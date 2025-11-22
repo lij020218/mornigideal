@@ -9,9 +9,22 @@ const model = genAI.getGenerativeModel({
 
 export async function POST(request: Request) {
     try {
+        console.log('[generate-lesson] Starting lesson generation');
+        console.log('[generate-lesson] API Key present:', !!process.env.GEMINI_API_KEY);
+
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("[generate-lesson] GEMINI_API_KEY is missing");
+            return NextResponse.json({
+                error: "Server configuration error: Missing API Key",
+                hint: "Please set GEMINI_API_KEY environment variable in Vercel"
+            }, { status: 500 });
+        }
+
         const { curriculumTitle, curriculumSubtitle, dayNumber, totalDays, userLevel, userJob } = await request.json();
+        console.log('[generate-lesson] Request params:', { curriculumTitle, dayNumber, totalDays, userLevel });
 
         if (!curriculumTitle) {
+            console.error('[generate-lesson] Missing curriculum title');
             return NextResponse.json(
                 { error: "Curriculum title is required" },
                 { status: 400 }
@@ -93,13 +106,28 @@ JSON 형식으로만 응답하세요. 예시:
 - summary는 반드시 정확히 3개 항목으로 구성하세요
 - bulletPoints는 3-5개로 구성하세요`;
 
-        console.log("📚 Generating lesson content...");
+        console.log('[generate-lesson] Calling Gemini API...');
 
-        const result = await model.generateContent(prompt);
+        let result;
+        try {
+            result = await model.generateContent(prompt);
+        } catch (apiError: any) {
+            console.error("[generate-lesson] Gemini API call failed:", {
+                message: apiError.message,
+                status: apiError.status,
+                error: apiError
+            });
+            return NextResponse.json({
+                error: "Gemini API call failed",
+                details: apiError.message,
+                hint: "Check if GEMINI_API_KEY is valid and model is accessible"
+            }, { status: 500 });
+        }
+
         const response = await result.response;
         const text = response.text();
 
-        console.log("📡 Raw Gemini response:", text.substring(0, 500));
+        console.log("[generate-lesson] Raw Gemini response:", text.substring(0, 500));
 
         // Extract JSON from response
         let jsonText = text.trim();
@@ -148,11 +176,16 @@ JSON 형식으로만 응답하세요. 예시:
             });
         }
 
-    } catch (error) {
-        console.error("💥 Error generating lesson:", error);
-        return NextResponse.json(
-            { error: "Failed to generate lesson content" },
-            { status: 500 }
-        );
+    } catch (error: any) {
+        console.error("[generate-lesson] Error:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
+        return NextResponse.json({
+            error: "Failed to generate lesson content",
+            details: error.message,
+            errorType: error.name
+        }, { status: 500 });
     }
 }

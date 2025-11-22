@@ -9,7 +9,19 @@ const model = genAI.getGenerativeModel({
 
 export async function POST(request: Request) {
     try {
+        console.log('[analyze-strengths] Starting analysis');
+        console.log('[analyze-strengths] API Key present:', !!process.env.GEMINI_API_KEY);
+
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("[analyze-strengths] GEMINI_API_KEY is missing");
+            return NextResponse.json({
+                error: "Server configuration error: Missing API Key",
+                hint: "Please set GEMINI_API_KEY environment variable in Vercel"
+            }, { status: 500 });
+        }
+
         const { userType, major, field, goal, score, level, totalQuestions } = await request.json();
+        console.log('[analyze-strengths] Request params:', { userType, field, goal, score, totalQuestions });
 
         const percentage = Math.round((score / totalQuestions) * 100);
 
@@ -34,11 +46,28 @@ JSON 형식으로만 응답하세요:
   "weaknesses": ["약점1", "약점2", "약점3"]
 }`;
 
-        const result = await model.generateContent(prompt);
+        console.log('[analyze-strengths] Calling Gemini API...');
+
+        let result;
+        try {
+            result = await model.generateContent(prompt);
+        } catch (apiError: any) {
+            console.error("[analyze-strengths] Gemini API call failed:", {
+                message: apiError.message,
+                status: apiError.status,
+                error: apiError
+            });
+            return NextResponse.json({
+                error: "Gemini API call failed",
+                details: apiError.message,
+                hint: "Check if GEMINI_API_KEY is valid and model is accessible"
+            }, { status: 500 });
+        }
+
         const response = await result.response;
         const text = response.text();
 
-        console.log("📊 Raw analysis response:", text.substring(0, 500));
+        console.log("[analyze-strengths] Raw analysis response:", text.substring(0, 500));
 
         // Extract JSON from response
         let jsonText = text.trim();
@@ -70,11 +99,16 @@ JSON 형식으로만 응답하세요:
             });
         }
 
-    } catch (error) {
-        console.error("💥 Error analyzing strengths:", error);
-        return NextResponse.json(
-            { error: "Failed to analyze strengths" },
-            { status: 500 }
-        );
+    } catch (error: any) {
+        console.error("[analyze-strengths] Error:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
+        return NextResponse.json({
+            error: "Failed to analyze strengths",
+            details: error.message,
+            errorType: error.name
+        }, { status: 500 });
     }
 }

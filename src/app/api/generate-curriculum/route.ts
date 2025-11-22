@@ -5,9 +5,26 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
     try {
-        const { job, goal, level } = await request.json();
+        console.log('[generate-curriculum] Starting curriculum generation');
+        console.log('[generate-curriculum] API Key present:', !!process.env.GEMINI_API_KEY);
 
-        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3-pro-preview" });
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("[generate-curriculum] GEMINI_API_KEY is missing");
+            return NextResponse.json({
+                error: "Server configuration error: Missing API Key",
+                hint: "Please set GEMINI_API_KEY environment variable in Vercel"
+            }, { status: 500 });
+        }
+
+        const { job, goal, level } = await request.json();
+        console.log('[generate-curriculum] Request params:', { job, goal, level });
+
+        const model = genAI.getGenerativeModel({
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
 
         const prompt = `
       You are an expert career coach and curriculum designer.
@@ -40,18 +57,53 @@ export async function POST(request: Request) {
       ]
     `;
 
-        const result = await model.generateContent(prompt);
+        console.log('[generate-curriculum] Calling Gemini API...');
+
+        let result;
+        try {
+            result = await model.generateContent(prompt);
+        } catch (apiError: any) {
+            console.error("[generate-curriculum] Gemini API call failed:", {
+                message: apiError.message,
+                status: apiError.status,
+                error: apiError
+            });
+            return NextResponse.json({
+                error: "Gemini API call failed",
+                details: apiError.message,
+                hint: "Check if GEMINI_API_KEY is valid and model is accessible"
+            }, { status: 500 });
+        }
+
         const response = await result.response;
         const text = response.text();
+
+        console.log('[generate-curriculum] Received response, length:', text?.length);
 
         // Clean up potential markdown formatting if the model includes it
         const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-        const curriculum = JSON.parse(cleanedText);
+        let curriculum;
+        try {
+            curriculum = JSON.parse(cleanedText);
+            console.log('[generate-curriculum] Successfully parsed', curriculum.length, 'courses');
+        } catch (parseError) {
+            console.error('[generate-curriculum] Failed to parse response:', text.substring(0, 500));
+            throw new Error('Failed to parse curriculum data');
+        }
 
+        console.log('[generate-curriculum] Curriculum generation successful');
         return NextResponse.json({ curriculum });
-    } catch (error) {
-        console.error("Error generating curriculum:", error);
-        return NextResponse.json({ error: "Failed to generate curriculum" }, { status: 500 });
+    } catch (error: any) {
+        console.error("[generate-curriculum] Error:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
+        return NextResponse.json({
+            error: "Failed to generate curriculum",
+            details: error.message,
+            errorType: error.name
+        }, { status: 500 });
     }
 }
