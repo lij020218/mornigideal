@@ -38,7 +38,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     const { email, password } = parsedCredentials.data
 
                     // Validate against user database via API route (Edge-compatible)
-                    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001"
+                    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+                        ? process.env.NEXT_PUBLIC_BASE_URL
+                        : process.env.VERCEL_URL
+                            ? `https://${process.env.VERCEL_URL}`
+                            : "http://localhost:3001"
                     const response = await fetch(`${baseUrl}/api/auth/validate`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
