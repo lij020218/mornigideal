@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getTrendsCache, getDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
 // Helper to verify and get the final URL (follows redirects)
 async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; finalUrl: string | null }> {
@@ -125,8 +125,58 @@ export async function GET(request: Request) {
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
-        const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const allTrends = JSON.parse(cleanedText);
+
+        console.log('[API] Raw response length:', text.length);
+
+        // More robust JSON extraction
+        let cleanedText = text.trim();
+
+        // Remove markdown code blocks
+        cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+        // Try to find JSON array in the text
+        const arrayMatch = cleanedText.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+            cleanedText = arrayMatch[0];
+        }
+
+        // Additional cleanup: remove any trailing non-JSON content
+        // Find the last ] and cut everything after it
+        const lastBracketIndex = cleanedText.lastIndexOf(']');
+        if (lastBracketIndex !== -1 && lastBracketIndex < cleanedText.length - 1) {
+            cleanedText = cleanedText.substring(0, lastBracketIndex + 1);
+        }
+
+        console.log('[API] Cleaned text length:', cleanedText.length);
+
+        let allTrends;
+        try {
+            allTrends = JSON.parse(cleanedText);
+        } catch (parseError: any) {
+            console.error('[API] JSON Parse Error:', parseError);
+            console.error('[API] Failed text (first 500 chars):', cleanedText.substring(0, 500));
+            console.error('[API] Failed text (last 500 chars):', cleanedText.substring(cleanedText.length - 500));
+
+            // Try to salvage partial JSON by finding valid array portion
+            try {
+                // Find the outermost array brackets and try parsing that
+                const firstBracket = cleanedText.indexOf('[');
+                const lastValidBracket = cleanedText.lastIndexOf(']');
+                if (firstBracket !== -1 && lastValidBracket !== -1) {
+                    const salvaged = cleanedText.substring(firstBracket, lastValidBracket + 1);
+                    allTrends = JSON.parse(salvaged);
+                    console.log('[API] Successfully salvaged partial JSON');
+                } else {
+                    throw parseError;
+                }
+            } catch (salvageError) {
+                throw new Error(`Failed to parse JSON: ${parseError.message}`);
+            }
+        }
+
+        if (!Array.isArray(allTrends)) {
+            throw new Error('Response is not an array');
+        }
 
         console.log(`[API] Generated ${allTrends.length} trends. Verifying URLs and following redirects...`);
 

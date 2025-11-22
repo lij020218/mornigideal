@@ -1,20 +1,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
     try {
         // Enhanced logging for debugging
         console.log('[generate-quiz] Starting quiz generation request');
-        console.log('[generate-quiz] API Key present:', !!process.env.GEMINI_API_KEY);
+        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        console.log('[generate-quiz] API Key present:', !!apiKey);
         console.log('[generate-quiz] Model:', process.env.GEMINI_MODEL || "gemini-2.0-flash-exp");
 
-        if (!process.env.GEMINI_API_KEY) {
-            console.error("[generate-quiz] GEMINI_API_KEY is missing");
+        if (!apiKey) {
+            console.error("[generate-quiz] GOOGLE_API_KEY or GEMINI_API_KEY is missing");
             return NextResponse.json({
                 error: "Server configuration error: Missing API Key",
-                hint: "Please set GEMINI_API_KEY environment variable in Vercel"
+                hint: "Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable in Vercel"
             }, { status: 500 });
         }
 
