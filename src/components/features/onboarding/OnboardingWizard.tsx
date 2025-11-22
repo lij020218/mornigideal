@@ -178,15 +178,28 @@ export function OnboardingWizard() {
                 localStorage.setItem("user_curriculum", JSON.stringify(data.curriculum));
                 localStorage.setItem("user_profile", JSON.stringify(finalSelection));
 
-                // Save profile to Supabase
+                // Save to Supabase
                 try {
+                    // Save profile
                     await fetch("/api/user/profile", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(finalSelection),
+                        body: JSON.stringify({ profile: finalSelection }),
                     });
-                } catch (profileError) {
-                    console.error("Failed to save profile to database:", profileError);
+
+                    // Save curriculum
+                    await fetch("/api/user/curriculum", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            curriculum_id: data.curriculum[0]?.id || "default",
+                            curriculum_data: data.curriculum
+                        }),
+                    });
+
+                    console.log('Successfully saved curriculum and profile to database');
+                } catch (apiError) {
+                    console.error("Failed to save to database:", apiError);
                     // Continue anyway as localStorage has the data
                 }
             }

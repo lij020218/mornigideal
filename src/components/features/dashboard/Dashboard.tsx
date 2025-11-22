@@ -276,9 +276,28 @@ export function Dashboard({ username }: DashboardProps) {
                 }
             }
 
+            // Load curriculum from API (with localStorage fallback)
             const savedCurriculum = localStorage.getItem("user_curriculum");
             if (savedCurriculum) {
                 setCurriculum(JSON.parse(savedCurriculum));
+            }
+
+            try {
+                const curriculumResponse = await fetch("/api/user/curriculum");
+                if (curriculumResponse.ok) {
+                    const curriculumData = await curriculumResponse.json();
+                    if (curriculumData.curriculums && curriculumData.curriculums.length > 0) {
+                        // Extract curriculum_data from first curriculum
+                        const latestCurriculum = curriculumData.curriculums[0];
+                        if (latestCurriculum.curriculum_data) {
+                            console.log('Loaded curriculum from API:', latestCurriculum.curriculum_data);
+                            setCurriculum(latestCurriculum.curriculum_data);
+                            localStorage.setItem("user_curriculum", JSON.stringify(latestCurriculum.curriculum_data));
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch curriculum from API:', error);
             }
 
             const savedSettings = localStorage.getItem("user_settings");
@@ -1008,11 +1027,11 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         goalId: string;
         endTime?: string;
     }> = [
-        { time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' },
-        { time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' },
-        { time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' },
-        { time: schedule.sleep, label: "취침", icon: Moon, color: "blue", goalId: 'sleep' },
-    ];
+            { time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' },
+            { time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' },
+            { time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' },
+            { time: schedule.sleep, label: "취침", icon: Moon, color: "blue", goalId: 'sleep' },
+        ];
 
     // Filter custom goals for today
     const todaysGoals = customGoals?.filter(goal =>
