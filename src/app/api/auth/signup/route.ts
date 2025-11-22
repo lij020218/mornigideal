@@ -15,10 +15,22 @@ const signupSchema = z.object({
 
 export async function POST(request: Request) {
     try {
+        console.log('[signup] Starting signup process');
+        console.log('[signup] Supabase URL present:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+        console.log('[signup] Supabase Key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
         const body = await request.json();
+        console.log('[signup] Request body received:', {
+            hasName: !!body.name,
+            hasEmail: !!body.email,
+            hasUsername: !!body.username,
+            hasPassword: !!body.password
+        });
+
         const result = signupSchema.safeParse(body);
 
         if (!result.success) {
+            console.error('[signup] Validation failed:', result.error.issues[0].message);
             return NextResponse.json(
                 { error: result.error.issues[0].message },
                 { status: 400 }
@@ -26,24 +38,31 @@ export async function POST(request: Request) {
         }
 
         const { name, username, email, password } = result.data;
+        console.log('[signup] Checking existing email:', email);
 
         // Check if email already exists
         const existingEmail = await getUserByEmail(email);
         if (existingEmail) {
+            console.log('[signup] Email already exists');
             return NextResponse.json(
                 { error: "이미 사용 중인 이메일입니다." },
                 { status: 400 }
             );
         }
 
+        console.log('[signup] Checking existing username:', username);
+
         // Check if username already exists
         const existingUsername = await getUserByUsername(username);
         if (existingUsername) {
+            console.log('[signup] Username already exists');
             return NextResponse.json(
                 { error: "이미 사용 중인 사용자명입니다." },
                 { status: 400 }
             );
         }
+
+        console.log('[signup] Creating new user');
 
         // Create user
         const user = await createUser({
@@ -52,6 +71,8 @@ export async function POST(request: Request) {
             email,
             password, // In production, hash this!
         });
+
+        console.log('[signup] User created successfully:', user.id);
 
         return NextResponse.json({
             success: true,
@@ -62,10 +83,18 @@ export async function POST(request: Request) {
                 email: user.email,
             },
         });
-    } catch (error) {
-        console.error("Signup error:", error);
+    } catch (error: any) {
+        console.error("[signup] Error:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name,
+            error
+        });
         return NextResponse.json(
-            { error: "회원가입 중 오류가 발생했습니다." },
+            {
+                error: "회원가입 중 오류가 발생했습니다.",
+                details: error.message
+            },
             { status: 500 }
         );
     }
