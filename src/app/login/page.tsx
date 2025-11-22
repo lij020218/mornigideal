@@ -32,7 +32,14 @@ export default function LoginPage() {
             if (result?.error) {
                 setError("이메일 또는 비밀번호가 올바르지 않습니다.");
             } else {
-                router.push("/dashboard");
+                // Check if user has completed onboarding
+                const hasProfile = localStorage.getItem("user_profile");
+
+                if (hasProfile) {
+                    router.push("/dashboard");
+                } else {
+                    router.push("/onboarding");
+                }
                 router.refresh();
             }
         } catch (err) {

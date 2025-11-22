@@ -248,34 +248,52 @@ export function Dashboard({ username }: DashboardProps) {
     }, [completedLearning, curriculum.length]);
 
     useEffect(() => {
-        console.log('===== Dashboard useEffect: Loading from localStorage =====');
-        const savedProfile = localStorage.getItem("user_profile");
-        console.log('Loaded user_profile from localStorage:', savedProfile);
-        if (savedProfile) {
-            const parsed = JSON.parse(savedProfile);
-            console.log('Parsed profile:', parsed);
-            console.log('Has schedule:', !!parsed.schedule);
-            console.log('Has customGoals:', parsed.customGoals?.length || 0);
-            setUserProfile(parsed);
-        } else {
-            console.log('No user_profile found in localStorage');
-        }
+        const loadProfile = async () => {
+            console.log('===== Dashboard useEffect: Loading profile =====');
 
-        const savedCurriculum = localStorage.getItem("user_curriculum");
-        if (savedCurriculum) {
-            setCurriculum(JSON.parse(savedCurriculum));
-        }
+            // First try localStorage
+            const savedProfile = localStorage.getItem("user_profile");
 
-        const savedSettings = localStorage.getItem("user_settings");
-        if (savedSettings) {
-            setUserSettings(JSON.parse(savedSettings));
-        }
+            if (savedProfile) {
+                const parsed = JSON.parse(savedProfile);
+                console.log('Loaded user_profile from localStorage:', parsed);
+                setUserProfile(parsed);
+            } else {
+                // If not in localStorage, try fetching from Supabase
+                console.log('No localStorage profile, fetching from database...');
+                try {
+                    const response = await fetch("/api/user/profile");
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.profile) {
+                            console.log('Loaded profile from database:', data.profile);
+                            setUserProfile(data.profile);
+                            localStorage.setItem("user_profile", JSON.stringify(data.profile));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch profile from database:', error);
+                }
+            }
 
-        setDailyGoals(getDailyGoals());
-        fetchTrends();
+            const savedCurriculum = localStorage.getItem("user_curriculum");
+            if (savedCurriculum) {
+                setCurriculum(JSON.parse(savedCurriculum));
+            }
 
-        // Request notification permission
-        requestNotificationPermission();
+            const savedSettings = localStorage.getItem("user_settings");
+            if (savedSettings) {
+                setUserSettings(JSON.parse(savedSettings));
+            }
+
+            setDailyGoals(getDailyGoals());
+            fetchTrends();
+
+            // Request notification permission
+            requestNotificationPermission();
+        };
+
+        loadProfile();
     }, []);
 
     const containerVariants = {

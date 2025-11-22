@@ -52,7 +52,8 @@ export default function SignupPage() {
                 setError("회원가입은 완료되었으나 로그인에 실패했습니다. 다시 로그인해주세요.");
                 setTimeout(() => router.push("/login"), 2000);
             } else {
-                router.push("/dashboard");
+                // New users always go through onboarding first
+                router.push("/onboarding");
                 router.refresh();
             }
         } catch (err) {
