@@ -6,6 +6,7 @@ export interface User {
     username: string;
     email: string;
     password: string; // In production, this should be hashed
+    profile?: any; // JSONB field for user profile data
     created_at?: string;
     updated_at?: string;
 }
