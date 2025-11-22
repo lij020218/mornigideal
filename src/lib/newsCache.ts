@@ -1,6 +1,5 @@
-// In-memory cache for Vercel deployment compatibility
-// Note: This cache will be reset when the serverless function cold starts.
-// For persistent caching in production, consider using Vercel KV or Redis.
+// Supabase-based cache for persistent storage
+import { supabase } from './supabase';
 
 export interface CachedTrend {
     category: string;
@@ -27,53 +26,137 @@ export interface CachedData {
     lastUpdated: string;
 }
 
-// Global in-memory storage
-let globalCache: CachedData = {
-    trends: [],
-    details: {},
-    lastUpdated: new Date(0).toISOString()
-};
-
 export async function saveTrendsCache(trends: CachedTrend[]): Promise<void> {
-    globalCache.trends = trends;
-    globalCache.lastUpdated = new Date().toISOString();
-    console.log('[Cache] Trends saved to in-memory cache');
+    try {
+        // Clear existing trends to keep only fresh ones (optional, or upsert)
+        // For simplicity, we'll upsert. But since we want to show "latest", maybe we should delete old ones?
+        // Let's just upsert for now.
+
+        const trendsToInsert = trends.map(t => ({
+            id: t.id,
+            title: t.title,
+            category: t.category,
+            time: t.time,
+            image_color: t.imageColor,
+            image_url: t.imageUrl,
+            original_url: t.originalUrl,
+            summary: t.summary,
+            created_at: new Date().toISOString()
+        }));
+
+        const { error } = await supabase
+            .from('trends')
+            .upsert(trendsToInsert);
+
+        if (error) {
+            console.error('[Cache] Error saving trends:', error);
+        } else {
+            console.log('[Cache] Trends saved to Supabase');
+        }
+    } catch (e) {
+        console.error('[Cache] Exception saving trends:', e);
+    }
 }
 
 export function isCacheValid(lastUpdated: string): boolean {
     const now = new Date();
     const cacheDate = new Date(lastUpdated);
-
-    // Simple 6-hour cache validity check
     const sixHoursInMs = 6 * 60 * 60 * 1000;
     return (now.getTime() - cacheDate.getTime()) < sixHoursInMs;
 }
 
 export async function getTrendsCache(): Promise<CachedData | null> {
-    if (globalCache.trends.length === 0) {
+    try {
+        // Get latest trends (limit 10 for example)
+        const { data, error } = await supabase
+            .from('trends')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (error || !data || data.length === 0) {
+            return null;
+        }
+
+        // Check validity of the most recent item
+        const latestTrend = data[0];
+        if (!isCacheValid(latestTrend.created_at)) {
+            console.log('[Cache] Cache expired (db), needs refresh');
+            return null;
+        }
+
+        const trends: CachedTrend[] = data.map(t => ({
+            id: t.id,
+            title: t.title,
+            category: t.category,
+            time: t.time,
+            imageColor: t.image_color,
+            imageUrl: t.image_url,
+            originalUrl: t.original_url,
+            summary: t.summary
+        }));
+
+        return {
+            trends,
+            details: {}, // Details are fetched on demand
+            lastUpdated: latestTrend.created_at
+        };
+    } catch (e) {
+        console.error('[Cache] Error fetching trends:', e);
         return null;
     }
-
-    // Check if cache is still valid
-    if (!isCacheValid(globalCache.lastUpdated)) {
-        console.log('[Cache] Cache expired, needs refresh');
-        return null;
-    }
-
-    return globalCache;
 }
 
 export async function saveDetailCache(trendId: string, detail: CachedDetail): Promise<void> {
-    globalCache.details[trendId] = detail;
-    console.log(`[Cache] Detail saved for ${trendId}`);
+    try {
+        const { error } = await supabase
+            .from('trend_details')
+            .upsert({
+                trend_id: trendId,
+                title: detail.title,
+                content: detail.content,
+                key_takeaways: detail.keyTakeaways,
+                action_items: detail.actionItems,
+                original_url: detail.originalUrl
+            });
+
+        if (error) {
+            console.error(`[Cache] Error saving detail for ${trendId}:`, error);
+        } else {
+            console.log(`[Cache] Detail saved for ${trendId}`);
+        }
+    } catch (e) {
+        console.error(`[Cache] Exception saving detail:`, e);
+    }
 }
 
 export async function getDetailCache(trendId: string): Promise<CachedDetail | null> {
-    return globalCache.details[trendId] || null;
+    try {
+        const { data, error } = await supabase
+            .from('trend_details')
+            .select('*')
+            .eq('trend_id', trendId)
+            .single();
+
+        if (error || !data) {
+            return null;
+        }
+
+        return {
+            title: data.title,
+            content: data.content,
+            keyTakeaways: data.key_takeaways,
+            actionItems: data.action_items,
+            originalUrl: data.original_url
+        };
+    } catch (e) {
+        return null;
+    }
 }
 
 export async function getAllDetailsCache(): Promise<Record<string, CachedDetail>> {
-    return globalCache.details;
+    // Not strictly needed for Supabase implementation as we fetch on demand
+    return {};
 }
 
 export function generateTrendId(title: string): string {

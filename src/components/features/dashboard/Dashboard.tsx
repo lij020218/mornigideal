@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, LogOut, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -418,14 +417,6 @@ export function Dashboard({ username }: DashboardProps) {
                                             <Settings className="w-4 h-4" />
                                             설정
                                         </Link>
-                                        <div className="border-t border-white/5 my-1" />
-                                        <button
-                                            onClick={() => signOut({ callbackUrl: "/login" })}
-                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-red-500/10 transition-colors w-full text-left text-red-400"
-                                        >
-                                            <LogOut className="w-4 h-4" />
-                                            로그아웃
-                                        </button>
                                     </motion.div>
                                 </>
                             )}
@@ -709,7 +700,15 @@ export function Dashboard({ username }: DashboardProps) {
                     {/* Curriculum List */}
                     <Card className="glass-card border-none">
                         <CardContent className="p-6">
-                            {curriculum.length > 0 ? (
+                            {!userProfile ? (
+                                <div className="text-center py-12 flex flex-col items-center justify-center h-full">
+                                    <p className="text-muted-foreground mb-4">성장 여정을 시작하려면 온보딩을 완료해주세요.</p>
+                                    <Button onClick={() => window.location.href = "/onboarding"}>
+                                        <Sparkles className="w-4 h-4 mr-2" />
+                                        성장 여정 시작하기
+                                    </Button>
+                                </div>
+                            ) : curriculum.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {curriculum.map((item, index) => {
                                         const learningId = `curriculum_${index}_${item.title}`;

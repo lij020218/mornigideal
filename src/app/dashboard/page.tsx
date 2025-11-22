@@ -1,9 +1,7 @@
 import { Dashboard } from "@/components/features/dashboard/Dashboard";
-import { auth } from "@/auth";
 
 export default async function DashboardPage() {
-    const session = await auth();
-    const username = session?.user?.username || session?.user?.name || "사용자";
+    const username = "사용자";
 
     return (
         <div className="min-h-screen bg-background relative">
