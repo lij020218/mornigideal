@@ -1,15 +1,7 @@
--- Add profile column to users table
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'profile'
-    ) THEN
-        ALTER TABLE users ADD COLUMN profile JSONB;
-    END IF;
-END $$;
+-- Add profile column to users table (skip if already exists)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB;
 
--- Add index for profile queries
+-- Add index for profile queries (skip if already exists)
 CREATE INDEX IF NOT EXISTS idx_users_profile ON users USING GIN (profile);
 
 -- Update existing users to have empty profile
