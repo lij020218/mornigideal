@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Test User",
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "password123",
+    "id": "1763729489446",
+    "createdAt": "2025-11-21T12:51:29.446Z"
+  },
+  {
+    "name": "이영준",
+    "username": "lyj138",
+    "email": "lij020218@naver.com",
+    "password": "absolute138!",
+    "id": "1763730768971",
+    "createdAt": "2025-11-21T13:12:48.971Z"
+  }
+]

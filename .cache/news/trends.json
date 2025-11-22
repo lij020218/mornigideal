@@ -1,0 +1,66 @@
+{
+  "trends": [
+    {
+      "category": "Pharma & Business",
+      "title": "일라이 릴리, 제약사 최초 시가총액 1조 달러 돌파",
+      "time": "20시간 전",
+      "imageColor": "bg-red-600/20",
+      "originalUrl": "https://www.aljazeera.com/economy/2025/11/21/eli-lilly-becomes-first-pharma-firm-to-join-1-trillion-club",
+      "imageUrl": "",
+      "summary": "비만 치료제 젭바운드(Zepbound)와 마운자로(Mounjaro)의 폭발적인 수요에 힘입어 일라이 릴리가 제약사 최초로 시가총액 1조 달러 클럽에 가입했습니다. 이는 테크 기업들이 주도하던 1조 달러 클럽에 헬스케어 기업이 진입한 역사적인 사건입니다.",
+      "id": "7J2865287J20IOumtOumrCwg7KCc7JW97IKsIOy1nOy0iCDsi5zqsIDstJ3slaEgMeyhsCDri6zrn6wg64-M7YyM"
+    },
+    {
+      "category": "AI & Tech",
+      "title": "메타(Meta), 챗GPT 대항마로 AI 기반 '모닝 브리핑' 기능 테스트 중",
+      "time": "1일 전",
+      "imageColor": "bg-blue-600/20",
+      "originalUrl": "https://www.washingtonpost.com/technology/2025/11/21/meta-ai-powered-daily-brief/",
+      "imageUrl": "",
+      "summary": "메타가 페이스북 사용자들에게 매일 개인화된 AI 뉴스 브리핑을 제공하는 기능을 테스트하며 오픈AI의 챗GPT와 경쟁을 가속화하고 있습니다. 이 기능은 사용자의 관심사와 콘텐츠를 분석하여 맞춤형 요약을 제공할 예정입니다.",
+      "id": "66mU7YOAKE1ldGEpLCDssZdHUFQg64yA7ZWt66eI66GcIEFJIOq4sOuwmCAn66qo64udIOu4jOumrO2VkScg6riw64qlIO2FjOyKpO2KuCDspJE"
+    },
+    {
+      "category": "Marketing & AI",
+      "title": "타겟(Target), 오픈AI와 파트너십 체결... 챗GPT 내 쇼핑 앱 런칭",
+      "time": "2일 전",
+      "imageColor": "bg-red-500/20",
+      "originalUrl": "https://openai.com/index/target-partnership/",
+      "imageUrl": "",
+      "summary": "미국 대형 유통업체 타겟이 오픈AI와 협력하여 챗GPT 인터페이스 내에서 직접 상품을 검색하고 구매할 수 있는 기능을 출시합니다. 이는 AI 챗봇을 통한 대화형 커머스의 새로운 장을 열 것으로 기대됩니다.",
+      "id": "7YOA6rKfKFRhcmdldCksIOyYpO2UiEFJ7JmAIO2MjO2KuOuEiOyLrSDssrTqsrAuLi4g7LGXR1BUIOuCtCDsh7ztlZEg7JWxIOufsOy5rQ"
+    },
+    {
+      "category": "Policy & Tech",
+      "title": "EU 집행위, AI 규제법 완화 및 '디지털 옴니버스' 제안",
+      "time": "2일 전",
+      "imageColor": "bg-blue-800/20",
+      "originalUrl": "https://digital-strategy.ec.europa.eu/en/policies/european-approach-artificial-intelligence",
+      "imageUrl": "",
+      "summary": "유럽연합 집행위원회가 혁신을 저해한다는 우려에 대응해 AI 규제법(AI Act)의 일부 조항 시행을 연기하고 규제를 간소화하는 '디지털 옴니버스' 패키지를 발표했습니다. 이는 유럽 내 테크 기업들의 경쟁력을 높이기 위한 조치로 해석됩니다.",
+      "id": "RVUg7KeR7ZaJ7JyELCBBSSDqt5zsoJzrspUg7JmE7ZmUIOuwjyAn65SU7KeA7YS4IOyYtOuLiOuyhOyKpCcg7KCc7JWI"
+    },
+    {
+      "category": "Social Media",
+      "title": "오픈AI, 틱톡(TikTok) 대항마로 숏폼 영상 앱 출시설 '솔솔'",
+      "time": "1일 전",
+      "imageColor": "bg-purple-600/20",
+      "originalUrl": "https://mashable.com/article/openai-tiktok-app-sora-2-launch-ai-slop",
+      "imageUrl": "",
+      "summary": "오픈AI가 자사의 비디오 생성 AI 'Sora'를 활용한 틱톡 스타일의 소셜 미디어 앱 출시를 준비 중이라는 보도가 나왔습니다. 이는 생성형 AI 콘텐츠가 소셜 미디어의 주류로 자리 잡을 수 있음을 시사합니다.",
+      "id": "7Jik7ZSIQUksIO2Lse2GoShUaWtUb2spIOuMgO2VreuniOuhnCDsiI_tj7wg7JiB7IOBIOyVsSDstpzsi5zshKQgJ-yGlOyGlCc"
+    },
+    {
+      "category": "Marketing",
+      "title": "SEO는 끝났다? 이제는 GEO(생성형 엔진 최적화)의 시대",
+      "time": "20시간 전",
+      "imageColor": "bg-orange-500/20",
+      "originalUrl": "https://searchengineland.com/seo-geo-aso-new-era-brand-visibility-ai-research-464936",
+      "imageUrl": "",
+      "summary": "검색 트렌드가 전통적인 검색 엔진 최적화(SEO)에서 AI 답변에 브랜드가 노출되도록 하는 GEO(Generative Engine Optimization)로 빠르게 이동하고 있습니다. 마케터들은 이제 챗GPT나 제미나이 같은 AI 모델의 추천을 받는 전략을 고민해야 합니다.",
+      "id": "U0VP64qUIOuBneuCrOuLpD8g7J207KCc64qUIEdFTyjsg53shLHtmJUg7JeU7KeEIOy1nOygge2ZlCnsnZgg7Iuc64yA"
+    }
+  ],
+  "details": {},
+  "lastUpdated": "2025-11-21T20:31:50.045Z"
+}
