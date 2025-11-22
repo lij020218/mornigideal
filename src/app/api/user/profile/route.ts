@@ -1,79 +1,78 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { getUserByEmail } from "@/lib/users";
 
-export async function POST(request: Request) {
+export async function GET() {
     try {
         const session = await auth();
 
-        if (!session?.user?.email) {
+        if (!session || !session.user || !session.user.email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
             );
         }
 
-        const profileData = await request.json();
+        const user = await getUserByEmail(session.user.email);
 
-        // Update user profile in Supabase
+        if (!user) {
+            return NextResponse.json(
+                { error: "User not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({
+            profile: user.profile || {}
+        });
+    } catch (error: any) {
+        console.error("[Profile API] Error:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch profile" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(request: Request) {
+    try {
+        const session = await auth();
+
+        if (!session || !session.user || !session.user.email) {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
+        }
+
+        const { profile } = await request.json();
+
+        // Update user profile in database
+        const { supabase } = await import("@/lib/supabase");
+
         const { data, error } = await supabase
-            .from('users')
-            .update({
-                profile: profileData,
-                updated_at: new Date().toISOString()
-            })
-            .eq('email', session.user.email)
+            .from("users")
+            .update({ profile })
+            .eq("email", session.user.email)
             .select()
             .single();
 
         if (error) {
-            console.error('[Profile API] Error updating profile:', error);
+            console.error("[Profile API] Update error:", error);
             return NextResponse.json(
                 { error: "Failed to update profile" },
                 { status: 500 }
             );
         }
 
-        return NextResponse.json({ success: true, profile: data.profile });
+        return NextResponse.json({
+            success: true,
+            profile: data.profile
+        });
     } catch (error: any) {
         console.error("[Profile API] Error:", error);
         return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
-    }
-}
-
-export async function GET(request: Request) {
-    try {
-        const session = await auth();
-
-        if (!session?.user?.email) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
-
-        const { data, error } = await supabase
-            .from('users')
-            .select('profile')
-            .eq('email', session.user.email)
-            .single();
-
-        if (error) {
-            console.error('[Profile API] Error fetching profile:', error);
-            return NextResponse.json(
-                { error: "Failed to fetch profile" },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({ profile: data.profile });
-    } catch (error: any) {
-        console.error("[Profile API] Error:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
+            { error: "Failed to update profile" },
             { status: 500 }
         );
     }
