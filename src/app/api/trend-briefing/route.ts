@@ -197,7 +197,6 @@ export async function POST(request: Request) {
         console.log('[API] Generating fresh detail for:', title);
         const model = genAI.getGenerativeModel({
             model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            tools: [{ googleSearch: {} }],
             generationConfig: {
                 responseMimeType: "application/json"
             }

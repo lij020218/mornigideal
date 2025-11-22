@@ -983,7 +983,14 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     };
 
     // Build base timeline items from schedule
-    const baseTimelineItems = [
+    const baseTimelineItems: Array<{
+        time: string;
+        label: string;
+        icon: any;
+        color: string;
+        goalId: string;
+        endTime?: string;
+    }> = [
         { time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' },
         { time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' },
         { time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' },

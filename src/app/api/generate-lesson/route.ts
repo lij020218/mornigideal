@@ -18,11 +18,12 @@ export async function POST(request: Request) {
             );
         }
 
-        const levelDescription = {
+        const levelDescriptions: Record<string, string> = {
             junior: "입문자/초급자 - 기초 개념부터 쉽게 설명",
             mid: "중급자 - 기본 개념은 알고 있으며 실무 적용 방법 위주",
             senior: "고급자 - 심화 내용과 전문적인 인사이트 위주"
-        }[userLevel] || "중급자 수준";
+        };
+        const levelDescription = levelDescriptions[userLevel] || "중급자 수준";
 
         const prompt = `당신은 교육 콘텐츠 전문가이자 숙련된 강사입니다.
 학습자가 몰입하고 쉽게 이해할 수 있도록, 풍부하고 자연스러운 한국어로 학습 콘텐츠를 작성해주세요.
