@@ -35,7 +35,7 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button size="lg" className="text-lg h-14 px-8 rounded-full shadow-lg shadow-primary/25">
                 성장 여정 시작하기 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
