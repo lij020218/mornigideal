@@ -32,12 +32,29 @@ export default function LoginPage() {
             if (result?.error) {
                 setError("이메일 또는 비밀번호가 올바르지 않습니다.");
             } else {
-                // Check if user has completed onboarding
-                const hasProfile = localStorage.getItem("user_profile");
+                // Check if user has completed onboarding by fetching from database
+                try {
+                    const profileResponse = await fetch("/api/user/profile");
+                    if (profileResponse.ok) {
+                        const { profile } = await profileResponse.json();
 
-                if (hasProfile) {
-                    router.push("/dashboard");
-                } else {
+                        // Check if profile has actual data (not just empty object)
+                        const hasCompletedOnboarding = profile && Object.keys(profile).length > 0;
+
+                        if (hasCompletedOnboarding) {
+                            // Save to localStorage for faster access
+                            localStorage.setItem("user_profile", JSON.stringify(profile));
+                            router.push("/dashboard");
+                        } else {
+                            router.push("/onboarding");
+                        }
+                    } else {
+                        // If profile fetch fails, go to onboarding to be safe
+                        router.push("/onboarding");
+                    }
+                } catch (profileError) {
+                    console.error("Failed to check profile:", profileError);
+                    // If error, go to onboarding to be safe
                     router.push("/onboarding");
                 }
                 router.refresh();
