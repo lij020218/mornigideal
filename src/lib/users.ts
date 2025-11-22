@@ -1,7 +1,4 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-
-const USERS_FILE = path.join(process.cwd(), '.cache', 'users.json');
+import { supabase } from './supabase';
 
 export interface User {
     id: string;
@@ -9,52 +6,76 @@ export interface User {
     username: string;
     email: string;
     password: string; // In production, this should be hashed
-    createdAt: string;
-}
-
-async function ensureFile() {
-    const dir = path.dirname(USERS_FILE);
-    try {
-        await fs.mkdir(dir, { recursive: true });
-    } catch (error) {
-        // Directory already exists
-    }
-    try {
-        await fs.access(USERS_FILE);
-    } catch (error) {
-        await fs.writeFile(USERS_FILE, JSON.stringify([], null, 2));
-    }
-}
-
-export async function getUsers(): Promise<User[]> {
-    await ensureFile();
-    const data = await fs.readFile(USERS_FILE, 'utf-8');
-    return JSON.parse(data);
+    created_at?: string;
+    updated_at?: string;
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-    const users = await getUsers();
-    return users.find(u => u.email === email) || null;
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No rows returned
+                return null;
+            }
+            console.error('[getUserByEmail] Error:', error);
+            throw error;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[getUserByEmail] Exception:', error);
+        return null;
+    }
 }
 
 export async function getUserByUsername(username: string): Promise<User | null> {
-    const users = await getUsers();
-    return users.find(u => u.username === username) || null;
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No rows returned
+                return null;
+            }
+            console.error('[getUserByUsername] Error:', error);
+            throw error;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[getUserByUsername] Exception:', error);
+        return null;
+    }
 }
 
-export async function createUser(userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
-    const users = await getUsers();
+export async function createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .insert([userData])
+            .select()
+            .single();
 
-    const newUser: User = {
-        ...userData,
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-    };
+        if (error) {
+            console.error('[createUser] Error:', error);
+            throw error;
+        }
 
-    users.push(newUser);
-    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
-
-    return newUser;
+        return data;
+    } catch (error) {
+        console.error('[createUser] Exception:', error);
+        throw error;
+    }
 }
 
 export async function validateUser(email: string, password: string): Promise<User | null> {
