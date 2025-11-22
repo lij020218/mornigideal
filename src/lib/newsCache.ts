@@ -1,9 +1,6 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-
-const CACHE_DIR = path.join(process.cwd(), '.cache', 'news');
-const TRENDS_CACHE_FILE = path.join(CACHE_DIR, 'trends.json');
-const DETAILS_CACHE_FILE = path.join(CACHE_DIR, 'details.json');
+// In-memory cache for Vercel deployment compatibility
+// Note: This cache will be reset when the serverless function cold starts.
+// For persistent caching in production, consider using Vercel KV or Redis.
 
 export interface CachedTrend {
     category: string;
@@ -30,100 +27,53 @@ export interface CachedData {
     lastUpdated: string;
 }
 
-async function ensureCacheDir() {
-    try {
-        await fs.mkdir(CACHE_DIR, { recursive: true });
-    } catch (error) {
-        console.error('Error creating cache directory:', error);
-    }
-}
+// Global in-memory storage
+let globalCache: CachedData = {
+    trends: [],
+    details: {},
+    lastUpdated: new Date(0).toISOString()
+};
 
 export async function saveTrendsCache(trends: CachedTrend[]): Promise<void> {
-    await ensureCacheDir();
-    const data: CachedData = {
-        trends,
-        details: {},
-        lastUpdated: new Date().toISOString()
-    };
-    await fs.writeFile(TRENDS_CACHE_FILE, JSON.stringify(data, null, 2));
+    globalCache.trends = trends;
+    globalCache.lastUpdated = new Date().toISOString();
+    console.log('[Cache] Trends saved to in-memory cache');
 }
 
 export function isCacheValid(lastUpdated: string): boolean {
     const now = new Date();
     const cacheDate = new Date(lastUpdated);
 
-    // Get today's 4 AM
-    const today4AM = new Date(now);
-    today4AM.setHours(4, 0, 0, 0);
-
-    // Get tomorrow's 4 AM
-    const tomorrow4AM = new Date(today4AM);
-    tomorrow4AM.setDate(tomorrow4AM.getDate() + 1);
-
-    // Cache is valid if:
-    // 1. Cache was created before today's 4 AM and current time is before today's 4 AM, OR
-    // 2. Cache was created after today's 4 AM and current time is before tomorrow's 4 AM
-
-    if (now < today4AM) {
-        // Before today's 4 AM - cache is valid if it was created yesterday
-        const yesterday4AM = new Date(today4AM);
-        yesterday4AM.setDate(yesterday4AM.getDate() - 1);
-        return cacheDate >= yesterday4AM && cacheDate < today4AM;
-    } else {
-        // After today's 4 AM - cache is valid if it was created after today's 4 AM
-        return cacheDate >= today4AM && cacheDate < tomorrow4AM;
-    }
+    // Simple 6-hour cache validity check
+    const sixHoursInMs = 6 * 60 * 60 * 1000;
+    return (now.getTime() - cacheDate.getTime()) < sixHoursInMs;
 }
 
 export async function getTrendsCache(): Promise<CachedData | null> {
-    try {
-        const data = await fs.readFile(TRENDS_CACHE_FILE, 'utf-8');
-        const parsedData = JSON.parse(data);
-
-        // Check if cache is still valid (until next 4 AM)
-        if (!isCacheValid(parsedData.lastUpdated)) {
-            console.log('[Cache] Cache expired, needs refresh');
-            return null;
-        }
-
-        return parsedData;
-    } catch (error) {
+    if (globalCache.trends.length === 0) {
         return null;
     }
+
+    // Check if cache is still valid
+    if (!isCacheValid(globalCache.lastUpdated)) {
+        console.log('[Cache] Cache expired, needs refresh');
+        return null;
+    }
+
+    return globalCache;
 }
 
 export async function saveDetailCache(trendId: string, detail: CachedDetail): Promise<void> {
-    await ensureCacheDir();
-
-    let allDetails: Record<string, CachedDetail> = {};
-    try {
-        const data = await fs.readFile(DETAILS_CACHE_FILE, 'utf-8');
-        allDetails = JSON.parse(data);
-    } catch (error) {
-        // File doesn't exist yet, start fresh
-    }
-
-    allDetails[trendId] = detail;
-    await fs.writeFile(DETAILS_CACHE_FILE, JSON.stringify(allDetails, null, 2));
+    globalCache.details[trendId] = detail;
+    console.log(`[Cache] Detail saved for ${trendId}`);
 }
 
 export async function getDetailCache(trendId: string): Promise<CachedDetail | null> {
-    try {
-        const data = await fs.readFile(DETAILS_CACHE_FILE, 'utf-8');
-        const allDetails: Record<string, CachedDetail> = JSON.parse(data);
-        return allDetails[trendId] || null;
-    } catch (error) {
-        return null;
-    }
+    return globalCache.details[trendId] || null;
 }
 
 export async function getAllDetailsCache(): Promise<Record<string, CachedDetail>> {
-    try {
-        const data = await fs.readFile(DETAILS_CACHE_FILE, 'utf-8');
-        return JSON.parse(data);
-    } catch (error) {
-        return {};
-    }
+    return globalCache.details;
 }
 
 export function generateTrendId(title: string): string {
