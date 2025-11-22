@@ -43,13 +43,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         : process.env.VERCEL_URL
                             ? `https://${process.env.VERCEL_URL}`
                             : "http://localhost:3001"
+
+                    console.log('[auth] Login attempt for:', email)
+                    console.log('[auth] Base URL:', baseUrl)
+                    console.log('[auth] NEXT_PUBLIC_BASE_URL:', process.env.NEXT_PUBLIC_BASE_URL)
+                    console.log('[auth] VERCEL_URL:', process.env.VERCEL_URL)
+                    console.log('[auth] Calling validate API at:', `${baseUrl}/api/auth/validate`)
+
                     const response = await fetch(`${baseUrl}/api/auth/validate`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ email, password }),
                     })
 
+                    console.log('[auth] Validate API response status:', response.status)
+                    console.log('[auth] Validate API response ok:', response.ok)
+
                     const user = await response.json()
+                    console.log('[auth] User data received:', user ? 'User found' : 'No user')
 
                     if (user) {
                         return {
