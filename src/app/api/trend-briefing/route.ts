@@ -157,19 +157,61 @@ export async function GET(request: Request) {
             console.error('[API] Failed text (first 500 chars):', cleanedText.substring(0, 500));
             console.error('[API] Failed text (last 500 chars):', cleanedText.substring(cleanedText.length - 500));
 
-            // Try to salvage partial JSON by finding valid array portion
+            // Try to salvage partial JSON by finding complete objects
             try {
-                // Find the outermost array brackets and try parsing that
+                // Strategy: Find all complete objects in the array
+                // Look for pattern },\n  { to split objects
                 const firstBracket = cleanedText.indexOf('[');
-                const lastValidBracket = cleanedText.lastIndexOf(']');
-                if (firstBracket !== -1 && lastValidBracket !== -1) {
-                    const salvaged = cleanedText.substring(firstBracket, lastValidBracket + 1);
-                    allTrends = JSON.parse(salvaged);
-                    console.log('[API] Successfully salvaged partial JSON');
+                if (firstBracket === -1) throw parseError;
+
+                // Find all object boundaries
+                let validJson = '[';
+                let braceCount = 0;
+                let currentObject = '';
+                let inString = false;
+                let escapeNext = false;
+                const validObjects: string[] = [];
+
+                for (let i = firstBracket + 1; i < cleanedText.length; i++) {
+                    const char = cleanedText[i];
+                    const prevChar = i > 0 ? cleanedText[i - 1] : '';
+
+                    // Track string state
+                    if (char === '"' && !escapeNext) {
+                        inString = !inString;
+                    }
+                    escapeNext = char === '\\' && !escapeNext;
+
+                    if (!inString) {
+                        if (char === '{') braceCount++;
+                        if (char === '}') braceCount--;
+                    }
+
+                    currentObject += char;
+
+                    // When we complete an object (braceCount returns to 0)
+                    if (braceCount === 0 && currentObject.trim().endsWith('}')) {
+                        try {
+                            // Try parsing this object
+                            const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
+                            validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
+                            currentObject = '';
+                        } catch (e) {
+                            // Skip invalid object
+                            currentObject = '';
+                        }
+                    }
+                }
+
+                if (validObjects.length > 0) {
+                    validJson = '[' + validObjects.join(',') + ']';
+                    allTrends = JSON.parse(validJson);
+                    console.log(`[API] Successfully salvaged ${allTrends.length} complete objects from partial JSON`);
                 } else {
                     throw parseError;
                 }
             } catch (salvageError) {
+                console.error('[API] Salvage attempt failed:', salvageError);
                 throw new Error(`Failed to parse JSON: ${parseError.message}`);
             }
         }
