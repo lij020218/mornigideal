@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { saveTrendsCache, saveDetailCache, generateTrendId, type CachedTrend } from "@/lib/newsCache";
+import { saveTrendsCache, saveDetailCache, generateTrendId } from "@/lib/newsCache";
 import { fetchOgImage } from "@/lib/fetchOgImage";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
