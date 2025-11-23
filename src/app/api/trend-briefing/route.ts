@@ -4,6 +4,64 @@ import { getTrendsCache, getDetailCache, generateTrendId, saveTrendsCache } from
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
+// Helper to verify if a news item is REAL and RECENT using a dedicated search check
+async function verifyTrendAuthenticity(title: string, category: string): Promise<{ isReal: boolean; url: string; imageUrl: string }> {
+    try {
+        console.log(`[API] Verifying authenticity of: "${title}"`);
+
+        const model = genAI.getGenerativeModel({
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            // @ts-expect-error - googleSearch is a valid tool
+            tools: [{ googleSearch: {} }],
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
+
+        const verificationPrompt = `
+        ACT AS A FACT-CHECKER.
+        
+        Target News: "${title}" (Category: ${category})
+        Current Date: ${new Date().toISOString().split('T')[0]}
+
+        TASK:
+        1. Search Google specifically for this news topic to verify if it is REAL and RECENT (within the last 7 days).
+        2. If the news is false, old (older than 7 days), or a rumor that has been debunked, mark it as FALSE.
+        3. If it is real, find the BEST, most authoritative source URL.
+        4. Try to find a relevant image URL from the search results (og:image).
+
+        Return JSON:
+        {
+            "isReal": boolean, // true ONLY if confirmed real and recent
+            "verifiedUrl": "string", // The actual URL found during verification
+            "verifiedImageUrl": "string", // Image URL if found, else empty
+            "reason": "string" // Why it is true or false
+        }
+        `;
+
+        const result = await model.generateContent(verificationPrompt);
+        const response = await result.response;
+        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+        const data = JSON.parse(text);
+
+        if (data.isReal && data.verifiedUrl) {
+            console.log(`[API] ✅ Verified: ${title} (${data.reason})`);
+            return {
+                isReal: true,
+                url: data.verifiedUrl,
+                imageUrl: data.verifiedImageUrl || ""
+            };
+        } else {
+            console.warn(`[API] ❌ Rejected: ${title} (${data.reason})`);
+            return { isReal: false, url: "", imageUrl: "" };
+        }
+
+    } catch (error) {
+        console.error(`[API] Verification failed for "${title}":`, error);
+        return { isReal: false, url: "", imageUrl: "" };
+    }
+}
+
 // Helper to verify and get the final URL (follows redirects)
 async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; finalUrl: string | null }> {
     try {
@@ -11,7 +69,7 @@ async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; fi
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
         const response = await fetch(url, {
-            method: 'HEAD', // Use HEAD instead of GET for faster checks
+            method: 'HEAD',
             signal: controller.signal,
             redirect: 'follow',
             headers: {
@@ -22,67 +80,11 @@ async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; fi
         clearTimeout(timeoutId);
 
         const finalUrl = response.url;
-        const isValid = response.status >= 200 && response.status < 400; // Accept 2xx and 3xx
-
-        if (isValid) {
-            console.log(`[API] URL verified: ${url} -> ${finalUrl}`);
-        } else {
-            console.warn(`[API] URL returned status ${response.status}: ${url}`);
-        }
+        const isValid = response.status >= 200 && response.status < 400;
 
         return { isValid, finalUrl: isValid ? finalUrl : null };
     } catch (error) {
-        console.warn(`[API] URL verification failed for ${url}:`, error);
         return { isValid: false, finalUrl: null };
-    }
-}
-
-// Helper to find real article URL by searching the title on Google
-async function findRealArticleUrl(title: string, category: string): Promise<string | null> {
-    try {
-        console.log(`[API] Searching Google for: ${title}`);
-
-        // Use Google search (this is a simple approach - in production you might use Google Custom Search API)
-        const searchQuery = encodeURIComponent(`${title} ${category}`);
-        // const searchUrl = `https://www.google.com/search?q=${searchQuery}`; // Not used directly
-
-        // For now, we'll construct a likely URL pattern
-        // Alternatively, you could use the Gemini model with googleSearch tool here
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            // @ts-expect-error - googleSearch is valid
-            tools: [{ googleSearch: {} }],
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        });
-
-        const searchPrompt = `
-Search Google for this exact article title: "${title}"
-Category: ${category}
-
-Find the REAL, WORKING URL for this article from a reputable news source.
-Return ONLY a JSON object with the URL:
-{ "url": "https://actual-working-url.com/article" }
-
-If you cannot find the article, return:
-{ "url": null }
-        `;
-
-        const result = await model.generateContent(searchPrompt);
-        const response = await result.response;
-        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const data = JSON.parse(text);
-
-        if (data.url && data.url.startsWith('http')) {
-            console.log(`[API] Found real URL: ${data.url}`);
-            return data.url;
-        }
-
-        return null;
-    } catch (error) {
-        console.error(`[API] Failed to find real URL for "${title}":`, error);
-        return null;
     }
 }
 
@@ -92,7 +94,6 @@ export async function GET(request: Request) {
         const job = searchParams.get("job") || "Marketer";
         const forceRefresh = searchParams.get("refresh") === "true";
 
-        // Try to get cached data first
         if (!forceRefresh) {
             const cachedData = await getTrendsCache();
             if (cachedData && cachedData.trends.length > 0) {
@@ -105,17 +106,15 @@ export async function GET(request: Request) {
             }
         }
 
-        // If no cache or force refresh, generate new trends
-        console.log('[API] Generating fresh trends');
+        console.log('[API] Starting STRICT generation process...');
 
         let validTrends: any[] = [];
         let retryCount = 0;
-        const maxRetries = 2;
+        const maxRetries = 3; // Increased retries since verification is strict
 
         while (validTrends.length < 6 && retryCount <= maxRetries) {
-            if (retryCount > 0) {
-                console.log(`[API] Retry ${retryCount}/${maxRetries}: Only found ${validTrends.length} valid trends. Generating more...`);
-            }
+            const needed = 6 - validTrends.length;
+            console.log(`[API] Loop ${retryCount + 1}: Need ${needed} more verified trends.`);
 
             try {
                 const model = genAI.getGenerativeModel({
@@ -128,200 +127,100 @@ export async function GET(request: Request) {
                 });
 
                 const today = new Date().toISOString().split('T')[0];
-                const itemsNeeded = 10; // Request more than 6 to have a buffer
+
+                // Ask for more candidates than needed to account for rejection
+                const candidatesNeeded = needed * 2 + 2;
 
                 const prompt = `
               You are a trend analyst for a ${job}.
               Today's date is ${today}.
 
-              **PREMIUM SOURCES (STRICT PRIORITY):**
-              You MUST prioritize news from the following high-quality sources. 
-              **At least 8 out of 10 items MUST come from these domains:**
-              1. Bloomberg
-              2. Financial Times (FT)
-              3. The Wall Street Journal (WSJ)
-              4. The Economist
-              5. BBC
-              6. Reuters
-              7. AP News
-              8. The New York Times (NYT)
-              9. The Washington Post (WP)
-              10. Nikkei Asia
-              11. South China Morning Post (SCMP)
-              12. TechCrunch
-              13. Wired
-              14. The Information
-
               **TASK:**
-              1. Use the 'googleSearch' tool to find **${itemsNeeded}** current, hot trending news items relevant to a ${job}.
-              2. **CRITICAL:** Search specifically for these premium sources (e.g., "site:bloomberg.com OR site:ft.com ...").
-              3. **ANTI-HALLUCINATION RULES (EXTREMELY IMPORTANT):**
-                 - **NEVER** invent or guess URLs.
-                 - **ONLY** use URLs that you have verified exist from the search results.
-                 - If you cannot find a direct link, skip the item.
-              4. Focus on news from the past 1-3 days.
-
-              For each item, provide:
-              - category: Short English category (e.g., "Marketing", "AI", "Tech").
-              - title: Catchy Korean headline.
-              - time: Relative time (e.g., "2시간 전").
-              - imageColor: Tailwind CSS background color class (e.g., "bg-blue-500/20").
-              - originalUrl: **THE EXACT URL** from the search result. Must start with http:// or https://.
-              - imageUrl: **CRITICAL:** Try to find the actual image URL from the search result snippet or metadata (often og:image). If you absolutely cannot find a real image URL, leave this empty string "". DO NOT make up an image URL.
-              - summary: 1-2 sentence Korean summary.
-
-              Return ONLY a valid JSON array of objects.
-              Example:
+              Find **${candidatesNeeded}** POTENTIAL trending news headlines relevant to a ${job}.
+              
+              **CRITERIA:**
+              1. MUST be from the last 3 days.
+              2. MUST be real news, not general advice.
+              3. Focus on: AI, Tech, Marketing, Business, Economy.
+              
+              Return a JSON array of objects:
               [
-                { "category": "AI", "title": "...", "time": "...", "imageColor": "...", "originalUrl": "https://actual-news-site.com/article", "imageUrl": "...", "summary": "..." }
+                { 
+                  "title": "Headline in Korean", 
+                  "category": "Category (English)",
+                  "summary": "Short summary in Korean",
+                  "searchQuery": "English search query to find this news" 
+                }
               ]
             `;
 
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
-                const text = response.text();
+                const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
 
-                console.log('[API] Raw response length:', text.length);
-
-                // More robust JSON extraction
-                let cleanedText = text.trim();
-                cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-
-                const arrayMatch = cleanedText.match(/\[[\s\S]*\]/);
-                if (arrayMatch) {
-                    cleanedText = arrayMatch[0];
-                }
-
-                // Additional cleanup: remove any trailing non-JSON content
-                const lastBracketIndex = cleanedText.lastIndexOf(']');
-                if (lastBracketIndex !== -1 && lastBracketIndex < cleanedText.length - 1) {
-                    cleanedText = cleanedText.substring(0, lastBracketIndex + 1);
-                }
-
-                let newTrends = [];
+                let candidates = [];
                 try {
-                    newTrends = JSON.parse(cleanedText);
-                } catch (parseError: any) {
-                    console.error('[API] JSON Parse Error:', parseError);
-                    // Try to salvage partial JSON
-                    try {
-                        const firstBracket = cleanedText.indexOf('[');
-                        if (firstBracket === -1) throw parseError;
+                    candidates = JSON.parse(text);
+                } catch (e) {
+                    console.error("[API] Failed to parse candidates JSON", e);
+                    continue;
+                }
 
-                        let validJson = '[';
-                        let braceCount = 0;
-                        let currentObject = '';
-                        let inString = false;
-                        let escapeNext = false;
-                        const validObjects: string[] = [];
+                if (!Array.isArray(candidates)) continue;
 
-                        for (let i = firstBracket + 1; i < cleanedText.length; i++) {
-                            const char = cleanedText[i];
+                console.log(`[API] Generated ${candidates.length} candidates. Starting strict verification...`);
 
-                            if (char === '"' && !escapeNext) inString = !inString;
-                            escapeNext = char === '\\' && !escapeNext;
+                // Verify each candidate one by one
+                for (const candidate of candidates) {
+                    if (validTrends.length >= 6) break;
 
-                            if (!inString) {
-                                if (char === '{') braceCount++;
-                                if (char === '}') braceCount--;
-                            }
+                    // Skip duplicates
+                    if (validTrends.some(t => t.title === candidate.title)) continue;
 
-                            currentObject += char;
+                    // STRICT VERIFICATION STEP
+                    const verification = await verifyTrendAuthenticity(candidate.title, candidate.category);
 
-                            if (braceCount === 0 && currentObject.trim().endsWith('}')) {
-                                try {
-                                    const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
-                                    validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
-                                    currentObject = '';
-                                } catch (e) {
-                                    currentObject = '';
-                                }
-                            }
+                    if (verification.isReal && verification.url) {
+                        // Double check URL accessibility
+                        const { isValid, finalUrl } = await verifyAndGetFinalUrl(verification.url);
+
+                        if (isValid && finalUrl) {
+                            validTrends.push({
+                                title: candidate.title,
+                                category: candidate.category,
+                                summary: candidate.summary,
+                                time: "최근", // Will be updated by client or generic
+                                imageColor: "bg-blue-500/20", // Randomize this if needed
+                                originalUrl: finalUrl,
+                                imageUrl: verification.imageUrl || "",
+                                id: generateTrendId(candidate.title)
+                            });
+                            console.log(`[API] Added verified trend. Total: ${validTrends.length}/6`);
                         }
-
-                        if (validObjects.length > 0) {
-                            validJson = '[' + validObjects.join(',') + ']';
-                            newTrends = JSON.parse(validJson);
-                            console.log(`[API] Successfully salvaged ${newTrends.length} complete objects from partial JSON`);
-                        } else {
-                            throw parseError;
-                        }
-                    } catch (salvageError) {
-                        console.error('[API] Salvage attempt failed');
                     }
                 }
 
-                if (Array.isArray(newTrends)) {
-                    console.log(`[API] Generated ${newTrends.length} new trends. Verifying URLs...`);
-
-                    // Verify and fix URLs for new trends
-                    const verificationPromises = newTrends.map(async (trend: any) => {
-                        // Skip if we already have this URL (deduplication)
-                        if (validTrends.some(t => t.originalUrl === trend.originalUrl || t.title === trend.title)) {
-                            return null;
-                        }
-
-                        if (!trend.originalUrl || !trend.originalUrl.startsWith('http')) {
-                            return null;
-                        }
-
-                        // 1. Verify URL
-                        const { isValid, finalUrl } = await verifyAndGetFinalUrl(trend.originalUrl);
-                        if (isValid && finalUrl) {
-                            return { ...trend, originalUrl: finalUrl };
-                        }
-
-                        // 2. Fix URL
-                        console.warn(`[API] URL invalid, searching for real article: ${trend.title}`);
-                        const realUrl = await findRealArticleUrl(trend.title, trend.category);
-                        if (realUrl) {
-                            const { isValid: realUrlValid, finalUrl: realFinalUrl } = await verifyAndGetFinalUrl(realUrl);
-                            if (realUrlValid && realFinalUrl) {
-                                return { ...trend, originalUrl: realFinalUrl };
-                            }
-                        }
-
-                        return null;
-                    });
-
-                    const results = await Promise.all(verificationPromises);
-                    const verifiedNewTrends = results.filter((t: any) => t !== null);
-
-                    validTrends = [...validTrends, ...verifiedNewTrends];
-                    console.log(`[API] Current valid trends count: ${validTrends.length}`);
-                }
-
             } catch (error) {
-                console.error(`[API] Error in generation attempt ${retryCount + 1}:`, error);
+                console.error(`[API] Error in generation loop ${retryCount}:`, error);
             }
 
             retryCount++;
         }
 
-        // Final check
         if (validTrends.length === 0) {
-            console.error('[API] Failed to generate any valid trends after retries');
-            return NextResponse.json({ error: "Failed to generate trends" }, { status: 500 });
+            return NextResponse.json({ error: "Failed to generate verified trends" }, { status: 500 });
         }
 
-        // Limit to 6
+        // Finalize
         validTrends = validTrends.slice(0, 6);
-        console.log(`[API] Finalizing with ${validTrends.length} trends`);
-
-        // Add IDs to trends
-        const trendsWithIds = validTrends.map((trend: any) => ({
-            ...trend,
-            id: generateTrendId(trend.title)
-        }));
-
-        // Save to cache
-        await saveTrendsCache(trendsWithIds);
+        await saveTrendsCache(validTrends);
 
         return NextResponse.json({
-            trends: trendsWithIds,
+            trends: validTrends,
             cached: false,
             lastUpdated: new Date().toISOString()
         });
+
     } catch (error) {
         console.error("Error fetching trends:", error);
         return NextResponse.json({ error: "Failed to fetch trends" }, { status: 500 });
@@ -332,25 +231,16 @@ export async function POST(request: Request) {
     try {
         const { title, level, job, originalUrl, summary, trendId } = await request.json();
 
-        // Try to get cached detail first
         if (trendId) {
             const cachedDetail = await getDetailCache(trendId);
             if (cachedDetail) {
-                console.log('[API] Returning cached detail for:', title);
-                return NextResponse.json({
-                    detail: cachedDetail,
-                    cached: true
-                });
+                return NextResponse.json({ detail: cachedDetail, cached: true });
             }
         }
 
-        // If no cache, generate new detail
-        console.log('[API] Generating fresh detail for:', title);
         const model = genAI.getGenerativeModel({
             model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
+            generationConfig: { responseMimeType: "application/json" }
         });
 
         const prompt = `
@@ -367,67 +257,23 @@ export async function POST(request: Request) {
       3. 이 뉴스에서 **사용자가 구체적으로 얻을 수 있는 것**이 무엇인지 명시
       4. 실용적이고 **즉시 적용 가능한 액션 아이템** 제공
 
-      **텍스트 크기 및 양식 규칙 (매우 중요)**:
-      - 제목: 18px, 굵게 (# 사용)
-      - 섹션 제목: 16px, 굵게 (## 사용)
-      - 본문: 14px, 보통 (일반 텍스트)
-      - 핵심 키워드: **굵게** 표시
-      - 단락 간 충분한 공백 (각 섹션 사이에 빈 줄)
-      - 길이: 본문 4-6개 단락 (너무 짧지도, 길지도 않게)
-
-      **필수 구성**:
-
-      ### 1. 핵심 내용 (2-3 단락)
-      - 이 뉴스가 무엇인지 명확하고 이해하기 쉽게 설명
-      - ${level} ${job}도 쉽게 이해할 수 있는 언어 사용
-      - 기술적 용어는 간단히 풀어 설명
-
-      ### 2. 나의 상황과의 연결 (2-3 단락)
-      - "${level} ${job}인 당신에게 이 뉴스는..."로 시작
-      - 사용자의 경력 단계에 맞춰 연결점 제시
-      - 왜 이 뉴스에 주목해야 하는지 구체적으로 설명
-      - 예: "3년차 마케터인 당신은 이 트렌드를 활용하여 다음 캠페인에서 ROI를 높일 수 있습니다"
-
-      ### 3. 얻을 수 있는 가치
-      - "이 브리핑에서 얻을 수 있는 것:"이라는 소제목 사용
-      - 지식, 스킬, 인사이트, 기회 등 구체적으로 명시
-      - 3-4개 bullet point로 정리
-
       **응답 형식**:
       {
         "title": "흥미롭고 명확한 한글 제목 (18px)",
-        "content": "### 핵심 내용\\n\\n[2-3 단락]\\n\\n### ${level} ${job}인 당신에게\\n\\n[사용자 상황과의 연결 2-3 단락]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **핵심 가치 1**\\n- **핵심 가치 2**\\n- **핵심 가치 3**",
-        "keyTakeaways": [
-          "${job} 관점에서의 핵심 포인트 1",
-          "${job} 관점에서의 핵심 포인트 2",
-          "${job} 관점에서의 핵심 포인트 3"
-        ],
-        "actionItems": [
-          "${level} ${job}가 즉시 시도할 수 있는 액션 1",
-          "${level} ${job}가 즉시 시도할 수 있는 액션 2",
-          "${level} ${job}가 즉시 시도할 수 있는 액션 3"
-        ]
+        "content": "### 핵심 내용\\n\\n[내용]\\n\\n### ${level} ${job}인 당신에게\\n\\n[내용]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **핵심 가치 1**\\n- **핵심 가치 2**",
+        "keyTakeaways": ["포인트 1", "포인트 2", "포인트 3"],
+        "actionItems": ["액션 1", "액션 2", "액션 3"]
       }
-
-      **중요**: 
-      - 모든 텍스트는 한글로 작성
-      - 매 브리핑마다 **동일한 구조와 텍스트 크기** 유지
-      - Markdown formatting 사용 (##, **, bullet points)
-      - 사용자에게 직접 말하는 톤 ("당신", "귀하" 사용)
       JSON만 반환하세요.
     `;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text();
-        const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const detail = JSON.parse(cleanedText);
+        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+        const detail = JSON.parse(text);
 
         return NextResponse.json({
-            detail: {
-                ...detail,
-                originalUrl: originalUrl || ""
-            },
+            detail: { ...detail, originalUrl: originalUrl || "" },
             cached: false
         });
     } catch (error) {
