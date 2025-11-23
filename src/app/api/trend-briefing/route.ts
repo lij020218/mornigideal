@@ -32,45 +32,68 @@ function isPremiumSource(url: string): boolean {
     }
 }
 
-// Robust JSON cleaner and parser
+// Robust JSON cleaner and parser with stack-based extraction
 function cleanAndParseJSON(text: string): any {
     // 1. Remove markdown code blocks
     let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // 2. Try parsing directly first
-    try {
-        return JSON.parse(cleanText);
-    } catch (e) {
-        // 3. If failed, try to extract JSON object or array
-        const firstBrace = cleanText.indexOf('{');
-        const firstBracket = cleanText.indexOf('[');
+    // 2. Stack-based extraction to find the exact end of the JSON structure
+    const firstBrace = cleanText.indexOf('{');
+    const firstBracket = cleanText.indexOf('[');
 
-        let start = -1;
-        let end = -1;
+    let start = -1;
+    let openChar = '';
+    let closeChar = '';
 
-        // Determine if we are looking for an object or array
-        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-            // It's likely an object
-            start = firstBrace;
-            end = cleanText.lastIndexOf('}');
-        } else if (firstBracket !== -1) {
-            // It's likely an array
-            start = firstBracket;
-            end = cleanText.lastIndexOf(']');
-        }
+    // Determine if we are looking for an object or array
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        start = firstBrace;
+        openChar = '{';
+        closeChar = '}';
+    } else if (firstBracket !== -1) {
+        start = firstBracket;
+        openChar = '[';
+        closeChar = ']';
+    }
 
-        if (start !== -1 && end !== -1 && end > start) {
-            const jsonCandidate = cleanText.substring(start, end + 1);
-            try {
-                return JSON.parse(jsonCandidate);
-            } catch (innerError) {
-                console.error("[API] JSON extraction failed:", innerError);
-                throw new Error("Failed to extract valid JSON");
+    if (start !== -1) {
+        let balance = 0;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = start; i < cleanText.length; i++) {
+            const char = cleanText[i];
+
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
+            if (char === '"') {
+                inString = !inString;
+                continue;
+            }
+
+            if (!inString) {
+                if (char === openChar) {
+                    balance++;
+                } else if (char === closeChar) {
+                    balance--;
+                    if (balance === 0) {
+                        // Found the matching close char - extract ONLY up to this point
+                        const jsonCandidate = cleanText.substring(start, i + 1);
+                        return JSON.parse(jsonCandidate);
+                    }
+                }
             }
         }
-
-        throw e;
     }
+
+    // Fallback: try parsing the entire text as-is
+    return JSON.parse(cleanText);
 }
 
 // Helper to verify if a news item is REAL and RECENT using a dedicated search check
