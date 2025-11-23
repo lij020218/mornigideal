@@ -96,86 +96,6 @@ function cleanAndParseJSON(text: string): any {
     return JSON.parse(cleanText);
 }
 
-// Helper to verify if a news item is REAL and RECENT using a dedicated search check
-async function verifyTrendAuthenticity(title: string, category: string, preferPremium: boolean = true): Promise<{ isReal: boolean; url: string; imageUrl: string; isPremium: boolean }> {
-    try {
-        console.log(`[API] Verifying authenticity of: "${title}"`);
-
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            // @ts-expect-error - googleSearch is a valid tool
-            tools: [{ googleSearch: {} }],
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        });
-
-        const premiumSourcesHint = preferPremium ? `
-        **PREFERRED SOURCES (PRIORITY):**
-        Bloomberg, Financial Times, WSJ, The Economist, BBC, Reuters, AP News,
-        NYT, Washington Post, Nikkei Asia, SCMP, TechCrunch, Wired, The Information
-
-        Try to find the article from these sources FIRST.
-        ` : '';
-
-        const verificationPrompt = `
-        ACT AS A STRICT FACT-CHECKER.
-
-        Target News: "${title}" (Category: ${category})
-        Current Date: ${new Date().toISOString().split('T')[0]}
-
-        TASK:
-        1. Search Google specifically for this news topic.
-        2. **CRITICAL**: Verify if this specific news event ACTUALLY HAPPENED within the last 7 days.
-        3. **REJECT** if:
-           - It is a rumor, prediction, or "leaked" info that hasn't been officially confirmed.
-           - It is an old story (older than 7 days) being recycled.
-           - The search results do not explicitly confirm the *exact* event described in the title.
-           - It is a general "how-to" or "guide" article, not a news event.
-        4. If verified as REAL and RECENT, find the BEST, most authoritative source URL.
-        ${premiumSourcesHint}
-
-        Return JSON:
-        {
-            "isReal": boolean, // true ONLY if confirmed real, recent, and specific
-            "verifiedUrl": "string", // The actual URL found during verification
-            "verifiedImageUrl": "string", // Image URL if found, else empty
-            "reason": "string" // specific reason for acceptance or rejection
-        }
-        `;
-
-        const result = await model.generateContent(verificationPrompt);
-        const response = await result.response;
-        const text = response.text();
-
-        try {
-            const data = cleanAndParseJSON(text);
-
-            if (data.isReal && data.verifiedUrl) {
-                const isPremium = isPremiumSource(data.verifiedUrl);
-                const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
-                console.log(`[API] ✅ Verified ${sourceType}: ${title} (${data.reason})`);
-                return {
-                    isReal: true,
-                    url: data.verifiedUrl,
-                    imageUrl: data.verifiedImageUrl || "",
-                    isPremium
-                };
-            } else {
-                console.warn(`[API] ❌ Rejected: ${title} (${data.reason})`);
-                return { isReal: false, url: "", imageUrl: "", isPremium: false };
-            }
-        } catch (parseError) {
-            console.error(`[API] JSON Parse Error for verification of "${title}":`, parseError);
-            return { isReal: false, url: "", imageUrl: "", isPremium: false };
-        }
-
-    } catch (error) {
-        console.error(`[API] Verification failed for "${title}":`, error);
-        return { isReal: false, url: "", imageUrl: "", isPremium: false };
-    }
-}
-
 // Helper to verify and get the final URL (follows redirects)
 async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; finalUrl: string | null }> {
     try {
@@ -230,180 +150,109 @@ export async function GET(request: Request) {
             }
         }
 
-        console.log('[API] Starting STRICT generation process...');
+        console.log('[API] Starting SEARCH-FIRST generation process...');
 
-        let validTrends: any[] = [];
-        let retryCount = 0;
-        const maxRetries = 4; // Increased retries for stricter verification
-
-        while (validTrends.length < 6 && retryCount <= maxRetries) {
-            const needed = 6 - validTrends.length;
-            console.log(`[API] Loop ${retryCount + 1}: Need ${needed} more verified trends.`);
-
-            try {
-                const model = genAI.getGenerativeModel({
-                    model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-                    // @ts-expect-error - googleSearch is a valid tool
-                    tools: [{ googleSearch: {} }],
-                    generationConfig: {
-                        responseMimeType: "application/json"
-                    }
-                });
-
-                const today = new Date().toISOString().split('T')[0];
-
-                // Ask for more candidates than needed to account for rejection
-                const candidatesNeeded = needed * 3 + 2;
-
-                const prompt = `
-              You are a trend analyst for a ${job}.
-              Today's date is ${today}.
-
-              **TASK:**
-              Find **${candidatesNeeded}** POTENTIAL trending news headlines relevant to a ${job}.
-              
-              **CRITERIA:**
-              1. MUST be from the last 3 days.
-              2. MUST be real news events, not general advice or "how-to" guides.
-              3. Focus on: AI, Tech, Marketing, Business, Economy.
-              ${excludedTitles.length > 0 ? `
-              **EXCLUSIONS (DO NOT INCLUDE):**
-              The user has already seen these. Find DIFFERENT news:
-              ${excludedTitles.map(t => `- ${t}`).join('\n')}
-              ` : ''}
-              
-              Return a JSON array of objects:
-              [
-                { 
-                  "title": "Headline in Korean", 
-                  "category": "Category (English)",
-                  "summary": "Short summary in Korean",
-                  "searchQuery": "English search query to find this news" 
-                }
-              ]
-            `;
-
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                const text = response.text();
-
-                let candidates = [];
-                try {
-                    candidates = cleanAndParseJSON(text);
-                } catch (parseError: any) {
-                    console.error("[API] Failed to parse candidates JSON", parseError);
-
-                    // Fallback: Try to salvage partial JSON if cleanAndParseJSON failed
-                    // This is the user's original salvage logic, kept as a last resort
-                    try {
-                        const firstBracket = text.indexOf('[');
-                        if (firstBracket !== -1) {
-                            let braceCount = 0;
-                            let currentObject = '';
-                            let inString = false;
-                            let escapeNext = false;
-                            const validObjects: string[] = [];
-
-                            for (let i = firstBracket + 1; i < text.length; i++) {
-                                const char = text[i];
-
-                                if (char === '"' && !escapeNext) inString = !inString;
-                                escapeNext = char === '\\' && !escapeNext;
-
-                                if (!inString) {
-                                    if (char === '{') braceCount++;
-                                    if (char === '}') braceCount--;
-                                }
-
-                                currentObject += char;
-
-                                if (braceCount === 0 && currentObject.trim().endsWith('}')) {
-                                    try {
-                                        const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
-                                        validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
-                                        currentObject = '';
-                                    } catch (e) {
-                                        currentObject = '';
-                                    }
-                                }
-                            }
-
-                            if (validObjects.length > 0) {
-                                const validJson = '[' + validObjects.join(',') + ']';
-                                candidates = JSON.parse(validJson);
-                                console.log(`[API] Salvaged ${candidates.length} candidates from partial JSON`);
-                            }
-                        }
-                    } catch (salvageError) {
-                        console.error("[API] Salvage attempt failed");
-                    }
-                }
-
-                if (!Array.isArray(candidates) || candidates.length === 0) continue;
-
-                console.log(`[API] Generated ${candidates.length} candidates. Starting strict verification...`);
-
-                // Collect all verification results with their premium status
-                const verificationResults = [];
-
-                for (const candidate of candidates) {
-                    // Skip duplicates
-                    if (validTrends.some(t => t.title === candidate.title)) continue;
-                    if (excludedTitles.includes(candidate.title)) continue;
-
-                    // STRICT VERIFICATION STEP
-                    const verification = await verifyTrendAuthenticity(candidate.title, candidate.category);
-
-                    if (verification.isReal && verification.url) {
-                        // Double check URL accessibility
-                        const { isValid, finalUrl } = await verifyAndGetFinalUrl(verification.url);
-
-                        if (isValid && finalUrl) {
-                            verificationResults.push({
-                                title: candidate.title,
-                                category: candidate.category,
-                                summary: candidate.summary,
-                                time: "최근",
-                                imageColor: "bg-blue-500/20",
-                                originalUrl: finalUrl,
-                                imageUrl: verification.imageUrl || "",
-                                id: generateTrendId(candidate.title),
-                                isPremium: verification.isPremium
-                            });
-                        }
-                    }
-                }
-
-                // Sort by premium status (premium sources first)
-                verificationResults.sort((a, b) => {
-                    if (a.isPremium && !b.isPremium) return -1;
-                    if (!a.isPremium && b.isPremium) return 1;
-                    return 0;
-                });
-
-                // Add to validTrends (premium first)
-                for (const result of verificationResults) {
-                    if (validTrends.length >= 6) break;
-                    const { isPremium, ...trendData } = result; // Remove isPremium before adding
-                    validTrends.push(trendData);
-                    const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
-                    console.log(`[API] Added ${sourceType} trend. Total: ${validTrends.length}/6`);
-                }
-
-            } catch (error) {
-                console.error(`[API] Error in generation loop ${retryCount}:`, error);
+        const model = genAI.getGenerativeModel({
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            // @ts-expect-error - googleSearch is a valid tool
+            tools: [{ googleSearch: {} }],
+            generationConfig: {
+                responseMimeType: "application/json"
             }
+        });
 
-            retryCount++;
+        const today = new Date().toISOString().split('T')[0];
+
+        // Single-Step Prompt: Search AND Select
+        const prompt = `
+        You are a professional trend analyst for a ${job}.
+        Today's date is ${today}.
+
+        **GOAL**: Find exactly 6 REAL, VERIFIED, and RECENT news articles relevant to a ${job}.
+
+        **INSTRUCTIONS**:
+        1. **SEARCH FIRST**: Use Google Search to find the latest news (last 3 days) about AI, Tech, Marketing, Business, or Economy.
+        2. **FILTER**:
+           - MUST be real news events from reputable sources.
+           - MUST be from the last 3 days.
+           - **EXCLUDE** these titles (already seen): ${excludedTitles.join(', ')}
+        3. **PRIORITIZE PREMIUM SOURCES**:
+           - Try to find articles from: Bloomberg, FT, WSJ, Economist, BBC, Reuters, NYT, TechCrunch, Wired, etc.
+        4. **OUTPUT**:
+           - Select the best 6 unique articles.
+           - For each, provide the *exact* source URL you found.
+
+        **Return JSON Array**:
+        [
+          {
+            "title": "Headline in Korean",
+            "category": "Category (English)",
+            "summary": "Short summary in Korean",
+            "originalUrl": "The ACTUAL URL found in search",
+            "imageUrl": "Image URL if found (og:image), else empty string"
+          }
+        ]
+        `;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        let candidates = [];
+        try {
+            candidates = cleanAndParseJSON(text);
+        } catch (parseError) {
+            console.error("[API] Failed to parse candidates JSON", parseError);
+            return NextResponse.json({ error: "Failed to parse trends" }, { status: 500 });
         }
 
+        if (!Array.isArray(candidates)) {
+            return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
+        }
+
+        console.log(`[API] Found ${candidates.length} candidates directly from search.`);
+
+        const validTrends: any[] = [];
+
+        // Validate URLs and Format
+        for (const candidate of candidates) {
+            if (validTrends.length >= 6) break;
+
+            // Basic validation
+            if (!candidate.title || !candidate.originalUrl) continue;
+
+            // Check URL accessibility (Head request) - fast check
+            const { isValid, finalUrl } = await verifyAndGetFinalUrl(candidate.originalUrl);
+
+            if (isValid && finalUrl) {
+                const isPremium = isPremiumSource(finalUrl);
+                validTrends.push({
+                    title: candidate.title,
+                    category: candidate.category || "General",
+                    summary: candidate.summary || "",
+                    time: "최근",
+                    imageColor: "bg-blue-500/20",
+                    originalUrl: finalUrl,
+                    imageUrl: candidate.imageUrl || "",
+                    id: generateTrendId(candidate.title),
+                    isPremium: isPremium
+                });
+            }
+        }
+
+        // Sort by premium status
+        validTrends.sort((a, b) => {
+            if (a.isPremium && !b.isPremium) return -1;
+            if (!a.isPremium && b.isPremium) return 1;
+            return 0;
+        });
+
+        // Final check
         if (validTrends.length === 0) {
-            return NextResponse.json({ error: "Failed to generate verified trends" }, { status: 500 });
+            return NextResponse.json({ error: "Failed to find valid trends" }, { status: 500 });
         }
 
-        // Finalize
-        validTrends = validTrends.slice(0, 6);
-        // Clear existing trends if this is a refresh request
+        // Save to cache
         await saveTrendsCache(validTrends, forceRefresh);
 
         return NextResponse.json({
