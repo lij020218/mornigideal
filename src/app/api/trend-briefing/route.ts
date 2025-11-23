@@ -32,6 +32,47 @@ function isPremiumSource(url: string): boolean {
     }
 }
 
+// Robust JSON cleaner and parser
+function cleanAndParseJSON(text: string): any {
+    // 1. Remove markdown code blocks
+    let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    // 2. Try parsing directly first
+    try {
+        return JSON.parse(cleanText);
+    } catch (e) {
+        // 3. If failed, try to extract JSON object or array
+        const firstBrace = cleanText.indexOf('{');
+        const firstBracket = cleanText.indexOf('[');
+
+        let start = -1;
+        let end = -1;
+
+        // Determine if we are looking for an object or array
+        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+            // It's likely an object
+            start = firstBrace;
+            end = cleanText.lastIndexOf('}');
+        } else if (firstBracket !== -1) {
+            // It's likely an array
+            start = firstBracket;
+            end = cleanText.lastIndexOf(']');
+        }
+
+        if (start !== -1 && end !== -1 && end > start) {
+            const jsonCandidate = cleanText.substring(start, end + 1);
+            try {
+                return JSON.parse(jsonCandidate);
+            } catch (innerError) {
+                console.error("[API] JSON extraction failed:", innerError);
+                throw new Error("Failed to extract valid JSON");
+            }
+        }
+
+        throw e;
+    }
+}
+
 // Helper to verify if a news item is REAL and RECENT using a dedicated search check
 async function verifyTrendAuthenticity(title: string, category: string, preferPremium: boolean = true): Promise<{ isReal: boolean; url: string; imageUrl: string; isPremium: boolean }> {
     try {
@@ -82,21 +123,27 @@ async function verifyTrendAuthenticity(title: string, category: string, preferPr
 
         const result = await model.generateContent(verificationPrompt);
         const response = await result.response;
-        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const data = JSON.parse(text);
+        const text = response.text();
 
-        if (data.isReal && data.verifiedUrl) {
-            const isPremium = isPremiumSource(data.verifiedUrl);
-            const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
-            console.log(`[API] ✅ Verified ${sourceType}: ${title} (${data.reason})`);
-            return {
-                isReal: true,
-                url: data.verifiedUrl,
-                imageUrl: data.verifiedImageUrl || "",
-                isPremium
-            };
-        } else {
-            console.warn(`[API] ❌ Rejected: ${title} (${data.reason})`);
+        try {
+            const data = cleanAndParseJSON(text);
+
+            if (data.isReal && data.verifiedUrl) {
+                const isPremium = isPremiumSource(data.verifiedUrl);
+                const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
+                console.log(`[API] ✅ Verified ${sourceType}: ${title} (${data.reason})`);
+                return {
+                    isReal: true,
+                    url: data.verifiedUrl,
+                    imageUrl: data.verifiedImageUrl || "",
+                    isPremium
+                };
+            } else {
+                console.warn(`[API] ❌ Rejected: ${title} (${data.reason})`);
+                return { isReal: false, url: "", imageUrl: "", isPremium: false };
+            }
+        } catch (parseError) {
+            console.error(`[API] JSON Parse Error for verification of "${title}":`, parseError);
             return { isReal: false, url: "", imageUrl: "", isPremium: false };
         }
 
@@ -215,77 +262,61 @@ export async function GET(request: Request) {
 
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
-                let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-
-                // Find JSON array in the text
-                const arrayMatch = text.match(/\[[\s\S]*\]/);
-                if (arrayMatch) {
-                    text = arrayMatch[0];
-                }
-
-                // Remove any trailing non-JSON content
-                const lastBracketIndex = text.lastIndexOf(']');
-                if (lastBracketIndex !== -1 && lastBracketIndex < text.length - 1) {
-                    text = text.substring(0, lastBracketIndex + 1);
-                }
+                const text = response.text();
 
                 let candidates = [];
                 try {
-                    candidates = JSON.parse(text);
+                    candidates = cleanAndParseJSON(text);
                 } catch (parseError: any) {
                     console.error("[API] Failed to parse candidates JSON", parseError);
 
-                    // Try to salvage partial JSON
+                    // Fallback: Try to salvage partial JSON if cleanAndParseJSON failed
+                    // This is the user's original salvage logic, kept as a last resort
                     try {
                         const firstBracket = text.indexOf('[');
-                        if (firstBracket === -1) {
-                            continue;
-                        }
+                        if (firstBracket !== -1) {
+                            let braceCount = 0;
+                            let currentObject = '';
+                            let inString = false;
+                            let escapeNext = false;
+                            const validObjects: string[] = [];
 
-                        let braceCount = 0;
-                        let currentObject = '';
-                        let inString = false;
-                        let escapeNext = false;
-                        const validObjects: string[] = [];
+                            for (let i = firstBracket + 1; i < text.length; i++) {
+                                const char = text[i];
 
-                        for (let i = firstBracket + 1; i < text.length; i++) {
-                            const char = text[i];
+                                if (char === '"' && !escapeNext) inString = !inString;
+                                escapeNext = char === '\\' && !escapeNext;
 
-                            if (char === '"' && !escapeNext) inString = !inString;
-                            escapeNext = char === '\\' && !escapeNext;
+                                if (!inString) {
+                                    if (char === '{') braceCount++;
+                                    if (char === '}') braceCount--;
+                                }
 
-                            if (!inString) {
-                                if (char === '{') braceCount++;
-                                if (char === '}') braceCount--;
-                            }
+                                currentObject += char;
 
-                            currentObject += char;
-
-                            if (braceCount === 0 && currentObject.trim().endsWith('}')) {
-                                try {
-                                    const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
-                                    validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
-                                    currentObject = '';
-                                } catch (e) {
-                                    currentObject = '';
+                                if (braceCount === 0 && currentObject.trim().endsWith('}')) {
+                                    try {
+                                        const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
+                                        validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
+                                        currentObject = '';
+                                    } catch (e) {
+                                        currentObject = '';
+                                    }
                                 }
                             }
-                        }
 
-                        if (validObjects.length > 0) {
-                            const validJson = '[' + validObjects.join(',') + ']';
-                            candidates = JSON.parse(validJson);
-                            console.log(`[API] Salvaged ${candidates.length} candidates from partial JSON`);
-                        } else {
-                            continue;
+                            if (validObjects.length > 0) {
+                                const validJson = '[' + validObjects.join(',') + ']';
+                                candidates = JSON.parse(validJson);
+                                console.log(`[API] Salvaged ${candidates.length} candidates from partial JSON`);
+                            }
                         }
                     } catch (salvageError) {
                         console.error("[API] Salvage attempt failed");
-                        continue;
                     }
                 }
 
-                if (!Array.isArray(candidates)) continue;
+                if (!Array.isArray(candidates) || candidates.length === 0) continue;
 
                 console.log(`[API] Generated ${candidates.length} candidates. Starting strict verification...`);
 
@@ -349,7 +380,8 @@ export async function GET(request: Request) {
 
         // Finalize
         validTrends = validTrends.slice(0, 6);
-        await saveTrendsCache(validTrends);
+        // Clear existing trends if this is a refresh request
+        await saveTrendsCache(validTrends, forceRefresh);
 
         return NextResponse.json({
             trends: validTrends,
@@ -405,8 +437,17 @@ export async function POST(request: Request) {
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const detail = JSON.parse(text);
+        const text = response.text();
+
+        let detail;
+        try {
+            detail = cleanAndParseJSON(text);
+        } catch (e) {
+            console.error("Failed to parse detail JSON", e);
+            // Fallback to simple clean if strict fails
+            const simpleClean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            detail = JSON.parse(simpleClean);
+        }
 
         return NextResponse.json({
             detail: { ...detail, originalUrl: originalUrl || "" },

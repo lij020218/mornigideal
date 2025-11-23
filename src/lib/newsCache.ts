@@ -26,11 +26,21 @@ export interface CachedData {
     lastUpdated: string;
 }
 
-export async function saveTrendsCache(trends: CachedTrend[]): Promise<void> {
+export async function saveTrendsCache(trends: CachedTrend[], clearExisting: boolean = false): Promise<void> {
     try {
-        // Clear existing trends to keep only fresh ones (optional, or upsert)
-        // For simplicity, we'll upsert. But since we want to show "latest", maybe we should delete old ones?
-        // Let's just upsert for now.
+        // If clearExisting is true, delete all old trends first
+        if (clearExisting) {
+            const { error: deleteError } = await supabase
+                .from('trends')
+                .delete()
+                .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+
+            if (deleteError) {
+                console.error('[Cache] Error clearing old trends:', deleteError);
+            } else {
+                console.log('[Cache] Cleared old trends from Supabase');
+            }
+        }
 
         const trendsToInsert = trends.map(t => ({
             id: t.id,
