@@ -301,7 +301,7 @@ export function Dashboard({ username }: DashboardProps) {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
+        <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
             {/* Header */}
             <header className="flex justify-between items-center">
                 <div>
@@ -435,7 +435,7 @@ export function Dashboard({ username }: DashboardProps) {
                 {/* 1. Daily Flow Section */}
                 <motion.section variants={itemVariants} className="space-y-4">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold flex items-center gap-2">
+                        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                             <Clock className="w-6 h-6 text-primary" /> Daily Flow
                         </h2>
                         <Button
@@ -444,11 +444,87 @@ export function Dashboard({ username }: DashboardProps) {
                             className="text-muted-foreground hover:text-white gap-2"
                             onClick={() => setShowSchedulePopup(true)}
                         >
-                            <Edit3 className="w-4 h-4" /> 일정 관리
+                            <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
                         </Button>
                     </div>
 
-                    <Card className="glass-card border-none overflow-hidden relative">
+                    {/* Mobile Layout: Goals -> Timeline -> Insights */}
+                    <div className="flex flex-col gap-4 md:hidden">
+                        {/* 1. Goals (Mobile) */}
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* Wake Up Goal */}
+                            <motion.button
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => updateDailyGoal("wakeUp", !dailyGoals.wakeUp)}
+                                className={cn(
+                                    "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
+                                    dailyGoals.wakeUp
+                                        ? "bg-green-500/10 border-green-500/30"
+                                        : "bg-white/5 border-white/10"
+                                )}
+                            >
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                    dailyGoals.wakeUp ? "bg-green-500 text-black" : "bg-white/10 text-muted-foreground"
+                                )}>
+                                    <Sun className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-sm">기상</p>
+                                    <p className="text-xs text-muted-foreground">{userSettings.wakeUpTime}</p>
+                                </div>
+                            </motion.button>
+
+                            {/* Learning Goal */}
+                            <div className={cn(
+                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
+                                dailyGoals.learning >= 2
+                                    ? "bg-purple-500/10 border-purple-500/30"
+                                    : "bg-white/5 border-white/10"
+                            )}>
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                    dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
+                                )}>
+                                    <BookOpen className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-sm">학습 ({dailyGoals.learning}/2)</p>
+                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
+                                        <motion.div
+                                            className="h-full bg-purple-500"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. Timeline (Mobile - Horizontal) */}
+                        <Card className="glass-card border-none overflow-hidden">
+                            <CardContent className="p-4">
+                                <DailyRhythmTimeline
+                                    schedule={userProfile?.schedule}
+                                    customGoals={userProfile?.customGoals}
+                                    dailyGoals={dailyGoals}
+                                    toggleCustomGoal={toggleCustomGoal}
+                                    isMobile={true}
+                                />
+                            </CardContent>
+                        </Card>
+
+                        {/* 3. Insights (Mobile) */}
+                        <div className="h-32">
+                            <PeerInsightsCard
+                                job={userProfile?.job || "마케터"}
+                                level={userProfile?.level || "중급"}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Desktop Layout: Original Grid */}
+                    <Card className="glass-card border-none overflow-hidden relative hidden md:block">
                         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 opacity-50" />
                         <CardContent className="p-6 relative">
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -503,8 +579,6 @@ export function Dashboard({ username }: DashboardProps) {
                                                 </div>
                                                 {dailyGoals.wakeUp ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Circle className="w-6 h-6 text-muted-foreground/50" />}
                                             </motion.button>
-
-
 
                                             {/* Learning Goal */}
                                             <div className={cn(
@@ -676,17 +750,17 @@ export function Dashboard({ username }: DashboardProps) {
 
                     {/* Curriculum List */}
                     <Card className="glass-card border-none">
-                        <CardContent className="p-6">
+                        <CardContent className="p-3 md:p-6">
                             {!userProfile ? (
-                                <div className="text-center py-12 flex flex-col items-center justify-center h-full">
-                                    <p className="text-muted-foreground mb-4">성장 여정을 시작하려면 온보딩을 완료해주세요.</p>
-                                    <Button onClick={() => window.location.href = "/onboarding"}>
-                                        <Sparkles className="w-4 h-4 mr-2" />
-                                        성장 여정 시작하기
+                                <div className="text-center py-8 md:py-12 flex flex-col items-center justify-center h-full">
+                                    <p className="text-sm md:text-base text-muted-foreground mb-3 md:mb-4">성장 여정을 시작하려면 온보딩을 완료해주세요.</p>
+                                    <Button onClick={() => window.location.href = "/onboarding"} size="sm" className="md:h-10">
+                                        <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
+                                        <span className="text-sm md:text-base">성장 여정 시작하기</span>
                                     </Button>
                                 </div>
                             ) : curriculum.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                                     {curriculum.map((item, index) => {
                                         const learningId = `curriculum_${index}_${item.title}`;
                                         const isCompleted = completedLearning.has(learningId);
@@ -700,41 +774,41 @@ export function Dashboard({ username }: DashboardProps) {
                                                 key={index}
                                                 whileHover={{ y: -4, scale: 1.02 }}
                                                 className={cn(
-                                                    "p-5 rounded-xl border border-white/5 bg-white/5 cursor-pointer transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-primary/10 flex flex-col h-full",
+                                                    "p-3.5 md:p-5 rounded-xl border border-white/5 bg-white/5 cursor-pointer transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-primary/10 flex flex-col h-full",
                                                     isCompleted && "bg-green-500/5 border-green-500/20"
                                                 )}
                                                 onClick={() => window.location.href = `/curriculum/${index}`}
                                             >
                                                 {/* Header with icon and title */}
-                                                <div className="flex items-start gap-3 mb-4">
+                                                <div className="flex items-start gap-2.5 md:gap-3 mb-3 md:mb-4">
                                                     <div className={cn(
-                                                        "w-12 h-12 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                                                        "w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center shrink-0 transition-all",
                                                         isCompleted
                                                             ? "bg-green-500/20 text-green-500"
                                                             : "bg-gradient-to-br from-primary/20 to-purple-500/20 text-primary"
                                                     )}>
-                                                        <BookOpen className="w-6 h-6" />
+                                                        <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className={cn("font-semibold text-base mb-1", isCompleted && "line-through text-muted-foreground")}>
+                                                        <p className={cn("font-semibold text-sm md:text-base mb-0.5 md:mb-1", isCompleted && "line-through text-muted-foreground")}>
                                                             {item.title}
                                                         </p>
-                                                        <p className="text-xs text-muted-foreground line-clamp-2">{item.subtitle}</p>
+                                                        <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2">{item.subtitle}</p>
                                                     </div>
                                                 </div>
 
                                                 {/* Progress Section */}
-                                                <div className="mt-auto space-y-3">
+                                                <div className="mt-auto space-y-2 md:space-y-3">
                                                     {/* Stats Row */}
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <div className="flex items-center gap-2">
+                                                    <div className="flex items-center justify-between text-[10px] md:text-xs">
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
                                                             <div className={cn(
-                                                                "px-2 py-1 rounded-full flex items-center gap-1",
+                                                                "px-1.5 md:px-2 py-0.5 md:py-1 rounded-full flex items-center gap-0.5 md:gap-1",
                                                                 isCompleted
                                                                     ? "bg-green-500/20 text-green-500"
                                                                     : "bg-primary/20 text-primary"
                                                             )}>
-                                                                <Target className="w-3 h-3" />
+                                                                <Target className="w-2.5 h-2.5 md:w-3 md:h-3" />
                                                                 <span className="font-semibold">{progressPercent}%</span>
                                                             </div>
                                                         </div>
@@ -745,7 +819,7 @@ export function Dashboard({ username }: DashboardProps) {
 
                                                     {/* Progress Bar */}
                                                     <div className="relative">
-                                                        <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="h-1.5 md:h-2 bg-white/5 rounded-full overflow-hidden">
                                                             <motion.div
                                                                 className={cn(
                                                                     "h-full rounded-full",
@@ -761,14 +835,14 @@ export function Dashboard({ username }: DashboardProps) {
                                                     </div>
 
                                                     {/* Footer */}
-                                                    <div className="pt-3 border-t border-white/5 flex items-center justify-between">
+                                                    <div className="pt-2 md:pt-3 border-t border-white/5 flex items-center justify-between">
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleLearningComplete(learningId);
                                                             }}
                                                             className={cn(
-                                                                "text-xs font-medium flex items-center gap-1 transition-colors",
+                                                                "text-[10px] md:text-xs font-medium flex items-center gap-0.5 md:gap-1 transition-colors",
                                                                 isCompleted
                                                                     ? "text-green-500 hover:text-green-400"
                                                                     : "text-muted-foreground hover:text-primary"
@@ -776,17 +850,17 @@ export function Dashboard({ username }: DashboardProps) {
                                                         >
                                                             {isCompleted ? (
                                                                 <>
-                                                                    <CheckCircle2 className="w-3 h-3" />
+                                                                    <CheckCircle2 className="w-2.5 h-2.5 md:w-3 md:h-3" />
                                                                     완료됨
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <Circle className="w-3 h-3" />
+                                                                    <Circle className="w-2.5 h-2.5 md:w-3 md:h-3" />
                                                                     진행중
                                                                 </>
                                                             )}
                                                         </button>
-                                                        <ArrowRight className="w-4 h-4 text-primary" />
+                                                        <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
                                                     </div>
                                                 </div>
                                             </motion.div>
@@ -895,11 +969,12 @@ export function Dashboard({ username }: DashboardProps) {
     );
 }
 
-function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGoal }: {
+function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGoal, isMobile = false }: {
     schedule?: UserProfile['schedule'];
     customGoals?: CustomGoal[];
     dailyGoals: DailyGoals;
     toggleCustomGoal: (id: string) => void;
+    isMobile?: boolean;
 }) {
     const [todayCompletions, setTodayCompletions] = useState<Record<string, any>>({});
 
@@ -1033,9 +1108,12 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     };
 
     return (
-        <div className="relative pl-8 space-y-3">
-            {/* Enhanced Vertical line with gradient */}
-            <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/30 via-primary/50 to-primary/30 rounded-full" />
+        <div className={cn(
+            "relative",
+            isMobile ? "flex gap-3 overflow-x-auto pb-2 scrollbar-hide px-1" : "pl-8 space-y-3"
+        )}>
+            {/* Enhanced Vertical line with gradient (Desktop only) */}
+            {!isMobile && <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/30 via-primary/50 to-primary/30 rounded-full" />}
 
             {timelineItems.map((item, index) => {
                 const Icon = item.icon;
@@ -1052,90 +1130,115 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="relative flex items-center gap-4 group"
+                        className={cn(
+                            "relative flex items-center gap-4 group",
+                            isMobile && "flex-col gap-2 min-w-[100px] text-center"
+                        )}
                     >
-                        {/* Enhanced Timeline dot with glow effect */}
-                        <div className={cn(
-                            "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
-                            colors.bg,
-                            isActive && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
-                        )}>
+                        {/* Enhanced Timeline dot with glow effect (Desktop only) */}
+                        {!isMobile && (
                             <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                isActive ? "bg-white" : "bg-background/50"
-                            )} />
-                        </div>
+                                "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
+                                colors.bg,
+                                isActive && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
+                            )}>
+                                <div className={cn(
+                                    "w-2 h-2 rounded-full",
+                                    isActive ? "bg-white" : "bg-background/50"
+                                )} />
+                            </div>
+                        )}
 
                         {/* Enhanced Content card */}
                         <div className={cn(
-                            "flex-1 rounded-xl p-4 border transition-all",
+                            "flex-1 rounded-xl p-4 border transition-all w-full",
+                            isMobile && "p-3 flex flex-col items-center justify-center gap-2",
                             isActive
                                 ? "bg-gradient-to-r from-white/10 to-white/5 border-white/20 shadow-md"
                                 : isPast
                                     ? "bg-white/5 border-white/5 opacity-60"
                                     : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
                         )}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    {/* Icon with colored background */}
+                            {isMobile ? (
+                                // Mobile Content
+                                <>
                                     <div className={cn(
-                                        "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
+                                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
                                         colors.bg,
                                         isActive && "shadow-lg"
                                     )}>
-                                        <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
+                                        <Icon className={cn("w-4 h-4", isActive ? "text-white" : colors.text)} />
                                     </div>
-
                                     <div>
-                                        <h4 className={cn(
-                                            "font-semibold text-base",
-                                            isActive && "text-white"
+                                        <h4 className={cn("font-semibold text-sm", isActive && "text-white")}>{item.label}</h4>
+                                        <p className={cn("text-xs font-mono", isActive ? "text-white/70" : "text-muted-foreground")}>{item.time}</p>
+                                    </div>
+                                    {isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">진행 중</span>}
+                                </>
+                            ) : (
+                                // Desktop Content
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        {/* Icon with colored background */}
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
+                                            colors.bg,
+                                            isActive && "shadow-lg"
                                         )}>
-                                            {item.label}
-                                        </h4>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <p className={cn(
-                                                "text-sm font-mono",
-                                                isActive ? "text-white/70" : "text-muted-foreground"
+                                            <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
+                                        </div>
+
+                                        <div>
+                                            <h4 className={cn(
+                                                "font-semibold text-base",
+                                                isActive && "text-white"
                                             )}>
-                                                {item.time}
-                                                {item.endTime && ` - ${item.endTime}`}
-                                            </p>
-                                            {isActive && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-                                                    진행 중
-                                                </span>
-                                            )}
+                                                {item.label}
+                                            </h4>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <p className={cn(
+                                                    "text-sm font-mono",
+                                                    isActive ? "text-white/70" : "text-muted-foreground"
+                                                )}>
+                                                    {item.time}
+                                                    {item.endTime && ` - ${item.endTime}`}
+                                                </p>
+                                                {isActive && (
+                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
+                                                        진행 중
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Completion status */}
-                                {completion && (
-                                    <motion.span
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className={cn(
-                                            "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
-                                            completion.completed
-                                                ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                                : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                        )}
-                                    >
-                                        {completion.completed ? (
-                                            <>
-                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                완료
-                                            </>
-                                        ) : (
-                                            <>
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                미완료
-                                            </>
-                                        )}
-                                    </motion.span>
-                                )}
-                            </div>
+                                    {/* Completion status */}
+                                    {completion && (
+                                        <motion.span
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className={cn(
+                                                "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
+                                                completion.completed
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                            )}
+                                        >
+                                            {completion.completed ? (
+                                                <>
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    완료
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <XCircle className="w-3.5 h-3.5" />
+                                                    미완료
+                                                </>
+                                            )}
+                                        </motion.span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 );
