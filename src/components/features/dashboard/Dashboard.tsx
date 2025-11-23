@@ -527,6 +527,18 @@ export function Dashboard({ username }: DashboardProps) {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Schedule Change Button (Mobile) */}
+                            <motion.button
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setShowSchedulePopup(true)}
+                                className="p-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex flex-col items-center justify-center gap-2"
+                            >
+                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <Edit3 className="w-4 h-4 text-primary" />
+                                </div>
+                                <p className="font-semibold text-sm text-primary">일정 변경</p>
+                            </motion.button>
                         </div>
 
                         {/* 2. Timeline (Mobile - Horizontal) */}
@@ -714,11 +726,36 @@ export function Dashboard({ username }: DashboardProps) {
 
                     {/* Progress Overview Card */}
                     <Card className="glass-card border-none overflow-hidden">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-6">
+                        <CardContent className="p-4 md:p-6">
+                            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
                                 {/* Left: Circular Progress */}
-                                <div className="relative w-32 h-32 shrink-0">
-                                    <svg className="w-32 h-32 transform -rotate-90">
+                                <div className="relative w-24 h-24 md:w-32 md:h-32 shrink-0">
+                                    {/* Mobile SVG */}
+                                    <svg className="w-24 h-24 md:hidden transform -rotate-90">
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r="42"
+                                            stroke="currentColor"
+                                            strokeWidth="6"
+                                            fill="none"
+                                            className="text-white/10"
+                                        />
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r="42"
+                                            stroke="currentColor"
+                                            strokeWidth="6"
+                                            fill="none"
+                                            strokeDasharray={`${2 * Math.PI * 42}`}
+                                            strokeDashoffset={`${2 * Math.PI * 42 * (1 - (completedLearning.size / Math.max(curriculum.length, 1)))}`}
+                                            className="text-primary transition-all duration-1000 ease-out"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                    {/* Desktop SVG */}
+                                    <svg className="hidden md:block w-32 h-32 transform -rotate-90">
                                         <circle
                                             cx="64"
                                             cy="64"
@@ -742,53 +779,53 @@ export function Dashboard({ username }: DashboardProps) {
                                         />
                                     </svg>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span className="text-3xl font-bold">{completedLearning.size}</span>
-                                        <span className="text-xs text-muted-foreground">/ {curriculum.length}</span>
+                                        <span className="text-2xl md:text-3xl font-bold">{completedLearning.size}</span>
+                                        <span className="text-[10px] md:text-xs text-muted-foreground">/ {curriculum.length}</span>
                                     </div>
                                 </div>
 
                                 {/* Right: Stats Grid */}
-                                <div className="flex-1 grid grid-cols-2 gap-4">
+                                <div className="flex-1 w-full grid grid-cols-2 gap-2 md:gap-4">
                                     {/* Completion Rate */}
-                                    <div className="bg-gradient-to-br from-green-500/10 to-transparent p-4 rounded-lg border border-green-500/20">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                            <span className="text-sm font-medium text-muted-foreground">완료율</span>
+                                    <div className="bg-gradient-to-br from-green-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-green-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 text-green-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">완료율</span>
                                         </div>
-                                        <div className="text-2xl font-bold text-green-500">
+                                        <div className="text-lg md:text-2xl font-bold text-green-500">
                                             {curriculum.length > 0 ? Math.round((completedLearning.size / curriculum.length) * 100) : 0}%
                                         </div>
                                     </div>
 
                                     {/* Total Learning */}
-                                    <div className="bg-gradient-to-br from-blue-500/10 to-transparent p-4 rounded-lg border border-blue-500/20">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <BookOpen className="w-4 h-4 text-blue-500" />
-                                            <span className="text-sm font-medium text-muted-foreground">전체 학습</span>
+                                    <div className="bg-gradient-to-br from-blue-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-blue-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <BookOpen className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">전체 학습</span>
                                         </div>
-                                        <div className="text-2xl font-bold text-blue-500">
+                                        <div className="text-lg md:text-2xl font-bold text-blue-500">
                                             {curriculum.length}개
                                         </div>
                                     </div>
 
                                     {/* Remaining */}
-                                    <div className="bg-gradient-to-br from-orange-500/10 to-transparent p-4 rounded-lg border border-orange-500/20">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Target className="w-4 h-4 text-orange-500" />
-                                            <span className="text-sm font-medium text-muted-foreground">남은 학습</span>
+                                    <div className="bg-gradient-to-br from-orange-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-orange-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <Target className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">남은 학습</span>
                                         </div>
-                                        <div className="text-2xl font-bold text-orange-500">
+                                        <div className="text-lg md:text-2xl font-bold text-orange-500">
                                             {curriculum.length - completedLearning.size}개
                                         </div>
                                     </div>
 
                                     {/* Today's Goal */}
-                                    <div className="bg-gradient-to-br from-purple-500/10 to-transparent p-4 rounded-lg border border-purple-500/20">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <TrendingUp className="w-4 h-4 text-purple-500" />
-                                            <span className="text-sm font-medium text-muted-foreground">오늘 목표</span>
+                                    <div className="bg-gradient-to-br from-purple-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-purple-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <TrendingUp className="w-3 h-3 md:w-4 md:h-4 text-purple-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">오늘 목표</span>
                                         </div>
-                                        <div className="text-2xl font-bold text-purple-500">
+                                        <div className="text-lg md:text-2xl font-bold text-purple-500">
                                             {dailyGoals.learning}/2
                                         </div>
                                     </div>
@@ -796,14 +833,14 @@ export function Dashboard({ username }: DashboardProps) {
                             </div>
 
                             {/* Progress Bar */}
-                            <div className="mt-6">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-sm font-medium">학습 진행도</span>
-                                    <span className="text-sm text-muted-foreground">
+                            <div className="mt-4 md:mt-6">
+                                <div className="flex justify-between items-center mb-1.5 md:mb-2">
+                                    <span className="text-xs md:text-sm font-medium">학습 진행도</span>
+                                    <span className="text-xs md:text-sm text-muted-foreground">
                                         {completedLearning.size} / {curriculum.length} 완료
                                     </span>
                                 </div>
-                                <div className="h-3 bg-white/5 rounded-full overflow-hidden">
+                                <div className="h-2 md:h-3 bg-white/5 rounded-full overflow-hidden">
                                     <motion.div
                                         className="h-full bg-gradient-to-r from-primary to-purple-500"
                                         initial={{ width: 0 }}
