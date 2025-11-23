@@ -94,8 +94,12 @@ export async function GET(request: Request) {
         const job = searchParams.get("job") || "Marketer";
         const forceRefresh = searchParams.get("refresh") === "true";
 
+        let excludedTitles: string[] = [];
+
+        // Try to get cached data first
+        const cachedData = await getTrendsCache();
+
         if (!forceRefresh) {
-            const cachedData = await getTrendsCache();
             if (cachedData && cachedData.trends.length > 0) {
                 console.log('[API] Returning cached trends from', cachedData.lastUpdated);
                 return NextResponse.json({
@@ -103,6 +107,12 @@ export async function GET(request: Request) {
                     cached: true,
                     lastUpdated: cachedData.lastUpdated
                 });
+            }
+        } else {
+            // If refreshing, collect existing titles to exclude to ensure NEW content
+            if (cachedData && cachedData.trends) {
+                excludedTitles = cachedData.trends.map((t: any) => t.title);
+                console.log(`[API] Refresh requested. Excluding ${excludedTitles.length} existing trends.`);
             }
         }
 
@@ -142,6 +152,11 @@ export async function GET(request: Request) {
               1. MUST be from the last 3 days.
               2. MUST be real news, not general advice.
               3. Focus on: AI, Tech, Marketing, Business, Economy.
+              ${excludedTitles.length > 0 ? `
+              **EXCLUSIONS (DO NOT INCLUDE):**
+              The user has already seen these. Find DIFFERENT news:
+              ${excludedTitles.map(t => `- ${t}`).join('\n')}
+              ` : ''}
               
               Return a JSON array of objects:
               [
@@ -234,8 +249,11 @@ export async function GET(request: Request) {
                 for (const candidate of candidates) {
                     if (validTrends.length >= 6) break;
 
-                    // Skip duplicates
+                    // Skip duplicates within this generation
                     if (validTrends.some(t => t.title === candidate.title)) continue;
+
+                    // Skip duplicates from excluded list (double check)
+                    if (excludedTitles.includes(candidate.title)) continue;
 
                     // STRICT VERIFICATION STEP
                     const verification = await verifyTrendAuthenticity(candidate.title, candidate.category);
