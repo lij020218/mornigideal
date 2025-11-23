@@ -50,17 +50,28 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
             goal.daysOfWeek?.includes(currentDayOfWeek) && goal.notificationEnabled
         );
 
-        // Create notification items
-        const items: NotificationItem[] = todaysGoals.map(goal => {
+        // Create notification items - only show schedules that have started
+        const items: (NotificationItem & { isFuture: boolean })[] = todaysGoals.map(goal => {
             const [goalHour, goalMinute] = goal.startTime!.split(':').map(Number);
             const goalTimeValue = goalHour * 60 + goalMinute;
+            const [endHour, endMinute] = goal.endTime!.split(':').map(Number);
+            const endTimeValue = endHour * 60 + endMinute;
 
             let status: NotificationItem['status'] = 'pending';
+            let isFuture = false;
 
             if (completions[goal.id]) {
+                // User already marked this schedule
                 status = completions[goal.id].completed ? 'completed' : 'notDone';
-            } else if (goalTimeValue < currentTimeValue) {
+            } else if (currentTimeValue >= goalTimeValue && currentTimeValue < endTimeValue) {
+                // Currently active schedule
+                status = 'pending';
+            } else if (currentTimeValue >= endTimeValue) {
+                // Schedule ended without being marked
                 status = 'missed';
+            } else {
+                // Future schedule - not yet started
+                isFuture = true;
             }
 
             return {
@@ -68,6 +79,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                 goal,
                 time: goal.startTime!,
                 status,
+                isFuture,
             };
         });
 
@@ -78,13 +90,19 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
             return (aHour * 60 + aMin) - (bHour * 60 + bMin);
         });
 
-        // Filter out dismissed notifications
+        // Filter out dismissed and future notifications
         const today = getTodayDateString();
         const dismissedKey = `dismissed_notifications_${today}`;
         const dismissed = localStorage.getItem(dismissedKey);
         const dismissedIds = dismissed ? JSON.parse(dismissed) : [];
 
-        const visibleItems = items.filter(item => !dismissedIds.includes(item.id));
+        // Only show notifications for schedules that have started or been responded to
+        const visibleItems = items.filter(item => {
+            if (dismissedIds.includes(item.id)) return false;
+            // Don't show future schedules - only show when time comes
+            if (item.isFuture) return false;
+            return true;
+        });
 
         setAllTodayGoals(items);
         setNotifications(visibleItems);

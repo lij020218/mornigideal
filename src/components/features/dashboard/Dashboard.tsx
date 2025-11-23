@@ -675,22 +675,30 @@ export function Dashboard({ username }: DashboardProps) {
                                                 }
 
                                                 // Render Dynamic Schedule
-                                                const isCompleted = getTodayCompletions()[targetSchedule.id]?.completed;
+                                                const completionStatus = getTodayCompletions()[targetSchedule.id];
+                                                const isCompleted = completionStatus?.completed === true;
                                                 const [sH, sM] = targetSchedule.startTime!.split(':').map(Number);
                                                 const startVal = sH * 60 + sM;
-                                                const isActive = currentTimeValue >= startVal && currentTimeValue < (parseInt(targetSchedule.endTime!.split(':')[0]) * 60 + parseInt(targetSchedule.endTime!.split(':')[1]));
+                                                const isActive = !isCompleted && currentTimeValue >= startVal && currentTimeValue < (parseInt(targetSchedule.endTime!.split(':')[0]) * 60 + parseInt(targetSchedule.endTime!.split(':')[1]));
 
                                                 return (
                                                     <motion.div
                                                         whileHover={{ scale: 1.01 }}
                                                         className={cn(
                                                             "p-5 rounded-lg text-left transition-all border flex items-center gap-4 relative overflow-hidden",
-                                                            isActive
-                                                                ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                                                                : "bg-white/5 border-white/5"
+                                                            isCompleted
+                                                                ? "bg-green-500/10 border-green-500/30"
+                                                                : isActive
+                                                                    ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                                                    : "bg-white/5 border-white/5"
                                                         )}
                                                     >
-                                                        {isActive && (
+                                                        {isCompleted && (
+                                                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-[10px] text-green-400 font-bold">
+                                                                완료
+                                                            </div>
+                                                        )}
+                                                        {isActive && !isCompleted && (
                                                             <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] text-primary font-bold animate-pulse">
                                                                 NOW
                                                             </div>
@@ -698,18 +706,30 @@ export function Dashboard({ username }: DashboardProps) {
 
                                                         <div className={cn(
                                                             "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                            isActive ? "bg-primary text-white shadow-lg" : "bg-white/10 text-muted-foreground"
+                                                            isCompleted
+                                                                ? "bg-green-500 text-white shadow-lg"
+                                                                : isActive
+                                                                    ? "bg-primary text-white shadow-lg"
+                                                                    : "bg-white/10 text-muted-foreground"
                                                         )}>
-                                                            <Clock className={cn("w-6 h-6", isActive && "animate-pulse")} />
+                                                            {isCompleted ? (
+                                                                <CheckCircle2 className="w-6 h-6" />
+                                                            ) : (
+                                                                <Clock className={cn("w-6 h-6", isActive && "animate-pulse")} />
+                                                            )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className={cn("font-semibold text-base", isActive && "text-primary")}>
+                                                            <p className={cn(
+                                                                "font-semibold text-base",
+                                                                isCompleted ? "text-green-400" : isActive && "text-primary"
+                                                            )}>
                                                                 {targetSchedule.text}
                                                             </p>
                                                             <p className="text-sm text-muted-foreground mt-0.5 font-mono">
                                                                 {targetSchedule.startTime} - {targetSchedule.endTime}
                                                             </p>
                                                         </div>
+                                                        {isCompleted && <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />}
                                                     </motion.div>
                                                 );
                                             })()}
