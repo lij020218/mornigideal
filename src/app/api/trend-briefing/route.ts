@@ -4,8 +4,36 @@ import { getTrendsCache, getDetailCache, generateTrendId, saveTrendsCache } from
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
+// Premium news sources for credibility
+const PREMIUM_SOURCES = [
+    'bloomberg.com',
+    'ft.com',
+    'wsj.com',
+    'economist.com',
+    'bbc.com',
+    'reuters.com',
+    'apnews.com',
+    'nytimes.com',
+    'washingtonpost.com',
+    'asia.nikkei.com',
+    'scmp.com',
+    'techcrunch.com',
+    'wired.com',
+    'theinformation.com'
+];
+
+// Helper to check if URL is from a premium source
+function isPremiumSource(url: string): boolean {
+    try {
+        const urlObj = new URL(url);
+        return PREMIUM_SOURCES.some(source => urlObj.hostname.includes(source));
+    } catch {
+        return false;
+    }
+}
+
 // Helper to verify if a news item is REAL and RECENT using a dedicated search check
-async function verifyTrendAuthenticity(title: string, category: string): Promise<{ isReal: boolean; url: string; imageUrl: string }> {
+async function verifyTrendAuthenticity(title: string, category: string, preferPremium: boolean = true): Promise<{ isReal: boolean; url: string; imageUrl: string; isPremium: boolean }> {
     try {
         console.log(`[API] Verifying authenticity of: "${title}"`);
 
@@ -18,24 +46,37 @@ async function verifyTrendAuthenticity(title: string, category: string): Promise
             }
         });
 
+        const premiumSourcesHint = preferPremium ? `
+        **PREFERRED SOURCES (PRIORITY):**
+        Bloomberg, Financial Times, WSJ, The Economist, BBC, Reuters, AP News,
+        NYT, Washington Post, Nikkei Asia, SCMP, TechCrunch, Wired, The Information
+
+        Try to find the article from these sources FIRST.
+        ` : '';
+
         const verificationPrompt = `
-        ACT AS A FACT-CHECKER.
-        
+        ACT AS A STRICT FACT-CHECKER.
+
         Target News: "${title}" (Category: ${category})
         Current Date: ${new Date().toISOString().split('T')[0]}
 
         TASK:
-        1. Search Google specifically for this news topic to verify if it is REAL and RECENT (within the last 7 days).
-        2. If the news is false, old (older than 7 days), or a rumor that has been debunked, mark it as FALSE.
-        3. If it is real, find the BEST, most authoritative source URL.
-        4. Try to find a relevant image URL from the search results (og:image).
+        1. Search Google specifically for this news topic.
+        2. **CRITICAL**: Verify if this specific news event ACTUALLY HAPPENED within the last 7 days.
+        3. **REJECT** if:
+           - It is a rumor, prediction, or "leaked" info that hasn't been officially confirmed.
+           - It is an old story (older than 7 days) being recycled.
+           - The search results do not explicitly confirm the *exact* event described in the title.
+           - It is a general "how-to" or "guide" article, not a news event.
+        4. If verified as REAL and RECENT, find the BEST, most authoritative source URL.
+        ${premiumSourcesHint}
 
         Return JSON:
         {
-            "isReal": boolean, // true ONLY if confirmed real and recent
+            "isReal": boolean, // true ONLY if confirmed real, recent, and specific
             "verifiedUrl": "string", // The actual URL found during verification
             "verifiedImageUrl": "string", // Image URL if found, else empty
-            "reason": "string" // Why it is true or false
+            "reason": "string" // specific reason for acceptance or rejection
         }
         `;
 
@@ -45,20 +86,23 @@ async function verifyTrendAuthenticity(title: string, category: string): Promise
         const data = JSON.parse(text);
 
         if (data.isReal && data.verifiedUrl) {
-            console.log(`[API] ✅ Verified: ${title} (${data.reason})`);
+            const isPremium = isPremiumSource(data.verifiedUrl);
+            const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
+            console.log(`[API] ✅ Verified ${sourceType}: ${title} (${data.reason})`);
             return {
                 isReal: true,
                 url: data.verifiedUrl,
-                imageUrl: data.verifiedImageUrl || ""
+                imageUrl: data.verifiedImageUrl || "",
+                isPremium
             };
         } else {
             console.warn(`[API] ❌ Rejected: ${title} (${data.reason})`);
-            return { isReal: false, url: "", imageUrl: "" };
+            return { isReal: false, url: "", imageUrl: "", isPremium: false };
         }
 
     } catch (error) {
         console.error(`[API] Verification failed for "${title}":`, error);
-        return { isReal: false, url: "", imageUrl: "" };
+        return { isReal: false, url: "", imageUrl: "", isPremium: false };
     }
 }
 
@@ -120,7 +164,7 @@ export async function GET(request: Request) {
 
         let validTrends: any[] = [];
         let retryCount = 0;
-        const maxRetries = 3; // Increased retries since verification is strict
+        const maxRetries = 4; // Increased retries for stricter verification
 
         while (validTrends.length < 6 && retryCount <= maxRetries) {
             const needed = 6 - validTrends.length;
@@ -139,7 +183,7 @@ export async function GET(request: Request) {
                 const today = new Date().toISOString().split('T')[0];
 
                 // Ask for more candidates than needed to account for rejection
-                const candidatesNeeded = needed * 2 + 2;
+                const candidatesNeeded = needed * 3 + 2;
 
                 const prompt = `
               You are a trend analyst for a ${job}.
@@ -150,7 +194,7 @@ export async function GET(request: Request) {
               
               **CRITERIA:**
               1. MUST be from the last 3 days.
-              2. MUST be real news, not general advice.
+              2. MUST be real news events, not general advice or "how-to" guides.
               3. Focus on: AI, Tech, Marketing, Business, Economy.
               ${excludedTitles.length > 0 ? `
               **EXCLUSIONS (DO NOT INCLUDE):**
@@ -245,14 +289,12 @@ export async function GET(request: Request) {
 
                 console.log(`[API] Generated ${candidates.length} candidates. Starting strict verification...`);
 
-                // Verify each candidate one by one
+                // Collect all verification results with their premium status
+                const verificationResults = [];
+
                 for (const candidate of candidates) {
-                    if (validTrends.length >= 6) break;
-
-                    // Skip duplicates within this generation
+                    // Skip duplicates
                     if (validTrends.some(t => t.title === candidate.title)) continue;
-
-                    // Skip duplicates from excluded list (double check)
                     if (excludedTitles.includes(candidate.title)) continue;
 
                     // STRICT VERIFICATION STEP
@@ -263,19 +305,35 @@ export async function GET(request: Request) {
                         const { isValid, finalUrl } = await verifyAndGetFinalUrl(verification.url);
 
                         if (isValid && finalUrl) {
-                            validTrends.push({
+                            verificationResults.push({
                                 title: candidate.title,
                                 category: candidate.category,
                                 summary: candidate.summary,
-                                time: "최근", // Will be updated by client or generic
-                                imageColor: "bg-blue-500/20", // Randomize this if needed
+                                time: "최근",
+                                imageColor: "bg-blue-500/20",
                                 originalUrl: finalUrl,
                                 imageUrl: verification.imageUrl || "",
-                                id: generateTrendId(candidate.title)
+                                id: generateTrendId(candidate.title),
+                                isPremium: verification.isPremium
                             });
-                            console.log(`[API] Added verified trend. Total: ${validTrends.length}/6`);
                         }
                     }
+                }
+
+                // Sort by premium status (premium sources first)
+                verificationResults.sort((a, b) => {
+                    if (a.isPremium && !b.isPremium) return -1;
+                    if (!a.isPremium && b.isPremium) return 1;
+                    return 0;
+                });
+
+                // Add to validTrends (premium first)
+                for (const result of verificationResults) {
+                    if (validTrends.length >= 6) break;
+                    const { isPremium, ...trendData } = result; // Remove isPremium before adding
+                    validTrends.push(trendData);
+                    const sourceType = isPremium ? '🌟 PREMIUM' : 'Standard';
+                    console.log(`[API] Added ${sourceType} trend. Total: ${validTrends.length}/6`);
                 }
 
             } catch (error) {
