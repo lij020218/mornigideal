@@ -1294,9 +1294,9 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
             if (cached) {
                 try {
                     const { achievements: cachedAchievements, timestamp } = JSON.parse(cached);
-                    const sixHoursInMs = 6 * 60 * 60 * 1000;
+                    const twoHoursInMs = 2 * 60 * 60 * 1000; // Changed from 6 hours to 2 hours
 
-                    if (Date.now() - timestamp < sixHoursInMs) {
+                    if (Date.now() - timestamp < twoHoursInMs) {
                         setAchievements(cachedAchievements);
                         setCurrentIndex(0);
                         setLoading(false);

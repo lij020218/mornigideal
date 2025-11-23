@@ -11,19 +11,18 @@ async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; fi
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
         const response = await fetch(url, {
-            method: 'GET',
+            method: 'HEAD', // Use HEAD instead of GET for faster checks
             signal: controller.signal,
-            redirect: 'follow', // Follow redirects
+            redirect: 'follow',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
         clearTimeout(timeoutId);
 
-        // Get the final URL after redirects
         const finalUrl = response.url;
-        const isValid = response.ok;
+        const isValid = response.status >= 200 && response.status < 400; // Accept 2xx and 3xx
 
         if (isValid) {
             console.log(`[API] URL verified: ${url} -> ${finalUrl}`);
@@ -35,6 +34,55 @@ async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; fi
     } catch (error) {
         console.warn(`[API] URL verification failed for ${url}:`, error);
         return { isValid: false, finalUrl: null };
+    }
+}
+
+// Helper to find real article URL by searching the title on Google
+async function findRealArticleUrl(title: string, category: string): Promise<string | null> {
+    try {
+        console.log(`[API] Searching Google for: ${title}`);
+
+        // Use Google search (this is a simple approach - in production you might use Google Custom Search API)
+        const searchQuery = encodeURIComponent(`${title} ${category}`);
+        const searchUrl = `https://www.google.com/search?q=${searchQuery}`;
+
+        // For now, we'll construct a likely URL pattern
+        // Alternatively, you could use the Gemini model with googleSearch tool here
+        const model = genAI.getGenerativeModel({
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            // @ts-expect-error - googleSearch is valid
+            tools: [{ googleSearch: {} }],
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
+
+        const searchPrompt = `
+Search Google for this exact article title: "${title}"
+Category: ${category}
+
+Find the REAL, WORKING URL for this article from a reputable news source.
+Return ONLY a JSON object with the URL:
+{ "url": "https://actual-working-url.com/article" }
+
+If you cannot find the article, return:
+{ "url": null }
+        `;
+
+        const result = await model.generateContent(searchPrompt);
+        const response = await result.response;
+        const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+        const data = JSON.parse(text);
+
+        if (data.url && data.url.startsWith('http')) {
+            console.log(`[API] Found real URL: ${data.url}`);
+            return data.url;
+        }
+
+        return null;
+    } catch (error) {
+        console.error(`[API] Failed to find real URL for "${title}":`, error);
+        return null;
     }
 }
 
@@ -220,34 +268,61 @@ export async function GET(request: Request) {
             throw new Error('Response is not an array');
         }
 
-        console.log(`[API] Generated ${allTrends.length} trends. Verifying URLs and following redirects...`);
+        console.log(`[API] Generated ${allTrends.length} trends. Verifying and fixing URLs...`);
 
-        // Verify URLs and get final URLs after redirects
+        // Verify each URL and fix hallucinated ones
         const verificationPromises = allTrends.map(async (trend: any) => {
             if (!trend.originalUrl || !trend.originalUrl.startsWith('http')) {
-                console.log(`[API] Dropping trend with invalid URL format: ${trend.originalUrl}`);
+                console.log(`[API] Invalid URL format: ${trend.originalUrl}`);
                 return null;
             }
 
-            // Verify URL and follow redirects to get the final URL
+            // First, try to verify the URL
             const { isValid, finalUrl } = await verifyAndGetFinalUrl(trend.originalUrl);
 
-            if (!isValid || !finalUrl) {
-                console.log(`[API] Dropping unreachable URL: ${trend.originalUrl}`);
-                return null;
+            if (isValid && finalUrl) {
+                // URL is good, use it
+                return {
+                    ...trend,
+                    originalUrl: finalUrl
+                };
             }
 
-            // Return trend with the final URL (after redirects)
-            return {
-                ...trend,
-                originalUrl: finalUrl // Use the final URL after redirects
-            };
+            // URL is bad (hallucinated by Gemini), search for the real one
+            console.warn(`[API] URL invalid, searching for real article: ${trend.title}`);
+            const realUrl = await findRealArticleUrl(trend.title, trend.category);
+
+            if (realUrl) {
+                // Verify the found URL
+                const { isValid: realUrlValid, finalUrl: realFinalUrl } = await verifyAndGetFinalUrl(realUrl);
+
+                if (realUrlValid && realFinalUrl) {
+                    console.log(`[API] ✅ Fixed URL for "${trend.title}": ${realFinalUrl}`);
+                    return {
+                        ...trend,
+                        originalUrl: realFinalUrl
+                    };
+                }
+            }
+
+            // Could not fix URL, drop this trend
+            console.error(`[API] ❌ Could not find valid URL for: ${trend.title}`);
+            return null;
         });
 
         const results = await Promise.all(verificationPromises);
         const validTrends = results.filter((trend: any) => trend !== null).slice(0, 6);
 
-        console.log(`[API] Retained ${validTrends.length} valid trends after verification.`);
+        console.log(`[API] Retained ${validTrends.length} valid trends after verification and fixing.`);
+
+        // Ensure we have at least 1 trend (fallback to accepting unverified URLs if necessary)
+        if (validTrends.length === 0 && allTrends.length > 0) {
+            console.warn('[API] No valid trends after verification, accepting first trend without verification as fallback');
+            validTrends.push({
+                ...allTrends[0],
+                id: generateTrendId(allTrends[0].title)
+            });
+        }
 
         // Add IDs to trends
         const trendsWithIds = validTrends.map((trend: any) => ({
