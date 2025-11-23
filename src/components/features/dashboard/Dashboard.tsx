@@ -44,6 +44,7 @@ interface DailyGoals {
     wakeUp: boolean;
     learning: number;
     exercise: boolean;
+    trendBriefing: number;
     customGoals: Record<string, boolean>;
 }
 
@@ -64,6 +65,7 @@ export function Dashboard({ username }: DashboardProps) {
         wakeUp: false,
         learning: 0,
         exercise: false,
+        trendBriefing: 0,
         customGoals: {}
     });
     const [userSettings, setUserSettings] = useState<UserSettings>({
@@ -71,6 +73,7 @@ export function Dashboard({ username }: DashboardProps) {
         exerciseEnabled: false,
     });
     const [completedLearning, setCompletedLearning] = useState<Set<string>>(new Set());
+    const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set());
     const [currentTime, setCurrentTime] = useState(new Date());
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
@@ -499,6 +502,31 @@ export function Dashboard({ username }: DashboardProps) {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Trend Briefing Goal */}
+                            <div className={cn(
+                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
+                                dailyGoals.trendBriefing >= 6
+                                    ? "bg-blue-500/10 border-blue-500/30"
+                                    : "bg-white/5 border-white/10"
+                            )}>
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                    dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
+                                )}>
+                                    <TrendingUp className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-sm">브리핑 ({dailyGoals.trendBriefing}/6)</p>
+                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
+                                        <motion.div
+                                            className="h-full bg-blue-500"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* 2. Timeline (Mobile - Horizontal) */}
@@ -550,7 +578,7 @@ export function Dashboard({ username }: DashboardProps) {
                                                 <Target className="w-5 h-5 text-red-500" /> 오늘의 핵심 목표
                                             </h3>
                                             <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                                                {[dailyGoals.wakeUp, dailyGoals.learning >= 2].filter(v => v === true).length}/2
+                                                {[dailyGoals.wakeUp, dailyGoals.learning >= 2, dailyGoals.trendBriefing >= 6].filter(v => v === true).length}/3
                                             </span>
                                         </div>
 
@@ -604,6 +632,32 @@ export function Dashboard({ username }: DashboardProps) {
                                                     </div>
                                                 </div>
                                                 <span className="font-mono text-sm font-bold">{dailyGoals.learning}/2</span>
+                                            </div>
+
+                                            {/* Trend Briefing Goal */}
+                                            <div className={cn(
+                                                "p-5 rounded-lg border flex items-center gap-4",
+                                                dailyGoals.trendBriefing >= 6
+                                                    ? "bg-blue-500/10 border-blue-500/30"
+                                                    : "bg-white/5 border-white/5"
+                                            )}>
+                                                <div className={cn(
+                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                    dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
+                                                )}>
+                                                    <TrendingUp className="w-6 h-6" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-base">트렌드 브리핑</p>
+                                                    <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            className="h-full bg-blue-500"
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <span className="font-mono text-sm font-bold">{dailyGoals.trendBriefing}/6</span>
                                             </div>
 
                                             {/* Add Schedule Button */}
@@ -887,6 +941,13 @@ export function Dashboard({ username }: DashboardProps) {
                         onSelectBriefing={(briefing) => {
                             setSelectedBriefing(briefing);
                             setShowBriefingDetail(true);
+
+                            // Increment trend briefing count if not already read
+                            if (!readBriefings.has(briefing.id)) {
+                                setReadBriefings(prev => new Set([...prev, briefing.id]));
+                                const newCount = Math.min(dailyGoals.trendBriefing + 1, 6);
+                                updateDailyGoal("trendBriefing", newCount);
+                            }
                         }}
                     />
                 )}
@@ -1354,10 +1415,10 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
     }
 
     return (
-        <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-8 border border-purple-500/20 h-full flex flex-col">
-            <div className="flex items-start gap-6 flex-1">
-                <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <Users className="w-8 h-8 text-purple-400" />
+        <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-4 md:p-8 border border-purple-500/20 h-full flex flex-col">
+            <div className="flex items-start gap-3 md:gap-6 flex-1 min-w-0">
+                <div className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5 md:w-8 md:h-8 text-purple-400" />
                 </div>
 
                 <AnimatePresence mode="wait">
@@ -1367,13 +1428,13 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: -100, opacity: 0 }}
                         transition={{ duration: 0.5, ease: "easeInOut" }}
-                        className="flex-1"
+                        className="flex-1 min-w-0"
                     >
-                        <h4 className="font-semibold mb-2 text-base">동료들의 인사이트</h4>
-                        <p className="text-sm text-purple-400 mb-2 font-medium">
+                        <h4 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base truncate">동료들의 인사이트</h4>
+                        <p className="text-xs md:text-sm text-purple-400 mb-1.5 md:mb-2 font-medium truncate">
                             {achievements[currentIndex].person}
                         </p>
-                        <p className="text-muted-foreground text-sm leading-relaxed">
+                        <p className="text-muted-foreground text-xs md:text-sm leading-relaxed line-clamp-3 md:line-clamp-none">
                             {achievements[currentIndex].achievement}
                         </p>
                     </motion.div>
@@ -1381,7 +1442,7 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
             </div>
 
             {/* Progress indicator */}
-            <div className="flex gap-1.5 mt-6 justify-center">
+            <div className="flex gap-1.5 mt-4 md:mt-6 justify-center">
                 {achievements.map((_, idx) => (
                     <div
                         key={idx}

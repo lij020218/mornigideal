@@ -4,6 +4,7 @@ interface DailyGoals {
     wakeUp: boolean;
     learning: number;
     exercise: boolean;
+    trendBriefing: number;
     customGoals: Record<string, boolean>;
 }
 
@@ -19,6 +20,7 @@ function getDefaultGoals(): DailyGoals {
         wakeUp: false,
         learning: 0,
         exercise: false,
+        trendBriefing: 0,
         customGoals: {},
     };
 }

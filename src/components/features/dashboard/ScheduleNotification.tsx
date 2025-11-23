@@ -113,6 +113,7 @@ interface ScheduleNotificationManagerProps {
 
 export function ScheduleNotificationManager({ goals }: ScheduleNotificationManagerProps) {
     const [activeNotifications, setActiveNotifications] = useState<CustomGoal[]>([]);
+    const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         // Check every minute for schedules that need notifications
@@ -128,11 +129,12 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                 // Check if today is in the selected days
                 if (!goal.daysOfWeek?.includes(currentDay)) return false;
 
-                // Check if it's time for this schedule
+                // Check if it's time for this schedule (exact match required)
                 if (goal.startTime !== currentTime) return false;
 
-                // Check if already notified (not already in active notifications)
-                if (activeNotifications.some(n => n.id === goal.id)) return false;
+                // Check if already notified this minute
+                const notificationKey = `${goal.id}_${currentTime}`;
+                if (notifiedIds.has(notificationKey)) return false;
 
                 // Check if already completed or marked as not done today
                 const completed = isScheduleCompleted(goal.id);
@@ -144,6 +146,15 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
 
             if (newNotifications.length > 0) {
                 setActiveNotifications(prev => [...prev, ...newNotifications]);
+
+                // Mark as notified to prevent duplicate notifications in the same minute
+                setNotifiedIds(prev => {
+                    const updated = new Set(prev);
+                    newNotifications.forEach(goal => {
+                        updated.add(`${goal.id}_${currentTime}`);
+                    });
+                    return updated;
+                });
 
                 // Request notification permission and show browser notification
                 if ("Notification" in window && Notification.permission === "granted") {
@@ -158,14 +169,24 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
             }
         };
 
-        // Check immediately
-        checkSchedules();
+        // Calculate time until next minute boundary
+        const now = new Date();
+        const seconds = now.getSeconds();
+        const millisecondsUntilNextMinute = (60 - seconds) * 1000 - now.getMilliseconds();
 
-        // Then check every minute
-        const interval = setInterval(checkSchedules, 60000);
+        let interval: NodeJS.Timeout;
 
-        return () => clearInterval(interval);
-    }, [goals, activeNotifications]);
+        // Wait until the next minute boundary, then check every minute
+        const initialTimeout = setTimeout(() => {
+            checkSchedules();
+            interval = setInterval(checkSchedules, 60000);
+        }, millisecondsUntilNextMinute);
+
+        return () => {
+            clearTimeout(initialTimeout);
+            if (interval) clearInterval(interval);
+        };
+    }, [goals]);
 
     const handleDismiss = (goalId: string) => {
         setActiveNotifications(prev => prev.filter(n => n.id !== goalId));
