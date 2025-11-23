@@ -2,7 +2,6 @@
 
 interface DailyGoals {
     wakeUp: boolean;
-    trendReading: number;
     learning: number;
     exercise: boolean;
     customGoals: Record<string, boolean>;
@@ -18,7 +17,6 @@ const STORAGE_KEY = "daily_goals";
 function getDefaultGoals(): DailyGoals {
     return {
         wakeUp: false,
-        trendReading: 0,
         learning: 0,
         exercise: false,
         customGoals: {},
@@ -58,40 +56,7 @@ export function saveDailyGoals(goals: DailyGoals): void {
     }));
 }
 
-export function incrementTrendReading(): number {
-    const goals = getDailyGoals();
-    // Track which trends have been read today to avoid double counting
-    const readTrendsKey = `read_trends_${getTodayString()}`;
-    const readTrends: string[] = JSON.parse(localStorage.getItem(readTrendsKey) || "[]");
 
-    // Increment only if under 6 (reasonable max)
-    if (goals.trendReading < 6) {
-        goals.trendReading += 1;
-        saveDailyGoals(goals);
-    }
-
-    return goals.trendReading;
-}
-
-export function markTrendAsRead(trendId: string): boolean {
-    if (typeof window === "undefined") return false;
-
-    const readTrendsKey = `read_trends_${getTodayString()}`;
-    const readTrends: string[] = JSON.parse(localStorage.getItem(readTrendsKey) || "[]");
-
-    // Already read this trend today
-    if (readTrends.includes(trendId)) {
-        return false;
-    }
-
-    // Mark as read
-    readTrends.push(trendId);
-    localStorage.setItem(readTrendsKey, JSON.stringify(readTrends));
-
-    // Increment the reading count
-    incrementTrendReading();
-    return true;
-}
 
 export function incrementLearning(): number {
     const goals = getDailyGoals();

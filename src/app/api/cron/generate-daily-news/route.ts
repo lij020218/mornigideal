@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
         // Step 1: Fetch trending news
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
             generationConfig: {
                 responseMimeType: "application/json"
             }

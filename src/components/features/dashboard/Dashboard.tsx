@@ -12,17 +12,10 @@ import { SchedulePopup, type CustomGoal } from "./SchedulePopup";
 import { ScheduleNotificationManager } from "./ScheduleNotification";
 import { NotificationDropdown } from "./NotificationDropdown";
 import { requestNotificationPermission, getTodayCompletions } from "@/lib/scheduleNotifications";
+import { TrendBriefingSection } from "./TrendBriefingSection";
+import { TrendBriefingDetail } from "./TrendBriefingDetail";
 
-interface TrendNews {
-    category: string;
-    title: string;
-    time: string;
-    imageColor: string;
-    imageUrl?: string;
-    originalUrl: string;
-    summary: string;
-    id: string;
-}
+
 
 interface DashboardProps {
     username: string;
@@ -49,7 +42,6 @@ interface CurriculumItem {
 
 interface DailyGoals {
     wakeUp: boolean;
-    trendReading: number;
     learning: number;
     exercise: boolean;
     customGoals: Record<string, boolean>;
@@ -61,11 +53,7 @@ interface UserSettings {
 }
 
 export function Dashboard({ username }: DashboardProps) {
-    const [trends, setTrends] = useState<TrendNews[]>([]);
-    const [loadingTrends, setLoadingTrends] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<string>("");
-    const [isCached, setIsCached] = useState(false);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
@@ -74,7 +62,6 @@ export function Dashboard({ username }: DashboardProps) {
     const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
     const [dailyGoals, setDailyGoals] = useState<DailyGoals>({
         wakeUp: false,
-        trendReading: 0,
         learning: 0,
         exercise: false,
         customGoals: {}
@@ -86,33 +73,10 @@ export function Dashboard({ username }: DashboardProps) {
     const [completedLearning, setCompletedLearning] = useState<Set<string>>(new Set());
     const [currentTime, setCurrentTime] = useState(new Date());
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
+    const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
+    const [showBriefingDetail, setShowBriefingDetail] = useState(false);
 
-    const fetchTrends = async (forceRefresh = false) => {
-        try {
-            setLoadingTrends(true);
-            const url = `/api/trend-briefing?job=Marketer${forceRefresh ? '&refresh=true' : ''}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error("Failed to fetch trends");
-            const data = await response.json();
-            if (Array.isArray(data.trends)) {
-                setTrends(data.trends);
-            } else {
-                setTrends([]);
-            }
-            setLastUpdated(data.lastUpdated || "");
-            setIsCached(data.cached || false);
-        } catch (error) {
-            console.error("Error fetching trends:", error);
-        } finally {
-            setLoadingTrends(false);
-            setIsRefreshing(false);
-        }
-    };
 
-    const handleRefresh = () => {
-        setIsRefreshing(true);
-        fetchTrends(true);
-    };
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -306,7 +270,7 @@ export function Dashboard({ username }: DashboardProps) {
             }
 
             setDailyGoals(getDailyGoals());
-            fetchTrends();
+
 
             // Request notification permission
             requestNotificationPermission();
@@ -510,7 +474,7 @@ export function Dashboard({ username }: DashboardProps) {
                                                 <Target className="w-5 h-5 text-red-500" /> 오늘의 핵심 목표
                                             </h3>
                                             <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                                                {[dailyGoals.wakeUp, dailyGoals.trendReading >= 3, dailyGoals.learning >= 2].filter(v => v === true).length}/3
+                                                {[dailyGoals.wakeUp, dailyGoals.learning >= 2].filter(v => v === true).length}/2
                                             </span>
                                         </div>
 
@@ -540,31 +504,7 @@ export function Dashboard({ username }: DashboardProps) {
                                                 {dailyGoals.wakeUp ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Circle className="w-6 h-6 text-muted-foreground/50" />}
                                             </motion.button>
 
-                                            {/* Trend Reading Goal */}
-                                            <div className={cn(
-                                                "p-5 rounded-lg border flex items-center gap-4",
-                                                dailyGoals.trendReading >= 3
-                                                    ? "bg-blue-500/10 border-blue-500/30"
-                                                    : "bg-white/5 border-white/5"
-                                            )}>
-                                                <div className={cn(
-                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                    dailyGoals.trendReading >= 3 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
-                                                )}>
-                                                    <TrendingUp className="w-6 h-6" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-base">트렌드 읽기</p>
-                                                    <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
-                                                        <motion.div
-                                                            className="h-full bg-blue-500"
-                                                            initial={{ width: 0 }}
-                                                            animate={{ width: `${Math.min((dailyGoals.trendReading / 3) * 100, 100)}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <span className="font-mono text-sm font-bold">{dailyGoals.trendReading}/3</span>
-                                            </div>
+
 
                                             {/* Learning Goal */}
                                             <div className={cn(
@@ -866,47 +806,17 @@ export function Dashboard({ username }: DashboardProps) {
                     </Card>
                 </motion.section>
 
-                {/* 3. Trend Briefing (Bottom) */}
-                <motion.section variants={itemVariants} className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5 text-blue-400" /> 트렌드 브리핑
-                        </h2>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleRefresh}
-                            disabled={isRefreshing || loadingTrends}
-                            className="gap-2 h-8 text-xs"
-                        >
-                            <RefreshCw className={cn("w-3 h-3", isRefreshing && "animate-spin")} />
-                            새로고침
-                        </Button>
-                    </div>
+                {/* 3. Trend Briefing Section */}
+                {userProfile && (
+                    <TrendBriefingSection
+                        job={userProfile.job}
+                        onSelectBriefing={(briefing) => {
+                            setSelectedBriefing(briefing);
+                            setShowBriefingDetail(true);
+                        }}
+                    />
+                )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {loadingTrends ? (
-                            [1, 2, 3, 4, 5, 6].map((i) => (
-                                <div key={i} className="glass-card p-4 rounded-xl animate-pulse space-y-3 h-64">
-                                    <div className="h-32 bg-white/5 rounded-lg" />
-                                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                                    <div className="h-4 bg-white/5 rounded w-1/2" />
-                                </div>
-                            ))
-                        ) : trends.length > 0 ? (
-                            trends.map((trend, index) => (
-                                <NewsCard
-                                    key={trend.id || index}
-                                    {...trend}
-                                />
-                            ))
-                        ) : (
-                            <div className="col-span-3 text-center py-12 text-muted-foreground glass-card rounded-xl">
-                                트렌드 뉴스를 불러올 수 없습니다.
-                            </div>
-                        )}
-                    </div>
-                </motion.section>
             </motion.div>
 
             <SchedulePopup
@@ -915,6 +825,18 @@ export function Dashboard({ username }: DashboardProps) {
                 initialSchedule={userProfile?.schedule}
                 initialCustomGoals={userProfile?.customGoals}
                 onSave={handleSaveSchedule}
+            />
+
+            {/* Trend Briefing Detail Modal */}
+            <TrendBriefingDetail
+                briefing={selectedBriefing}
+                isOpen={showBriefingDetail}
+                onClose={() => {
+                    setShowBriefingDetail(false);
+                    setSelectedBriefing(null);
+                }}
+                userLevel={userProfile?.level || ""}
+                userJob={userProfile?.job || ""}
             />
 
             {/* Schedule Notification Manager */}
@@ -1216,62 +1138,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                             </div>
                         </div>
                     </motion.div>
-                );
             })}
         </div>
-    );
-}
-
-function NewsCard({ id, category, title, time, imageColor, imageUrl, originalUrl, summary }: TrendNews) {
-    const [imgError, setImgError] = useState(false);
-
-    const handleClick = () => {
-        const params = new URLSearchParams({
-            title,
-            url: originalUrl,
-            summary,
-            category,
-            id
-        });
-        window.location.href = `/trend-briefing/${encodeURIComponent(title)}?${params.toString()}`;
-    };
-
-    return (
-        <motion.div
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            className="glass-card rounded-xl overflow-hidden cursor-pointer group border border-white/5 flex flex-col h-full"
-            onClick={handleClick}
-        >
-            <div className="h-40 relative overflow-hidden">
-                {imageUrl && !imgError ? (
-                    <img
-                        src={imageUrl}
-                        alt={title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                        onError={() => setImgError(true)}
-                    />
-                ) : (
-                    <div className={cn("w-full h-full", imageColor)} />
-                )}
-                <div className="absolute top-2 left-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-white bg-black/50 backdrop-blur-md px-2 py-1 rounded-full">{category}</span>
-                </div>
-            </div>
-            <div className="p-4 flex flex-col flex-1 justify-between bg-white/5 group-hover:bg-white/10 transition-colors">
-                <div>
-                    <h3 className="font-medium text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors mb-2">{title}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{summary}</p>
-                </div>
-                <div className="flex justify-between items-center mt-4">
-                    <span className="text-[10px] text-muted-foreground">{time}</span>
-                    <div className="flex items-center gap-1 text-xs text-primary">
-                        <span>Read</span>
-                        <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                    </div>
-                </div>
-            </div>
-        </motion.div>
     );
 }
 

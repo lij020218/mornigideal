@@ -9,7 +9,7 @@ export async function POST(request: Request) {
         console.log('[generate-quiz] Starting quiz generation request');
         const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
         console.log('[generate-quiz] API Key present:', !!apiKey);
-        console.log('[generate-quiz] Model:', process.env.GEMINI_MODEL || "gemini-2.0-flash-exp");
+        console.log('[generate-quiz] Model:', process.env.GEMINI_MODEL || "gemini-3-pro-preview");
 
         if (!apiKey) {
             console.error("[generate-quiz] GOOGLE_API_KEY or GEMINI_API_KEY is missing");
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
         console.log('[generate-quiz] Initializing Gemini model...');
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
             generationConfig: {
                 responseMimeType: "application/json"
             }

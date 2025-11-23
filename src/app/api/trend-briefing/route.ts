@@ -1,43 +1,27 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { getTrendsCache, getDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
+import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
-// Premium news sources for credibility
+// Premium news sources with URL patterns
 const PREMIUM_SOURCES = [
-    'bloomberg.com',
-    'ft.com',
-    'wsj.com',
-    'economist.com',
-    'bbc.com',
-    'reuters.com',
-    'apnews.com',
-    'nytimes.com',
-    'washingtonpost.com',
-    'asia.nikkei.com',
-    'scmp.com',
-    'techcrunch.com',
-    'wired.com',
-    'theinformation.com'
+    { name: "Bloomberg", urlPattern: "https://www.bloomberg.com/news/articles/", category: "경제·비즈니스" },
+    { name: "Financial Times", urlPattern: "https://www.ft.com/content/", category: "경제·금융" },
+    { name: "The Wall Street Journal", urlPattern: "https://www.wsj.com/articles/", category: "비즈니스" },
+    { name: "The Economist", urlPattern: "https://www.economist.com/", category: "경제·정책" },
+    { name: "BBC", urlPattern: "https://www.bbc.com/news/", category: "국제" },
+    { name: "Reuters", urlPattern: "https://www.reuters.com/", category: "속보·국제" },
+    { name: "The New York Times", urlPattern: "https://www.nytimes.com/", category: "종합" },
+    { name: "TechCrunch", urlPattern: "https://techcrunch.com/", category: "테크·스타트업" },
+    { name: "Wired", urlPattern: "https://www.wired.com/story/", category: "기술·문화" },
+    { name: "Nikkei Asia", urlPattern: "https://asia.nikkei.com/", category: "아시아 경제" }
 ];
 
-// Helper to check if URL is from a premium source
-function isPremiumSource(url: string): boolean {
-    try {
-        const urlObj = new URL(url);
-        return PREMIUM_SOURCES.some(source => urlObj.hostname.includes(source));
-    } catch {
-        return false;
-    }
-}
-
-// Robust JSON cleaner and parser with stack-based extraction
+// JSON parser
 function cleanAndParseJSON(text: string): any {
-    // 1. Remove markdown code blocks
     let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // 2. Stack-based extraction to find the exact end of the JSON structure
     const firstBrace = cleanText.indexOf('{');
     const firstBracket = cleanText.indexOf('[');
 
@@ -45,7 +29,6 @@ function cleanAndParseJSON(text: string): any {
     let openChar = '';
     let closeChar = '';
 
-    // Determine if we are looking for an object or array
     if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
         start = firstBrace;
         openChar = '{';
@@ -83,7 +66,6 @@ function cleanAndParseJSON(text: string): any {
                 } else if (char === closeChar) {
                     balance--;
                     if (balance === 0) {
-                        // Found the matching close char - extract ONLY up to this point
                         const jsonCandidate = cleanText.substring(start, i + 1);
                         return JSON.parse(jsonCandidate);
                     }
@@ -92,171 +74,139 @@ function cleanAndParseJSON(text: string): any {
         }
     }
 
-    // Fallback: try parsing the entire text as-is
     return JSON.parse(cleanText);
-}
-
-// Helper to verify and get the final URL (follows redirects)
-async function verifyAndGetFinalUrl(url: string): Promise<{ isValid: boolean; finalUrl: string | null }> {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-        const response = await fetch(url, {
-            method: 'HEAD',
-            signal: controller.signal,
-            redirect: 'follow',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        clearTimeout(timeoutId);
-
-        const finalUrl = response.url;
-        const isValid = response.status >= 200 && response.status < 400;
-
-        return { isValid, finalUrl: isValid ? finalUrl : null };
-    } catch (error) {
-        return { isValid: false, finalUrl: null };
-    }
 }
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const job = searchParams.get("job") || "Marketer";
-        const forceRefresh = searchParams.get("refresh") === "true";
 
-        let excludedTitles: string[] = [];
-
-        // Try to get cached data first
+        // Check cache first - only return if it's from today
         const cachedData = await getTrendsCache();
+        const today = new Date().toISOString().split('T')[0];
 
-        if (!forceRefresh) {
-            if (cachedData && cachedData.trends.length > 0) {
-                console.log('[API] Returning cached trends from', cachedData.lastUpdated);
+        if (cachedData && cachedData.trends.length > 0) {
+            const cacheDate = new Date(cachedData.lastUpdated).toISOString().split('T')[0];
+            if (cacheDate === today) {
+                console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
                 return NextResponse.json({
                     trends: cachedData.trends,
                     cached: true,
                     lastUpdated: cachedData.lastUpdated
                 });
             }
-        } else {
-            // If refreshing, collect existing titles to exclude to ensure NEW content
-            if (cachedData && cachedData.trends) {
-                excludedTitles = cachedData.trends.map((t: any) => t.title);
-                console.log(`[API] Refresh requested. Excluding ${excludedTitles.length} existing trends.`);
-            }
         }
 
-        console.log('[API] Starting SEARCH-FIRST generation process...');
+        console.log('[API] Generating new daily briefing with Google Search...');
+
+        // Use configured Gemini model with Google Search tool
+        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        console.log(`[API] Using model: ${modelName}`);
 
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            // @ts-expect-error - googleSearch is a valid tool
-            tools: [{ googleSearch: {} }],
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
+            model: modelName,
+            // @ts-expect-error - googleSearch is valid in latest SDK
+            tools: [{ googleSearch: {} }]
         });
 
-        const today = new Date().toISOString().split('T')[0];
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const dateStr = sevenDaysAgo.toISOString().split('T')[0];
 
-        // Single-Step Prompt: Search AND Select
+        const sourcesInfo = PREMIUM_SOURCES.map(s => `${s.name}`).join(", ");
+
         const prompt = `
-        You are a professional trend analyst for a ${job}.
-        Today's date is ${today}.
+**TODAY'S DATE:** ${today}
+**TARGET AUDIENCE:** ${job} professionals
 
-        **GOAL**: Find exactly 6 REAL, VERIFIED, and RECENT news articles relevant to a ${job}.
+**YOUR TASK:**
+Use Google Search to find 6 REAL news articles published in the last 7 days (after ${dateStr}) that are highly relevant for ${job} professionals.
 
-        **INSTRUCTIONS**:
-        1. **SEARCH FIRST**: Use Google Search to find the latest news (last 3 days) about AI, Tech, Marketing, Business, or Economy.
-        2. **FILTER**:
-           - MUST be real news events from reputable sources.
-           - MUST be from the last 3 days.
-           - **EXCLUDE** these titles (already seen): ${excludedTitles.join(', ')}
-        3. **PRIORITIZE PREMIUM SOURCES**:
-           - Try to find articles from: Bloomberg, FT, WSJ, Economist, BBC, Reuters, NYT, TechCrunch, Wired, etc.
-        4. **OUTPUT**:
-           - Select the best 6 unique articles.
-           - For each, provide the *exact* source URL you found.
+**SEARCH REQUIREMENTS:**
+1. **PREMIUM SOURCES ONLY**: Prioritize these sources: ${sourcesInfo}
+2. **RECENT**: Articles must be published between ${dateStr} and ${today}
+3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development
+4. **DIVERSE**: Cover different topics - AI, business strategy, market trends, innovation, regulations, etc.
 
-        **Return JSON Array**:
-        [
-          {
-            "title": "Headline in Korean",
-            "category": "Category (English)",
-            "summary": "Short summary in Korean",
-            "originalUrl": "The ACTUAL URL found in search",
-            "imageUrl": "Image URL if found (og:image), else empty string"
-          }
-        ]
-        `;
+**SEARCH STRATEGY:**
+- Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology", etc.
+- Add source filters: site:bloomberg.com, site:ft.com, site:techcrunch.com, etc.
+- Verify publication dates are within last 7 days
+
+**OUTPUT FORMAT (JSON):**
+Return exactly 6 articles in this format:
+
+{
+  "briefings": [
+    {
+      "title": "Korean translation of article title (tailored for ${job})",
+      "category": "AI | Business | Tech | Finance | Strategy | Innovation",
+      "summary": "Korean summary (2-3 sentences) explaining why this matters to ${job}",
+      "sourceName": "Exact source name (e.g., Bloomberg, TechCrunch)",
+      "sourceUrl": "EXACT original article URL from search results",
+      "publishedDate": "YYYY-MM-DD (actual publication date)",
+      "relevance": "Why ${job} should care about this (Korean, 1 sentence)"
+    }
+  ]
+}
+
+**CRITICAL:**
+- Use REAL URLs found via Google Search
+- Verify dates are within last 7 days
+- Prioritize premium sources
+- Ensure diversity of topics
+
+Start searching and curating now.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
 
-        let candidates = [];
-        try {
-            candidates = cleanAndParseJSON(text);
-        } catch (parseError) {
-            console.error("[API] Failed to parse candidates JSON", parseError);
-            return NextResponse.json({ error: "Failed to parse trends" }, { status: 500 });
+        console.log('[API] Gemini response received. Length:', text.length);
+
+        // Log grounding metadata to verify search was used
+        if (response.candidates && response.candidates[0].groundingMetadata) {
+            console.log('[API] ✅ Google Search was used! Grounding metadata present.');
+        } else {
+            console.warn('[API] ⚠️ No grounding metadata - search might not have been performed.');
         }
 
-        if (!Array.isArray(candidates)) {
+        let data;
+        try {
+            data = cleanAndParseJSON(text);
+        } catch (parseError) {
+            console.error("[API] Failed to parse JSON", parseError);
+            console.error("[API] Failed text:", text);
+            return NextResponse.json({ error: "Failed to parse briefings" }, { status: 500 });
+        }
+
+        const briefings = data.briefings || [];
+
+        if (!Array.isArray(briefings) || briefings.length === 0) {
             return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
         }
 
-        console.log(`[API] Found ${candidates.length} candidates directly from search.`);
+        console.log(`[API] Parsed ${briefings.length} briefings`);
 
-        const validTrends: any[] = [];
+        const trends = briefings.map((item: any) => ({
+            id: generateTrendId(item.title),
+            title: item.title,
+            category: item.category || "General",
+            summary: item.summary,
+            time: item.publishedDate || today,
+            imageColor: "bg-blue-500/20",
+            originalUrl: item.sourceUrl,
+            imageUrl: "",
+            source: item.sourceName,
+            relevance: item.relevance
+        }));
 
-        // Validate URLs and Format
-        for (const candidate of candidates) {
-            if (validTrends.length >= 6) break;
-
-            // Basic validation
-            if (!candidate.title || !candidate.originalUrl) continue;
-
-            // Check URL accessibility (Head request) - fast check
-            const { isValid, finalUrl } = await verifyAndGetFinalUrl(candidate.originalUrl);
-
-            if (isValid && finalUrl) {
-                const isPremium = isPremiumSource(finalUrl);
-                validTrends.push({
-                    title: candidate.title,
-                    category: candidate.category || "General",
-                    summary: candidate.summary || "",
-                    time: "최근",
-                    imageColor: "bg-blue-500/20",
-                    originalUrl: finalUrl,
-                    imageUrl: candidate.imageUrl || "",
-                    id: generateTrendId(candidate.title),
-                    isPremium: isPremium
-                });
-            }
-        }
-
-        // Sort by premium status
-        validTrends.sort((a, b) => {
-            if (a.isPremium && !b.isPremium) return -1;
-            if (!a.isPremium && b.isPremium) return 1;
-            return 0;
-        });
-
-        // Final check
-        if (validTrends.length === 0) {
-            return NextResponse.json({ error: "Failed to find valid trends" }, { status: 500 });
-        }
-
-        // Save to cache
-        await saveTrendsCache(validTrends, forceRefresh);
+        // Save to cache - this will be today's briefing
+        await saveTrendsCache(trends, true); // Clear old trends
 
         return NextResponse.json({
-            trends: validTrends,
+            trends,
             cached: false,
             lastUpdated: new Date().toISOString()
         });
@@ -271,41 +221,67 @@ export async function POST(request: Request) {
     try {
         const { title, level, job, originalUrl, summary, trendId } = await request.json();
 
+        // Check cache first
         if (trendId) {
-            const cachedDetail = await getDetailCache(trendId);
+            const cachedDetail = await (async () => {
+                const { getDetailCache } = await import("@/lib/newsCache");
+                return getDetailCache(trendId);
+            })();
+
             if (cachedDetail) {
                 return NextResponse.json({ detail: cachedDetail, cached: true });
             }
         }
 
+        const modelName = process.env.GEMINI_MODEL || "gemini-3-pro-preview";
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            model: modelName,
             generationConfig: { responseMimeType: "application/json" }
         });
 
         const prompt = `
-      당신은 ${level} 수준의 ${job}를 위한 전문 멘토입니다.
-      사용자는 "${title}"라는 뉴스를 이해하고 싶어합니다.
-      ${summary ? `간략 요약: ${summary}` : ''}
-      ${originalUrl ? `출처: ${originalUrl}` : ''}
+You are an expert mentor for ${level}-level ${job} professionals.
 
-      필요하다면 웹 검색을 통해 이 뉴스에 대한 추가 컨텍스트를 수집하세요.
+**CONTEXT:**
+- Article Title: "${title}"
+- Basic Summary: ${summary}
+- Source: ${originalUrl}
 
-      **핵심 목표**:
-      1. 이 뉴스가 **${level} ${job}인 사용자에게 어떤 의미**인지 명확히 설명
-      2. 사용자의 **현재 상황과 경력 단계에 어떻게 연결**되는지 제시
-      3. 이 뉴스에서 **사용자가 구체적으로 얻을 수 있는 것**이 무엇인지 명시
-      4. 실용적이고 **즉시 적용 가능한 액션 아이템** 제공
+**YOUR TASK:**
+Create a comprehensive briefing that helps ${level} ${job} understand this news deeply.
 
-      **응답 형식**:
-      {
-        "title": "흥미롭고 명확한 한글 제목 (18px)",
-        "content": "### 핵심 내용\\n\\n[내용]\\n\\n### ${level} ${job}인 당신에게\\n\\n[내용]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **핵심 가치 1**\\n- **핵심 가치 2**",
-        "keyTakeaways": ["포인트 1", "포인트 2", "포인트 3"],
-        "actionItems": ["액션 1", "액션 2", "액션 3"]
-      }
-      JSON만 반환하세요.
-    `;
+**REQUIRED SECTIONS:**
+
+1. **핵심 내용 (Core Content)**
+   - What happened? Key facts and context
+   - Why is this significant?
+   - What's the bigger picture?
+
+2. **${level} ${job}인 당신에게 (For You as ${level} ${job})**
+   - How does this directly impact ${job} professionals?
+   - What opportunities or challenges does this present?
+   - Industry-specific implications
+
+3. **이 브리핑에서 얻을 수 있는 것 (Key Takeaways)**
+   - 3-4 bullet points of critical insights
+   - Actionable knowledge
+   - Strategic implications
+
+4. **실행 가능한 액션 아이템 (Action Items)**
+   - 3 specific actions ${level} ${job} can take
+   - Both short-term and long-term suggestions
+   - Practical and concrete
+
+**OUTPUT FORMAT (JSON):**
+{
+  "title": "Engaging Korean title (clear and specific)",
+  "content": "### 핵심 내용\\n\\n[detailed content]\\n\\n### ${level} ${job}인 당신에게\\n\\n[personalized analysis]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **포인트 1**\\n- **포인트 2**\\n- **포인트 3**",
+  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
+  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "originalUrl": "${originalUrl}"
+}
+
+Write in Korean. Be insightful, practical, and tailored to ${level} ${job}.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -316,9 +292,13 @@ export async function POST(request: Request) {
             detail = cleanAndParseJSON(text);
         } catch (e) {
             console.error("Failed to parse detail JSON", e);
-            // Fallback to simple clean if strict fails
             const simpleClean = text.replace(/```json/g, "").replace(/```/g, "").trim();
             detail = JSON.parse(simpleClean);
+        }
+
+        // Cache the detail
+        if (trendId) {
+            await saveDetailCache(trendId, detail);
         }
 
         return NextResponse.json({
@@ -326,7 +306,7 @@ export async function POST(request: Request) {
             cached: false
         });
     } catch (error) {
-        console.error("Error reconstructing news:", error);
-        return NextResponse.json({ error: "Failed to reconstruct news" }, { status: 500 });
+        console.error("Error generating briefing detail:", error);
+        return NextResponse.json({ error: "Failed to generate briefing detail" }, { status: 500 });
     }
 }
