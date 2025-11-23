@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
 import { motion, AnimatePresence } from "framer-motion";
 import { SchedulePopup, type CustomGoal } from "./SchedulePopup";
-import { ScheduleNotificationManager } from "./ScheduleNotification";
+import { ScheduleNotificationManager } from "./ScheduleNotificationManager";
 import { NotificationDropdown } from "./NotificationDropdown";
 import { requestNotificationPermission, getTodayCompletions } from "@/lib/scheduleNotifications";
 import { TrendBriefingSection } from "./TrendBriefingSection";
@@ -305,6 +305,8 @@ export function Dashboard({ username }: DashboardProps) {
 
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
+            <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
+
             {/* Header */}
             <header className="flex justify-between items-center">
                 <div>
@@ -427,7 +429,7 @@ export function Dashboard({ username }: DashboardProps) {
                         </AnimatePresence>
                     </div>
                 </div>
-            </header>
+            </header >
 
             <motion.div
                 variants={containerVariants}
@@ -608,30 +610,109 @@ export function Dashboard({ username }: DashboardProps) {
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-                                            {/* Wake Up Goal */}
-                                            <motion.button
-                                                whileHover={{ scale: 1.01 }}
-                                                whileTap={{ scale: 0.99 }}
-                                                onClick={() => updateDailyGoal("wakeUp", !dailyGoals.wakeUp)}
-                                                className={cn(
-                                                    "p-5 rounded-lg text-left transition-all border flex items-center gap-4",
-                                                    dailyGoals.wakeUp
-                                                        ? "bg-green-500/10 border-green-500/30"
-                                                        : "bg-white/5 border-white/5 hover:bg-white/10"
-                                                )}
-                                            >
-                                                <div className={cn(
-                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                    dailyGoals.wakeUp ? "bg-green-500 text-black" : "bg-white/10 text-muted-foreground"
-                                                )}>
-                                                    <Sun className="w-6 h-6" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-base">기상 목표</p>
-                                                    <p className="text-sm text-muted-foreground mt-0.5">{userSettings.wakeUpTime} 기상</p>
-                                                </div>
-                                                {dailyGoals.wakeUp ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Circle className="w-6 h-6 text-muted-foreground/50" />}
-                                            </motion.button>
+                                            {/* Dynamic Schedule Goal */}
+                                            {(() => {
+                                                // Find current or next schedule
+                                                const now = new Date();
+                                                const currentDay = now.getDay();
+                                                const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+
+                                                const schedules = userProfile?.customGoals?.filter(g =>
+                                                    g.daysOfWeek?.includes(currentDay)
+                                                ) || [];
+
+                                                // Sort by time
+                                                schedules.sort((a, b) => {
+                                                    const [aH, aM] = a.startTime!.split(':').map(Number);
+                                                    const [bH, bM] = b.startTime!.split(':').map(Number);
+                                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                                });
+
+                                                // Find active or next
+                                                let targetSchedule = schedules.find(s => {
+                                                    const [sH, sM] = s.startTime!.split(':').map(Number);
+                                                    const [eH, eM] = s.endTime!.split(':').map(Number);
+                                                    const start = sH * 60 + sM;
+                                                    const end = eH * 60 + eM;
+                                                    return currentTimeValue >= start && currentTimeValue < end;
+                                                });
+
+                                                if (!targetSchedule) {
+                                                    targetSchedule = schedules.find(s => {
+                                                        const [sH, sM] = s.startTime!.split(':').map(Number);
+                                                        const start = sH * 60 + sM;
+                                                        return start > currentTimeValue;
+                                                    });
+                                                }
+
+                                                // Default to Wake Up if no schedule found or it's early
+                                                if (!targetSchedule) {
+                                                    return (
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.01 }}
+                                                            whileTap={{ scale: 0.99 }}
+                                                            onClick={() => updateDailyGoal("wakeUp", !dailyGoals.wakeUp)}
+                                                            className={cn(
+                                                                "p-5 rounded-lg text-left transition-all border flex items-center gap-4",
+                                                                dailyGoals.wakeUp
+                                                                    ? "bg-green-500/10 border-green-500/30"
+                                                                    : "bg-white/5 border-white/5 hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            <div className={cn(
+                                                                "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                                dailyGoals.wakeUp ? "bg-green-500 text-black" : "bg-white/10 text-muted-foreground"
+                                                            )}>
+                                                                <Sun className="w-6 h-6" />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-semibold text-base">기상 목표</p>
+                                                                <p className="text-sm text-muted-foreground mt-0.5">{userSettings.wakeUpTime} 기상</p>
+                                                            </div>
+                                                            {dailyGoals.wakeUp ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Circle className="w-6 h-6 text-muted-foreground/50" />}
+                                                        </motion.button>
+                                                    );
+                                                }
+
+                                                // Render Dynamic Schedule
+                                                const isCompleted = getTodayCompletions()[targetSchedule.id]?.completed;
+                                                const [sH, sM] = targetSchedule.startTime!.split(':').map(Number);
+                                                const startVal = sH * 60 + sM;
+                                                const isActive = currentTimeValue >= startVal && currentTimeValue < (parseInt(targetSchedule.endTime!.split(':')[0]) * 60 + parseInt(targetSchedule.endTime!.split(':')[1]));
+
+                                                return (
+                                                    <motion.div
+                                                        whileHover={{ scale: 1.01 }}
+                                                        className={cn(
+                                                            "p-5 rounded-lg text-left transition-all border flex items-center gap-4 relative overflow-hidden",
+                                                            isActive
+                                                                ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                                                : "bg-white/5 border-white/5"
+                                                        )}
+                                                    >
+                                                        {isActive && (
+                                                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] text-primary font-bold animate-pulse">
+                                                                NOW
+                                                            </div>
+                                                        )}
+
+                                                        <div className={cn(
+                                                            "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                            isActive ? "bg-primary text-white shadow-lg" : "bg-white/10 text-muted-foreground"
+                                                        )}>
+                                                            <Clock className={cn("w-6 h-6", isActive && "animate-pulse")} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={cn("font-semibold text-base", isActive && "text-primary")}>
+                                                                {targetSchedule.text}
+                                                            </p>
+                                                            <p className="text-sm text-muted-foreground mt-0.5 font-mono">
+                                                                {targetSchedule.startTime} - {targetSchedule.endTime}
+                                                            </p>
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            })()}
 
                                             {/* Learning Goal */}
                                             <div className={cn(
@@ -1025,58 +1106,60 @@ export function Dashboard({ username }: DashboardProps) {
             />
 
             {/* Schedule Notification Manager */}
-            {userProfile && (
-                <ScheduleNotificationManager
-                    goals={[
-                        // Add basic schedule as custom goals for notifications
-                        ...(userProfile.schedule ? [
-                            {
-                                id: 'wake-up',
-                                text: '기상',
-                                time: 'morning' as const,
-                                startTime: userProfile.schedule.wakeUp,
-                                endTime: userProfile.schedule.wakeUp,
-                                color: 'yellow',
-                                daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                notificationEnabled: true,
-                            },
-                            {
-                                id: 'work-start',
-                                text: '업무 시작',
-                                time: 'morning' as const,
-                                startTime: userProfile.schedule.workStart,
-                                endTime: userProfile.schedule.workStart,
-                                color: 'purple',
-                                daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                notificationEnabled: true,
-                            },
-                            {
-                                id: 'work-end',
-                                text: '업무 종료',
-                                time: 'evening' as const,
-                                startTime: userProfile.schedule.workEnd,
-                                endTime: userProfile.schedule.workEnd,
-                                color: 'green',
-                                daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                notificationEnabled: true,
-                            },
-                            {
-                                id: 'sleep',
-                                text: '취침',
-                                time: 'evening' as const,
-                                startTime: userProfile.schedule.sleep,
-                                endTime: userProfile.schedule.sleep,
-                                color: 'blue',
-                                daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                notificationEnabled: true,
-                            },
-                        ] : []),
-                        // Add custom goals
-                        ...(userProfile.customGoals || []),
-                    ]}
-                />
-            )}
-        </div>
+            {
+                userProfile && (
+                    <ScheduleNotificationManager
+                        goals={[
+                            // Add basic schedule as custom goals for notifications
+                            ...(userProfile.schedule ? [
+                                {
+                                    id: 'wake-up',
+                                    text: '기상',
+                                    time: 'morning' as const,
+                                    startTime: userProfile.schedule.wakeUp,
+                                    endTime: userProfile.schedule.wakeUp,
+                                    color: 'yellow',
+                                    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+                                    notificationEnabled: true,
+                                },
+                                {
+                                    id: 'work-start',
+                                    text: '업무 시작',
+                                    time: 'morning' as const,
+                                    startTime: userProfile.schedule.workStart,
+                                    endTime: userProfile.schedule.workStart,
+                                    color: 'purple',
+                                    daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
+                                    notificationEnabled: true,
+                                },
+                                {
+                                    id: 'work-end',
+                                    text: '업무 종료',
+                                    time: 'evening' as const,
+                                    startTime: userProfile.schedule.workEnd,
+                                    endTime: userProfile.schedule.workEnd,
+                                    color: 'green',
+                                    daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
+                                    notificationEnabled: true,
+                                },
+                                {
+                                    id: 'sleep',
+                                    text: '취침',
+                                    time: 'evening' as const,
+                                    startTime: userProfile.schedule.sleep,
+                                    endTime: userProfile.schedule.sleep,
+                                    color: 'blue',
+                                    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+                                    notificationEnabled: true,
+                                },
+                            ] : []),
+                            // Add custom goals
+                            ...(userProfile.customGoals || []),
+                        ]}
+                    />
+                )
+            }
+        </div >
     );
 }
 
@@ -1168,6 +1251,32 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         return (aHour * 60 + aMin) - (bHour * 60 + bMin);
     });
 
+    // Find active and next indices
+    let activeIndex = -1;
+    let nextIndex = -1;
+
+    for (let i = 0; i < timelineItems.length; i++) {
+        const item = timelineItems[i];
+        const [h, m] = item.time.split(':').map(Number);
+        const itemTime = h * 60 + m;
+
+        const nextItem = timelineItems[i + 1];
+        let nextTime = 24 * 60; // End of day
+        if (nextItem) {
+            const [nh, nm] = nextItem.time.split(':').map(Number);
+            nextTime = nh * 60 + nm;
+        }
+
+        if (currentTimeValue >= itemTime && currentTimeValue < nextTime) {
+            activeIndex = i;
+            break;
+        }
+
+        if (currentTimeValue < itemTime && nextIndex === -1) {
+            nextIndex = i;
+        }
+    }
+
     const getColorClasses = (color: string, isActive: boolean = false) => {
         const bgColors: Record<string, string> = {
             yellow: isActive ? 'bg-yellow-500' : 'bg-yellow-500/30',
@@ -1231,11 +1340,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 <div className="flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-hide snap-x snap-mandatory px-1">
                     {timelineItems.map((item, index) => {
                         const Icon = item.icon;
-                        const [itemHour, itemMinute] = item.time.split(':').map(Number);
-                        const itemTimeValue = itemHour * 60 + itemMinute;
-                        const isActive = currentTimeValue >= itemTimeValue && (index === timelineItems.length - 1 || currentTimeValue < (parseInt(timelineItems[index + 1]?.time.split(':')[0]) * 60 + parseInt(timelineItems[index + 1]?.time.split(':')[1])));
-                        const isPast = currentTimeValue > itemTimeValue;
-                        const colors = getColorClasses(item.color, isActive);
+                        const isActive = index === activeIndex;
+                        const isUpcoming = activeIndex === -1 && index === nextIndex;
+                        const isPast = index < activeIndex || (activeIndex === -1 && index < nextIndex && nextIndex !== -1);
+                        const colors = getColorClasses(item.color, isActive || isUpcoming);
 
                         return (
                             <motion.div
@@ -1249,9 +1357,11 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     "relative w-[140px] p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
                                     isActive
                                         ? "bg-gradient-to-b from-white/10 to-white/5 border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] scale-105 z-10"
-                                        : isPast
-                                            ? "bg-white/5 border-white/5 opacity-60 grayscale-[0.5]"
-                                            : "bg-white/5 border-white/10"
+                                        : isUpcoming
+                                            ? "bg-gradient-to-b from-primary/10 to-primary/5 border-primary/30 shadow-[0_0_15px_rgba(168,85,247,0.1)] scale-105 z-10"
+                                            : isPast
+                                                ? "bg-white/5 border-white/5 opacity-60 grayscale-[0.5]"
+                                                : "bg-white/5 border-white/10"
                                 )}>
                                     {/* Connection Line (Visual only) */}
                                     {index < timelineItems.length - 1 && (
@@ -1261,7 +1371,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     {/* Time Badge */}
                                     <div className={cn(
                                         "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border",
-                                        isActive
+                                        isActive || isUpcoming
                                             ? "bg-white/10 border-white/20 text-white"
                                             : "bg-black/20 border-white/5 text-muted-foreground"
                                     )}>
@@ -1272,9 +1382,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     <div className={cn(
                                         "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 relative",
                                         colors.bg,
-                                        isActive && "shadow-lg ring-2 ring-white/20"
+                                        (isActive || isUpcoming) && "shadow-lg ring-2 ring-white/20"
                                     )}>
-                                        <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
+                                        <Icon className={cn("w-5 h-5", (isActive || isUpcoming) ? "text-white" : colors.text)} />
                                         {isActive && (
                                             <span className="absolute -top-1 -right-1 flex h-3 w-3">
                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
@@ -1287,7 +1397,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     <div className="text-center w-full">
                                         <h4 className={cn(
                                             "font-semibold text-sm mb-0.5 truncate w-full",
-                                            isActive ? "text-white" : "text-gray-300"
+                                            (isActive || isUpcoming) ? "text-white" : "text-gray-300"
                                         )}>
                                             {item.label}
                                         </h4>
@@ -1296,119 +1406,44 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                                 현재 진행 중
                                             </p>
                                         )}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Desktop Vertical Layout */}
-            {!isMobile && timelineItems.map((item, index) => {
-                const Icon = item.icon;
-                const completion = todayCompletions[item.goalId];
-                const [itemHour, itemMinute] = item.time.split(':').map(Number);
-                const itemTimeValue = itemHour * 60 + itemMinute;
-                const isActive = currentTimeValue >= itemTimeValue && (index === timelineItems.length - 1 || currentTimeValue < (parseInt(timelineItems[index + 1]?.time.split(':')[0]) * 60 + parseInt(timelineItems[index + 1]?.time.split(':')[1])));
-                const isPast = currentTimeValue > itemTimeValue;
-                const colors = getColorClasses(item.color, isActive);
-
-                return (
-                    <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="relative flex items-center gap-4 group"
-                    >
-                        {/* Enhanced Timeline dot with glow effect (Desktop only) */}
-                        <div className={cn(
-                            "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
-                            colors.bg,
-                            isActive && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
-                        )}>
-                            <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                isActive ? "bg-white" : "bg-background/50"
-                            )} />
-                        </div>
-
-                        {/* Enhanced Content card */}
-                        <div className={cn(
-                            "flex-1 rounded-xl p-4 border transition-all w-full",
-                            isActive
-                                ? "bg-gradient-to-r from-white/10 to-white/5 border-white/20 shadow-md"
-                                : isPast
-                                    ? "bg-white/5 border-white/5 opacity-60"
-                                    : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
-                        )}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    {/* Icon with colored background */}
-                                    <div className={cn(
-                                        "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                                        colors.bg,
-                                        isActive && "shadow-lg"
-                                    )}>
-                                        <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
-                                    </div>
-
-                                    <div>
-                                        <h4 className={cn(
-                                            "font-semibold text-base",
-                                            isActive && "text-white"
-                                        )}>
-                                            {item.label}
-                                        </h4>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <p className={cn(
-                                                "text-sm font-mono",
-                                                isActive ? "text-white/70" : "text-muted-foreground"
-                                            )}>
-                                                {item.time}
-                                                {item.endTime && ` - ${item.endTime}`}
+                                        {isUpcoming && (
+                                            <p className="text-[10px] text-primary font-medium">
+                                                예정됨
                                             </p>
-                                            {isActive && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-                                                    진행 중
-                                                </span>
-                                            )}
-                                        </div>
+                                        )}
                                     </div>
-                                </div>
 
-                                {/* Completion status */}
-                                {completion && (
-                                    <motion.span
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className={cn(
-                                            "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
-                                            completion.completed
-                                                ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                                : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                        )}
-                                    >
-                                        {completion.completed ? (
-                                            <>
-                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                완료
-                                            </>
-                                        ) : (
-                                            <>
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                미완료
-                                            </>
-                                        )}
-                                    </motion.span>
-                                )}
+                                    {/* Completion status */}
+                                    {completion && (
+                                        <motion.span
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className={cn(
+                                                "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
+                                                completion.completed
+                                                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                            )}
+                                        >
+                                            {completion.completed ? (
+                                                <>
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    완료
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <XCircle className="w-3.5 h-3.5" />
+                                                    미완료
+                                                </>
+                                            )}
+                                        </motion.span>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </motion.div>
-                );
-            })}
-        </div>
+                        </motion.div>
+            );
+                })}
+        </div >
     );
 }
 
