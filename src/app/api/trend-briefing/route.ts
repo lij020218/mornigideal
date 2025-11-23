@@ -156,14 +156,74 @@ export async function GET(request: Request) {
 
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
-                const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+                let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+
+                // Find JSON array in the text
+                const arrayMatch = text.match(/\[[\s\S]*\]/);
+                if (arrayMatch) {
+                    text = arrayMatch[0];
+                }
+
+                // Remove any trailing non-JSON content
+                const lastBracketIndex = text.lastIndexOf(']');
+                if (lastBracketIndex !== -1 && lastBracketIndex < text.length - 1) {
+                    text = text.substring(0, lastBracketIndex + 1);
+                }
 
                 let candidates = [];
                 try {
                     candidates = JSON.parse(text);
-                } catch (e) {
-                    console.error("[API] Failed to parse candidates JSON", e);
-                    continue;
+                } catch (parseError: any) {
+                    console.error("[API] Failed to parse candidates JSON", parseError);
+
+                    // Try to salvage partial JSON
+                    try {
+                        const firstBracket = text.indexOf('[');
+                        if (firstBracket === -1) {
+                            continue;
+                        }
+
+                        let braceCount = 0;
+                        let currentObject = '';
+                        let inString = false;
+                        let escapeNext = false;
+                        const validObjects: string[] = [];
+
+                        for (let i = firstBracket + 1; i < text.length; i++) {
+                            const char = text[i];
+
+                            if (char === '"' && !escapeNext) inString = !inString;
+                            escapeNext = char === '\\' && !escapeNext;
+
+                            if (!inString) {
+                                if (char === '{') braceCount++;
+                                if (char === '}') braceCount--;
+                            }
+
+                            currentObject += char;
+
+                            if (braceCount === 0 && currentObject.trim().endsWith('}')) {
+                                try {
+                                    const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
+                                    validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
+                                    currentObject = '';
+                                } catch (e) {
+                                    currentObject = '';
+                                }
+                            }
+                        }
+
+                        if (validObjects.length > 0) {
+                            const validJson = '[' + validObjects.join(',') + ']';
+                            candidates = JSON.parse(validJson);
+                            console.log(`[API] Salvaged ${candidates.length} candidates from partial JSON`);
+                        } else {
+                            continue;
+                        }
+                    } catch (salvageError) {
+                        console.error("[API] Salvage attempt failed");
+                        continue;
+                    }
                 }
 
                 if (!Array.isArray(candidates)) continue;
