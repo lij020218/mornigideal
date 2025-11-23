@@ -44,7 +44,7 @@ async function findRealArticleUrl(title: string, category: string): Promise<stri
 
         // Use Google search (this is a simple approach - in production you might use Google Custom Search API)
         const searchQuery = encodeURIComponent(`${title} ${category}`);
-        const searchUrl = `https://www.google.com/search?q=${searchQuery}`;
+        // const searchUrl = `https://www.google.com/search?q=${searchQuery}`; // Not used directly
 
         // For now, we'll construct a likely URL pattern
         // Alternatively, you could use the Gemini model with googleSearch tool here
@@ -107,222 +107,206 @@ export async function GET(request: Request) {
 
         // If no cache or force refresh, generate new trends
         console.log('[API] Generating fresh trends');
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
-            // @ts-expect-error - googleSearch is a valid tool but types might be outdated
-            tools: [{ googleSearch: {} }],
-            generationConfig: {
-                responseMimeType: "application/json"
+
+        let validTrends: any[] = [];
+        let retryCount = 0;
+        const maxRetries = 2;
+
+        while (validTrends.length < 6 && retryCount <= maxRetries) {
+            if (retryCount > 0) {
+                console.log(`[API] Retry ${retryCount}/${maxRetries}: Only found ${validTrends.length} valid trends. Generating more...`);
             }
-        });
 
-        const today = new Date().toISOString().split('T')[0];
-
-        const prompt = `
-      You are a trend analyst for a ${job}.
-      Today's date is ${today}.
-
-      **PREMIUM SOURCES (STRICT PRIORITY):**
-      You MUST prioritize news from the following high-quality sources. 
-      **At least 8 out of 10 items MUST come from these domains:**
-      1. Bloomberg
-      2. Financial Times (FT)
-      3. The Wall Street Journal (WSJ)
-      4. The Economist
-      5. BBC
-      6. Reuters
-      7. AP News
-      8. The New York Times (NYT)
-      9. The Washington Post (WP)
-      10. Nikkei Asia
-      11. South China Morning Post (SCMP)
-      12. TechCrunch
-      13. Wired
-      14. The Information
-
-      **TASK:**
-      1. Use the 'googleSearch' tool to find **15-20** current, hot trending news items relevant to a ${job}.
-      2. **CRITICAL:** Search specifically for these premium sources (e.g., "site:bloomberg.com OR site:ft.com ...").
-      3. **ANTI-HALLUCINATION RULES (EXTREMELY IMPORTANT):**
-         - **NEVER** modify, shorten, or rewrite the URL in ANY way.
-         - **COPY** the complete originalUrl EXACTLY as it appears in the search result - every single character.
-         - The URL must be the FULL, COMPLETE link including all query parameters and ID codes.
-         - Example CORRECT: "https://apnews.com/article/jobs-unemployment-economy-trump-tariff-bf603d63e13d6dc1083e9a6616c7ffee"
-         - Example WRONG: "https://apnews.com/article/jobs-report-september-unemployment-economy-inflation-fed-7a3c4b1b" (DO NOT DO THIS)
-         - If the search gives you "https://example.com/article/very-long-id-12345-abcdef", return EXACTLY that.
-         - If you cannot find or copy the exact complete URL, skip that article entirely.
-         - Double-check: Does your URL contain the complete unique article identifier from the search result?
-      4. Focus on news from the past 1-3 days.
-
-      For each item, provide:
-      - category: Short English category (e.g., "Marketing", "AI", "Tech").
-      - title: Catchy Korean headline.
-      - time: Relative time (e.g., "2시간 전").
-      - imageColor: Tailwind CSS background color class (e.g., "bg-blue-500/20").
-      - originalUrl: **THE EXACT URL** from the search result. Must start with http:// or https://.
-      - imageUrl: **CRITICAL:** Try to find the actual image URL from the search result snippet or metadata (often og:image). If you absolutely cannot find a real image URL, leave this empty string "". DO NOT make up an image URL.
-      - summary: 1-2 sentence Korean summary.
-
-      Return ONLY a valid JSON array of objects.
-      Example:
-      [
-        { "category": "AI", "title": "...", "time": "...", "imageColor": "...", "originalUrl": "https://actual-news-site.com/article", "imageUrl": "...", "summary": "..." }
-      ]
-    `;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-
-        console.log('[API] Raw response length:', text.length);
-
-        // More robust JSON extraction
-        let cleanedText = text.trim();
-
-        // Remove markdown code blocks
-        cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-
-        // Try to find JSON array in the text
-        const arrayMatch = cleanedText.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
-            cleanedText = arrayMatch[0];
-        }
-
-        // Additional cleanup: remove any trailing non-JSON content
-        // Find the last ] and cut everything after it
-        const lastBracketIndex = cleanedText.lastIndexOf(']');
-        if (lastBracketIndex !== -1 && lastBracketIndex < cleanedText.length - 1) {
-            cleanedText = cleanedText.substring(0, lastBracketIndex + 1);
-        }
-
-        console.log('[API] Cleaned text length:', cleanedText.length);
-
-        let allTrends;
-        try {
-            allTrends = JSON.parse(cleanedText);
-        } catch (parseError: any) {
-            console.error('[API] JSON Parse Error:', parseError);
-            console.error('[API] Failed text (first 500 chars):', cleanedText.substring(0, 500));
-            console.error('[API] Failed text (last 500 chars):', cleanedText.substring(cleanedText.length - 500));
-
-            // Try to salvage partial JSON by finding complete objects
             try {
-                // Strategy: Find all complete objects in the array
-                // Look for pattern },\n  { to split objects
-                const firstBracket = cleanedText.indexOf('[');
-                if (firstBracket === -1) throw parseError;
-
-                // Find all object boundaries
-                let validJson = '[';
-                let braceCount = 0;
-                let currentObject = '';
-                let inString = false;
-                let escapeNext = false;
-                const validObjects: string[] = [];
-
-                for (let i = firstBracket + 1; i < cleanedText.length; i++) {
-                    const char = cleanedText[i];
-                    const prevChar = i > 0 ? cleanedText[i - 1] : '';
-
-                    // Track string state
-                    if (char === '"' && !escapeNext) {
-                        inString = !inString;
+                const model = genAI.getGenerativeModel({
+                    model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+                    // @ts-expect-error - googleSearch is a valid tool
+                    tools: [{ googleSearch: {} }],
+                    generationConfig: {
+                        responseMimeType: "application/json"
                     }
-                    escapeNext = char === '\\' && !escapeNext;
+                });
 
-                    if (!inString) {
-                        if (char === '{') braceCount++;
-                        if (char === '}') braceCount--;
-                    }
+                const today = new Date().toISOString().split('T')[0];
+                const itemsNeeded = 10; // Request more than 6 to have a buffer
 
-                    currentObject += char;
+                const prompt = `
+              You are a trend analyst for a ${job}.
+              Today's date is ${today}.
 
-                    // When we complete an object (braceCount returns to 0)
-                    if (braceCount === 0 && currentObject.trim().endsWith('}')) {
-                        try {
-                            // Try parsing this object
-                            const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
-                            validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
-                            currentObject = '';
-                        } catch (e) {
-                            // Skip invalid object
-                            currentObject = '';
+              **PREMIUM SOURCES (STRICT PRIORITY):**
+              You MUST prioritize news from the following high-quality sources. 
+              **At least 8 out of 10 items MUST come from these domains:**
+              1. Bloomberg
+              2. Financial Times (FT)
+              3. The Wall Street Journal (WSJ)
+              4. The Economist
+              5. BBC
+              6. Reuters
+              7. AP News
+              8. The New York Times (NYT)
+              9. The Washington Post (WP)
+              10. Nikkei Asia
+              11. South China Morning Post (SCMP)
+              12. TechCrunch
+              13. Wired
+              14. The Information
+
+              **TASK:**
+              1. Use the 'googleSearch' tool to find **${itemsNeeded}** current, hot trending news items relevant to a ${job}.
+              2. **CRITICAL:** Search specifically for these premium sources (e.g., "site:bloomberg.com OR site:ft.com ...").
+              3. **ANTI-HALLUCINATION RULES (EXTREMELY IMPORTANT):**
+                 - **NEVER** invent or guess URLs.
+                 - **ONLY** use URLs that you have verified exist from the search results.
+                 - If you cannot find a direct link, skip the item.
+              4. Focus on news from the past 1-3 days.
+
+              For each item, provide:
+              - category: Short English category (e.g., "Marketing", "AI", "Tech").
+              - title: Catchy Korean headline.
+              - time: Relative time (e.g., "2시간 전").
+              - imageColor: Tailwind CSS background color class (e.g., "bg-blue-500/20").
+              - originalUrl: **THE EXACT URL** from the search result. Must start with http:// or https://.
+              - imageUrl: **CRITICAL:** Try to find the actual image URL from the search result snippet or metadata (often og:image). If you absolutely cannot find a real image URL, leave this empty string "". DO NOT make up an image URL.
+              - summary: 1-2 sentence Korean summary.
+
+              Return ONLY a valid JSON array of objects.
+              Example:
+              [
+                { "category": "AI", "title": "...", "time": "...", "imageColor": "...", "originalUrl": "https://actual-news-site.com/article", "imageUrl": "...", "summary": "..." }
+              ]
+            `;
+
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const text = response.text();
+
+                console.log('[API] Raw response length:', text.length);
+
+                // More robust JSON extraction
+                let cleanedText = text.trim();
+                cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+                const arrayMatch = cleanedText.match(/\[[\s\S]*\]/);
+                if (arrayMatch) {
+                    cleanedText = arrayMatch[0];
+                }
+
+                // Additional cleanup: remove any trailing non-JSON content
+                const lastBracketIndex = cleanedText.lastIndexOf(']');
+                if (lastBracketIndex !== -1 && lastBracketIndex < cleanedText.length - 1) {
+                    cleanedText = cleanedText.substring(0, lastBracketIndex + 1);
+                }
+
+                let newTrends = [];
+                try {
+                    newTrends = JSON.parse(cleanedText);
+                } catch (parseError: any) {
+                    console.error('[API] JSON Parse Error:', parseError);
+                    // Try to salvage partial JSON
+                    try {
+                        const firstBracket = cleanedText.indexOf('[');
+                        if (firstBracket === -1) throw parseError;
+
+                        let validJson = '[';
+                        let braceCount = 0;
+                        let currentObject = '';
+                        let inString = false;
+                        let escapeNext = false;
+                        const validObjects: string[] = [];
+
+                        for (let i = firstBracket + 1; i < cleanedText.length; i++) {
+                            const char = cleanedText[i];
+
+                            if (char === '"' && !escapeNext) inString = !inString;
+                            escapeNext = char === '\\' && !escapeNext;
+
+                            if (!inString) {
+                                if (char === '{') braceCount++;
+                                if (char === '}') braceCount--;
+                            }
+
+                            currentObject += char;
+
+                            if (braceCount === 0 && currentObject.trim().endsWith('}')) {
+                                try {
+                                    const testObj = JSON.parse(currentObject.trim().replace(/,\s*$/, ''));
+                                    validObjects.push(currentObject.trim().replace(/,\s*$/, ''));
+                                    currentObject = '';
+                                } catch (e) {
+                                    currentObject = '';
+                                }
+                            }
                         }
+
+                        if (validObjects.length > 0) {
+                            validJson = '[' + validObjects.join(',') + ']';
+                            newTrends = JSON.parse(validJson);
+                            console.log(`[API] Successfully salvaged ${newTrends.length} complete objects from partial JSON`);
+                        } else {
+                            throw parseError;
+                        }
+                    } catch (salvageError) {
+                        console.error('[API] Salvage attempt failed');
                     }
                 }
 
-                if (validObjects.length > 0) {
-                    validJson = '[' + validObjects.join(',') + ']';
-                    allTrends = JSON.parse(validJson);
-                    console.log(`[API] Successfully salvaged ${allTrends.length} complete objects from partial JSON`);
-                } else {
-                    throw parseError;
+                if (Array.isArray(newTrends)) {
+                    console.log(`[API] Generated ${newTrends.length} new trends. Verifying URLs...`);
+
+                    // Verify and fix URLs for new trends
+                    const verificationPromises = newTrends.map(async (trend: any) => {
+                        // Skip if we already have this URL (deduplication)
+                        if (validTrends.some(t => t.originalUrl === trend.originalUrl || t.title === trend.title)) {
+                            return null;
+                        }
+
+                        if (!trend.originalUrl || !trend.originalUrl.startsWith('http')) {
+                            return null;
+                        }
+
+                        // 1. Verify URL
+                        const { isValid, finalUrl } = await verifyAndGetFinalUrl(trend.originalUrl);
+                        if (isValid && finalUrl) {
+                            return { ...trend, originalUrl: finalUrl };
+                        }
+
+                        // 2. Fix URL
+                        console.warn(`[API] URL invalid, searching for real article: ${trend.title}`);
+                        const realUrl = await findRealArticleUrl(trend.title, trend.category);
+                        if (realUrl) {
+                            const { isValid: realUrlValid, finalUrl: realFinalUrl } = await verifyAndGetFinalUrl(realUrl);
+                            if (realUrlValid && realFinalUrl) {
+                                return { ...trend, originalUrl: realFinalUrl };
+                            }
+                        }
+
+                        return null;
+                    });
+
+                    const results = await Promise.all(verificationPromises);
+                    const verifiedNewTrends = results.filter((t: any) => t !== null);
+
+                    validTrends = [...validTrends, ...verifiedNewTrends];
+                    console.log(`[API] Current valid trends count: ${validTrends.length}`);
                 }
-            } catch (salvageError) {
-                console.error('[API] Salvage attempt failed:', salvageError);
-                throw new Error(`Failed to parse JSON: ${parseError.message}`);
+
+            } catch (error) {
+                console.error(`[API] Error in generation attempt ${retryCount + 1}:`, error);
             }
+
+            retryCount++;
         }
 
-        if (!Array.isArray(allTrends)) {
-            throw new Error('Response is not an array');
+        // Final check
+        if (validTrends.length === 0) {
+            console.error('[API] Failed to generate any valid trends after retries');
+            return NextResponse.json({ error: "Failed to generate trends" }, { status: 500 });
         }
 
-        console.log(`[API] Generated ${allTrends.length} trends. Verifying and fixing URLs...`);
-
-        // Verify each URL and fix hallucinated ones
-        const verificationPromises = allTrends.map(async (trend: any) => {
-            if (!trend.originalUrl || !trend.originalUrl.startsWith('http')) {
-                console.log(`[API] Invalid URL format: ${trend.originalUrl}`);
-                return null;
-            }
-
-            // First, try to verify the URL
-            const { isValid, finalUrl } = await verifyAndGetFinalUrl(trend.originalUrl);
-
-            if (isValid && finalUrl) {
-                // URL is good, use it
-                return {
-                    ...trend,
-                    originalUrl: finalUrl
-                };
-            }
-
-            // URL is bad (hallucinated by Gemini), search for the real one
-            console.warn(`[API] URL invalid, searching for real article: ${trend.title}`);
-            const realUrl = await findRealArticleUrl(trend.title, trend.category);
-
-            if (realUrl) {
-                // Verify the found URL
-                const { isValid: realUrlValid, finalUrl: realFinalUrl } = await verifyAndGetFinalUrl(realUrl);
-
-                if (realUrlValid && realFinalUrl) {
-                    console.log(`[API] ✅ Fixed URL for "${trend.title}": ${realFinalUrl}`);
-                    return {
-                        ...trend,
-                        originalUrl: realFinalUrl
-                    };
-                }
-            }
-
-            // Could not fix URL, drop this trend
-            console.error(`[API] ❌ Could not find valid URL for: ${trend.title}`);
-            return null;
-        });
-
-        const results = await Promise.all(verificationPromises);
-        const validTrends = results.filter((trend: any) => trend !== null).slice(0, 6);
-
-        console.log(`[API] Retained ${validTrends.length} valid trends after verification and fixing.`);
-
-        // Ensure we have at least 1 trend (fallback to accepting unverified URLs if necessary)
-        if (validTrends.length === 0 && allTrends.length > 0) {
-            console.warn('[API] No valid trends after verification, accepting first trend without verification as fallback');
-            validTrends.push({
-                ...allTrends[0],
-                id: generateTrendId(allTrends[0].title)
-            });
-        }
+        // Limit to 6
+        validTrends = validTrends.slice(0, 6);
+        console.log(`[API] Finalizing with ${validTrends.length} trends`);
 
         // Add IDs to trends
         const trendsWithIds = validTrends.map((trend: any) => ({
@@ -412,7 +396,7 @@ export async function POST(request: Request) {
       **응답 형식**:
       {
         "title": "흥미롭고 명확한 한글 제목 (18px)",
-        "content": "### 핵심 내용\n\n[2-3 단락]\n\n### ${level} ${job}인 당신에게\n\n[사용자 상황과의 연결 2-3 단락]\n\n### 이 브리핑에서 얻을 수 있는 것\n\n- **핵심 가치 1**\n- **핵심 가치 2**\n- **핵심 가치 3**",
+        "content": "### 핵심 내용\\n\\n[2-3 단락]\\n\\n### ${level} ${job}인 당신에게\\n\\n[사용자 상황과의 연결 2-3 단락]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **핵심 가치 1**\\n- **핵심 가치 2**\\n- **핵심 가치 3**",
         "keyTakeaways": [
           "${job} 관점에서의 핵심 포인트 1",
           "${job} 관점에서의 핵심 포인트 2",
