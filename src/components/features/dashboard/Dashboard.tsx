@@ -532,6 +532,19 @@ export function Dashboard({ username }: DashboardProps) {
                         {/* 2. Timeline (Mobile - Horizontal) */}
                         <Card className="glass-card border-none overflow-hidden">
                             <CardContent className="p-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-semibold flex items-center gap-2 text-sm">
+                                        <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
+                                    </h3>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-xs text-muted-foreground hover:text-white gap-1.5 px-2"
+                                        onClick={() => setShowSchedulePopup(true)}
+                                    >
+                                        <Edit3 className="w-3.5 h-3.5" /> 일정 관리
+                                    </Button>
+                                </div>
                                 <DailyRhythmTimeline
                                     schedule={userProfile?.schedule}
                                     customGoals={userProfile?.customGoals}
@@ -543,7 +556,7 @@ export function Dashboard({ username }: DashboardProps) {
                         </Card>
 
                         {/* 3. Insights (Mobile) */}
-                        <div className="h-32">
+                        <div className="h-40">
                             <PeerInsightsCard
                                 job={userProfile?.job || "마케터"}
                                 level={userProfile?.level || "중급"}
@@ -1171,12 +1184,91 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     return (
         <div className={cn(
             "relative",
-            isMobile ? "flex gap-3 overflow-x-auto pb-2 scrollbar-hide px-1" : "pl-8 space-y-3"
+            isMobile ? "w-full" : "pl-8 space-y-3"
         )}>
             {/* Enhanced Vertical line with gradient (Desktop only) */}
             {!isMobile && <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary/30 via-primary/50 to-primary/30 rounded-full" />}
 
-            {timelineItems.map((item, index) => {
+            {/* Mobile Horizontal Scroll Container */}
+            {isMobile && (
+                <div className="flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-hide snap-x snap-mandatory px-1">
+                    {timelineItems.map((item, index) => {
+                        const Icon = item.icon;
+                        const [itemHour, itemMinute] = item.time.split(':').map(Number);
+                        const itemTimeValue = itemHour * 60 + itemMinute;
+                        const isActive = currentTimeValue >= itemTimeValue && (index === timelineItems.length - 1 || currentTimeValue < (parseInt(timelineItems[index + 1]?.time.split(':')[0]) * 60 + parseInt(timelineItems[index + 1]?.time.split(':')[1])));
+                        const isPast = currentTimeValue > itemTimeValue;
+                        const colors = getColorClasses(item.color, isActive);
+
+                        return (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.05 }}
+                                className="snap-center shrink-0"
+                            >
+                                <div className={cn(
+                                    "relative w-[140px] p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
+                                    isActive
+                                        ? "bg-gradient-to-b from-white/10 to-white/5 border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] scale-105 z-10"
+                                        : isPast
+                                            ? "bg-white/5 border-white/5 opacity-60 grayscale-[0.5]"
+                                            : "bg-white/5 border-white/10"
+                                )}>
+                                    {/* Connection Line (Visual only) */}
+                                    {index < timelineItems.length - 1 && (
+                                        <div className="absolute top-1/2 -right-4 w-4 h-0.5 bg-white/10 z-0" />
+                                    )}
+
+                                    {/* Time Badge */}
+                                    <div className={cn(
+                                        "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border",
+                                        isActive
+                                            ? "bg-white/10 border-white/20 text-white"
+                                            : "bg-black/20 border-white/5 text-muted-foreground"
+                                    )}>
+                                        {item.time}
+                                    </div>
+
+                                    {/* Icon Circle */}
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 relative",
+                                        colors.bg,
+                                        isActive && "shadow-lg ring-2 ring-white/20"
+                                    )}>
+                                        <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
+                                        {isActive && (
+                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className="text-center w-full">
+                                        <h4 className={cn(
+                                            "font-semibold text-sm mb-0.5 truncate w-full",
+                                            isActive ? "text-white" : "text-gray-300"
+                                        )}>
+                                            {item.label}
+                                        </h4>
+                                        {isActive && (
+                                            <p className="text-[10px] text-primary font-medium animate-pulse">
+                                                현재 진행 중
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Desktop Vertical Layout */}
+            {!isMobile && timelineItems.map((item, index) => {
                 const Icon = item.icon;
                 const completion = todayCompletions[item.goalId];
                 const [itemHour, itemMinute] = item.time.split(':').map(Number);
@@ -1191,115 +1283,90 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className={cn(
-                            "relative flex items-center gap-4 group",
-                            isMobile && "flex-col gap-2 min-w-[100px] text-center"
-                        )}
+                        className="relative flex items-center gap-4 group"
                     >
                         {/* Enhanced Timeline dot with glow effect (Desktop only) */}
-                        {!isMobile && (
+                        <div className={cn(
+                            "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
+                            colors.bg,
+                            isActive && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
+                        )}>
                             <div className={cn(
-                                "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
-                                colors.bg,
-                                isActive && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
-                            )}>
-                                <div className={cn(
-                                    "w-2 h-2 rounded-full",
-                                    isActive ? "bg-white" : "bg-background/50"
-                                )} />
-                            </div>
-                        )}
+                                "w-2 h-2 rounded-full",
+                                isActive ? "bg-white" : "bg-background/50"
+                            )} />
+                        </div>
 
                         {/* Enhanced Content card */}
                         <div className={cn(
                             "flex-1 rounded-xl p-4 border transition-all w-full",
-                            isMobile && "p-3 flex flex-col items-center justify-center gap-2",
                             isActive
                                 ? "bg-gradient-to-r from-white/10 to-white/5 border-white/20 shadow-md"
                                 : isPast
                                     ? "bg-white/5 border-white/5 opacity-60"
                                     : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
                         )}>
-                            {isMobile ? (
-                                // Mobile Content
-                                <>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    {/* Icon with colored background */}
                                     <div className={cn(
-                                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                                        "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
                                         colors.bg,
                                         isActive && "shadow-lg"
                                     )}>
-                                        <Icon className={cn("w-4 h-4", isActive ? "text-white" : colors.text)} />
+                                        <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
                                     </div>
+
                                     <div>
-                                        <h4 className={cn("font-semibold text-sm", isActive && "text-white")}>{item.label}</h4>
-                                        <p className={cn("text-xs font-mono", isActive ? "text-white/70" : "text-muted-foreground")}>{item.time}</p>
-                                    </div>
-                                    {isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">진행 중</span>}
-                                </>
-                            ) : (
-                                // Desktop Content
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                        {/* Icon with colored background */}
-                                        <div className={cn(
-                                            "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                                            colors.bg,
-                                            isActive && "shadow-lg"
+                                        <h4 className={cn(
+                                            "font-semibold text-base",
+                                            isActive && "text-white"
                                         )}>
-                                            <Icon className={cn("w-5 h-5", isActive ? "text-white" : colors.text)} />
-                                        </div>
-
-                                        <div>
-                                            <h4 className={cn(
-                                                "font-semibold text-base",
-                                                isActive && "text-white"
+                                            {item.label}
+                                        </h4>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className={cn(
+                                                "text-sm font-mono",
+                                                isActive ? "text-white/70" : "text-muted-foreground"
                                             )}>
-                                                {item.label}
-                                            </h4>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <p className={cn(
-                                                    "text-sm font-mono",
-                                                    isActive ? "text-white/70" : "text-muted-foreground"
-                                                )}>
-                                                    {item.time}
-                                                    {item.endTime && ` - ${item.endTime}`}
-                                                </p>
-                                                {isActive && (
-                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-                                                        진행 중
-                                                    </span>
-                                                )}
-                                            </div>
+                                                {item.time}
+                                                {item.endTime && ` - ${item.endTime}`}
+                                            </p>
+                                            {isActive && (
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
+                                                    진행 중
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
-
-                                    {/* Completion status */}
-                                    {completion && (
-                                        <motion.span
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            className={cn(
-                                                "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
-                                                completion.completed
-                                                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                            )}
-                                        >
-                                            {completion.completed ? (
-                                                <>
-                                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                                    완료
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <XCircle className="w-3.5 h-3.5" />
-                                                    미완료
-                                                </>
-                                            )}
-                                        </motion.span>
-                                    )}
                                 </div>
-                            )}
+
+                                {/* Completion status */}
+                                {completion && (
+                                    <motion.span
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className={cn(
+                                            "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
+                                            completion.completed
+                                                ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                                : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                        )}
+                                    >
+                                        {completion.completed ? (
+                                            <>
+                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                완료
+                                            </>
+                                        ) : (
+                                            <>
+                                                <XCircle className="w-3.5 h-3.5" />
+                                                미완료
+                                            </>
+                                        )}
+                                    </motion.span>
+                                )}
+                            </div>
                         </div>
                     </motion.div>
                 );
@@ -1327,7 +1394,7 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
             if (cached) {
                 try {
                     const { achievements: cachedAchievements, timestamp } = JSON.parse(cached);
-                    const twoHoursInMs = 2 * 60 * 60 * 1000; // Changed from 6 hours to 2 hours
+                    const twoHoursInMs = 2 * 60 * 60 * 1000;
 
                     if (Date.now() - timestamp < twoHoursInMs) {
                         setAchievements(cachedAchievements);
@@ -1387,8 +1454,8 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
 
     if (loading) {
         return (
-            <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-8 border border-purple-500/20 flex items-center gap-6 animate-pulse h-full">
-                <div className="w-16 h-16 rounded-full bg-purple-500/10" />
+            <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-6 md:p-8 border border-purple-500/20 flex items-center gap-4 md:gap-6 animate-pulse h-full">
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-purple-500/10" />
                 <div className="flex-1 space-y-3">
                     <div className="h-5 bg-white/5 rounded w-1/3" />
                     <div className="h-4 bg-white/5 rounded w-full" />
@@ -1400,9 +1467,9 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
 
     if (achievements.length === 0) {
         return (
-            <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-8 border border-purple-500/20 flex items-center gap-6 h-full">
-                <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <Users className="w-8 h-8 text-purple-400" />
+            <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-6 md:p-8 border border-purple-500/20 flex items-center gap-4 md:gap-6 h-full">
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
+                    <Users className="w-6 h-6 md:w-8 md:h-8 text-purple-400" />
                 </div>
                 <div className="flex-1">
                     <h4 className="font-semibold mb-2 text-base">동료들의 인사이트</h4>
@@ -1415,42 +1482,53 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
     }
 
     return (
-        <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-4 md:p-8 border border-purple-500/20 h-full flex flex-col">
-            <div className="flex items-start gap-3 md:gap-6 flex-1 min-w-0">
-                <div className="w-10 h-10 md:w-16 md:h-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <Users className="w-5 h-5 md:w-8 md:h-8 text-purple-400" />
+        <div className="bg-gradient-to-br from-purple-500/10 to-transparent rounded-lg p-4 md:p-6 border border-purple-500/20 h-full flex flex-col relative overflow-hidden group">
+            {/* Background decoration */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+
+            <div className="flex items-start gap-4 md:gap-5 flex-1 min-w-0 z-10">
+                <div className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                    <Users className="w-5 h-5 md:w-7 md:h-7 text-purple-400" />
                 </div>
 
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={currentIndex}
-                        initial={{ x: 100, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: -100, opacity: 0 }}
-                        transition={{ duration: 0.5, ease: "easeInOut" }}
-                        className="flex-1 min-w-0"
-                    >
-                        <h4 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base truncate">동료들의 인사이트</h4>
-                        <p className="text-xs md:text-sm text-purple-400 mb-1.5 md:mb-2 font-medium truncate">
-                            {achievements[currentIndex].person}
-                        </p>
-                        <p className="text-muted-foreground text-xs md:text-sm leading-relaxed line-clamp-3 md:line-clamp-none">
-                            {achievements[currentIndex].achievement}
-                        </p>
-                    </motion.div>
-                </AnimatePresence>
+                <div className="flex-1 min-w-0 flex flex-col h-full">
+                    <div className="flex justify-between items-start mb-1">
+                        <div>
+                            <h4 className="font-bold text-sm md:text-base text-white/90">동료들의 인사이트</h4>
+                            <p className="text-xs md:text-sm text-purple-400 font-medium truncate">
+                                {achievements[currentIndex].person}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 relative">
+                        <AnimatePresence mode="wait">
+                            <motion.p
+                                key={currentIndex}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.3 }}
+                                className="text-muted-foreground text-xs md:text-sm leading-relaxed"
+                            >
+                                {achievements[currentIndex].achievement}
+                            </motion.p>
+                        </AnimatePresence>
+                    </div>
+                </div>
             </div>
 
-            {/* Progress indicator */}
-            <div className="flex gap-1.5 mt-4 md:mt-6 justify-center">
+            {/* Progress indicator - Always visible at bottom */}
+            <div className="flex gap-1.5 mt-3 justify-center z-10 shrink-0">
                 {achievements.map((_, idx) => (
-                    <div
+                    <button
                         key={idx}
+                        onClick={() => setCurrentIndex(idx)}
                         className={cn(
                             "h-1 rounded-full transition-all duration-300",
                             idx === currentIndex
-                                ? "bg-purple-500 w-8"
-                                : "bg-white/20 w-1.5"
+                                ? "bg-purple-500 w-6 md:w-8 shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+                                : "bg-white/10 w-1.5 hover:bg-white/30"
                         )}
                     />
                 ))}
