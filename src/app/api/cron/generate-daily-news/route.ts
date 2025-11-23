@@ -57,7 +57,7 @@ export async function GET(request: Request) {
         const trends = JSON.parse(cleanedTrendsText);
 
         // Add unique IDs to trends
-        const trendsWithIds: CachedTrend[] = trends.map((trend: Omit<CachedTrend, 'id'>) => ({
+        const trendsWithIds: any[] = trends.map((trend: any) => ({
             ...trend,
             id: generateTrendId(trend.title)
         }));
