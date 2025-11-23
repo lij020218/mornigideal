@@ -178,64 +178,65 @@ export default function CurriculumDetailPage() {
                 animate={{ y: 0, opacity: 1 }}
                 className="sticky top-0 z-50 glass border-b border-white/5 backdrop-blur-xl"
             >
-                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                <div className="max-w-7xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => router.push("/dashboard")}
-                            className="hover:bg-white/5 rounded-full"
+                            className="hover:bg-white/5 rounded-full shrink-0 w-8 h-8 md:w-10 md:h-10"
                         >
-                            <ArrowLeft className="w-5 h-5" />
+                            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
                         </Button>
-                        <div className="flex items-center gap-3">
-                            <span className="text-lg font-semibold tracking-tight">{curriculum?.title || "학습 과정"}</span>
-                            <span className={cn("text-xs px-2.5 py-0.5 rounded-full border font-medium", statusColor[progress.status])}>
+                        <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                            <span className="text-sm md:text-lg font-semibold tracking-tight truncate">{curriculum?.title || "학습 과정"}</span>
+                            <span className={cn("text-[10px] md:text-xs px-2 md:px-2.5 py-0.5 rounded-full border font-medium shrink-0", statusColor[progress.status])}>
                                 {statusLabel[progress.status]}
                             </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="hover:bg-white/5 rounded-full">
-                            <Bell className="w-5 h-5" />
+                    <div className="flex items-center gap-1 md:gap-2 shrink-0">
+                        <Button variant="ghost" size="icon" className="hover:bg-white/5 rounded-full w-8 h-8 md:w-10 md:h-10">
+                            <Bell className="w-4 h-4 md:w-5 md:h-5" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => router.push("/mypage")} className="hover:bg-white/5 rounded-full">
-                            <User className="w-5 h-5" />
+                        <Button variant="ghost" size="icon" onClick={() => router.push("/mypage")} className="hover:bg-white/5 rounded-full w-8 h-8 md:w-10 md:h-10">
+                            <User className="w-4 h-4 md:w-5 md:h-5" />
                         </Button>
                     </div>
                 </div>
             </motion.header>
 
-            <main className="max-w-4xl mx-auto px-6 py-10 space-y-10 relative z-10">
+            <main className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-10 space-y-6 md:space-y-10 relative z-10">
                 {/* Title Section */}
-                <div className="flex flex-col md:flex-row justify-between items-start gap-8">
+                <div className="flex flex-col md:flex-row justify-between items-start gap-6 md:gap-8">
                     <motion.div
                         initial={{ x: -20, opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.1 }}
-                        className="space-y-5 flex-1"
+                        className="space-y-4 md:space-y-5 flex-1"
                     >
                         <div>
-                            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 mb-2">
+                            <h1 className="text-2xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 mb-2">
                                 {curriculum.title}
                             </h1>
-                            <p className="text-lg text-muted-foreground leading-relaxed">
+                            <p className="text-sm md:text-lg text-muted-foreground leading-relaxed">
                                 {curriculum.subtitle || "체계적인 학습 계획을 수립하고 목표에 합격하는 것"}
                             </p>
                         </div>
 
-                        <div className="flex flex-wrap gap-4 text-sm">
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                                <Target className="w-4 h-4 text-primary" />
+                        <div className="flex flex-wrap gap-2 md:gap-4 text-xs md:text-sm">
+                            <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg bg-white/5 border border-white/5">
+                                <Target className="w-3 h-3 md:w-4 md:h-4 text-primary" />
                                 <span>중급</span>
                             </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                                <Clock className="w-4 h-4 text-blue-400" />
+                            <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg bg-white/5 border border-white/5">
+                                <Clock className="w-3 h-3 md:w-4 md:h-4 text-blue-400" />
                                 <span>{progress.totalDays}일 과정</span>
                             </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
-                                <Calendar className="w-4 h-4 text-purple-400" />
-                                <span>{progress.startDate.replace(/-/g, '.')} 시작</span>
+                            <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg bg-white/5 border border-white/5">
+                                <Calendar className="w-3 h-3 md:w-4 md:h-4 text-purple-400" />
+                                <span className="hidden sm:inline">{progress.startDate.replace(/-/g, '.')} 시작</span>
+                                <span className="sm:hidden">{progress.startDate.split('-')[1]}.{progress.startDate.split('-')[2]} 시작</span>
                             </div>
                         </div>
                     </motion.div>
@@ -245,10 +246,32 @@ export default function CurriculumDetailPage() {
                         initial={{ scale: 0.8, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ delay: 0.2, type: "spring" }}
-                        className="flex flex-col items-center bg-white/5 p-6 rounded-2xl border border-white/5 backdrop-blur-sm"
+                        className="flex flex-col items-center bg-white/5 p-4 md:p-6 rounded-2xl border border-white/5 backdrop-blur-sm w-full md:w-auto"
                     >
-                        <div className="relative w-36 h-36">
+                        <div className="relative w-28 h-28 md:w-36 md:h-36">
                             <svg className="w-full h-full transform -rotate-90">
+                                <circle
+                                    cx="56"
+                                    cy="56"
+                                    r="48"
+                                    stroke="currentColor"
+                                    strokeWidth="6"
+                                    fill="none"
+                                    className="text-white/5 md:hidden"
+                                />
+                                <motion.circle
+                                    cx="56"
+                                    cy="56"
+                                    r="48"
+                                    stroke="currentColor"
+                                    strokeWidth="6"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    initial={{ strokeDasharray: "0 302" }}
+                                    animate={{ strokeDasharray: `${completionPercentage * 3.02} 302` }}
+                                    transition={{ duration: 1.5, ease: "easeOut" }}
+                                    className="text-primary drop-shadow-[0_0_10px_rgba(var(--primary),0.5)] md:hidden"
+                                />
                                 <circle
                                     cx="72"
                                     cy="72"
@@ -256,7 +279,7 @@ export default function CurriculumDetailPage() {
                                     stroke="currentColor"
                                     strokeWidth="8"
                                     fill="none"
-                                    className="text-white/5"
+                                    className="text-white/5 hidden md:block"
                                 />
                                 <motion.circle
                                     cx="72"
@@ -269,16 +292,16 @@ export default function CurriculumDetailPage() {
                                     initial={{ strokeDasharray: "0 377" }}
                                     animate={{ strokeDasharray: `${completionPercentage * 3.77} 377` }}
                                     transition={{ duration: 1.5, ease: "easeOut" }}
-                                    className="text-primary drop-shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                                    className="text-primary drop-shadow-[0_0_10px_rgba(var(--primary),0.5)] hidden md:block"
                                 />
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-4xl font-bold tracking-tighter">{completionPercentage}%</span>
-                                <span className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Complete</span>
+                                <span className="text-3xl md:text-4xl font-bold tracking-tighter">{completionPercentage}%</span>
+                                <span className="text-[10px] md:text-xs text-muted-foreground uppercase tracking-widest mt-0.5 md:mt-1">Complete</span>
                             </div>
                         </div>
-                        <p className="text-sm font-medium text-muted-foreground mt-4 flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <p className="text-xs md:text-sm font-medium text-muted-foreground mt-3 md:mt-4 flex items-center gap-2">
+                            <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-green-500" />
                             {progress.completedDays.length} / {progress.totalDays}일 완료
                         </p>
                     </motion.div>
@@ -289,32 +312,35 @@ export default function CurriculumDetailPage() {
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.3 }}
-                    className="flex flex-wrap gap-3"
+                    className="flex flex-wrap gap-2 md:gap-3"
                 >
                     <Button
                         variant="outline"
-                        className="gap-2 h-11 px-6 rounded-xl border-white/10 hover:bg-white/5 hover:border-primary/50 transition-all"
+                        className="gap-1.5 md:gap-2 h-9 md:h-11 px-3 md:px-6 rounded-xl border-white/10 hover:bg-white/5 hover:border-primary/50 transition-all text-xs md:text-sm"
                         onClick={handlePause}
                     >
-                        <Pause className="w-4 h-4" />
-                        {progress.status === "paused" ? "학습 재개하기" : "일시정지"}
+                        <Pause className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">{progress.status === "paused" ? "학습 재개하기" : "일시정지"}</span>
+                        <span className="sm:hidden">{progress.status === "paused" ? "재개" : "정지"}</span>
                     </Button>
                     <Button
-                        className="gap-2 h-11 px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all"
+                        className="gap-1.5 md:gap-2 h-9 md:h-11 px-3 md:px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all text-xs md:text-sm"
                         onClick={handleComplete}
                         disabled={progress.status === "completed"}
                     >
-                        <Sparkles className="w-4 h-4" />
-                        전체 완료 처리
+                        <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">전체 완료 처리</span>
+                        <span className="sm:hidden">완료</span>
                     </Button>
                     <div className="flex-1" />
                     <Button
                         variant="ghost"
-                        className="gap-2 h-11 px-6 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                        className="gap-1.5 md:gap-2 h-9 md:h-11 px-3 md:px-6 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-xs md:text-sm"
                         onClick={handleDelete}
                     >
-                        <Trash2 className="w-4 h-4" />
-                        과정 삭제
+                        <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">과정 삭제</span>
+                        <span className="sm:hidden">삭제</span>
                     </Button>
                 </motion.div>
 
@@ -325,33 +351,33 @@ export default function CurriculumDetailPage() {
                     transition={{ delay: 0.4 }}
                 >
                     <Card className="glass-card border-none bg-black/20 backdrop-blur-xl overflow-hidden">
-                        <CardContent className="p-8">
-                            <div className="flex justify-between items-center mb-8">
-                                <h2 className="text-2xl font-bold flex items-center gap-2">
-                                    <Calendar className="w-6 h-6 text-primary" />
+                        <CardContent className="p-4 md:p-8">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4 mb-6 md:mb-8">
+                                <h2 className="text-lg md:text-2xl font-bold flex items-center gap-2">
+                                    <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                                     학습 캘린더
                                 </h2>
-                                <div className="flex items-center gap-4 bg-white/5 rounded-full p-1 pr-4">
-                                    <div className="flex gap-1">
-                                        <Button variant="ghost" size="icon" onClick={prevMonth} className="rounded-full w-8 h-8 hover:bg-white/10">
-                                            <ChevronLeft className="w-4 h-4" />
+                                <div className="flex items-center gap-2 md:gap-4 bg-white/5 rounded-full p-1 pr-3 md:pr-4 w-full sm:w-auto justify-between sm:justify-start">
+                                    <div className="flex gap-0.5 md:gap-1">
+                                        <Button variant="ghost" size="icon" onClick={prevMonth} className="rounded-full w-7 h-7 md:w-8 md:h-8 hover:bg-white/10">
+                                            <ChevronLeft className="w-3.5 h-3.5 md:w-4 md:h-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" onClick={nextMonth} className="rounded-full w-8 h-8 hover:bg-white/10">
-                                            <ChevronRight className="w-4 h-4" />
+                                        <Button variant="ghost" size="icon" onClick={nextMonth} className="rounded-full w-7 h-7 md:w-8 md:h-8 hover:bg-white/10">
+                                            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
                                         </Button>
                                     </div>
-                                    <span className="text-lg font-medium tabular-nums">{formatMonth(currentMonth)}</span>
+                                    <span className="text-sm md:text-lg font-medium tabular-nums">{formatMonth(currentMonth)}</span>
                                 </div>
                             </div>
 
                             {/* Calendar Grid */}
-                            <div className="grid grid-cols-7 gap-3">
+                            <div className="grid grid-cols-7 gap-2 md:gap-3">
                                 {/* Day Headers */}
                                 {["일", "월", "화", "수", "목", "금", "토"].map((day, i) => (
                                     <div
                                         key={day}
                                         className={cn(
-                                            "text-center py-3 text-sm font-medium text-muted-foreground",
+                                            "text-center py-2 md:py-3 text-xs md:text-sm font-medium text-muted-foreground",
                                             i === 0 && "text-red-400/70",
                                             i === 6 && "text-blue-400/70"
                                         )}
@@ -387,34 +413,35 @@ export default function CurriculumDetailPage() {
                                             }}
                                             disabled={!isInPeriod}
                                             className={cn(
-                                                "aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300",
+                                                "aspect-square rounded-lg md:rounded-xl flex flex-col items-center justify-center relative transition-all duration-300",
                                                 isInPeriod ? "cursor-pointer bg-white/5 hover:bg-white/10 border border-white/5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10" : "opacity-30 cursor-not-allowed",
                                                 isCompleted && "bg-green-500/10 border-green-500/30 text-green-400",
                                                 isInPeriod && !isCompleted && "bg-primary/5 border-primary/20 text-primary-foreground",
-                                                isToday && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                                                isToday && "ring-1 md:ring-2 ring-primary ring-offset-1 md:ring-offset-2 ring-offset-background",
                                                 !isInPeriod && dayOfWeek === 0 && "text-red-400",
                                                 !isInPeriod && dayOfWeek === 6 && "text-blue-400"
                                             )}
                                         >
-                                            <span className={cn("text-sm font-medium", isToday && "font-bold")}>{calendarDay}</span>
+                                            <span className={cn("text-xs md:text-sm font-medium", isToday && "font-bold")}>{calendarDay}</span>
 
                                             {/* Status Indicators */}
-                                            <div className="mt-1 h-1.5 flex gap-0.5">
+                                            <div className="mt-0.5 md:mt-1 h-1 md:h-1.5 flex gap-0.5">
                                                 {isCompleted && (
                                                     <motion.div
                                                         initial={{ scale: 0 }}
                                                         animate={{ scale: 1 }}
-                                                        className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]"
+                                                        className="w-1 h-1 md:w-1.5 md:h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]"
                                                     />
                                                 )}
                                                 {isToday && !isCompleted && isInPeriod && (
-                                                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
+                                                    <div className="w-1 h-1 md:w-1.5 md:h-1.5 bg-primary rounded-full animate-pulse" />
                                                 )}
                                             </div>
 
                                             {isInPeriod && dayNum && (
-                                                <div className="absolute top-1.5 right-1.5 text-[10px] font-bold opacity-50">
-                                                    Day {dayNum}
+                                                <div className="absolute top-1 md:top-1.5 right-1 md:right-1.5 text-[8px] md:text-[10px] font-bold opacity-50">
+                                                    <span className="hidden md:inline">Day {dayNum}</span>
+                                                    <span className="md:hidden">{dayNum}</span>
                                                 </div>
                                             )}
                                         </motion.button>
@@ -423,17 +450,17 @@ export default function CurriculumDetailPage() {
                             </div>
 
                             {/* Legend */}
-                            <div className="mt-8 flex flex-wrap gap-6 text-sm justify-center bg-white/5 rounded-xl p-4 border border-white/5">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-primary/20 border border-primary/30"></div>
+                            <div className="mt-6 md:mt-8 flex flex-wrap gap-4 md:gap-6 text-xs md:text-sm justify-center bg-white/5 rounded-xl p-3 md:p-4 border border-white/5">
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                    <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-primary/20 border border-primary/30"></div>
                                     <span className="text-muted-foreground">학습 기간</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/30 shadow-[0_0_5px_rgba(34,197,94,0.3)]"></div>
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                    <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500/20 border border-green-500/30 shadow-[0_0_5px_rgba(34,197,94,0.3)]"></div>
                                     <span className="text-muted-foreground">완료함</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-transparent border-2 border-primary"></div>
+                                <div className="flex items-center gap-1.5 md:gap-2">
+                                    <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-transparent border-2 border-primary"></div>
                                     <span className="text-muted-foreground">오늘</span>
                                 </div>
                             </div>
