@@ -1138,6 +1138,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                             </div>
                         </div>
                     </motion.div>
+                );
             })}
         </div>
     );
