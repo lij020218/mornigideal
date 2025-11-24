@@ -258,8 +258,19 @@ export function Dashboard({ username }: DashboardProps) {
                         const data = await response.json();
                         if (data.profile) {
                             console.log('Loaded profile from database:', data.profile);
-                            setUserProfile(data.profile);
-                            localStorage.setItem("user_profile", JSON.stringify(data.profile));
+                            // Preserve any existing interests from localStorage
+                            const existingProfile = localStorage.getItem("user_profile");
+                            let mergedProfile = data.profile;
+                            if (existingProfile) {
+                                const existing = JSON.parse(existingProfile);
+                                mergedProfile = {
+                                    ...data.profile,
+                                    interests: existing.interests || data.profile.interests || [],
+                                    customGoals: existing.customGoals || data.profile.customGoals || []
+                                };
+                            }
+                            setUserProfile(mergedProfile);
+                            localStorage.setItem("user_profile", JSON.stringify(mergedProfile));
                         }
                     }
                 } catch (error) {
