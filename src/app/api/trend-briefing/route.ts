@@ -161,107 +161,46 @@ ${goal ? `**GOAL:** ${goal}` : ""}
 ${interests ? `**INTERESTS:** ${interests}` : ""}
 
 **🎯 MISSION:**
-Find 6 recent news articles (published after ${dateStr}) using a 3-TIER priority system with BILINGUAL search (English + Korean).
+Find 8-10 recent news articles (published after ${dateStr}). PRIORITIZE TOP SOURCES.
 
-**📊 3-TIER PRIORITY SYSTEM:**
+**📊 SOURCE PRIORITY:**
 
-**🥇 TIER 1 - TOP PRIORITY (Search FIRST):**
-${topPrioritySources.map(s => `• ${s}`).join('\n')}
+**🥇 TOP PRIORITY (MUST SEARCH THESE FIRST):**
+• Reuters (site:reuters.com)
+• AP News (site:apnews.com)
+• BBC Business (site:bbc.com/business)
+• BBC Korean (site:bbc.com/korean)
+• CNN (site:cnn.com)
+• TechCrunch (site:techcrunch.com)
 
-**🥈 TIER 2 - PREMIUM SOURCES (Search if Tier 1 insufficient):**
-${premiumOnlySources.map(s => `• ${s}`).join('\n')}
+**🥈 SECONDARY SOURCES:**
+• Bloomberg, Financial Times, WSJ, NYT, Wired, etc.
 
-**🥉 TIER 3 - GENERAL (Last resort only):**
-• Other reputable news sources
+**🔍 SEARCH INSTRUCTIONS:**
 
-**🔍 BILINGUAL SEARCH STRATEGY:**
+**STEP 1 - MANDATORY: Search TOP PRIORITY sites with site: filter**
 
-**TIER 1 - Use SITE FILTERS with interests (English + Korean):**
+Execute these exact searches (English + Korean):
 
-English searches:
-- site:reuters.com (AI OR technology OR ${jobEnglish}) after:${dateStr}
-- site:apnews.com (AI OR innovation OR ${jobEnglish}) after:${dateStr}
-- site:bbc.com/business (AI OR business OR ${jobEnglish}) after:${dateStr}
-- site:cnn.com (technology OR business OR ${jobEnglish}) after:${dateStr}
-- site:techcrunch.com (AI OR startup OR ${jobEnglish}) after:${dateStr}
-${interests ? `
-Interest-specific (English):
-${interests.split(',').map(i => `- site:reuters.com "${i.trim()}" after:${dateStr}
-- site:apnews.com "${i.trim()}" after:${dateStr}
-- site:techcrunch.com "${i.trim()}" after:${dateStr}`).join('\n')}
-` : ""}
+1. site:reuters.com (AI OR technology${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
+2. site:apnews.com (technology OR business${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
+3. site:bbc.com/business (AI OR business) after:${dateStr}
+4. site:bbc.com/korean (비즈니스 OR 기술${interests ? ` OR ${interests}` : ""}) after:${dateStr}
+5. site:cnn.com (technology OR AI) after:${dateStr}
+6. site:techcrunch.com (AI OR startup${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
 
-Korean searches:
-- site:bbc.com/korean (인공지능 OR 비즈니스 OR ${jobKorean}) after:${dateStr}
-- site:reuters.com (한국 OR 기술 OR ${jobKorean}) after:${dateStr}
-- site:cnn.com (인공지능 OR 기술 OR ${jobKorean}) after:${dateStr}
-${interests ? `
-Interest-specific (Korean):
-${interests.split(',').map(i => `- site:reuters.com "${i.trim()}" after:${dateStr}
-- site:bbc.com/korean "${i.trim()}" after:${dateStr}`).join('\n')}
-` : ""}
+**STEP 2 - If needed: Search secondary sources**
 
-**TIER 2 - Use SOURCE NAMES with interests (English + Korean):**
+7. "Bloomberg" technology after:${dateStr}
+8. "Financial Times" AI after:${dateStr}
+9. "New York Times" business after:${dateStr}
 
-English searches:
-- "Bloomberg" (AI OR ${jobEnglish} OR technology) after:${dateStr}
-- "Financial Times" (business OR AI OR ${jobEnglish}) after:${dateStr}
-- "Wall Street Journal" (technology OR ${jobEnglish}) after:${dateStr}
-- "New York Times" (AI OR business OR ${jobEnglish}) after:${dateStr}
-- "Wired" (AI OR technology) after:${dateStr}
-${interests ? `
-Interest-specific (English):
-${interests.split(',').map(i => `- "Bloomberg" "${i.trim()}" after:${dateStr}
-- "Financial Times" "${i.trim()}" after:${dateStr}
-- "Wired" "${i.trim()}" after:${dateStr}`).join('\n')}
-` : ""}
+**STEP 3 - Select 8-10 BEST articles**
 
-Korean searches:
-- "블룸버그" (인공지능 OR ${jobKorean}) after:${dateStr}
-- "파이낸셜타임스" (기술 OR ${jobKorean}) after:${dateStr}
-- "뉴욕타임스" (비즈니스 OR ${jobKorean}) after:${dateStr}
-${interests ? `
-Interest-specific (Korean):
-${interests.split(',').map(i => `- "Bloomberg" "${i.trim()}" after:${dateStr}
-- "뉴욕타임스" "${i.trim()}" after:${dateStr}`).join('\n')}
-` : ""}
-
-**TIER 3 - GENERAL search (English + Korean):**
-
-English searches:
-- "${jobEnglish} AI news" after:${dateStr}
-- "latest ${jobEnglish} technology trends" after:${dateStr}
-${interests ? `- ${interests.split(',').map(i => `"${i.trim()} news"`).join(' OR ')} after:${dateStr}` : ""}
-
-Korean searches:
-- "${jobKorean} 인공지능 뉴스" after:${dateStr}
-- "${jobKorean} 기술 트렌드" after:${dateStr}
-${interests ? `- ${interests.split(',').map(i => `"${i.trim()} 뉴스"`).join(' OR ')} after:${dateStr}` : ""}
-
-**📋 EXECUTION STEPS:**
-
-1. **Execute Tier 1 searches** (both English AND Korean):
-   - Use site: filters with keywords
-   - Search each interest separately
-   - Collect 8-12 candidates
-
-2. **If less than 6 articles, execute Tier 2** (both English AND Korean):
-   - Use source names in quotes
-   - Search with interests
-   - Collect additional candidates
-
-3. **If still less than 6, execute Tier 3** (both English AND Korean):
-   - General web search
-   - Focus on interests and job
-
-4. **Select BEST 6 articles** ensuring:
-   ✓ Maximum from Tier 1
-   ✓ Fill gaps with Tier 2
-   ✓ Use Tier 3 only if necessary
-   ✓ Published ${dateStr} or later
-   ✓ Diverse topics
-   ✓ Mix of English AND Korean results if available
-   ${interests ? `✓ At least 2-3 related to: ${interests}` : ""}
+✓ Include AT LEAST 5-6 from TOP PRIORITY sites (Step 1)
+✓ Published ${dateStr} or later
+✓ Diverse topics
+${interests ? `✓ At least 2-3 about: ${interests}` : ""}
 
 **📊 OUTPUT (JSON):**
 {
@@ -314,32 +253,67 @@ ${interests ? `- ${interests.split(',').map(i => `"${i.trim()} 뉴스"`).join(' 
 
         const briefings = data.briefings || [];
 
-        // Prefer premium sources; if not enough, backfill with others
-        const premiumPatterns = PREMIUM_SOURCES.map(s => s.urlPattern.replace(/^https?:\/\//, "").replace(/^www\./, ""));
-        const isPremiumSource = (item: any) => {
-            const url = item?.sourceUrl || "";
-            const normalized = url.startsWith("http") ? url : `https://${url.replace(/^\/\//, "")}`;
-            try {
-                const host = new URL(normalized).hostname.replace(/^www\./, "");
-                return premiumPatterns.some(pattern => host === pattern || host.endsWith(`.${pattern}`) || host.includes(pattern));
-            } catch {
-                const sourceName = (item?.sourceName || "").toLowerCase();
-                return premiumPatterns.some(pattern => sourceName.includes(pattern.split(".")[0]));
-            }
+        // Categorize sources by priority
+        const topPriorityPatterns = TOP_PRIORITY_SOURCES.map(s => s.urlPattern.toLowerCase());
+        const premiumPatterns = PREMIUM_SOURCES.map(s => s.urlPattern.toLowerCase());
+
+        const isTopPriority = (item: any) => {
+            const url = (item?.sourceUrl || "").toLowerCase();
+            const sourceName = (item?.sourceName || "").toLowerCase();
+            return topPriorityPatterns.some(pattern =>
+                url.includes(pattern) ||
+                sourceName.includes(pattern.split('.')[0]) ||
+                sourceName.includes('reuters') && pattern.includes('reuters') ||
+                sourceName.includes('bbc') && pattern.includes('bbc') ||
+                sourceName.includes('cnn') && pattern.includes('cnn') ||
+                sourceName.includes('ap news') && pattern.includes('apnews') ||
+                sourceName.includes('techcrunch') && pattern.includes('techcrunch')
+            );
         };
 
-        const premiumBriefings = (briefings || []).filter(isPremiumSource);
-        const nonPremiumBriefings = (briefings || []).filter((item: any) => !isPremiumSource(item));
+        const isPremium = (item: any) => {
+            const url = (item?.sourceUrl || "").toLowerCase();
+            const sourceName = (item?.sourceName || "").toLowerCase();
+            return premiumPatterns.some(pattern =>
+                url.includes(pattern) ||
+                sourceName.includes(pattern.split('.')[0])
+            );
+        };
 
-        // Aim for at least 4 premium items; fill remaining slots with others if needed
-        const desiredCount = Math.min(briefings.length, 6);
-        const finalBriefings = [...premiumBriefings, ...nonPremiumBriefings].slice(0, desiredCount);
+        // Separate articles by priority
+        const topPriorityBriefings = briefings.filter(isTopPriority);
+        const premiumBriefings = briefings.filter((item: any) => !isTopPriority(item) && isPremium(item));
+        const otherBriefings = briefings.filter((item: any) => !isTopPriority(item) && !isPremium(item));
+
+        console.log(`[API] Article breakdown: Top Priority=${topPriorityBriefings.length}, Premium=${premiumBriefings.length}, Other=${otherBriefings.length}`);
+
+        // Build final selection: prioritize top sources
+        let finalBriefings: any[] = [];
+
+        // Take at least 4 from top priority (or all if less than 4)
+        const topCount = Math.min(topPriorityBriefings.length, 6);
+        finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
+
+        // If we need more, add premium sources
+        if (finalBriefings.length < 6) {
+            const needed = 6 - finalBriefings.length;
+            finalBriefings.push(...premiumBriefings.slice(0, needed));
+        }
+
+        // If still need more, add other sources
+        if (finalBriefings.length < 6) {
+            const needed = 6 - finalBriefings.length;
+            finalBriefings.push(...otherBriefings.slice(0, needed));
+        }
+
+        // If we have more than 6, trim to 6
+        finalBriefings = finalBriefings.slice(0, 6);
 
         if (!Array.isArray(finalBriefings) || finalBriefings.length === 0) {
             return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
         }
 
-        console.log(`[API] Parsed ${briefings.length} briefings (premium ${premiumBriefings.length}, final ${finalBriefings.length})`);
+        console.log(`[API] Final selection: ${finalBriefings.length} articles (${finalBriefings.filter(isTopPriority).length} from top priority)`);
 
         const trends = finalBriefings.map((item: any) => ({
             id: generateTrendId(item.title),
