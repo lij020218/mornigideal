@@ -156,78 +156,71 @@ export async function GET(request: Request) {
 
         const prompt = `
 **TODAY'S DATE:** ${today}
-**TARGET:** ${job} professionals
-${goal ? `**GOAL:** ${goal}` : ""}
-${interests ? `**INTERESTS:** ${interests}` : ""}
+**USER:** ${job} professional
+${goal ? `**USER GOAL:** ${goal}` : ""}
+${interests ? `**USER INTERESTS:** ${interests}` : ""}
 
-**🎯 MISSION:**
-Find 8-10 recent news articles (published after ${dateStr}). PRIORITIZE TOP SOURCES.
+**🎯 YOUR MISSION:**
+Find 8-10 recent news articles (after ${dateStr}) from the TOP PRIORITY sources below.
 
-**📊 SOURCE PRIORITY:**
+**⚠️ CRITICAL: YOU MUST USE THESE EXACT SOURCES**
 
-**🥇 TOP PRIORITY (MUST SEARCH THESE FIRST):**
-• Reuters (site:reuters.com)
-• AP News (site:apnews.com)
-• BBC Business (site:bbc.com/business)
-• BBC Korean (site:bbc.com/korean)
-• CNN (site:cnn.com)
-• TechCrunch (site:techcrunch.com)
+**TOP PRIORITY SOURCES (YOU MUST SEARCH THESE):**
+1. Reuters (reuters.com)
+2. AP News (apnews.com)
+3. BBC Business (bbc.com/business)
+4. BBC Korean (bbc.com/korean)
+5. CNN (cnn.com)
+6. TechCrunch (techcrunch.com)
 
-**🥈 SECONDARY SOURCES:**
-• Bloomberg, Financial Times, WSJ, NYT, Wired, etc.
+**📍 MANDATORY SEARCH QUERIES:**
 
-**🔍 SEARCH INSTRUCTIONS:**
-
-**STEP 1 - MANDATORY: Search TOP PRIORITY sites with site: filter**
-
-Execute these exact searches (English + Korean):
+Execute these EXACT Google searches WITH site: filters:
 
 1. site:reuters.com (AI OR technology${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
-2. site:apnews.com (technology OR business${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
-3. site:bbc.com/business (AI OR business) after:${dateStr}
-4. site:bbc.com/korean (비즈니스 OR 기술${interests ? ` OR ${interests}` : ""}) after:${dateStr}
-5. site:cnn.com (technology OR AI) after:${dateStr}
-6. site:techcrunch.com (AI OR startup${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
+2. site:apnews.com (AI OR business${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
+3. site:bbc.com/business (AI OR technology OR business) after:${dateStr}
+4. site:bbc.com/korean (인공지능 OR 기술 OR 비즈니스${interests ? ` OR ${interests}` : ""}) after:${dateStr}
+5. site:cnn.com (AI OR technology OR business) after:${dateStr}
+6. site:techcrunch.com (AI OR startup OR technology${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
 
-**STEP 2 - If needed: Search secondary sources**
+${interests ? `**INTEREST-SPECIFIC SEARCHES:**
+${interests.split(',').map(interest => `- site:reuters.com "${interest.trim()}" after:${dateStr}
+- site:techcrunch.com "${interest.trim()}" after:${dateStr}`).join('\n')}
+` : ""}
 
-7. "Bloomberg" technology after:${dateStr}
-8. "Financial Times" AI after:${dateStr}
-9. "New York Times" business after:${dateStr}
+**📊 SELECTION RULES:**
 
-**STEP 3 - Select 8-10 BEST articles**
+1. **MANDATORY**: Select 8-10 articles
+2. **MANDATORY**: At least 6-7 articles MUST be from TOP PRIORITY sources (Reuters, AP News, BBC, CNN, TechCrunch)
+3. **ALLOWED**: 1-2 articles can be from: Bloomberg, Financial Times, New York Times, WSJ
+4. Published after ${dateStr}
+5. Diverse topics
+${interests ? `6. At least 3-4 articles about: ${interests}` : ""}
 
-✓ Include AT LEAST 5-6 from TOP PRIORITY sites (Step 1)
-✓ Published ${dateStr} or later
-✓ Diverse topics
-${interests ? `✓ At least 2-3 about: ${interests}` : ""}
-
-**📊 OUTPUT (JSON):**
+**� OUTPUT FORMAT (JSON):**
 {
   "briefings": [
     {
-      "title": "Korean translation of article title",
+      "title": "Korean translation",
       "category": "AI | Business | Tech | Finance | Strategy | Innovation",
-      "summary": "Korean 2-3 sentence summary - WHY ${job} should care",
-      "sourceName": "Exact source name (e.g., 'BBC Business', 'Reuters', 'Bloomberg')",
-      "sourceUrl": "Complete HTTPS URL from search",
+      "summary": "Korean summary (2-3 sentences)",
+      "sourceName": "EXACT source name: 'Reuters' OR 'AP News' OR 'BBC Business' OR 'BBC Korean' OR 'CNN' OR 'TechCrunch'",
+      "sourceUrl": "Full HTTPS URL",
       "publishedDate": "YYYY-MM-DD",
-      "relevance": "Korean 1-sentence: specific value for ${job}"
+      "relevance": "Korean relevance (1 sentence)"
     }
   ]
 }
 
-**⚠️ CRITICAL RULES:**
-✓ Search BOTH English AND Korean for each tier
-✓ Tier 1: Use site:domain.com filters
-✓ Tier 2: Use "Source Name" in quotes
-✓ Tier 3: General search
-✓ REAL URLs only from Google Search
-✓ Published ${dateStr} or later
-✓ Full HTTPS URLs required
-✓ Prioritize Tier 1 > Tier 2 > Tier 3
+**🚨 CRITICAL REQUIREMENTS:**
+✓ Use the EXACT site: filters listed above
+✓ sourceName MUST be one of: Reuters, AP News, BBC Business, BBC Korean, CNN, TechCrunch (for top priority)
+✓ MINIMUM 6 articles from top priority sources
+✓ Real URLs from Google Search ONLY
+✓ All dates after ${dateStr}
 
-**START NOW** - Execute bilingual searches starting with Tier 1 site filters.`;
+**START NOW** - Search Reuters, AP News, BBC, CNN, TechCrunch with site: filters.`;
 
         // Retry logic: Keep trying until we get at least 2 top priority articles
         const MAX_RETRIES = 5;
@@ -289,6 +282,12 @@ ${interests ? `✓ At least 2-3 about: ${interests}` : ""}
             }
 
             const briefings = data.briefings || [];
+
+            // DEBUG: Log all sources returned to understand matching issues
+            console.log(`[API] DEBUG: Received ${briefings.length} articles from Gemini:`);
+            briefings.forEach((item: any, index: number) => {
+                console.log(`  ${index + 1}. Source: "${item.sourceName}" | URL: ${item.sourceUrl}`);
+            });
 
             // Separate articles by priority
             const topPriorityBriefings = briefings.filter(isTopPriority);
