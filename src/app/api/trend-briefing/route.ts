@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+﻿import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
 
@@ -236,30 +236,26 @@ ${interests ? `✓ At least 2-3 about: ${interests}` : ""}
         let attempt = 0;
 
         // Define helper functions once (used in loop and after)
-        const topPriorityPatterns = TOP_PRIORITY_SOURCES.map(s => s.urlPattern.toLowerCase());
-        const premiumPatterns = PREMIUM_SOURCES.map(s => s.urlPattern.toLowerCase());
-
         const isTopPriority = (item: any) => {
             const url = (item?.sourceUrl || "").toLowerCase();
             const sourceName = (item?.sourceName || "").toLowerCase();
-            return topPriorityPatterns.some(pattern =>
-                url.includes(pattern) ||
-                sourceName.includes(pattern.split('.')[0]) ||
-                sourceName.includes('reuters') && pattern.includes('reuters') ||
-                sourceName.includes('bbc') && pattern.includes('bbc') ||
-                sourceName.includes('cnn') && pattern.includes('cnn') ||
-                sourceName.includes('ap news') && pattern.includes('apnews') ||
-                sourceName.includes('techcrunch') && pattern.includes('techcrunch')
-            );
+
+            return TOP_PRIORITY_SOURCES.some((s) => {
+                const pattern = s.urlPattern.toLowerCase();
+                const name = s.name.toLowerCase();
+                return url.includes(pattern) || sourceName.includes(name);
+            });
         };
 
         const isPremium = (item: any) => {
             const url = (item?.sourceUrl || "").toLowerCase();
             const sourceName = (item?.sourceName || "").toLowerCase();
-            return premiumPatterns.some(pattern =>
-                url.includes(pattern) ||
-                sourceName.includes(pattern.split('.')[0])
-            );
+
+            return PREMIUM_SOURCES.some((s) => {
+                const pattern = s.urlPattern.toLowerCase();
+                const name = s.name.toLowerCase();
+                return url.includes(pattern) || sourceName.includes(name);
+            });
         };
 
         while (attempt < MAX_RETRIES) {
