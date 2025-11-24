@@ -229,31 +229,13 @@ ${interests ? `✓ At least 2-3 about: ${interests}` : ""}
 
 **START NOW** - Execute bilingual searches starting with Tier 1 site filters.`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        // Retry logic: Keep trying until we get at least 2 top priority articles
+        const MAX_RETRIES = 5;
+        const MIN_TOP_PRIORITY = 2;
+        let finalBriefings: any[] = [];
+        let attempt = 0;
 
-        console.log('[API] Gemini response received. Length:', text.length);
-
-        // Log grounding metadata to verify search was used
-        if (response.candidates && response.candidates[0].groundingMetadata) {
-            console.log('[API] ✅ Google Search was used! Grounding metadata present.');
-        } else {
-            console.warn('[API] ⚠️ No grounding metadata - search might not have been performed.');
-        }
-
-        let data;
-        try {
-            data = cleanAndParseJSON(text);
-        } catch (parseError) {
-            console.error("[API] Failed to parse JSON", parseError);
-            console.error("[API] Failed text:", text);
-            return NextResponse.json({ error: "Failed to parse briefings" }, { status: 500 });
-        }
-
-        const briefings = data.briefings || [];
-
-        // Categorize sources by priority
+        // Define helper functions once (used in loop and after)
         const topPriorityPatterns = TOP_PRIORITY_SOURCES.map(s => s.urlPattern.toLowerCase());
         const premiumPatterns = PREMIUM_SOURCES.map(s => s.urlPattern.toLowerCase());
 
@@ -280,34 +262,96 @@ ${interests ? `✓ At least 2-3 about: ${interests}` : ""}
             );
         };
 
-        // Separate articles by priority
-        const topPriorityBriefings = briefings.filter(isTopPriority);
-        const premiumBriefings = briefings.filter((item: any) => !isTopPriority(item) && isPremium(item));
-        const otherBriefings = briefings.filter((item: any) => !isTopPriority(item) && !isPremium(item));
+        while (attempt < MAX_RETRIES) {
+            attempt++;
+            console.log(`[API] Attempt ${attempt}/${MAX_RETRIES} to fetch briefings...`);
 
-        console.log(`[API] Article breakdown: Top Priority=${topPriorityBriefings.length}, Premium=${premiumBriefings.length}, Other=${otherBriefings.length}`);
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
 
-        // Build final selection: prioritize top sources
-        let finalBriefings: any[] = [];
+            console.log(`[API] Gemini response received. Length: ${text.length}`);
 
-        // Take at least 4 from top priority (or all if less than 4)
-        const topCount = Math.min(topPriorityBriefings.length, 6);
-        finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
+            // Log grounding metadata to verify search was used
+            if (response.candidates && response.candidates[0].groundingMetadata) {
+                console.log('[API] ✅ Google Search was used! Grounding metadata present.');
+            } else {
+                console.warn('[API] ⚠️ No grounding metadata - search might not have been performed.');
+            }
 
-        // If we need more, add premium sources
-        if (finalBriefings.length < 6) {
-            const needed = 6 - finalBriefings.length;
-            finalBriefings.push(...premiumBriefings.slice(0, needed));
+            let data;
+            try {
+                data = cleanAndParseJSON(text);
+            } catch (parseError) {
+                console.error(`[API] Attempt ${attempt}: Failed to parse JSON`, parseError);
+                if (attempt < MAX_RETRIES) {
+                    console.log('[API] Retrying...');
+                    continue;
+                } else {
+                    return NextResponse.json({ error: "Failed to parse briefings" }, { status: 500 });
+                }
+            }
+
+            const briefings = data.briefings || [];
+
+            // Separate articles by priority
+            const topPriorityBriefings = briefings.filter(isTopPriority);
+            const premiumBriefings = briefings.filter((item: any) => !isTopPriority(item) && isPremium(item));
+            const otherBriefings = briefings.filter((item: any) => !isTopPriority(item) && !isPremium(item));
+
+            console.log(`[API] Attempt ${attempt}: Top Priority=${topPriorityBriefings.length}, Premium=${premiumBriefings.length}, Other=${otherBriefings.length}`);
+
+            // Check if we have at least 2 top priority articles
+            if (topPriorityBriefings.length >= MIN_TOP_PRIORITY) {
+                console.log(`[API] ✅ Success! Found ${topPriorityBriefings.length} top priority articles (min: ${MIN_TOP_PRIORITY})`);
+
+                // Build final selection: prioritize top sources
+                finalBriefings = [];
+
+                // Take at least 4 from top priority (or all if less than 4)
+                const topCount = Math.min(topPriorityBriefings.length, 6);
+                finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
+
+                // If we need more, add premium sources
+                if (finalBriefings.length < 6) {
+                    const needed = 6 - finalBriefings.length;
+                    finalBriefings.push(...premiumBriefings.slice(0, needed));
+                }
+
+                // If still need more, add other sources
+                if (finalBriefings.length < 6) {
+                    const needed = 6 - finalBriefings.length;
+                    finalBriefings.push(...otherBriefings.slice(0, needed));
+                }
+
+                // Trim to 6
+                finalBriefings = finalBriefings.slice(0, 6);
+
+                console.log(`[API] Final selection: ${finalBriefings.length} articles (${finalBriefings.filter(isTopPriority).length} from top priority)`);
+                break; // Success! Exit retry loop
+            } else {
+                console.log(`[API] ⚠️ Attempt ${attempt}: Only ${topPriorityBriefings.length} top priority articles (min: ${MIN_TOP_PRIORITY}). Retrying...`);
+                if (attempt >= MAX_RETRIES) {
+                    console.log('[API] ⚠️ Max retries reached. Using best available results.');
+                    // Use whatever we have
+                    finalBriefings = [];
+                    const topCount = Math.min(topPriorityBriefings.length, 6);
+                    finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
+
+                    if (finalBriefings.length < 6) {
+                        const needed = 6 - finalBriefings.length;
+                        finalBriefings.push(...premiumBriefings.slice(0, needed));
+                    }
+
+                    if (finalBriefings.length < 6) {
+                        const needed = 6 - finalBriefings.length;
+                        finalBriefings.push(...otherBriefings.slice(0, needed));
+                    }
+
+                    finalBriefings = finalBriefings.slice(0, 6);
+                }
+            }
         }
-
-        // If still need more, add other sources
-        if (finalBriefings.length < 6) {
-            const needed = 6 - finalBriefings.length;
-            finalBriefings.push(...otherBriefings.slice(0, needed));
-        }
-
-        // If we have more than 6, trim to 6
-        finalBriefings = finalBriefings.slice(0, 6);
 
         if (!Array.isArray(finalBriefings) || finalBriefings.length === 0) {
             return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
