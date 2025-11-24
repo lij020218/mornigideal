@@ -3,9 +3,15 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper } from "lucide-react";
+import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface TrendBriefing {
     id: string;
@@ -22,20 +28,30 @@ interface TrendBriefing {
 
 interface TrendBriefingSectionProps {
     job: string;
+    goal?: string;
+    interests?: string[];
     onSelectBriefing: (briefing: TrendBriefing) => void;
+    onAddInterest?: (interest: string) => void;
+    onRemoveInterest?: (interest: string) => void;
 }
 
-export function TrendBriefingSection({ job, onSelectBriefing }: TrendBriefingSectionProps) {
+export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefing, onAddInterest, onRemoveInterest }: TrendBriefingSectionProps) {
     const [briefings, setBriefings] = useState<TrendBriefing[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<string>("");
     const [isCached, setIsCached] = useState(false);
+    const [newInterest, setNewInterest] = useState("");
+    const [isInterestOpen, setIsInterestOpen] = useState(false);
 
     const fetchBriefings = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/trend-briefing?job=${encodeURIComponent(job)}`);
+            const params = new URLSearchParams({ job });
+            if (goal) params.append("goal", goal);
+            if (interests.length > 0) params.append("interests", interests.join(","));
+
+            const response = await fetch(`/api/trend-briefing?${params.toString()}`);
             if (!response.ok) throw new Error("Failed to fetch briefings");
 
             const data = await response.json();
@@ -52,11 +68,20 @@ export function TrendBriefingSection({ job, onSelectBriefing }: TrendBriefingSec
 
     useEffect(() => {
         fetchBriefings();
-    }, [job]);
+    }, [job, goal, interests.length]); // Re-fetch when context changes
 
     const handleRefresh = () => {
         setRefreshing(true);
         fetchBriefings();
+    };
+
+    const handleAddInterestSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newInterest.trim() && onAddInterest) {
+            onAddInterest(newInterest.trim());
+            setNewInterest("");
+            setIsInterestOpen(false);
+        }
     };
 
     const getCategoryColor = (category: string) => {
@@ -75,7 +100,7 @@ export function TrendBriefingSection({ job, onSelectBriefing }: TrendBriefingSec
         <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
+            className="space-y-6"
         >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
@@ -102,83 +127,122 @@ export function TrendBriefingSection({ job, onSelectBriefing }: TrendBriefingSec
                 </div>
             </div>
 
-            <Card className="glass-card border-none overflow-hidden bg-black/20 backdrop-blur-xl">
-                <CardContent className="p-3 md:p-6">
-                    {loading && !refreshing ? (
-                        <div className="flex flex-col items-center justify-center py-12 md:py-20 gap-4">
-                            <div className="relative">
-                                <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse" />
-                                <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin text-blue-400 relative z-10" />
+            {/* Context Cards Section */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Goal Card */}
+                <div className="md:col-span-1 bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-xl p-4 flex flex-col justify-between group hover:border-white/20 transition-all">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                        <Target className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium uppercase tracking-wider">My Goal</span>
+                    </div>
+                    <div>
+                        <p className="font-semibold text-white group-hover:text-primary transition-colors line-clamp-2">
+                            {goal || "목표를 설정해주세요"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">{job}</p>
+                    </div>
+                </div>
+
+                {/* Interests Card */}
+                <div className="md:col-span-2 bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                            <Sparkles className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs font-medium uppercase tracking-wider">Interest Areas</span>
+                        </div>
+                        <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs hover:bg-white/10">
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    추가
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-60 p-3 bg-[#1a1a1a] border-white/10 text-white">
+                                <form onSubmit={handleAddInterestSubmit} className="space-y-2">
+                                    <h4 className="font-medium text-sm">관심 분야 추가</h4>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={newInterest}
+                                            onChange={(e) => setNewInterest(e.target.value)}
+                                            placeholder="예: 화장품, AI, 마케팅"
+                                            className="h-8 text-sm bg-white/5 border-white/10"
+                                            autoFocus
+                                        />
+                                        <Button type="submit" size="sm" className="h-8 px-3">
+                                            <Plus className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </form>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {interests.length > 0 ? (
+                            interests.map((interest, idx) => (
+                                <span
+                                    key={idx}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 transition-all group"
+                                >
+                                    {interest}
+                                    {onRemoveInterest && (
+                                        <button
+                                            onClick={() => onRemoveInterest(interest)}
+                                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    )}
+                                </span>
+                            ))
+                        ) : (
+                            <span className="text-sm text-muted-foreground italic">관심 분야를 추가하여 맞춤형 뉴스를 받아보세요</span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-48 rounded-xl bg-white/5 animate-pulse border border-white/5" />
+                    ))}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {briefings.map((briefing) => (
+                        <motion.div
+                            key={briefing.id}
+                            layoutId={briefing.id}
+                            onClick={() => onSelectBriefing(briefing)}
+                            className="group cursor-pointer relative flex flex-col justify-between h-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 hover:border-white/20 rounded-xl p-5 transition-all hover:shadow-lg hover:shadow-purple-500/5 hover:-translate-y-1"
+                        >
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-start">
+                                    <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider", getCategoryColor(briefing.category))}>
+                                        {briefing.category}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground font-mono">{briefing.time}</span>
+                                </div>
+                                <h3 className="font-bold text-base md:text-lg leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                                    {briefing.title}
+                                </h3>
+                                <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                                    {briefing.summary}
+                                </p>
                             </div>
-                            <p className="text-sm text-muted-foreground animate-pulse">트렌드를 분석하고 있습니다...</p>
-                        </div>
-                    ) : briefings.length === 0 ? (
-                        <div className="text-center py-12 md:py-20 text-muted-foreground">
-                            <Newspaper className="w-10 h-10 md:w-14 md:h-14 mx-auto mb-3 md:mb-4 opacity-30" />
-                            <p className="text-sm md:text-base">트렌드 브리핑을 불러올 수 없습니다</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                            <AnimatePresence mode="popLayout">
-                                {briefings.map((briefing, index) => (
-                                    <motion.div
-                                        key={briefing.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        transition={{ delay: index * 0.05 }}
-                                        whileHover={{ y: -5, scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        className="cursor-pointer group h-full"
-                                        onClick={() => onSelectBriefing(briefing)}
-                                    >
-                                        <div className="h-full relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] hover:from-white/10 hover:to-white/5 transition-all duration-300 shadow-lg hover:shadow-primary/10 hover:border-white/20">
-                                            {/* Hover Glow Effect */}
-                                            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                                            <div className="p-4 md:p-5 flex flex-col h-full relative z-10">
-                                                {/* Category Badge */}
-                                                <div className="flex items-center justify-between mb-3 md:mb-4">
-                                                    <span className={cn(
-                                                        "px-2.5 py-1 text-[10px] md:text-xs font-bold rounded-full border backdrop-blur-md",
-                                                        getCategoryColor(briefing.category)
-                                                    )}>
-                                                        {briefing.category}
-                                                    </span>
-                                                    <span className="text-[10px] md:text-xs text-muted-foreground font-mono">
-                                                        {briefing.time}
-                                                    </span>
-                                                </div>
-
-                                                {/* Title */}
-                                                <h3 className="font-bold text-base md:text-lg mb-2 md:mb-3 line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                                                    {briefing.title}
-                                                </h3>
-
-                                                {/* Summary */}
-                                                <p className="text-xs md:text-sm text-muted-foreground/80 line-clamp-3 mb-4 flex-1 leading-relaxed">
-                                                    {briefing.summary}
-                                                </p>
-
-                                                {/* Footer */}
-                                                <div className="flex items-center justify-between pt-3 border-t border-white/5 mt-auto">
-                                                    <span className="text-[10px] md:text-xs font-medium text-white/50 group-hover:text-white/80 transition-colors flex items-center gap-1.5">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-white/30 group-hover:bg-primary transition-colors" />
-                                                        {briefing.source}
-                                                    </span>
-                                                    <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all duration-300">
-                                                        <ExternalLink className="w-3 h-3" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                            <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                    {briefing.source}
+                                </div>
+                                <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors opacity-0 group-hover:opacity-100" />
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
         </motion.section>
     );
 }

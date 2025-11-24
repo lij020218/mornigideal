@@ -15,8 +15,6 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 
-
-
 interface DashboardProps {
     username: string;
 }
@@ -32,6 +30,7 @@ interface UserProfile {
         sleep: string;
     };
     customGoals?: CustomGoal[];
+    interests?: string[];
 }
 
 interface CurriculumItem {
@@ -78,8 +77,6 @@ export function Dashboard({ username }: DashboardProps) {
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
-
-
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -149,6 +146,33 @@ export function Dashboard({ username }: DashboardProps) {
         } finally {
             setGeneratingCurriculum(false);
         }
+    };
+
+    const handleAddInterest = (interest: string) => {
+        if (!userProfile) return;
+        const currentInterests = userProfile.interests || [];
+        if (currentInterests.includes(interest)) return;
+
+        const updatedProfile = {
+            ...userProfile,
+            interests: [...currentInterests, interest]
+        };
+
+        setUserProfile(updatedProfile);
+        localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
+    };
+
+    const handleRemoveInterest = (interest: string) => {
+        if (!userProfile) return;
+        const currentInterests = userProfile.interests || [];
+
+        const updatedProfile = {
+            ...userProfile,
+            interests: currentInterests.filter(i => i !== interest)
+        };
+
+        setUserProfile(updatedProfile);
+        localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
     };
 
     const handleSaveSchedule = (newSchedule: any, newCustomGoals: any) => {
@@ -1089,6 +1113,10 @@ export function Dashboard({ username }: DashboardProps) {
                 {userProfile && (
                     <TrendBriefingSection
                         job={userProfile.job}
+                        goal={userProfile.goal}
+                        interests={userProfile.interests}
+                        onAddInterest={handleAddInterest}
+                        onRemoveInterest={handleRemoveInterest}
                         onSelectBriefing={(briefing) => {
                             setSelectedBriefing(briefing);
                             setShowBriefingDetail(true);

@@ -81,6 +81,8 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const job = searchParams.get("job") || "Marketer";
+        const goal = searchParams.get("goal");
+        const interests = searchParams.get("interests");
 
         // Check cache first - only return if it's from today
         const cachedData = await getTrendsCache();
@@ -119,18 +121,20 @@ export async function GET(request: Request) {
         const prompt = `
 **TODAY'S DATE:** ${today}
 **TARGET AUDIENCE:** ${job} professionals
+${goal ? `**USER GOAL:** ${goal}` : ""}
+${interests ? `**USER INTERESTS:** ${interests}` : ""}
 
 **YOUR TASK:**
-Use Google Search to find 6 REAL news articles published in the last 7 days (after ${dateStr}) that are highly relevant for ${job} professionals.
+Use Google Search to find 6 REAL news articles published in the last 7 days (after ${dateStr}) that are highly relevant for ${job} professionals${interests ? ` and specifically related to these interests: ${interests}` : ""}.
 
 **SEARCH REQUIREMENTS:**
 1. **PREMIUM SOURCES ONLY**: Prioritize these sources: ${sourcesInfo}
 2. **RECENT**: Articles must be published between ${dateStr} and ${today}
-3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development
+3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development${goal ? `, helping them achieve: "${goal}"` : ""}
 4. **DIVERSE**: Cover different topics - AI, business strategy, market trends, innovation, regulations, etc.
 
 **SEARCH STRATEGY:**
-- Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology", etc.
+- Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology"${interests ? `, ${interests.split(',').map(i => `"${i} news"`).join(', ')}` : ""}
 - Add source filters: site:bloomberg.com, site:ft.com, site:techcrunch.com, etc.
 - Verify publication dates are within last 7 days
 
@@ -156,6 +160,7 @@ Return exactly 6 articles in this format:
 - Verify dates are within last 7 days
 - Prioritize premium sources
 - Ensure diversity of topics
+- If user interests are provided, ensure at least 2-3 articles relate to them
 
 Start searching and curating now.`;
 
