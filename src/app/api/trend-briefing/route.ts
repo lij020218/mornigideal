@@ -143,50 +143,62 @@ export async function GET(request: Request) {
 ${goal ? `**USER GOAL:** ${goal}` : ""}
 ${interests ? `**USER INTERESTS:** ${interests}` : ""}
 
-**YOUR TASK:**
-Use Google Search to find 6 REAL news articles published in the last 7 days (after ${dateStr}) that are highly relevant for ${job} professionals${interests ? ` and specifically related to these interests: ${interests}` : ""}.
+**YOUR MISSION:**
+Find 6 REAL news articles published in the last 7 days (after ${dateStr}) from PRIORITY SOURCES ONLY (unless absolutely necessary).
 
-**PRIORITY SOURCES (MUST PRIORITIZE THESE):**
+**🎯 PRIORITY SOURCES (SEARCH THESE FIRST):**
 ${sourcesList}
 
-**SEARCH REQUIREMENTS:**
-1. **SOURCE QUALITY**: At least 4 of the 6 articles **must** be from the Priority Sources above; remaining slots may use other reputable sources if needed.
-2. **RECENT**: Articles must be published between ${dateStr} and ${today}
-3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development${goal ? `, helping them achieve: "${goal}"` : ""}
-4. **DIVERSE**: Cover different topics - AI, business strategy, market trends, innovation, regulations, etc.
+**MANDATORY REQUIREMENTS:**
+1. **SOURCE PRIORITY**: At least 4 articles MUST come from the Priority Sources above
+2. **RECENCY**: Published between ${dateStr} and ${today} only
+3. **RELEVANCE**: Essential for ${job} professionals${goal ? ` working toward: "${goal}"` : ""}${interests ? ` with interests in: ${interests}` : ""}
+4. **DIVERSITY**: Cover different topics (AI, strategy, tech, business, etc.)
 
-**SEARCH STRATEGY:**
-- Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology"${interests ? `, ${interests.split(',').map(i => `"${i} news"`).join(', ')}` : ""}
-- **CRITICAL**: Include source filters in your search queries: (${siteFilters})
-- If you cannot find enough priority-source articles, fill the remaining slots with other reputable sources and note them.
-- Verify publication dates are within last 7 days
+**🔍 STEP-BY-STEP SEARCH PROCESS:**
 
-**OUTPUT FORMAT (JSON):**
-Return exactly 6 articles in this format:
+**STEP 1**: Search ONLY Priority Sources first
+Execute these exact searches:
+- site:bloomberg.com OR site:ft.com OR site:wsj.com OR site:economist.com "${job}" OR "AI" OR "business strategy" after:${dateStr}
+- site:bbc.com OR site:reuters.com OR site:apnews.com "${job}" OR "technology" OR "innovation" after:${dateStr}
+- site:nytimes.com OR site:washingtonpost.com "${job}" OR "AI" OR "business" after:${dateStr}
+- site:techcrunch.com OR site:wired.com OR site:theinformation.com "AI" OR "tech" OR "startup" after:${dateStr}
+- site:asia.nikkei.com OR site:scmp.com "business" OR "technology" after:${dateStr}
+${interests ? `- site:bloomberg.com OR site:ft.com OR site:techcrunch.com ${interests.split(',').map(i => `"${i.trim()}"`).join(' OR ')} after:${dateStr}` : ""}
 
+**STEP 2**: Select best 6 articles
+- Choose the most relevant and recent articles from STEP 1
+- Ensure topic diversity
+- Aim for 4-6 from Priority Sources
+
+**STEP 3** (Only if needed): If you cannot find 6 articles from Priority Sources:
+- Search general web for remaining slots
+- Mark non-priority sources clearly in sourceName
+
+**📊 OUTPUT FORMAT (JSON):**
 {
   "briefings": [
     {
-      "title": "Korean translation of article title (tailored for ${job})",
+      "title": "Korean translation (clear, specific, tailored for ${job})",
       "category": "AI | Business | Tech | Finance | Strategy | Innovation",
-      "summary": "Korean summary (2-3 sentences) explaining why this matters to ${job}",
-      "sourceName": "Exact source name (e.g., Bloomberg, TechCrunch)",
-      "sourceUrl": "EXACT original article URL from search results",
-      "publishedDate": "YYYY-MM-DD (actual publication date)",
-      "relevance": "Why ${job} should care about this (Korean, 1 sentence)"
+      "summary": "Korean summary (2-3 sentences) - WHY this matters to ${job}",
+      "sourceName": "Exact source name (e.g., 'Bloomberg', 'TechCrunch')",
+      "sourceUrl": "Full HTTPS URL from search results",
+      "publishedDate": "YYYY-MM-DD",
+      "relevance": "Korean, 1 sentence - specific impact on ${job}"
     }
   ]
 }
 
-**CRITICAL:**
-- Use REAL URLs found via Google Search
-- Always include full URLs with protocol (https://...)
-- Verify dates are within last 7 days
-- **Strongly prefer** articles from the Priority Sources list (min 4 of 6). If fewer are available, clearly note which are non-priority in the sourceName.
-- Ensure diversity of topics
-- If user interests are provided, ensure at least 2-3 articles relate to them
+**⚠️ CRITICAL RULES:**
+✓ Use REAL URLs from Google Search (never fabricate)
+✓ Include full URLs with https://
+✓ Verify all dates are ${dateStr} or later
+✓ MINIMUM 4 articles from Priority Sources
+✓ If interests provided: minimum 2-3 related articles
+✓ Execute the exact site-filtered searches from STEP 1
 
-Start searching and curating now.`;
+Begin searching Priority Sources NOW.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
