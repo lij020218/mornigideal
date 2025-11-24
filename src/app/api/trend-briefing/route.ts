@@ -4,7 +4,17 @@ import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache } fro
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
-// Premium news sources with URL patterns
+// TOP PRIORITY SOURCES (Tier 1 - Search these FIRST)
+const TOP_PRIORITY_SOURCES = [
+    { name: "BBC Business", urlPattern: "bbc.com/business", category: "글로벌 비즈니스" },
+    { name: "BBC Korean", urlPattern: "bbc.com/korean", category: "한국어 뉴스" },
+    { name: "Reuters", urlPattern: "reuters.com", category: "속보·국제" },
+    { name: "AP News", urlPattern: "apnews.com", category: "속보" },
+    { name: "CNN", urlPattern: "cnn.com", category: "국제·비즈니스" },
+    { name: "TechCrunch", urlPattern: "techcrunch.com", category: "테크·스타트업" }
+];
+
+// PREMIUM SOURCES (Tier 2 - Search if Tier 1 doesn't have enough)
 const PREMIUM_SOURCES = [
     // Economic & Business
     { name: "Bloomberg", urlPattern: "bloomberg.com", category: "경제·비즈니스" },
@@ -14,8 +24,6 @@ const PREMIUM_SOURCES = [
 
     // Global News
     { name: "BBC", urlPattern: "bbc.com", category: "국제" },
-    { name: "Reuters", urlPattern: "reuters.com", category: "속보·국제" },
-    { name: "AP News", urlPattern: "apnews.com", category: "속보" },
 
     // US Major
     { name: "The New York Times", urlPattern: "nytimes.com", category: "종합" },
@@ -26,7 +34,6 @@ const PREMIUM_SOURCES = [
     { name: "South China Morning Post", urlPattern: "scmp.com", category: "아시아·중국" },
 
     // Tech & Startup
-    { name: "TechCrunch", urlPattern: "techcrunch.com", category: "테크·스타트업" },
     { name: "Wired", urlPattern: "wired.com", category: "기술·문화" },
     { name: "The Information", urlPattern: "theinformation.com", category: "테크·인사이트" }
 ];
@@ -134,24 +141,18 @@ export async function GET(request: Request) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const dateStr = sevenDaysAgo.toISOString().split('T')[0];
 
-        // Create simple search queries for each premium source
-        const economicSources = ["Bloomberg", "Financial Times", "Wall Street Journal", "The Economist"];
-        const newsSources = ["BBC", "Reuters", "AP News"];
-        const usSources = ["New York Times", "Washington Post"];
-        const asiaSources = ["Nikkei Asia", "South China Morning Post"];
-        const techSources = ["TechCrunch", "Wired", "The Information"];
+        // Tier 1: Top Priority Sources
+        const topPrioritySources = TOP_PRIORITY_SOURCES.map(s => s.name);
+        const topPrioritySites = TOP_PRIORITY_SOURCES.map(s => `site:${s.urlPattern}`);
 
-        const allSources = [...economicSources, ...newsSources, ...usSources, ...asiaSources, ...techSources];
+        // Tier 2: Premium Sources (excluding duplicates from Tier 1)
+        const tier1Patterns = TOP_PRIORITY_SOURCES.map(s => s.urlPattern.toLowerCase());
+        const premiumOnlySources = PREMIUM_SOURCES
+            .filter(s => !tier1Patterns.some(pattern => s.urlPattern.toLowerCase().includes(pattern)))
+            .map(s => s.name);
 
-        // Create example queries
         const jobEnglish = job === "마케터" ? "marketing" : job === "개발자" ? "developer" : "business professional";
-        const exampleQueries = [
-            `"Bloomberg AI" after:${dateStr}`,
-            `"Reuters technology" after:${dateStr}`,
-            `"TechCrunch startup" after:${dateStr}`,
-            `"Financial Times business" after:${dateStr}`,
-            `"AP News innovation" after:${dateStr}`
-        ];
+        const jobKorean = job;
 
         const prompt = `
 **TODAY'S DATE:** ${today}
@@ -160,63 +161,116 @@ ${goal ? `**GOAL:** ${goal}` : ""}
 ${interests ? `**INTERESTS:** ${interests}` : ""}
 
 **🎯 MISSION:**
-Find 6 recent news articles (published after ${dateStr}) from PREMIUM SOURCES using simple English search queries.
+Find 6 recent news articles (published after ${dateStr}) using a 3-TIER priority system with BILINGUAL search (English + Korean).
 
-**📰 PREMIUM SOURCES (USE THESE ONLY):**
-• Economic/Business: ${economicSources.join(", ")}
-• Global News: ${newsSources.join(", ")}
-• US Major: ${usSources.join(", ")}
-• Asia: ${asiaSources.join(", ")}
-• Tech/Startup: ${techSources.join(", ")}
+**📊 3-TIER PRIORITY SYSTEM:**
 
-**🔍 SEARCH METHOD:**
-Use SIMPLE queries combining source name + topic in ENGLISH:
+**🥇 TIER 1 - TOP PRIORITY (Search FIRST):**
+${topPrioritySources.map(s => `• ${s}`).join('\n')}
 
-Examples:
-${exampleQueries.join('\n')}
+**🥈 TIER 2 - PREMIUM SOURCES (Search if Tier 1 insufficient):**
+${premiumOnlySources.map(s => `• ${s}`).join('\n')}
 
-For ${job}:
-- "Bloomberg ${jobEnglish}" after:${dateStr}
-- "Reuters AI ${jobEnglish}" after:${dateStr}
-- "TechCrunch ${jobEnglish}" after:${dateStr}
-- "Financial Times ${jobEnglish}" after:${dateStr}
-- "BBC technology ${jobEnglish}" after:${dateStr}
-- "Nikkei Asia business" after:${dateStr}
+**🥉 TIER 3 - GENERAL (Last resort only):**
+• Other reputable news sources
 
+**🔍 BILINGUAL SEARCH STRATEGY:**
+
+**TIER 1 - Use SITE FILTERS with interests (English + Korean):**
+
+English searches:
+- site:reuters.com (AI OR technology OR ${jobEnglish}) after:${dateStr}
+- site:apnews.com (AI OR innovation OR ${jobEnglish}) after:${dateStr}
+- site:bbc.com/business (AI OR business OR ${jobEnglish}) after:${dateStr}
+- site:cnn.com (technology OR business OR ${jobEnglish}) after:${dateStr}
+- site:techcrunch.com (AI OR startup OR ${jobEnglish}) after:${dateStr}
 ${interests ? `
-For user interests (${interests}):
-${interests.split(',').map(interest => {
-            const engInterest = interest.trim();
-            return `- "Bloomberg ${engInterest}" after:${dateStr}
-- "Reuters ${engInterest}" after:${dateStr}
-- "TechCrunch ${engInterest}" after:${dateStr}`;
-        }).join('\n')}
+Interest-specific (English):
+${interests.split(',').map(i => `- site:reuters.com "${i.trim()}" after:${dateStr}
+- site:apnews.com "${i.trim()}" after:${dateStr}
+- site:techcrunch.com "${i.trim()}" after:${dateStr}`).join('\n')}
 ` : ""}
 
-**📋 STEP-BY-STEP:**
+Korean searches:
+- site:bbc.com/korean (인공지능 OR 비즈니스 OR ${jobKorean}) after:${dateStr}
+- site:reuters.com (한국 OR 기술 OR ${jobKorean}) after:${dateStr}
+- site:cnn.com (인공지능 OR 기술 OR ${jobKorean}) after:${dateStr}
+${interests ? `
+Interest-specific (Korean):
+${interests.split(',').map(i => `- site:reuters.com "${i.trim()}" after:${dateStr}
+- site:bbc.com/korean "${i.trim()}" after:${dateStr}`).join('\n')}
+` : ""}
 
-1. **Execute searches** using the simple query format above:
-   - Try EACH premium source with relevant keywords in ENGLISH
-   - Include "after:${dateStr}" in all searches
-   - Example: Search "Bloomberg artificial intelligence" OR "Reuters AI technology"
+**TIER 2 - Use SOURCE NAMES with interests (English + Korean):**
 
-2. **Collect 8-10 candidate articles** from premium sources only
+English searches:
+- "Bloomberg" (AI OR ${jobEnglish} OR technology) after:${dateStr}
+- "Financial Times" (business OR AI OR ${jobEnglish}) after:${dateStr}
+- "Wall Street Journal" (technology OR ${jobEnglish}) after:${dateStr}
+- "New York Times" (AI OR business OR ${jobEnglish}) after:${dateStr}
+- "Wired" (AI OR technology) after:${dateStr}
+${interests ? `
+Interest-specific (English):
+${interests.split(',').map(i => `- "Bloomberg" "${i.trim()}" after:${dateStr}
+- "Financial Times" "${i.trim()}" after:${dateStr}
+- "Wired" "${i.trim()}" after:${dateStr}`).join('\n')}
+` : ""}
 
-3. **Select BEST 6 articles** ensuring:
-   ✓ All from premium sources list above
+Korean searches:
+- "블룸버그" (인공지능 OR ${jobKorean}) after:${dateStr}
+- "파이낸셜타임스" (기술 OR ${jobKorean}) after:${dateStr}
+- "뉴욕타임스" (비즈니스 OR ${jobKorean}) after:${dateStr}
+${interests ? `
+Interest-specific (Korean):
+${interests.split(',').map(i => `- "Bloomberg" "${i.trim()}" after:${dateStr}
+- "뉴욕타임스" "${i.trim()}" after:${dateStr}`).join('\n')}
+` : ""}
+
+**TIER 3 - GENERAL search (English + Korean):**
+
+English searches:
+- "${jobEnglish} AI news" after:${dateStr}
+- "latest ${jobEnglish} technology trends" after:${dateStr}
+${interests ? `- ${interests.split(',').map(i => `"${i.trim()} news"`).join(' OR ')} after:${dateStr}` : ""}
+
+Korean searches:
+- "${jobKorean} 인공지능 뉴스" after:${dateStr}
+- "${jobKorean} 기술 트렌드" after:${dateStr}
+${interests ? `- ${interests.split(',').map(i => `"${i.trim()} 뉴스"`).join(' OR ')} after:${dateStr}` : ""}
+
+**📋 EXECUTION STEPS:**
+
+1. **Execute Tier 1 searches** (both English AND Korean):
+   - Use site: filters with keywords
+   - Search each interest separately
+   - Collect 8-12 candidates
+
+2. **If less than 6 articles, execute Tier 2** (both English AND Korean):
+   - Use source names in quotes
+   - Search with interests
+   - Collect additional candidates
+
+3. **If still less than 6, execute Tier 3** (both English AND Korean):
+   - General web search
+   - Focus on interests and job
+
+4. **Select BEST 6 articles** ensuring:
+   ✓ Maximum from Tier 1
+   ✓ Fill gaps with Tier 2
+   ✓ Use Tier 3 only if necessary
    ✓ Published ${dateStr} or later
-   ✓ Diverse topics (AI, business, tech, strategy, etc.)
-   ✓ Highly relevant to ${job}
+   ✓ Diverse topics
+   ✓ Mix of English AND Korean results if available
    ${interests ? `✓ At least 2-3 related to: ${interests}` : ""}
 
 **📊 OUTPUT (JSON):**
 {
   "briefings": [
     {
-      "title": "Korean translation of article title (professional, specific)",
+      "title": "Korean translation of article title",
       "category": "AI | Business | Tech | Finance | Strategy | Innovation",
-      "summary": "Korean 2-3 sentence summary - explain WHY ${job} should care",
-      "sourceName": "Exact source name (e.g., 'Bloomberg', 'Reuters', 'TechCrunch')",
+      "summary": "Korean 2-3 sentence summary - WHY ${job} should care",
+      "sourceName": "Exact source name (e.g., 'BBC Business', 'Reuters', 'Bloomberg')",
       "sourceUrl": "Complete HTTPS URL from search",
       "publishedDate": "YYYY-MM-DD",
       "relevance": "Korean 1-sentence: specific value for ${job}"
@@ -225,14 +279,16 @@ ${interests.split(',').map(interest => {
 }
 
 **⚠️ CRITICAL RULES:**
-✓ ALL 6 articles MUST be from premium sources listed above
-✓ Use simple English queries: "[Source Name] [keyword]"
-✓ REAL URLs only (from actual Google Search results)
-✓ Published ${dateStr} or later only
-✓ Full HTTPS URLs
-✓ Never fabricate or guess URLs
+✓ Search BOTH English AND Korean for each tier
+✓ Tier 1: Use site:domain.com filters
+✓ Tier 2: Use "Source Name" in quotes
+✓ Tier 3: General search
+✓ REAL URLs only from Google Search
+✓ Published ${dateStr} or later
+✓ Full HTTPS URLs required
+✓ Prioritize Tier 1 > Tier 2 > Tier 3
 
-**START NOW** - Execute simple English searches for each premium source.`;
+**START NOW** - Execute bilingual searches starting with Tier 1 site filters.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
