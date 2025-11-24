@@ -83,12 +83,13 @@ export async function GET(request: Request) {
         const job = searchParams.get("job") || "Marketer";
         const goal = searchParams.get("goal");
         const interests = searchParams.get("interests");
+        const forceRefresh = searchParams.get("forceRefresh") === "true";
 
-        // Check cache first - only return if it's from today
+        // Check cache first - only return if it's from today and not force refreshing
         const cachedData = await getTrendsCache();
         const today = new Date().toISOString().split('T')[0];
 
-        if (cachedData && cachedData.trends.length > 0) {
+        if (!forceRefresh && cachedData && cachedData.trends.length > 0) {
             const cacheDate = new Date(cachedData.lastUpdated).toISOString().split('T')[0];
             if (cacheDate === today) {
                 console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
@@ -98,6 +99,10 @@ export async function GET(request: Request) {
                     lastUpdated: cachedData.lastUpdated
                 });
             }
+        }
+
+        if (forceRefresh) {
+            console.log('[API] Force refresh requested with interests:', interests);
         }
 
         console.log('[API] Generating new daily briefing with Google Search...');

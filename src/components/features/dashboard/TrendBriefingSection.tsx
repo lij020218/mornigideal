@@ -44,12 +44,13 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [newInterest, setNewInterest] = useState("");
     const [isInterestOpen, setIsInterestOpen] = useState(false);
 
-    const fetchBriefings = async () => {
+    const fetchBriefings = async (forceRefresh = false) => {
         try {
             setLoading(true);
             const params = new URLSearchParams({ job });
             if (goal) params.append("goal", goal);
             if (interests.length > 0) params.append("interests", interests.join(","));
+            if (forceRefresh) params.append("forceRefresh", "true");
 
             const response = await fetch(`/api/trend-briefing?${params.toString()}`);
             if (!response.ok) throw new Error("Failed to fetch briefings");
@@ -72,7 +73,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
 
     const handleRefresh = () => {
         setRefreshing(true);
-        fetchBriefings();
+        fetchBriefings(true); // Force refresh to get new briefings based on interests
     };
 
     const handleAddInterestSubmit = (e: React.FormEvent) => {
