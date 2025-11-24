@@ -148,6 +148,23 @@ export function Dashboard({ username }: DashboardProps) {
         }
     };
 
+    const saveProfileToSupabase = async (updatedProfile: UserProfile) => {
+        try {
+            const response = await fetch("/api/user/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ profile: updatedProfile }),
+            });
+
+            if (!response.ok) {
+                console.error("Failed to save profile to Supabase");
+                // Optionally revert state here if needed, but for now we just log
+            }
+        } catch (error) {
+            console.error("Error saving profile:", error);
+        }
+    };
+
     const handleAddInterest = (interest: string) => {
         if (!userProfile) return;
         const currentInterests = userProfile.interests || [];
@@ -160,6 +177,7 @@ export function Dashboard({ username }: DashboardProps) {
 
         setUserProfile(updatedProfile);
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
+        saveProfileToSupabase(updatedProfile);
     };
 
     const handleRemoveInterest = (interest: string) => {
@@ -173,6 +191,7 @@ export function Dashboard({ username }: DashboardProps) {
 
         setUserProfile(updatedProfile);
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
+        saveProfileToSupabase(updatedProfile);
     };
 
     const handleSaveSchedule = (newSchedule: any, newCustomGoals: any) => {
