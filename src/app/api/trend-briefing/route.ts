@@ -134,71 +134,105 @@ export async function GET(request: Request) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const dateStr = sevenDaysAgo.toISOString().split('T')[0];
 
-        const sourcesList = PREMIUM_SOURCES.map(s => `${s.name} (${s.urlPattern})`).join(", ");
-        const siteFilters = PREMIUM_SOURCES.map(s => `site:${s.urlPattern}`).join(" OR ");
+        // Create simple search queries for each premium source
+        const economicSources = ["Bloomberg", "Financial Times", "Wall Street Journal", "The Economist"];
+        const newsSources = ["BBC", "Reuters", "AP News"];
+        const usSources = ["New York Times", "Washington Post"];
+        const asiaSources = ["Nikkei Asia", "South China Morning Post"];
+        const techSources = ["TechCrunch", "Wired", "The Information"];
+
+        const allSources = [...economicSources, ...newsSources, ...usSources, ...asiaSources, ...techSources];
+
+        // Create example queries
+        const jobEnglish = job === "마케터" ? "marketing" : job === "개발자" ? "developer" : "business professional";
+        const exampleQueries = [
+            `"Bloomberg AI" after:${dateStr}`,
+            `"Reuters technology" after:${dateStr}`,
+            `"TechCrunch startup" after:${dateStr}`,
+            `"Financial Times business" after:${dateStr}`,
+            `"AP News innovation" after:${dateStr}`
+        ];
 
         const prompt = `
 **TODAY'S DATE:** ${today}
-**TARGET AUDIENCE:** ${job} professionals
-${goal ? `**USER GOAL:** ${goal}` : ""}
-${interests ? `**USER INTERESTS:** ${interests}` : ""}
+**TARGET:** ${job} professionals
+${goal ? `**GOAL:** ${goal}` : ""}
+${interests ? `**INTERESTS:** ${interests}` : ""}
 
-**YOUR MISSION:**
-Find 6 REAL news articles published in the last 7 days (after ${dateStr}) from PRIORITY SOURCES ONLY (unless absolutely necessary).
+**🎯 MISSION:**
+Find 6 recent news articles (published after ${dateStr}) from PREMIUM SOURCES using simple English search queries.
 
-**🎯 PRIORITY SOURCES (SEARCH THESE FIRST):**
-${sourcesList}
+**📰 PREMIUM SOURCES (USE THESE ONLY):**
+• Economic/Business: ${economicSources.join(", ")}
+• Global News: ${newsSources.join(", ")}
+• US Major: ${usSources.join(", ")}
+• Asia: ${asiaSources.join(", ")}
+• Tech/Startup: ${techSources.join(", ")}
 
-**MANDATORY REQUIREMENTS:**
-1. **SOURCE PRIORITY**: At least 4 articles MUST come from the Priority Sources above
-2. **RECENCY**: Published between ${dateStr} and ${today} only
-3. **RELEVANCE**: Essential for ${job} professionals${goal ? ` working toward: "${goal}"` : ""}${interests ? ` with interests in: ${interests}` : ""}
-4. **DIVERSITY**: Cover different topics (AI, strategy, tech, business, etc.)
+**🔍 SEARCH METHOD:**
+Use SIMPLE queries combining source name + topic in ENGLISH:
 
-**🔍 STEP-BY-STEP SEARCH PROCESS:**
+Examples:
+${exampleQueries.join('\n')}
 
-**STEP 1**: Search ONLY Priority Sources first
-Execute these exact searches:
-- site:bloomberg.com OR site:ft.com OR site:wsj.com OR site:economist.com "${job}" OR "AI" OR "business strategy" after:${dateStr}
-- site:bbc.com OR site:reuters.com OR site:apnews.com "${job}" OR "technology" OR "innovation" after:${dateStr}
-- site:nytimes.com OR site:washingtonpost.com "${job}" OR "AI" OR "business" after:${dateStr}
-- site:techcrunch.com OR site:wired.com OR site:theinformation.com "AI" OR "tech" OR "startup" after:${dateStr}
-- site:asia.nikkei.com OR site:scmp.com "business" OR "technology" after:${dateStr}
-${interests ? `- site:bloomberg.com OR site:ft.com OR site:techcrunch.com ${interests.split(',').map(i => `"${i.trim()}"`).join(' OR ')} after:${dateStr}` : ""}
+For ${job}:
+- "Bloomberg ${jobEnglish}" after:${dateStr}
+- "Reuters AI ${jobEnglish}" after:${dateStr}
+- "TechCrunch ${jobEnglish}" after:${dateStr}
+- "Financial Times ${jobEnglish}" after:${dateStr}
+- "BBC technology ${jobEnglish}" after:${dateStr}
+- "Nikkei Asia business" after:${dateStr}
 
-**STEP 2**: Select best 6 articles
-- Choose the most relevant and recent articles from STEP 1
-- Ensure topic diversity
-- Aim for 4-6 from Priority Sources
+${interests ? `
+For user interests (${interests}):
+${interests.split(',').map(interest => {
+            const engInterest = interest.trim();
+            return `- "Bloomberg ${engInterest}" after:${dateStr}
+- "Reuters ${engInterest}" after:${dateStr}
+- "TechCrunch ${engInterest}" after:${dateStr}`;
+        }).join('\n')}
+` : ""}
 
-**STEP 3** (Only if needed): If you cannot find 6 articles from Priority Sources:
-- Search general web for remaining slots
-- Mark non-priority sources clearly in sourceName
+**📋 STEP-BY-STEP:**
 
-**📊 OUTPUT FORMAT (JSON):**
+1. **Execute searches** using the simple query format above:
+   - Try EACH premium source with relevant keywords in ENGLISH
+   - Include "after:${dateStr}" in all searches
+   - Example: Search "Bloomberg artificial intelligence" OR "Reuters AI technology"
+
+2. **Collect 8-10 candidate articles** from premium sources only
+
+3. **Select BEST 6 articles** ensuring:
+   ✓ All from premium sources list above
+   ✓ Published ${dateStr} or later
+   ✓ Diverse topics (AI, business, tech, strategy, etc.)
+   ✓ Highly relevant to ${job}
+   ${interests ? `✓ At least 2-3 related to: ${interests}` : ""}
+
+**📊 OUTPUT (JSON):**
 {
   "briefings": [
     {
-      "title": "Korean translation (clear, specific, tailored for ${job})",
+      "title": "Korean translation of article title (professional, specific)",
       "category": "AI | Business | Tech | Finance | Strategy | Innovation",
-      "summary": "Korean summary (2-3 sentences) - WHY this matters to ${job}",
-      "sourceName": "Exact source name (e.g., 'Bloomberg', 'TechCrunch')",
-      "sourceUrl": "Full HTTPS URL from search results",
+      "summary": "Korean 2-3 sentence summary - explain WHY ${job} should care",
+      "sourceName": "Exact source name (e.g., 'Bloomberg', 'Reuters', 'TechCrunch')",
+      "sourceUrl": "Complete HTTPS URL from search",
       "publishedDate": "YYYY-MM-DD",
-      "relevance": "Korean, 1 sentence - specific impact on ${job}"
+      "relevance": "Korean 1-sentence: specific value for ${job}"
     }
   ]
 }
 
 **⚠️ CRITICAL RULES:**
-✓ Use REAL URLs from Google Search (never fabricate)
-✓ Include full URLs with https://
-✓ Verify all dates are ${dateStr} or later
-✓ MINIMUM 4 articles from Priority Sources
-✓ If interests provided: minimum 2-3 related articles
-✓ Execute the exact site-filtered searches from STEP 1
+✓ ALL 6 articles MUST be from premium sources listed above
+✓ Use simple English queries: "[Source Name] [keyword]"
+✓ REAL URLs only (from actual Google Search results)
+✓ Published ${dateStr} or later only
+✓ Full HTTPS URLs
+✓ Never fabricate or guess URLs
 
-Begin searching Priority Sources NOW.`;
+**START NOW** - Execute simple English searches for each premium source.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
