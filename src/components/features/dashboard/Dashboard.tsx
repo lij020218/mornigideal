@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle } from "lucide-react";
@@ -553,6 +553,42 @@ export function Dashboard({ username }: DashboardProps) {
                                             <p className="text-sm font-medium text-white">{username}</p>
                                             <p className="text-xs text-muted-foreground truncate">{userProfile?.job || "User"}</p>
                                         </div>
+                                        {/* Temporary Debug Button */}
+                                        <button
+                                            onClick={() => {
+                                                setDailyBriefingData({
+                                                    greeting: `Good Morning, ${username}!`,
+                                                    yesterdayReview: "어제는 목표 달성이 조금 부족했네요. 하지만 괜찮습니다! 오늘은 새로운 시작이니까요.",
+                                                    yesterdayStats: {
+                                                        wakeUp: true,
+                                                        learning: 1,
+                                                        trendBriefing: 4
+                                                    },
+                                                    trendSummary: [
+                                                        "테슬라, AI 기반 새로운 마케팅 플랫폼 'Optimus Ads' 공개",
+                                                        "비트코인, 10만 달러 돌파하며 사상 최고가 경신",
+                                                        "애플, 생성형 AI가 탑재된 아이폰 16 시리즈 발표 임박",
+                                                        "삼성전자, 차세대 HBM4 메모리 양산 계획 발표",
+                                                        "구글, 제미나이 2.0 모델 개발자 프리뷰 공개",
+                                                        "오픈AI, 새로운 추론 모델 'o2' 출시 예고"
+                                                    ],
+                                                    todayFocus: "오전 10시 업무 시작 전, 가장 중요한 기획안을 먼저 검토해보세요.",
+                                                    importantSchedule: {
+                                                        time: "10:00",
+                                                        title: "주간 기획 회의",
+                                                        type: "work"
+                                                    },
+                                                    closing: "오늘도 당신의 성장을 응원합니다! 힘찬 하루 되세요!"
+                                                });
+                                                setShowDailyBriefing(true);
+                                                setShowProfileMenu(false);
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-yellow-400 hover:text-yellow-300 flex items-center gap-3"
+                                        >
+                                            <Sparkles className="w-4 h-4" />
+                                            브리핑 미리보기 (Debug)
+                                        </button>
+
                                         <Link
                                             href="/mypage"
                                             className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
@@ -761,123 +797,168 @@ export function Dashboard({ username }: DashboardProps) {
                                                 // Find current or next schedule
                                                 const now = new Date();
                                                 const currentDay = now.getDay();
+                                                // --- Daily Flow Logic ---
                                                 const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
-                                                const schedules = userProfile?.customGoals?.filter(g =>
-                                                    g.daysOfWeek?.includes(currentDay)
-                                                ) || [];
+                                                // 1. Prepare Base Schedule Items with inferred durations
+                                                const baseItems: Array<{ id: string; text: string; startTime: string; icon: any; color: string; type: string; endTime?: string }> = [];
+                                                if (userProfile?.schedule) {
+                                                    const { wakeUp, workStart, workEnd, sleep } = userProfile.schedule;
+                                                    if (wakeUp) baseItems.push({ id: 'wake-up', text: '기상', startTime: wakeUp, icon: Sun, color: 'yellow', type: 'base' });
+                                                    if (workStart) baseItems.push({ id: 'work-start', text: '업무 시작', startTime: workStart, icon: Briefcase, color: 'purple', type: 'base' });
+                                                    if (workEnd) baseItems.push({ id: 'work-end', text: '업무 종료', startTime: workEnd, icon: Briefcase, color: 'green', type: 'base' });
+                                                    if (sleep) baseItems.push({ id: 'sleep', text: '취침', startTime: sleep, icon: Moon, color: 'blue', type: 'base' });
+                                                }
 
-                                                // Sort by time
-                                                schedules.sort((a, b) => {
-                                                    const [aH, aM] = a.startTime!.split(':').map(Number);
-                                                    const [bH, bM] = b.startTime!.split(':').map(Number);
+                                                // Sort base items to infer end times
+                                                baseItems.sort((a, b) => {
+                                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                                    const [bH, bM] = b.startTime.split(':').map(Number);
                                                     return (aH * 60 + aM) - (bH * 60 + bM);
                                                 });
 
-                                                // Find active or next
-                                                let targetSchedule = schedules.find(s => {
-                                                    const [sH, sM] = s.startTime!.split(':').map(Number);
-                                                    const [eH, eM] = s.endTime!.split(':').map(Number);
-                                                    const start = sH * 60 + sM;
-                                                    const end = eH * 60 + eM;
+                                                // Assign end times to base items (until next item starts)
+                                                const baseScheduleWithDuration = baseItems.map((item, index) => {
+                                                    const nextItem = baseItems[(index + 1) % baseItems.length];
+                                                    return { ...item, endTime: nextItem.startTime };
+                                                });
+
+                                                // 2. Prepare Custom Goals
+                                                const customItems = userProfile?.customGoals?.filter(g =>
+                                                    g.daysOfWeek?.includes(currentDay)
+                                                ).map(g => ({
+                                                    id: g.id,
+                                                    text: g.text,
+                                                    startTime: g.startTime!,
+                                                    endTime: g.endTime!,
+                                                    icon: Target, // Default icon, could be mapped
+                                                    color: g.color || 'primary',
+                                                    type: 'custom'
+                                                })) || [];
+
+                                                // 3. Combine All Schedules
+                                                const allSchedules = [...baseScheduleWithDuration, ...customItems];
+
+                                                // 4. Find Active or Next Schedule
+                                                // Sort by start time
+                                                allSchedules.sort((a, b) => {
+                                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                                    const [bH, bM] = b.startTime.split(':').map(Number);
+                                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                                });
+
+                                                let targetSchedule = allSchedules.find(s => {
+                                                    const [sH, sM] = s.startTime.split(':').map(Number);
+                                                    const [eH, eM] = s.endTime.split(':').map(Number);
+                                                    let start = sH * 60 + sM;
+                                                    let end = eH * 60 + eM;
+
+                                                    // Handle overnight (e.g. sleep)
+                                                    if (end < start) end += 24 * 60;
+
+                                                    // Adjust current time for overnight check if needed
+                                                    // (Simple check: if current < start and start is late, maybe we are in previous day's overnight?)
+                                                    // For now, simple range check.
                                                     return currentTimeValue >= start && currentTimeValue < end;
                                                 });
 
+                                                // If no active schedule, find next upcoming
                                                 if (!targetSchedule) {
-                                                    targetSchedule = schedules.find(s => {
-                                                        const [sH, sM] = s.startTime!.split(':').map(Number);
+                                                    targetSchedule = allSchedules.find(s => {
+                                                        const [sH, sM] = s.startTime.split(':').map(Number);
                                                         const start = sH * 60 + sM;
                                                         return start > currentTimeValue;
                                                     });
                                                 }
 
-                                                // Default to Wake Up if no schedule found or it's early
-                                                if (!targetSchedule) {
-                                                    return (
-                                                        <motion.button
-                                                            whileHover={{ scale: 1.01 }}
-                                                            whileTap={{ scale: 0.99 }}
-                                                            onClick={() => updateDailyGoal("wakeUp", !dailyGoals.wakeUp)}
-                                                            className={cn(
-                                                                "p-5 rounded-lg text-left transition-all border flex items-center gap-4",
-                                                                dailyGoals.wakeUp
-                                                                    ? "bg-green-500/10 border-green-500/30"
-                                                                    : "bg-white/5 border-white/5 hover:bg-white/10"
-                                                            )}
-                                                        >
-                                                            <div className={cn(
-                                                                "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                                dailyGoals.wakeUp ? "bg-green-500 text-black" : "bg-white/10 text-muted-foreground"
-                                                            )}>
-                                                                <Sun className="w-6 h-6" />
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-semibold text-base">기상 목표</p>
-                                                                <p className="text-sm text-muted-foreground mt-0.5">{userSettings.wakeUpTime} 기상</p>
-                                                            </div>
-                                                            {dailyGoals.wakeUp ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Circle className="w-6 h-6 text-muted-foreground/50" />}
-                                                        </motion.button>
-                                                    );
+                                                // If still null (end of day), show first item of tomorrow (Wake Up)
+                                                if (!targetSchedule && allSchedules.length > 0) {
+                                                    targetSchedule = allSchedules[0];
                                                 }
 
-                                                // Render Dynamic Schedule
-                                                const completionStatus = getTodayCompletions()[targetSchedule.id];
-                                                const isCompleted = completionStatus?.completed === true;
-                                                const [sH, sM] = targetSchedule.startTime!.split(':').map(Number);
-                                                const startVal = sH * 60 + sM;
-                                                const isActive = !isCompleted && currentTimeValue >= startVal && currentTimeValue < (parseInt(targetSchedule.endTime!.split(':')[0]) * 60 + parseInt(targetSchedule.endTime!.split(':')[1]));
+                                                // 5. Render Card
+                                                if (targetSchedule) {
+                                                    const completionStatus = getTodayCompletions()[targetSchedule.id];
+                                                    const isCompleted = completionStatus?.completed === true;
 
-                                                return (
-                                                    <motion.div
-                                                        whileHover={{ scale: 1.01 }}
-                                                        className={cn(
-                                                            "p-5 rounded-lg text-left transition-all border flex items-center gap-4 relative overflow-hidden",
-                                                            isCompleted
-                                                                ? "bg-green-500/10 border-green-500/30"
-                                                                : isActive
-                                                                    ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                                                                    : "bg-white/5 border-white/5"
-                                                        )}
-                                                    >
-                                                        {isCompleted && (
-                                                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-[10px] text-green-400 font-bold">
-                                                                완료
-                                                            </div>
-                                                        )}
-                                                        {isActive && !isCompleted && (
-                                                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] text-primary font-bold animate-pulse">
-                                                                NOW
-                                                            </div>
-                                                        )}
+                                                    // Recalculate active state for visual
+                                                    const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
+                                                    const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
+                                                    let start = sH * 60 + sM;
+                                                    let end = eH * 60 + eM;
+                                                    if (end < start) end += 24 * 60;
+                                                    const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
 
-                                                        <div className={cn(
-                                                            "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                            isCompleted
-                                                                ? "bg-green-500 text-white shadow-lg"
-                                                                : isActive
-                                                                    ? "bg-primary text-white shadow-lg"
-                                                                    : "bg-white/10 text-muted-foreground"
-                                                        )}>
-                                                            {isCompleted ? (
-                                                                <CheckCircle2 className="w-6 h-6" />
-                                                            ) : (
-                                                                <Clock className={cn("w-6 h-6", isActive && "animate-pulse")} />
+                                                    const Icon = targetSchedule.icon;
+
+                                                    // Color mapping for safe Tailwind classes
+                                                    const colorMap: Record<string, string> = {
+                                                        yellow: "bg-yellow-500",
+                                                        purple: "bg-purple-500",
+                                                        green: "bg-green-500",
+                                                        blue: "bg-blue-500",
+                                                        red: "bg-red-500",
+                                                        orange: "bg-orange-500",
+                                                        pink: "bg-pink-500",
+                                                        primary: "bg-primary"
+                                                    };
+                                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
+
+                                                    return (
+                                                        <motion.div
+                                                            whileHover={{ scale: 1.01 }}
+                                                            className={cn(
+                                                                "p-5 rounded-lg text-left transition-all border flex items-center gap-4 relative overflow-hidden",
+                                                                isCompleted
+                                                                    ? "bg-green-500/10 border-green-500/30"
+                                                                    : isActive
+                                                                        ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                                                        : "bg-white/5 border-white/5"
                                                             )}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className={cn(
-                                                                "font-semibold text-base",
-                                                                isCompleted ? "text-green-400" : isActive && "text-primary"
+                                                        >
+                                                            {isCompleted && (
+                                                                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-[10px] text-green-400 font-bold">
+                                                                    완료
+                                                                </div>
+                                                            )}
+                                                            {isActive && !isCompleted && (
+                                                                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] text-primary font-bold animate-pulse">
+                                                                    NOW
+                                                                </div>
+                                                            )}
+
+                                                            <div className={cn(
+                                                                "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                                isCompleted
+                                                                    ? "bg-green-500 text-white shadow-lg"
+                                                                    : isActive
+                                                                        ? `${bgClass} text-white shadow-lg`
+                                                                        : "bg-white/10 text-muted-foreground"
                                                             )}>
-                                                                {targetSchedule.text}
-                                                            </p>
-                                                            <p className="text-sm text-muted-foreground mt-0.5 font-mono">
-                                                                {targetSchedule.startTime} - {targetSchedule.endTime}
-                                                            </p>
-                                                        </div>
-                                                        {isCompleted && <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />}
-                                                    </motion.div>
-                                                );
+                                                                {isCompleted ? (
+                                                                    <CheckCircle2 className="w-6 h-6" />
+                                                                ) : (
+                                                                    <Icon className={cn("w-6 h-6", isActive && "animate-pulse")} />
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className={cn(
+                                                                    "font-semibold text-base",
+                                                                    isCompleted ? "text-green-400" : isActive && "text-primary"
+                                                                )}>
+                                                                    {targetSchedule.text}
+                                                                </p>
+                                                                <p className="text-sm text-muted-foreground mt-0.5 font-mono">
+                                                                    {targetSchedule.startTime} - {targetSchedule.endTime}
+                                                                </p>
+                                                            </div>
+                                                            {isCompleted && <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />}
+                                                        </motion.div>
+                                                    );
+                                                } else {
+                                                    // Fallback if no schedule at all
+                                                    return <div className="p-5 rounded-lg border border-dashed border-white/10 text-center text-muted-foreground">일정이 없습니다.</div>;
+                                                }
                                             })()}
 
                                             {/* Learning Goal */}
@@ -1342,6 +1423,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
 }) {
     const [todayCompletions, setTodayCompletions] = useState<Record<string, any>>({});
 
+    // Auto-scroll to active/upcoming item on mobile (must be before early return)
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         const updateCompletions = () => {
             setTodayCompletions(getTodayCompletions());
@@ -1351,6 +1435,68 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         const interval = setInterval(updateCompletions, 60000);
         return () => clearInterval(interval);
     }, [customGoals]);
+
+    // Note: This useEffect needs schedule-dependent variables, but must be here for hooks order
+    // It will safely handle the case when schedule is undefined
+    useEffect(() => {
+        if (!schedule || !isMobile || !scrollContainerRef.current) return;
+
+        // These variables are calculated below, so we need to recalculate them here
+        const now = new Date();
+        const currentDayOfWeek = now.getDay();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTimeValue = currentHour * 60 + currentMinute;
+
+        // Build timeline to find active index
+        const tempTimelineItems: Array<{ time: string }> = [
+            ...(schedule?.wakeUp ? [{ time: schedule.wakeUp }] : []),
+            ...(schedule?.workStart ? [{ time: schedule.workStart }] : []),
+            ...(schedule?.workEnd ? [{ time: schedule.workEnd }] : []),
+            ...(schedule?.sleep ? [{ time: schedule.sleep }] : []),
+            ...(customGoals?.filter(g => g.daysOfWeek?.includes(currentDayOfWeek))
+                .filter(g => g.startTime)
+                .map(g => ({ time: g.startTime! })) || [])
+        ].sort((a, b) => {
+            const [aH, aM] = a.time.split(':').map(Number);
+            const [bH, bM] = b.time.split(':').map(Number);
+            return (aH * 60 + aM) - (bH * 60 + bM);
+        });
+
+        let activeIndex = -1;
+        let nextIndex = -1;
+
+        for (let i = 0; i < tempTimelineItems.length; i++) {
+            const [h, m] = tempTimelineItems[i].time.split(':').map(Number);
+            const itemTime = h * 60 + m;
+            const nextItem = tempTimelineItems[i + 1];
+            let nextTime = 24 * 60;
+            if (nextItem) {
+                const [nh, nm] = nextItem.time.split(':').map(Number);
+                nextTime = nh * 60 + nm;
+            }
+            if (currentTimeValue >= itemTime && currentTimeValue < nextTime) {
+                activeIndex = i;
+                break;
+            }
+            if (currentTimeValue < itemTime && nextIndex === -1) {
+                nextIndex = i;
+            }
+        }
+
+        const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
+        if (targetIndex !== -1) {
+            const itemWidth = 140;
+            const gap = 12;
+            const containerWidth = scrollContainerRef.current.clientWidth;
+            const scrollLeft = (targetIndex * (itemWidth + gap)) + (itemWidth / 2) - (containerWidth / 2) + 4;
+
+            scrollContainerRef.current.scrollTo({
+                left: scrollLeft,
+                behavior: 'smooth'
+            });
+        }
+    }, [isMobile, schedule, customGoals]);
 
     if (!schedule) return (
         <div className="text-center text-muted-foreground py-10 flex flex-col items-center gap-4">
@@ -1388,10 +1534,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         goalId: string;
         endTime?: string;
     }> = [
-            { time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' },
-            { time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' },
-            { time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' },
-            { time: schedule.sleep, label: "취침", icon: Moon, color: "blue", goalId: 'sleep' },
+            ...(schedule?.wakeUp ? [{ time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' }] : []),
+            ...(schedule?.workStart ? [{ time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' }] : []),
+            ...(schedule?.workEnd ? [{ time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' }] : []),
+            ...(schedule?.sleep ? [{ time: schedule.sleep, label: "취침", icon: Moon, color: "blue", goalId: 'sleep' }] : []),
         ];
 
     // Filter custom goals for today
@@ -1462,6 +1608,20 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             primary: isActive ? 'bg-primary' : 'bg-primary/30',
         };
 
+        const activeGradients: Record<string, string> = {
+            yellow: 'bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)]',
+            blue: 'bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)]',
+            purple: 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]',
+            green: 'bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)]',
+            red: 'bg-gradient-to-br from-red-500/20 to-orange-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)]',
+            orange: 'bg-gradient-to-br from-orange-500/20 to-red-500/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)]',
+            pink: 'bg-gradient-to-br from-pink-500/20 to-purple-500/20 border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)]',
+            amber: 'bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]',
+            cyan: 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]',
+            indigo: 'bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)]',
+            primary: 'bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]',
+        };
+
         const textColors: Record<string, string> = {
             yellow: 'text-yellow-400',
             blue: 'text-blue-400',
@@ -1492,6 +1652,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
 
         return {
             bg: bgColors[color] || bgColors.primary,
+            activeGradient: activeGradients[color] || activeGradients.primary,
             text: textColors[color] || textColors.primary,
             border: borderColors[color] || borderColors.primary,
         };
@@ -1507,7 +1668,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
 
             {/* Mobile Horizontal Scroll Container */}
             {isMobile && (
-                <div className="flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-hide snap-x snap-mandatory px-1">
+                <div
+                    ref={scrollContainerRef}
+                    className="flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-hide snap-x snap-mandatory px-1"
+                >
                     {timelineItems.map((item, index) => {
                         const Icon = item.icon;
                         const isActive = index === activeIndex;
@@ -1527,9 +1691,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                 <div className={cn(
                                     "relative w-[140px] p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
                                     isActive
-                                        ? "bg-gradient-to-b from-white/10 to-white/5 border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] scale-105 z-10"
+                                        ? `${colors.activeGradient} scale-105 z-10`
                                         : isUpcoming
-                                            ? "bg-gradient-to-b from-primary/10 to-primary/5 border-primary/30 shadow-[0_0_15px_rgba(168,85,247,0.1)] scale-105 z-10"
+                                            ? `${colors.activeGradient} scale-105 z-10 opacity-80`
                                             : isPast
                                                 ? "bg-white/5 border-white/5 opacity-60 grayscale-[0.5]"
                                                 : "bg-white/5 border-white/10"
@@ -1573,12 +1737,12 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                             {item.label}
                                         </h4>
                                         {isActive && (
-                                            <p className="text-[10px] text-primary font-medium animate-pulse">
+                                            <p className={cn("text-[10px] font-medium animate-pulse", colors.text)}>
                                                 현재 진행 중
                                             </p>
                                         )}
                                         {isUpcoming && (
-                                            <p className="text-[10px] text-primary font-medium">
+                                            <p className={cn("text-[10px] font-medium", colors.text)}>
                                                 예정됨
                                             </p>
                                         )}
@@ -1649,9 +1813,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         <div className={cn(
                             "flex-1 rounded-xl p-4 border transition-all w-full",
                             isActive
-                                ? "bg-gradient-to-r from-white/10 to-white/5 border-white/20 shadow-md"
+                                ? `${colors.activeGradient} shadow-md`
                                 : isUpcoming
-                                    ? "bg-gradient-to-r from-primary/10 to-primary/5 border-primary/30"
+                                    ? `${colors.activeGradient} shadow-md opacity-80`
                                     : isPast
                                         ? "bg-white/5 border-white/5 opacity-60"
                                         : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"

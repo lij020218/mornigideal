@@ -211,13 +211,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         if (!selectedTimeSlot) return;
 
         if (schedule.wakeUp === selectedTimeSlot) {
-            setSchedule(prev => ({ ...prev, wakeUp: "07:00" }));
+            setSchedule(prev => ({ ...prev, wakeUp: "" }));
         } else if (schedule.sleep === selectedTimeSlot) {
-            setSchedule(prev => ({ ...prev, sleep: "23:00" }));
+            setSchedule(prev => ({ ...prev, sleep: "" }));
         } else if (schedule.workStart === selectedTimeSlot) {
-            setSchedule(prev => ({ ...prev, workStart: "09:00" }));
+            setSchedule(prev => ({ ...prev, workStart: "" }));
         } else if (schedule.workEnd === selectedTimeSlot) {
-            setSchedule(prev => ({ ...prev, workEnd: "18:00" }));
+            setSchedule(prev => ({ ...prev, workEnd: "" }));
         } else {
             setCustomGoals(customGoals.filter(g => g.startTime !== selectedTimeSlot));
         }

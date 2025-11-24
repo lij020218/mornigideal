@@ -216,7 +216,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                             {notifications.length === 0 ? (
                                 <div className="p-8 text-center">
                                     <Bell className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                                    <p className="text-muted-foreground text-sm">오늘 예정된 알림이 없습니다</p>
+                                    <p className="text-muted-foreground text-sm">읽지 않은 알림이 없습니다</p>
                                     <p className="text-muted-foreground text-xs mt-1">일정을 추가하고 알림을 받아보세요</p>
                                 </div>
                             ) : (

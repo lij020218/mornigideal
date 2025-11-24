@@ -32,12 +32,25 @@ Generate a structured morning briefing in Korean.
 {
   "greeting": "Warm, personalized morning greeting (e.g., 'Good Morning, [Name]! Ready to grow today?')",
   "yesterdayReview": "1-2 sentences reviewing yesterday's goal completion. Be encouraging but honest. If they missed goals, suggest how to recover today.",
+  "yesterdayStats": {
+    "wakeUp": ${yesterdayGoals.wakeUp || false},
+    "learning": ${yesterdayGoals.learning || 0},
+    "trendBriefing": ${yesterdayGoals.trendBriefing || 0}
+  },
   "trendSummary": [
-    "Bullet point 1: Key insight from yesterday's news relevant to ${userProfile.job}",
-    "Bullet point 2: Another key insight",
-    "Bullet point 3: Final key insight"
+    "Summary of Article 1 (1 sentence)",
+    "Summary of Article 2 (1 sentence)",
+    "Summary of Article 3 (1 sentence)",
+    "Summary of Article 4 (1 sentence)",
+    "Summary of Article 5 (1 sentence)",
+    "Summary of Article 6 (1 sentence)"
   ],
   "todayFocus": "Advice for today's schedule. Highlight the most important task or mindset based on their schedule.",
+  "importantSchedule": {
+    "time": "HH:MM",
+    "title": "Title of the most important schedule item found in Today's Schedule. If none, select the first one or 'Work Start'.",
+    "type": "work" 
+  },
   "closing": "A short, punchy closing statement to start the day with energy."
 }
 
@@ -45,6 +58,7 @@ Generate a structured morning briefing in Korean.
 - Professional yet warm
 - Motivating and actionable
 - Korean language (natural and fluent)
+- Ensure 'trendSummary' has EXACTLY 6 items corresponding to the input trends.
 `;
 
         const result = await model.generateContent(prompt);
