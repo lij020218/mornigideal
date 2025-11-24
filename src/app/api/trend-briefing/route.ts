@@ -1,100 +1,78 @@
 ﻿import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
+import Parser from 'rss-parser';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+const parser = new Parser();
 
-// TOP PRIORITY SOURCES (Tier 1 - Search these FIRST)
-const TOP_PRIORITY_SOURCES = [
-    { name: "BBC Business", urlPattern: "bbc.com/business", category: "글로벌 비즈니스" },
-    { name: "BBC Korean", urlPattern: "bbc.com/korean", category: "한국어 뉴스" },
-    { name: "Reuters", urlPattern: "reuters.com", category: "속보·국제" },
-    { name: "AP News", urlPattern: "apnews.com", category: "속보" },
-    { name: "CNN", urlPattern: "cnn.com", category: "국제·비즈니스" },
-    { name: "TechCrunch", urlPattern: "techcrunch.com", category: "테크·스타트업" }
+// RSS Feed URLs for top priority sources
+const RSS_FEEDS = [
+    // International Sources - News & Business
+    { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business" },
+    { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology" },
+    { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News" },
+    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
+    { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
+    { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories" },
+    { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Tech" },
+
+    // International Sources - Sports
+    { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports" },
+    { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", category: "Sports" },
+    { name: "Reuters Sports", url: "http://feeds.reuters.com/reuters/worldOfSport", category: "Sports" },
+    { name: "Sky Sports", url: "https://www.skysports.com/rss/11095", category: "Sports" },
+
+    // Korean Sources
+    { name: "한국경제", url: "https://www.hankyung.com/feed/economy", category: "경제" },
+    { name: "한국경제 IT", url: "https://www.hankyung.com/feed/it", category: "IT" },
+    { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제" },
+    { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제" },
+    { name: "매일경제 증권", url: "https://www.mk.co.kr/rss/50200011/", category: "증권" },
 ];
 
-// PREMIUM SOURCES (Tier 2 - Search if Tier 1 doesn't have enough)
-const PREMIUM_SOURCES = [
-    // Economic & Business
-    { name: "Bloomberg", urlPattern: "bloomberg.com", category: "경제·비즈니스" },
-    { name: "Financial Times", urlPattern: "ft.com", category: "경제·금융" },
-    { name: "The Wall Street Journal", urlPattern: "wsj.com", category: "비즈니스" },
-    { name: "The Economist", urlPattern: "economist.com", category: "경제·정책" },
+interface RSSArticle {
+    title: string;
+    link: string;
+    pubDate?: string;
+    contentSnippet?: string;
+    sourceName: string;
+}
 
-    // Global News
-    { name: "BBC", urlPattern: "bbc.com", category: "국제" },
+// Fetch articles from RSS feeds
+async function fetchRSSArticles(): Promise<RSSArticle[]> {
+    const articles: RSSArticle[] = [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // US Major
-    { name: "The New York Times", urlPattern: "nytimes.com", category: "종합" },
-    { name: "The Washington Post", urlPattern: "washingtonpost.com", category: "정치·사회" },
+    console.log('[RSS] Fetching from', RSS_FEEDS.length, 'RSS feeds...');
 
-    // Asia
-    { name: "Nikkei Asia", urlPattern: "asia.nikkei.com", category: "아시아 경제" },
-    { name: "South China Morning Post", urlPattern: "scmp.com", category: "아시아·중국" },
+    for (const feed of RSS_FEEDS) {
+        try {
+            const feedData = await parser.parseURL(feed.url);
+            console.log(`[RSS] Fetched ${feedData.items?.length || 0} items from ${feed.name}`);
 
-    // Tech & Startup
-    { name: "Wired", urlPattern: "wired.com", category: "기술·문화" },
-    { name: "The Information", urlPattern: "theinformation.com", category: "테크·인사이트" }
-];
+            feedData.items?.forEach((item) => {
+                const pubDate = item.pubDate ? new Date(item.pubDate) : null;
 
-// JSON parser
-function cleanAndParseJSON(text: string): any {
-    let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    const firstBrace = cleanText.indexOf('{');
-    const firstBracket = cleanText.indexOf('[');
-
-    let start = -1;
-    let openChar = '';
-    let closeChar = '';
-
-    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-        start = firstBrace;
-        openChar = '{';
-        closeChar = '}';
-    } else if (firstBracket !== -1) {
-        start = firstBracket;
-        openChar = '[';
-        closeChar = ']';
-    }
-
-    if (start !== -1) {
-        let balance = 0;
-        let inString = false;
-        let escapeNext = false;
-
-        for (let i = start; i < cleanText.length; i++) {
-            const char = cleanText[i];
-
-            if (escapeNext) {
-                escapeNext = false;
-                continue;
-            }
-            if (char === '\\') {
-                escapeNext = true;
-                continue;
-            }
-            if (char === '"') {
-                inString = !inString;
-                continue;
-            }
-
-            if (!inString) {
-                if (char === openChar) {
-                    balance++;
-                } else if (char === closeChar) {
-                    balance--;
-                    if (balance === 0) {
-                        const jsonCandidate = cleanText.substring(start, i + 1);
-                        return JSON.parse(jsonCandidate);
-                    }
+                // Only include articles from last 7 days
+                if (pubDate && pubDate >= sevenDaysAgo) {
+                    articles.push({
+                        title: item.title || 'Untitled',
+                        link: item.link || '',
+                        pubDate: item.pubDate,
+                        contentSnippet: item.contentSnippet || item.content,
+                        sourceName: feed.name
+                    });
                 }
-            }
+            });
+        } catch (error) {
+            console.error(`[RSS] Error fetching ${feed.name}:`, error);
         }
     }
 
-    return JSON.parse(cleanText);
+    console.log(`[RSS] Total articles collected: ${articles.length}`);
+    return articles;
 }
 
 export async function GET(request: Request) {
@@ -105,7 +83,7 @@ export async function GET(request: Request) {
         const interests = searchParams.get("interests");
         const forceRefresh = searchParams.get("forceRefresh") === "true";
 
-        // Check cache first - only return if it's from today and not force refreshing
+        // Check cache first
         const cachedData = await getTrendsCache();
         const today = new Date().toISOString().split('T')[0];
 
@@ -121,254 +99,136 @@ export async function GET(request: Request) {
             }
         }
 
-        if (forceRefresh) {
-            console.log('[API] Force refresh requested with interests:', interests);
+        console.log('[API] Generating new daily briefing from RSS feeds...');
+        console.log('[API] Interests:', interests);
+
+        // Step 1: Fetch articles from RSS feeds
+        const rssArticles = await fetchRSSArticles();
+
+        if (rssArticles.length === 0) {
+            return NextResponse.json({ error: "No articles found in RSS feeds" }, { status: 500 });
         }
 
-        console.log('[API] Generating new daily briefing with Google Search...');
-
-        // Use configured Gemini model with Google Search tool
+        // Step 2: Use Gemini to filter and select relevant articles
         const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
-        console.log(`[API] Using model: ${modelName}`);
-
         const model = genAI.getGenerativeModel({
             model: modelName,
-            // @ts-expect-error - googleSearch is valid in latest SDK
-            tools: [{ googleSearch: {} }]
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-
-        // Tier 1: Top Priority Sources
-        const topPrioritySources = TOP_PRIORITY_SOURCES.map(s => s.name);
-        const topPrioritySites = TOP_PRIORITY_SOURCES.map(s => `site:${s.urlPattern}`);
-
-        // Tier 2: Premium Sources (excluding duplicates from Tier 1)
-        const tier1Patterns = TOP_PRIORITY_SOURCES.map(s => s.urlPattern.toLowerCase());
-        const premiumOnlySources = PREMIUM_SOURCES
-            .filter(s => !tier1Patterns.some(pattern => s.urlPattern.toLowerCase().includes(pattern)))
-            .map(s => s.name);
-
-        const jobEnglish = job === "마케터" ? "marketing" : job === "개발자" ? "developer" : "business professional";
-        const jobKorean = job;
+        const articlesForPrompt = rssArticles.slice(0, 80).map((article, index) => ({
+            id: index,
+            title: article.title,
+            source: article.sourceName,
+            snippet: article.contentSnippet?.substring(0, 250),
+            date: article.pubDate
+        }));
 
         const prompt = `
-**TODAY'S DATE:** ${today}
-**USER:** ${job} professional
-${goal ? `**USER GOAL:** ${goal}` : ""}
-${interests ? `**USER INTERESTS:** ${interests}` : ""}
+You are an expert news curator specializing in personalized content for professionals.
 
-**🎯 YOUR MISSION:**
-Find 8-10 recent news articles (after ${dateStr}) from the TOP PRIORITY sources below.
+**AVAILABLE ARTICLES (${articlesForPrompt.length} from last 7 days):**
+${JSON.stringify(articlesForPrompt, null, 2)}
 
-**⚠️ CRITICAL: YOU MUST USE THESE EXACT SOURCES**
+**USER PROFILE:**
+- **직업 (Job):** ${job}
+- **목표 (Goal):** ${goal || "전문성 향상"}
+- **관심사 (Interests):** ${interests || "비즈니스, 기술, 전략"}
+- **언어 (Language):** 한국어 (Korean)
 
-**TOP PRIORITY SOURCES (YOU MUST SEARCH THESE):**
-1. Reuters (reuters.com)
-2. AP News (apnews.com)
-3. BBC Business (bbc.com/business)
-4. BBC Korean (bbc.com/korean)
-5. CNN (cnn.com)
-6. TechCrunch (techcrunch.com)
+**YOUR MISSION:**
+Select exactly 6 articles that are PERFECTLY tailored to this user's profile.
 
-**📍 MANDATORY SEARCH QUERIES:**
+**SELECTION CRITERIA (in priority order):**
 
-Execute these EXACT Google searches WITH site: filters:
+1. **관심사 매칭 (Interest Match) - 40% weight**
+   - MUST include at least 3 articles directly related to: ${interests || ""}
+   - ${interests ? interests.split(',').map(i => `Articles about "${i.trim()}" are HIGH PRIORITY`).join('\n   - ') : ""}
 
-1. site:reuters.com (AI OR technology${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
-2. site:apnews.com (AI OR business${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
-3. site:bbc.com/business (AI OR technology OR business) after:${dateStr}
-4. site:bbc.com/korean (인공지능 OR 기술 OR 비즈니스${interests ? ` OR ${interests}` : ""}) after:${dateStr}
-5. site:cnn.com (AI OR technology OR business) after:${dateStr}
-6. site:techcrunch.com (AI OR startup OR technology${interests ? ` OR ${interests.split(',')[0]?.trim()}` : ""}) after:${dateStr}
+2. **직무 관련성 (Job Relevance) - 30% weight**
+   - How valuable is this for a ${job}?
+   - Will it help them in their daily work?
+   - Does it provide actionable insights for ${job}?
 
-${interests ? `**INTEREST-SPECIFIC SEARCHES:**
-${interests.split(',').map(interest => `- site:reuters.com "${interest.trim()}" after:${dateStr}
-- site:techcrunch.com "${interest.trim()}" after:${dateStr}`).join('\n')}
-` : ""}
+3. **목표 정렬 (Goal Alignment) - 20% weight**
+   - ${goal ? `Does it support their goal: "${goal}"?` : "Does it support professional growth?"}
 
-**📊 SELECTION RULES:**
+4. **다양성 (Diversity) - 10% weight**
+   - Mix of topics: business, tech, innovation, sports, finance
+   - Mix of sources: global (Reuters, BBC, CNN) + Korean (한국경제, 조선일보)
 
-1. **MANDATORY**: Select 8-10 articles
-2. **MANDATORY**: At least 6-7 articles MUST be from TOP PRIORITY sources (Reuters, AP News, BBC, CNN, TechCrunch)
-3. **ALLOWED**: 1-2 articles can be from: Bloomberg, Financial Times, New York Times, WSJ
-4. Published after ${dateStr}
-5. Diverse topics
-${interests ? `6. At least 3-4 articles about: ${interests}` : ""}
+**PERSONALIZATION RULES:**
+✓ Translate ALL titles to clear, natural Korean
+✓ Write summaries explaining **WHY** this matters to a ${job}
+✓ Focus on practical value and actionable insights
+✓ Use professional but accessible language
+✓ Emphasize how this helps achieve: ${goal || "professional excellence"}
 
-**� OUTPUT FORMAT (JSON):**
+**OUTPUT (JSON):**
 {
-  "briefings": [
+  "selectedArticles": [
     {
-      "title": "Korean translation",
-      "category": "AI | Business | Tech | Finance | Strategy | Innovation",
-      "summary": "Korean summary (2-3 sentences)",
-      "sourceName": "EXACT source name: 'Reuters' OR 'AP News' OR 'BBC Business' OR 'BBC Korean' OR 'CNN' OR 'TechCrunch'",
-      "sourceUrl": "Full HTTPS URL",
-      "publishedDate": "YYYY-MM-DD",
-      "relevance": "Korean relevance (1 sentence)"
+      "id": <article id>,
+      "title_korean": "명확하고 구체적인 한국어 제목",
+      "category": "AI | Business | Tech | Finance | Strategy | Innovation | Sports",
+      "summary_korean": "${job}에게 이 기사가 왜 중요한지 2-3문장으로 설명. ${interests ? `특히 ${interests} 관련하여` : ''}",
+      "relevance_korean": "${job}로서 이 기사로부터 얻을 수 있는 구체적인 가치 한 문장",
+      "interest_match_tags": ["${interests ? interests.split(',')[0]?.trim() : 'business'}"], 
+      "relevance_score": <1-10, how relevant to this user>
     }
   ]
 }
 
-**🚨 CRITICAL REQUIREMENTS:**
-✓ Use the EXACT site: filters listed above
-✓ sourceName MUST be one of: Reuters, AP News, BBC Business, BBC Korean, CNN, TechCrunch (for top priority)
-✓ MINIMUM 6 articles from top priority sources
-✓ Real URLs from Google Search ONLY
-✓ All dates after ${dateStr}
+**CRITICAL:**
+- Select the 6 MOST RELEVANT articles for THIS SPECIFIC ${job}
+- ${interests ? `AT LEAST 3 must match interests: ${interests}` : ""}
+- All content in natural, professional Korean
+- Focus on actionable value
 
-**START NOW** - Search Reuters, AP News, BBC, CNN, TechCrunch with site: filters.`;
+Start now.`;
 
-        // Retry logic: Keep trying until we get at least 2 top priority articles
-        const MAX_RETRIES = 5;
-        const MIN_TOP_PRIORITY = 2;
-        let finalBriefings: any[] = [];
-        let attempt = 0;
 
-        // Define helper functions once (used in loop and after)
-        const isTopPriority = (item: any) => {
-            const url = (item?.sourceUrl || "").toLowerCase();
-            const sourceName = (item?.sourceName || "").toLowerCase();
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-            return TOP_PRIORITY_SOURCES.some((s) => {
-                const pattern = s.urlPattern.toLowerCase();
-                const name = s.name.toLowerCase();
-                return url.includes(pattern) || sourceName.includes(name);
-            });
-        };
-
-        const isPremium = (item: any) => {
-            const url = (item?.sourceUrl || "").toLowerCase();
-            const sourceName = (item?.sourceName || "").toLowerCase();
-
-            return PREMIUM_SOURCES.some((s) => {
-                const pattern = s.urlPattern.toLowerCase();
-                const name = s.name.toLowerCase();
-                return url.includes(pattern) || sourceName.includes(name);
-            });
-        };
-
-        while (attempt < MAX_RETRIES) {
-            attempt++;
-            console.log(`[API] Attempt ${attempt}/${MAX_RETRIES} to fetch briefings...`);
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            console.log(`[API] Gemini response received. Length: ${text.length}`);
-
-            // Log grounding metadata to verify search was used
-            if (response.candidates && response.candidates[0].groundingMetadata) {
-                console.log('[API] ✅ Google Search was used! Grounding metadata present.');
-            } else {
-                console.warn('[API] ⚠️ No grounding metadata - search might not have been performed.');
-            }
-
-            let data;
-            try {
-                data = cleanAndParseJSON(text);
-            } catch (parseError) {
-                console.error(`[API] Attempt ${attempt}: Failed to parse JSON`, parseError);
-                if (attempt < MAX_RETRIES) {
-                    console.log('[API] Retrying...');
-                    continue;
-                } else {
-                    return NextResponse.json({ error: "Failed to parse briefings" }, { status: 500 });
-                }
-            }
-
-            const briefings = data.briefings || [];
-
-            // DEBUG: Log all sources returned to understand matching issues
-            console.log(`[API] DEBUG: Received ${briefings.length} articles from Gemini:`);
-            briefings.forEach((item: any, index: number) => {
-                console.log(`  ${index + 1}. Source: "${item.sourceName}" | URL: ${item.sourceUrl}`);
-            });
-
-            // Separate articles by priority
-            const topPriorityBriefings = briefings.filter(isTopPriority);
-            const premiumBriefings = briefings.filter((item: any) => !isTopPriority(item) && isPremium(item));
-            const otherBriefings = briefings.filter((item: any) => !isTopPriority(item) && !isPremium(item));
-
-            console.log(`[API] Attempt ${attempt}: Top Priority=${topPriorityBriefings.length}, Premium=${premiumBriefings.length}, Other=${otherBriefings.length}`);
-
-            // Check if we have at least 2 top priority articles
-            if (topPriorityBriefings.length >= MIN_TOP_PRIORITY) {
-                console.log(`[API] ✅ Success! Found ${topPriorityBriefings.length} top priority articles (min: ${MIN_TOP_PRIORITY})`);
-
-                // Build final selection: prioritize top sources
-                finalBriefings = [];
-
-                // Take at least 4 from top priority (or all if less than 4)
-                const topCount = Math.min(topPriorityBriefings.length, 6);
-                finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
-
-                // If we need more, add premium sources
-                if (finalBriefings.length < 6) {
-                    const needed = 6 - finalBriefings.length;
-                    finalBriefings.push(...premiumBriefings.slice(0, needed));
-                }
-
-                // If still need more, add other sources
-                if (finalBriefings.length < 6) {
-                    const needed = 6 - finalBriefings.length;
-                    finalBriefings.push(...otherBriefings.slice(0, needed));
-                }
-
-                // Trim to 6
-                finalBriefings = finalBriefings.slice(0, 6);
-
-                console.log(`[API] Final selection: ${finalBriefings.length} articles (${finalBriefings.filter(isTopPriority).length} from top priority)`);
-                break; // Success! Exit retry loop
-            } else {
-                console.log(`[API] ⚠️ Attempt ${attempt}: Only ${topPriorityBriefings.length} top priority articles (min: ${MIN_TOP_PRIORITY}). Retrying...`);
-                if (attempt >= MAX_RETRIES) {
-                    console.log('[API] ⚠️ Max retries reached. Using best available results.');
-                    // Use whatever we have
-                    finalBriefings = [];
-                    const topCount = Math.min(topPriorityBriefings.length, 6);
-                    finalBriefings.push(...topPriorityBriefings.slice(0, topCount));
-
-                    if (finalBriefings.length < 6) {
-                        const needed = 6 - finalBriefings.length;
-                        finalBriefings.push(...premiumBriefings.slice(0, needed));
-                    }
-
-                    if (finalBriefings.length < 6) {
-                        const needed = 6 - finalBriefings.length;
-                        finalBriefings.push(...otherBriefings.slice(0, needed));
-                    }
-
-                    finalBriefings = finalBriefings.slice(0, 6);
-                }
-            }
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (parseError) {
+            console.error("[API] Failed to parse Gemini response", parseError);
+            return NextResponse.json({ error: "Failed to process articles" }, { status: 500 });
         }
 
-        if (!Array.isArray(finalBriefings) || finalBriefings.length === 0) {
-            return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
+        const selectedArticles = data.selectedArticles || [];
+
+        if (selectedArticles.length === 0) {
+            return NextResponse.json({ error: "No relevant articles found" }, { status: 500 });
         }
 
-        console.log(`[API] Final selection: ${finalBriefings.length} articles (${finalBriefings.filter(isTopPriority).length} from top priority)`);
+        // Step 3: Map selected articles back to original RSS articles
+        const trends = selectedArticles.map((selected: any) => {
+            const originalArticle = rssArticles[selected.id];
+            const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
 
-        const trends = finalBriefings.map((item: any) => ({
-            id: generateTrendId(item.title),
-            title: item.title,
-            category: item.category || "General",
-            summary: item.summary,
-            time: item.publishedDate || today,
-            imageColor: "bg-blue-500/20",
-            originalUrl: item.sourceUrl,
-            imageUrl: "",
-            source: item.sourceName,
-            relevance: item.relevance
-        }));
+            return {
+                id: generateTrendId(selected.title_korean),
+                title: selected.title_korean,
+                category: selected.category || "General",
+                summary: selected.summary_korean,
+                time: pubDate,
+                imageColor: "bg-blue-500/20",
+                originalUrl: originalArticle?.link || "",
+                imageUrl: "",
+                source: originalArticle?.sourceName || "Unknown",
+                relevance: selected.relevance_korean
+            };
+        });
 
-        // Save to cache - this will be today's briefing
-        await saveTrendsCache(trends, true); // Clear old trends
+        console.log(`[API] Selected ${trends.length} articles from RSS feeds`);
+
+        // Save to cache
+        await saveTrendsCache(trends, true);
 
         return NextResponse.json({
             trends,
@@ -398,7 +258,7 @@ export async function POST(request: Request) {
             }
         }
 
-        const modelName = process.env.GEMINI_MODEL || "gemini-3-pro-preview";
+        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
         const model = genAI.getGenerativeModel({
             model: modelName,
             generationConfig: { responseMimeType: "application/json" }
@@ -454,11 +314,10 @@ Write in Korean. Be insightful, practical, and tailored to ${level} ${job}.`;
 
         let detail;
         try {
-            detail = cleanAndParseJSON(text);
+            detail = JSON.parse(text);
         } catch (e) {
             console.error("Failed to parse detail JSON", e);
-            const simpleClean = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            detail = JSON.parse(simpleClean);
+            return NextResponse.json({ error: "Failed to generate detail" }, { status: 500 });
         }
 
         // Cache the detail
