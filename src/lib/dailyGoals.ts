@@ -39,6 +39,12 @@ export function getDailyGoals(): DailyGoals {
         const { date, goals }: StoredGoals = JSON.parse(stored);
         // Reset if it's a new day
         if (date !== getTodayString()) {
+            // Archive yesterday's goals before resetting
+            localStorage.setItem("previous_daily_goals", JSON.stringify({
+                date: date,
+                goals: goals
+            }));
+
             localStorage.removeItem(STORAGE_KEY);
             return getDefaultGoals();
         }
@@ -46,6 +52,20 @@ export function getDailyGoals(): DailyGoals {
         return { ...getDefaultGoals(), ...goals };
     } catch {
         return getDefaultGoals();
+    }
+}
+
+export function getPreviousDailyGoals(): DailyGoals | null {
+    if (typeof window === "undefined") return null;
+
+    const stored = localStorage.getItem("previous_daily_goals");
+    if (!stored) return null;
+
+    try {
+        const { goals } = JSON.parse(stored);
+        return goals;
+    } catch {
+        return null;
     }
 }
 

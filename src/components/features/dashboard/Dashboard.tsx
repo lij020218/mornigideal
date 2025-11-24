@@ -14,6 +14,7 @@ import { NotificationDropdown } from "./NotificationDropdown";
 import { requestNotificationPermission, getTodayCompletions } from "@/lib/scheduleNotifications";
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
+import { DailyBriefingModal } from "./DailyBriefingModal";
 
 interface DashboardProps {
     username: string;
@@ -357,8 +358,99 @@ export function Dashboard({ username }: DashboardProps) {
         }
     };
 
+    const [showDailyBriefing, setShowDailyBriefing] = useState(false);
+    const [dailyBriefingData, setDailyBriefingData] = useState<any>(null);
+    const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
+
+    // ... (existing helper functions)
+
+    // Daily Briefing Trigger Logic
+    useEffect(() => {
+        const checkAndTriggerBriefing = async () => {
+            if (!userProfile?.schedule?.wakeUp) return;
+
+            const now = new Date();
+            const todayStr = now.toDateString();
+            const lastBriefingDate = localStorage.getItem("last_briefing_date");
+
+            // 1. Check if already shown today
+            if (lastBriefingDate === todayStr) return;
+
+            // 2. Check if it's past wake-up time
+            const [wakeH, wakeM] = userProfile.schedule.wakeUp.split(':').map(Number);
+            const wakeTime = new Date(now);
+            wakeTime.setHours(wakeH, wakeM, 0, 0);
+
+            if (now >= wakeTime) {
+                // Trigger Briefing
+                setIsGeneratingBriefing(true);
+                setShowDailyBriefing(true); // Show modal immediately with loading state
+
+                try {
+                    // Get yesterday's date string (YYYY-MM-DD) for fetching history
+                    const yesterday = new Date(now);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+                    // Fetch yesterday's trends (or today's if yesterday's not found/relevant)
+                    // Note: In a real scenario, we'd fetch from a history API. 
+                    // For now, we'll try to get cached trends from the API which handles caching.
+                    // If we want strictly "yesterday's", we need the history endpoint.
+                    // Let's use the current trends as "latest news" for now, or implement history fetch if critical.
+                    // User asked for "yesterday's content", implying what happened while they slept.
+                    // We'll try to fetch the latest trends first.
+                    const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
+                    const trendsData = await trendsResponse.json();
+
+                    const previousGoals = getDailyGoals(); // Actually we want previous, but getDailyGoals handles the rotation. 
+                    // If we are strictly after wake up, getDailyGoals might have already reset if the user visited earlier?
+                    // Actually getDailyGoals resets on date change. 
+                    // We need the *archived* goals from yesterday.
+                    // We need to import getPreviousDailyGoals.
+                    const { getPreviousDailyGoals } = await import("@/lib/dailyGoals");
+                    const yesterdayGoals = getPreviousDailyGoals();
+
+                    const response = await fetch("/api/daily-briefing/generate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            userProfile,
+                            yesterdayGoals: yesterdayGoals || {},
+                            todaySchedule: userProfile.schedule,
+                            yesterdayTrends: trendsData.trends || []
+                        }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        setDailyBriefingData(data);
+                        localStorage.setItem("last_briefing_date", todayStr);
+                    } else {
+                        setShowDailyBriefing(false); // Hide if failed
+                    }
+                } catch (error) {
+                    console.error("Error generating briefing:", error);
+                    setShowDailyBriefing(false);
+                } finally {
+                    setIsGeneratingBriefing(false);
+                }
+            }
+        };
+
+        const interval = setInterval(checkAndTriggerBriefing, 60000); // Check every minute
+        checkAndTriggerBriefing(); // Check on mount
+
+        return () => clearInterval(interval);
+    }, [userProfile]);
+
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
+            <DailyBriefingModal
+                isOpen={showDailyBriefing}
+                onClose={() => setShowDailyBriefing(false)}
+                data={dailyBriefingData}
+                isLoading={isGeneratingBriefing}
+            />
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
 
             {/* Header */}

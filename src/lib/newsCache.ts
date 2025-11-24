@@ -67,6 +67,30 @@ export async function getTrendsCache(): Promise<{ trends: any[]; lastUpdated: st
 }
 
 /**
+ * Get cached trends for a specific date (history)
+ */
+export async function getTrendsHistory(date: string): Promise<any[] | null> {
+    try {
+        const userEmail = await getUserEmail();
+        if (!userEmail) return null;
+
+        const { data, error } = await supabase
+            .from('trends_cache')
+            .select('trends')
+            .eq('email', userEmail)
+            .eq('date', date)
+            .single();
+
+        if (error || !data) return null;
+
+        return data.trends as any[];
+    } catch (error) {
+        console.error('[NewsCache] Error fetching trends history:', error);
+        return null;
+    }
+}
+
+/**
  * Save trends to cache
  */
 export async function saveTrendsCache(trends: any[], clearExisting: boolean = false): Promise<void> {
