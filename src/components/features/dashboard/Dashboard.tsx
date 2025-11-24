@@ -362,6 +362,69 @@ export function Dashboard({ username }: DashboardProps) {
     const [dailyBriefingData, setDailyBriefingData] = useState<any>(null);
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
 
+    // Load or generate daily briefing (with caching)
+    const loadOrGenerateBriefing = async () => {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const cacheKey = `daily_briefing_${today}`;
+
+        // Check localStorage first
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const data = JSON.parse(cached);
+                setDailyBriefingData(data);
+                setShowDailyBriefing(true);
+                return;
+            } catch (e) {
+                console.error('Failed to parse cached briefing', e);
+                // Continue to generate new briefing if cache is corrupted
+            }
+        }
+
+        // Generate new briefing
+        if (!userProfile) return;
+
+        setIsGeneratingBriefing(true);
+        setShowDailyBriefing(true);
+
+        try {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
+            const trendsData = await trendsResponse.json();
+
+            const { getPreviousDailyGoals } = await import("@/lib/dailyGoals");
+            const yesterdayGoals = getPreviousDailyGoals();
+
+            const response = await fetch("/api/daily-briefing/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userProfile,
+                    yesterdayGoals: yesterdayGoals || {},
+                    todaySchedule: userProfile.schedule,
+                    yesterdayTrends: trendsData.trends || []
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setDailyBriefingData(data);
+                // Save to localStorage
+                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem("last_briefing_date", today);
+            } else {
+                setShowDailyBriefing(false);
+            }
+        } catch (error) {
+            console.error("Error generating briefing:", error);
+            setShowDailyBriefing(false);
+        } finally {
+            setIsGeneratingBriefing(false);
+        }
+    };
+
     // ... (existing helper functions)
 
     // Daily Briefing Trigger Logic
@@ -370,7 +433,7 @@ export function Dashboard({ username }: DashboardProps) {
             if (!userProfile?.schedule?.wakeUp) return;
 
             const now = new Date();
-            const todayStr = now.toDateString();
+            const todayStr = now.toISOString().split('T')[0]; // Use ISO format for consistency
             const lastBriefingDate = localStorage.getItem("last_briefing_date");
 
             // 1. Check if already shown today
@@ -382,58 +445,8 @@ export function Dashboard({ username }: DashboardProps) {
             wakeTime.setHours(wakeH, wakeM, 0, 0);
 
             if (now >= wakeTime) {
-                // Trigger Briefing
-                setIsGeneratingBriefing(true);
-                setShowDailyBriefing(true); // Show modal immediately with loading state
-
-                try {
-                    // Get yesterday's date string (YYYY-MM-DD) for fetching history
-                    const yesterday = new Date(now);
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-                    // Fetch yesterday's trends (or today's if yesterday's not found/relevant)
-                    // Note: In a real scenario, we'd fetch from a history API. 
-                    // For now, we'll try to get cached trends from the API which handles caching.
-                    // If we want strictly "yesterday's", we need the history endpoint.
-                    // Let's use the current trends as "latest news" for now, or implement history fetch if critical.
-                    // User asked for "yesterday's content", implying what happened while they slept.
-                    // We'll try to fetch the latest trends first.
-                    const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
-                    const trendsData = await trendsResponse.json();
-
-                    const previousGoals = getDailyGoals(); // Actually we want previous, but getDailyGoals handles the rotation. 
-                    // If we are strictly after wake up, getDailyGoals might have already reset if the user visited earlier?
-                    // Actually getDailyGoals resets on date change. 
-                    // We need the *archived* goals from yesterday.
-                    // We need to import getPreviousDailyGoals.
-                    const { getPreviousDailyGoals } = await import("@/lib/dailyGoals");
-                    const yesterdayGoals = getPreviousDailyGoals();
-
-                    const response = await fetch("/api/daily-briefing/generate", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            userProfile,
-                            yesterdayGoals: yesterdayGoals || {},
-                            todaySchedule: userProfile.schedule,
-                            yesterdayTrends: trendsData.trends || []
-                        }),
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        setDailyBriefingData(data);
-                        localStorage.setItem("last_briefing_date", todayStr);
-                    } else {
-                        setShowDailyBriefing(false); // Hide if failed
-                    }
-                } catch (error) {
-                    console.error("Error generating briefing:", error);
-                    setShowDailyBriefing(false);
-                } finally {
-                    setIsGeneratingBriefing(false);
-                }
+                // Trigger Briefing using cached function
+                loadOrGenerateBriefing();
             }
         };
 
@@ -553,40 +566,16 @@ export function Dashboard({ username }: DashboardProps) {
                                             <p className="text-sm font-medium text-white">{username}</p>
                                             <p className="text-xs text-muted-foreground truncate">{userProfile?.job || "User"}</p>
                                         </div>
-                                        {/* Temporary Debug Button */}
+                                        {/* Daily Briefing Button */}
                                         <button
                                             onClick={() => {
-                                                setDailyBriefingData({
-                                                    greeting: `Good Morning, ${username}!`,
-                                                    yesterdayReview: "어제는 목표 달성이 조금 부족했네요. 하지만 괜찮습니다! 오늘은 새로운 시작이니까요.",
-                                                    yesterdayStats: {
-                                                        wakeUp: true,
-                                                        learning: 1,
-                                                        trendBriefing: 4
-                                                    },
-                                                    trendSummary: [
-                                                        "테슬라, AI 기반 새로운 마케팅 플랫폼 'Optimus Ads' 공개",
-                                                        "비트코인, 10만 달러 돌파하며 사상 최고가 경신",
-                                                        "애플, 생성형 AI가 탑재된 아이폰 16 시리즈 발표 임박",
-                                                        "삼성전자, 차세대 HBM4 메모리 양산 계획 발표",
-                                                        "구글, 제미나이 2.0 모델 개발자 프리뷰 공개",
-                                                        "오픈AI, 새로운 추론 모델 'o2' 출시 예고"
-                                                    ],
-                                                    todayFocus: "오전 10시 업무 시작 전, 가장 중요한 기획안을 먼저 검토해보세요.",
-                                                    importantSchedule: {
-                                                        time: "10:00",
-                                                        title: "주간 기획 회의",
-                                                        type: "work"
-                                                    },
-                                                    closing: "오늘도 당신의 성장을 응원합니다! 힘찬 하루 되세요!"
-                                                });
-                                                setShowDailyBriefing(true);
+                                                loadOrGenerateBriefing();
                                                 setShowProfileMenu(false);
                                             }}
                                             className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-yellow-400 hover:text-yellow-300 flex items-center gap-3"
                                         >
                                             <Sparkles className="w-4 h-4" />
-                                            브리핑 미리보기 (Debug)
+                                            일일 브리핑
                                         </button>
 
                                         <Link
