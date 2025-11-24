@@ -6,16 +6,29 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.G
 
 // Premium news sources with URL patterns
 const PREMIUM_SOURCES = [
-    { name: "Bloomberg", urlPattern: "https://www.bloomberg.com/news/articles/", category: "경제·비즈니스" },
-    { name: "Financial Times", urlPattern: "https://www.ft.com/content/", category: "경제·금융" },
-    { name: "The Wall Street Journal", urlPattern: "https://www.wsj.com/articles/", category: "비즈니스" },
-    { name: "The Economist", urlPattern: "https://www.economist.com/", category: "경제·정책" },
-    { name: "BBC", urlPattern: "https://www.bbc.com/news/", category: "국제" },
-    { name: "Reuters", urlPattern: "https://www.reuters.com/", category: "속보·국제" },
-    { name: "The New York Times", urlPattern: "https://www.nytimes.com/", category: "종합" },
-    { name: "TechCrunch", urlPattern: "https://techcrunch.com/", category: "테크·스타트업" },
-    { name: "Wired", urlPattern: "https://www.wired.com/story/", category: "기술·문화" },
-    { name: "Nikkei Asia", urlPattern: "https://asia.nikkei.com/", category: "아시아 경제" }
+    // Economic & Business
+    { name: "Bloomberg", urlPattern: "bloomberg.com", category: "경제·비즈니스" },
+    { name: "Financial Times", urlPattern: "ft.com", category: "경제·금융" },
+    { name: "The Wall Street Journal", urlPattern: "wsj.com", category: "비즈니스" },
+    { name: "The Economist", urlPattern: "economist.com", category: "경제·정책" },
+
+    // Global News
+    { name: "BBC", urlPattern: "bbc.com", category: "국제" },
+    { name: "Reuters", urlPattern: "reuters.com", category: "속보·국제" },
+    { name: "AP News", urlPattern: "apnews.com", category: "속보" },
+
+    // US Major
+    { name: "The New York Times", urlPattern: "nytimes.com", category: "종합" },
+    { name: "The Washington Post", urlPattern: "washingtonpost.com", category: "정치·사회" },
+
+    // Asia
+    { name: "Nikkei Asia", urlPattern: "asia.nikkei.com", category: "아시아 경제" },
+    { name: "South China Morning Post", urlPattern: "scmp.com", category: "아시아·중국" },
+
+    // Tech & Startup
+    { name: "TechCrunch", urlPattern: "techcrunch.com", category: "테크·스타트업" },
+    { name: "Wired", urlPattern: "wired.com", category: "기술·문화" },
+    { name: "The Information", urlPattern: "theinformation.com", category: "테크·인사이트" }
 ];
 
 // JSON parser
@@ -121,7 +134,8 @@ export async function GET(request: Request) {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const dateStr = sevenDaysAgo.toISOString().split('T')[0];
 
-        const sourcesInfo = PREMIUM_SOURCES.map(s => `${s.name}`).join(", ");
+        const sourcesList = PREMIUM_SOURCES.map(s => `${s.name} (${s.urlPattern})`).join(", ");
+        const siteFilters = PREMIUM_SOURCES.map(s => `site:${s.urlPattern}`).join(" OR ");
 
         const prompt = `
 **TODAY'S DATE:** ${today}
@@ -132,15 +146,18 @@ ${interests ? `**USER INTERESTS:** ${interests}` : ""}
 **YOUR TASK:**
 Use Google Search to find 6 REAL news articles published in the last 7 days (after ${dateStr}) that are highly relevant for ${job} professionals${interests ? ` and specifically related to these interests: ${interests}` : ""}.
 
+**PRIORITY SOURCES (MUST PRIORITIZE THESE):**
+${sourcesList}
+
 **SEARCH REQUIREMENTS:**
-1. **PREMIUM SOURCES ONLY**: Prioritize these sources: ${sourcesInfo}
+1. **SOURCE QUALITY**: Strongly prioritize the Premium Sources listed above.
 2. **RECENT**: Articles must be published between ${dateStr} and ${today}
 3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development${goal ? `, helping them achieve: "${goal}"` : ""}
 4. **DIVERSE**: Cover different topics - AI, business strategy, market trends, innovation, regulations, etc.
 
 **SEARCH STRATEGY:**
 - Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology"${interests ? `, ${interests.split(',').map(i => `"${i} news"`).join(', ')}` : ""}
-- Add source filters: site:bloomberg.com, site:ft.com, site:techcrunch.com, etc.
+- **CRITICAL**: Include source filters in your search queries: (${siteFilters})
 - Verify publication dates are within last 7 days
 
 **OUTPUT FORMAT (JSON):**
@@ -163,7 +180,7 @@ Return exactly 6 articles in this format:
 **CRITICAL:**
 - Use REAL URLs found via Google Search
 - Verify dates are within last 7 days
-- Prioritize premium sources
+- **Strongly prefer** articles from the Priority Sources list
 - Ensure diversity of topics
 - If user interests are provided, ensure at least 2-3 articles relate to them
 
