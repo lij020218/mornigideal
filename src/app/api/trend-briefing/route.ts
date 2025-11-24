@@ -12,10 +12,17 @@ const RSS_FEEDS = [
     { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business" },
     { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology" },
     { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News" },
-    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
+    { name: "BB Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
     { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
     { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories" },
     { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Tech" },
+
+    // Premium Business Sources
+    { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business" },
+    { name: "Bloomberg Economics", url: "https://feeds.bloomberg.com/economics/news.rss", category: "Economics" },
+    { name: "WSJ World News", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", category: "Business" },
+    { name: "New York Times Economy", url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", category: "Economics" },
+    { name: "New York Times AI", url: "https://www.nytimes.com/svc/collections/v1/publish/spotlight/artificial-intelligence/rss.xml", category: "AI" },
 
     // International Sources - Sports
     { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports" },
@@ -155,7 +162,7 @@ Select exactly 6 articles that are PERFECTLY tailored to this user's profile.
 
 4. **다양성 (Diversity) - 10% weight**
    - Mix of topics: business, tech, innovation, sports, finance
-   - Mix of sources: global (Reuters, BBC, CNN) + Korean (한국경제, 조선일보)
+   - Mix of sources: global (Reuters, BBC, Bloomberg, NYT) + Korean (한국경제, 조선일보)
 
 **PERSONALIZATION RULES:**
 ✓ Translate ALL titles to clear, natural Korean
@@ -186,7 +193,6 @@ Select exactly 6 articles that are PERFECTLY tailored to this user's profile.
 - Focus on actionable value
 
 Start now.`;
-
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
