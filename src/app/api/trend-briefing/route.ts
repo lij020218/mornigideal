@@ -150,7 +150,7 @@ Use Google Search to find 6 REAL news articles published in the last 7 days (aft
 ${sourcesList}
 
 **SEARCH REQUIREMENTS:**
-1. **SOURCE QUALITY**: Strongly prioritize the Premium Sources listed above.
+1. **SOURCE QUALITY**: At least 4 of the 6 articles **must** be from the Priority Sources above; remaining slots may use other reputable sources if needed.
 2. **RECENT**: Articles must be published between ${dateStr} and ${today}
 3. **RELEVANT**: Directly useful for ${job}'s career, industry knowledge, or professional development${goal ? `, helping them achieve: "${goal}"` : ""}
 4. **DIVERSE**: Cover different topics - AI, business strategy, market trends, innovation, regulations, etc.
@@ -158,6 +158,7 @@ ${sourcesList}
 **SEARCH STRATEGY:**
 - Search for: "${job} news", "AI ${job}", "${job} industry trends", "business technology"${interests ? `, ${interests.split(',').map(i => `"${i} news"`).join(', ')}` : ""}
 - **CRITICAL**: Include source filters in your search queries: (${siteFilters})
+- If you cannot find enough priority-source articles, fill the remaining slots with other reputable sources and note them.
 - Verify publication dates are within last 7 days
 
 **OUTPUT FORMAT (JSON):**
@@ -179,8 +180,9 @@ Return exactly 6 articles in this format:
 
 **CRITICAL:**
 - Use REAL URLs found via Google Search
+- Always include full URLs with protocol (https://...)
 - Verify dates are within last 7 days
-- **Strongly prefer** articles from the Priority Sources list
+- **Strongly prefer** articles from the Priority Sources list (min 4 of 6). If fewer are available, clearly note which are non-priority in the sourceName.
 - Ensure diversity of topics
 - If user interests are provided, ensure at least 2-3 articles relate to them
 
@@ -210,13 +212,34 @@ Start searching and curating now.`;
 
         const briefings = data.briefings || [];
 
-        if (!Array.isArray(briefings) || briefings.length === 0) {
+        // Prefer premium sources; if not enough, backfill with others
+        const premiumPatterns = PREMIUM_SOURCES.map(s => s.urlPattern.replace(/^https?:\/\//, "").replace(/^www\./, ""));
+        const isPremiumSource = (item: any) => {
+            const url = item?.sourceUrl || "";
+            const normalized = url.startsWith("http") ? url : `https://${url.replace(/^\/\//, "")}`;
+            try {
+                const host = new URL(normalized).hostname.replace(/^www\./, "");
+                return premiumPatterns.some(pattern => host === pattern || host.endsWith(`.${pattern}`) || host.includes(pattern));
+            } catch {
+                const sourceName = (item?.sourceName || "").toLowerCase();
+                return premiumPatterns.some(pattern => sourceName.includes(pattern.split(".")[0]));
+            }
+        };
+
+        const premiumBriefings = (briefings || []).filter(isPremiumSource);
+        const nonPremiumBriefings = (briefings || []).filter((item: any) => !isPremiumSource(item));
+
+        // Aim for at least 4 premium items; fill remaining slots with others if needed
+        const desiredCount = Math.min(briefings.length, 6);
+        const finalBriefings = [...premiumBriefings, ...nonPremiumBriefings].slice(0, desiredCount);
+
+        if (!Array.isArray(finalBriefings) || finalBriefings.length === 0) {
             return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
         }
 
-        console.log(`[API] Parsed ${briefings.length} briefings`);
+        console.log(`[API] Parsed ${briefings.length} briefings (premium ${premiumBriefings.length}, final ${finalBriefings.length})`);
 
-        const trends = briefings.map((item: any) => ({
+        const trends = finalBriefings.map((item: any) => ({
             id: generateTrendId(item.title),
             title: item.title,
             category: item.category || "General",
