@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, X, Loader2, Sparkles } from "lucide-react";
+import { Mic, MicOff, X, Loader2, Sparkles, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 // @ts-ignore - The package is installed but types might be missing or experimental
 import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
@@ -11,7 +11,14 @@ export function JarvisAssistant() {
     const [isOpen, setIsOpen] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [transcript, setTranscript] = useState("");
+    const [reply, setReply] = useState("");
     const sessionRef = useRef<any>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<BlobPart[]>([]);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const connectToRealtime = async () => {
         try {
@@ -78,6 +85,94 @@ export function JarvisAssistant() {
         }
     };
 
+    // Mic recording -> send to voice API
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            audioChunksRef.current = [];
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            recorder.onstop = async () => {
+                const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+                await sendAudio(blob);
+                stream.getTracks().forEach((t) => t.stop());
+            };
+
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setIsRecording(true);
+        } catch (error) {
+            console.error("Mic access error:", error);
+            alert("마이크 접근에 실패했어요. 권한을 확인해주세요.");
+        }
+    };
+
+    const stopRecording = () => {
+        mediaRecorderRef.current?.stop();
+        setIsRecording(false);
+    };
+
+    const sendAudio = async (blob: Blob) => {
+        setIsProcessing(true);
+        setTranscript("");
+        setReply("");
+        try {
+            const formData = new FormData();
+            formData.append("audio", blob, "voice.webm");
+
+            const res = await fetch("/api/openai/voice", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) {
+                throw new Error("Voice API error");
+            }
+
+            const data = await res.json();
+            setTranscript(data.transcript || "");
+            setReply(data.reply || "");
+
+            if (data.audio) {
+                const audioBlob = b64ToBlob(data.audio, data.audioContentType || "audio/mpeg");
+                const url = URL.createObjectURL(audioBlob);
+                if (!audioRef.current) {
+                    audioRef.current = new Audio();
+                }
+                audioRef.current.src = url;
+                audioRef.current.play().catch(() => {
+                    console.warn("Autoplay blocked; user interaction required.");
+                });
+            }
+        } catch (error) {
+            console.error("Failed to process audio:", error);
+            alert("음성 처리에 실패했어요. 다시 시도해 주세요.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const b64ToBlob = (b64Data: string, contentType = "audio/mpeg") => {
+        const byteCharacters = atob(b64Data);
+        const byteArrays = [];
+        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+            const slice = byteCharacters.slice(offset, offset + 512);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            byteArrays.push(byteArray);
+        }
+        return new Blob(byteArrays, { type: contentType });
+    };
+
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4">
             <AnimatePresence>
@@ -114,8 +209,64 @@ export function JarvisAssistant() {
                             </div>
 
                             <p className="text-sm text-center text-muted-foreground">
-                                {isConnecting ? "Connecting to secure channel..." : isConnected ? "Listening..." : "Initializing..."}
+                                {isConnecting
+                                    ? "Connecting to secure channel..."
+                                    : isConnected
+                                        ? isRecording
+                                            ? "Recording... 말씀이 끝나면 버튼을 다시 눌러주세요."
+                                            : isProcessing
+                                                ? "응답 생성 중..."
+                                                : "Tap mic to talk"
+                                        : "Initializing..."}
                             </p>
+
+                            <div className="w-full space-y-2">
+                                <div className="text-xs text-muted-foreground break-words">
+                                    {transcript && (
+                                        <p className="mb-1">
+                                            <span className="font-semibold text-white">사용자:</span> {transcript}
+                                        </p>
+                                    )}
+                                    {reply && (
+                                        <p>
+                                            <span className="font-semibold text-white">Jarvis:</span> {reply}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    variant={isRecording ? "destructive" : "secondary"}
+                                    size="sm"
+                                    onClick={isRecording ? stopRecording : startRecording}
+                                    disabled={isProcessing || isConnecting}
+                                    className="flex items-center gap-2"
+                                >
+                                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                                    {isRecording ? "녹음 중지" : "말하기"}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (audioRef.current) {
+                                            audioRef.current.pause();
+                                            audioRef.current.currentTime = 0;
+                                        }
+                                        if (reply && audioRef.current?.src) {
+                                            audioRef.current.play().catch(() => {
+                                                console.warn("Replay blocked");
+                                            });
+                                        }
+                                    }}
+                                    disabled={!reply}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Volume2 className="w-4 h-4" />
+                                    다시 듣기
+                                </Button>
+                            </div>
                         </div>
                     </motion.div>
                 )}
