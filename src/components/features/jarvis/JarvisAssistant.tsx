@@ -32,6 +32,7 @@ export function JarvisAssistant() {
     const [isRecording, setIsRecording] = useState(false);
     const [assistantText, setAssistantText] = useState("");
     const [userText, setUserText] = useState("");
+    const intentLockRef = useRef(false);
 
     const wsRef = useRef<WebSocket | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -62,7 +63,7 @@ export function JarvisAssistant() {
             if (!secret) throw new Error("No client secret value");
 
             const ws = new WebSocket(
-                `wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28&client_secret=${encodeURIComponent(
+                `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime&client_secret=${encodeURIComponent(
                     secret
                 )}`,
                 ["oai-realtime"]
@@ -70,7 +71,7 @@ export function JarvisAssistant() {
             wsRef.current = ws;
 
             ws.onopen = () => {
-                // Authenticate
+                // Configure session
                 ws.send(
                     JSON.stringify({
                         type: "session.update",
@@ -96,7 +97,9 @@ export function JarvisAssistant() {
                         setAssistantText((prev) => prev + (msg.delta || ""));
                     }
                     if (msg.type === "response.input_text") {
-                        setUserText(msg.text || "");
+                        const text = msg.text || "";
+                        setUserText(text);
+                        triggerIntent(text);
                     }
                     if (msg.type === "response.output_audio.delta" && msg.delta) {
                         const audio = Uint8Array.from(atob(msg.delta), (c) => c.charCodeAt(0));
@@ -153,6 +156,28 @@ export function JarvisAssistant() {
         source.buffer = buffer;
         source.connect(ctx.destination);
         source.start();
+    };
+
+    const triggerIntent = async (text: string) => {
+        if (!text || intentLockRef.current) return;
+        intentLockRef.current = true;
+        try {
+            const res = await fetch("/api/openai/intent", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const reply = data.reply || "";
+                setAssistantText("");
+                wsRef.current?.send(JSON.stringify({ type: "input_text", text: reply }));
+            }
+        } catch (err) {
+            console.error("Intent trigger error", err);
+        } finally {
+            intentLockRef.current = false;
+        }
     };
 
     const startRecording = async () => {

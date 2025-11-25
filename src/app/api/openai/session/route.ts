@@ -16,7 +16,7 @@ export async function POST() {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                model: "gpt-realtime-2025-08-28",
+                model: "gpt-4o-realtime",
                 voice: "alloy",
             }),
         });
