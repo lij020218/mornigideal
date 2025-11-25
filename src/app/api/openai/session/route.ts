@@ -9,7 +9,7 @@ export async function POST() {
             );
         }
 
-        const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+        const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -17,7 +17,6 @@ export async function POST() {
             },
             body: JSON.stringify({
                 model: "gpt-4o-realtime-preview-2024-12-17",
-                voice: "verse",
             }),
         });
 
@@ -31,7 +30,8 @@ export async function POST() {
 
         const data = await response.json();
 
-        // Return the ephemeral client secret
+        // Return the ephemeral client secret value
+        // The response structure is { client_secret: { value: "ek_...", ... } }
         return NextResponse.json({
             client_secret: data.client_secret,
         });
