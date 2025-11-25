@@ -58,7 +58,7 @@ export function JarvisAssistant() {
             const tokenRes = await fetch("/api/openai/session", { method: "POST" });
             if (!tokenRes.ok) throw new Error("Failed to get client secret");
             const { client_secret } = await tokenRes.json();
-            const secret = client_secret?.value;
+            const secret = typeof client_secret === "string" ? client_secret : client_secret?.value;
             if (!secret) throw new Error("No client secret value");
 
             const ws = new WebSocket(
