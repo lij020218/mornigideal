@@ -17,6 +17,13 @@ export function JarvisAssistant() {
     const audioChunksRef = useRef<BlobPart[]>([]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    const disconnect = () => {
+        if (isRecording) {
+            stopRecording();
+        }
+        setIsOpen(false);
+    };
+
     const toggleAssistant = () => {
         if (isOpen) {
             // stop recording if active
