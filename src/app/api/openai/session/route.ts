@@ -16,7 +16,7 @@ export async function POST() {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                model: "gpt-4o-realtime-preview-2024-12-17",
+                model: "gpt-realtime-2025-08-28",
                 // Optional: limit lifetime (seconds). Default 300 if omitted.
                 // expires_in: 300,
             }),

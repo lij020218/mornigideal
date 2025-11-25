@@ -62,7 +62,7 @@ export function JarvisAssistant() {
             if (!secret) throw new Error("No client secret value");
 
             const ws = new WebSocket(
-                `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17&client_secret=${encodeURIComponent(
+                `wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28&client_secret=${encodeURIComponent(
                     secret
                 )}`,
                 ["oai-realtime"]
