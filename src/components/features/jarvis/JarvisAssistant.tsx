@@ -2,86 +2,31 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, X, Loader2, Sparkles, Volume2 } from "lucide-react";
+import { Mic, MicOff, X, Loader2, Sparkles, Volume2, Link2Off } from "lucide-react";
 import { Button } from "@/components/ui/button";
-// @ts-ignore - The package is installed but types might be missing or experimental
-import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
 
 export function JarvisAssistant() {
     const [isOpen, setIsOpen] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
+    const [isConnected, setIsConnected] = useState(true); // We use our own voice API, no realtime socket needed
     const [isConnecting, setIsConnecting] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [transcript, setTranscript] = useState("");
     const [reply, setReply] = useState("");
-    const sessionRef = useRef<any>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<BlobPart[]>([]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    const connectToRealtime = async () => {
-        try {
-            setIsConnecting(true);
-
-            // 1. Get ephemeral token from our server
-            const tokenResponse = await fetch("/api/openai/session", {
-                method: "POST",
-            });
-
-            if (!tokenResponse.ok) {
-                throw new Error("Failed to get ephemeral token");
-            }
-
-            const data = await tokenResponse.json();
-            const ephemeralKey = data.client_secret.value; // Note: client_secret is an object { value: "...", expires_at: ... }
-
-            // 2. Initialize Agent and Session
-            const agent = new RealtimeAgent({
-                name: "Jarvis",
-                instructions: "You are Jarvis, a helpful and intelligent AI assistant for the user's daily productivity. You are concise, professional, and encouraging. You have access to the user's schedule and goals context (simulated for now).",
-            });
-
-            const session = new RealtimeSession(agent);
-            sessionRef.current = session;
-
-            // 3. Connect
-            await session.connect({
-                apiKey: ephemeralKey,
-            });
-
-            setIsConnected(true);
-            console.log("Connected to OpenAI Realtime API");
-
-        } catch (error) {
-            console.error("Failed to connect:", error);
-            alert("Failed to connect to Jarvis. Please try again.");
-            setIsOpen(false);
-        } finally {
-            setIsConnecting(false);
-        }
-    };
-
-    const disconnect = () => {
-        if (sessionRef.current) {
-            // Try to disconnect if method exists, otherwise just nullify
-            try {
-                sessionRef.current.disconnect?.();
-            } catch (e) {
-                console.warn("Disconnect method not found or failed", e);
-            }
-            sessionRef.current = null;
-        }
-        setIsConnected(false);
-        setIsOpen(false);
-    };
-
     const toggleAssistant = () => {
         if (isOpen) {
-            disconnect();
+            // stop recording if active
+            if (isRecording) {
+                stopRecording();
+            }
+            setIsOpen(false);
         } else {
             setIsOpen(true);
-            connectToRealtime();
+            setIsConnected(true);
         }
     };
 
@@ -217,7 +162,7 @@ export function JarvisAssistant() {
                                             : isProcessing
                                                 ? "응답 생성 중..."
                                                 : "Tap mic to talk"
-                                        : "Initializing..."}
+                                        : "음성 서비스를 사용할 수 없습니다"}
                             </p>
 
                             <div className="w-full space-y-2">
@@ -276,11 +221,11 @@ export function JarvisAssistant() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={toggleAssistant}
-                className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 ${isOpen ? "bg-red-500 hover:bg-red-600" : "bg-gradient-to-br from-blue-600 to-purple-600 hover:shadow-blue-500/25"}`}
-            >
-                {isOpen ? (
-                    <X className="w-6 h-6 text-white" />
-                ) : (
+                        className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 ${isOpen ? "bg-red-500 hover:bg-red-600" : "bg-gradient-to-br from-blue-600 to-purple-600 hover:shadow-blue-500/25"}`}
+                    >
+                        {isOpen ? (
+                            <X className="w-6 h-6 text-white" />
+                        ) : (
                     <Sparkles className="w-6 h-6 text-white" />
                 )}
             </motion.button>
