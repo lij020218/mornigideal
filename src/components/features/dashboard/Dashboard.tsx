@@ -15,6 +15,7 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
+import { JarvisAssistant } from "../jarvis/JarvisAssistant";
 
 interface DashboardProps {
     username: string;
@@ -1399,6 +1400,7 @@ export function Dashboard({ username }: DashboardProps) {
                     />
                 )
             }
+            <JarvisAssistant />
         </div >
     );
 }
