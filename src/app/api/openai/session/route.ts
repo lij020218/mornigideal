@@ -9,7 +9,7 @@ export async function POST() {
             );
         }
 
-        const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+        const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -17,25 +17,23 @@ export async function POST() {
             },
             body: JSON.stringify({
                 model: "gpt-realtime-2025-08-28",
-                // Optional: limit lifetime (seconds). Default 300 if omitted.
-                // expires_in: 300,
+                voice: "alloy",
             }),
         });
 
         if (!response.ok) {
-            const error = await response.json();
+            const error = await response.text();
+            console.error("[OpenAI Session] Failed:", error);
             return NextResponse.json(
-                { error: error.error?.message || "Failed to create session" },
-                { status: response.status }
+                { error: error || "Failed to create session" },
+                { status: 400 }
             );
         }
 
         const data = await response.json();
 
-        // Return the ephemeral client secret value
-        // The response structure is { client_secret: { value: "ek_...", ... } }
         return NextResponse.json({
-            client_secret: data.client_secret,
+            client_secret: data.client_secret?.value || data.client_secret,
         });
 
     } catch (error) {
