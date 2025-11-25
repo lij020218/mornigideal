@@ -17,6 +17,8 @@ export async function POST() {
             },
             body: JSON.stringify({
                 model: "gpt-4o-realtime-preview-2024-12-17",
+                // Optional: limit lifetime (seconds). Default 300 if omitted.
+                // expires_in: 300,
             }),
         });
 
