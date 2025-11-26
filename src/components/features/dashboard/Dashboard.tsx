@@ -291,26 +291,43 @@ export function Dashboard({ username }: DashboardProps) {
             // Load curriculum from API (with localStorage fallback)
             const savedCurriculum = localStorage.getItem("user_curriculum");
             if (savedCurriculum) {
-                setCurriculum(JSON.parse(savedCurriculum));
+                try {
+                    setCurriculum(JSON.parse(savedCurriculum));
+                    console.log('[Dashboard] Loaded curriculum from localStorage');
+                } catch (e) {
+                    console.error('[Dashboard] Failed to parse localStorage curriculum:', e);
+                }
             }
 
+            console.log('[Dashboard] Fetching curriculum from API...');
             try {
                 const curriculumResponse = await fetch("/api/user/curriculum");
+                console.log('[Dashboard] Curriculum API response status:', curriculumResponse.status);
+
                 if (curriculumResponse.ok) {
                     const curriculumData = await curriculumResponse.json();
+                    console.log('[Dashboard] Curriculum API data:', curriculumData);
+
                     if (curriculumData.curriculums && curriculumData.curriculums.length > 0) {
                         // Extract curriculum_data from first curriculum
                         const latestCurriculum = curriculumData.curriculums[0];
                         if (latestCurriculum.curriculum_data) {
-                            console.log('Loaded curriculum from API:', latestCurriculum.curriculum_data);
+                            console.log('[Dashboard] Loaded curriculum from API:', latestCurriculum.curriculum_data);
                             setCurriculum(latestCurriculum.curriculum_data);
                             localStorage.setItem("user_curriculum", JSON.stringify(latestCurriculum.curriculum_data));
+                        } else {
+                            console.warn('[Dashboard] Curriculum data is empty');
                         }
+                    } else {
+                        console.log('[Dashboard] No curriculums found in API response');
                     }
+                } else {
+                    console.error('[Dashboard] Curriculum API returned error:', curriculumResponse.status);
                 }
             } catch (error) {
-                console.error('Failed to fetch curriculum from API:', error);
+                console.error('[Dashboard] Failed to fetch curriculum from API:', error);
             } finally {
+                console.log('[Dashboard] Setting loadingCurriculum to false');
                 setLoadingCurriculum(false);
             }
 

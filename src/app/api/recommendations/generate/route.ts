@@ -22,13 +22,21 @@ export async function POST(request: Request) {
     You are a helpful content curator for a ${job} whose goal is "${goal}".
     The user is interested in: ${interests.join(", ")}.
 
-    Generate 3 specific, distinct YouTube search queries to find helpful videos for them.
-    
+    Generate 3 broad, searchable YouTube queries to find popular videos about their interests.
+
     **CRITICAL INSTRUCTIONS:**
-    1. Queries should be in Korean or English (whichever yields better results for the topic).
-    2. Focus on high-quality, educational, or inspiring content.
-    3. Avoid generic terms; be specific (e.g. instead of "React", use "React 19 new features tutorial").
-    4. Ensure the 3 queries cover different aspects of their interests.
+    1. Use SIMPLE, BROAD keywords that are commonly used in popular videos
+    2. DO NOT combine too many concepts - keep each query to 1-2 words maximum
+    3. Use the EXACT interest name or a broader category (e.g. "엔비디아" not "엔비디아 경영 전략")
+    4. Think about what casual viewers would search for, not academic terms
+    5. Queries should be in Korean for Korean topics, English for English topics
+
+    **EXAMPLES:**
+    ❌ BAD: "엔비디아 경영 전략 분석" (too specific, won't find popular videos)
+    ✅ GOOD: "엔비디아" (broad, will find many popular videos)
+
+    ❌ BAD: "React 19 새로운 기능 상세 가이드" (too long, too specific)
+    ✅ GOOD: "React 강의" (broad, commonly searched)
 
     **REQUIRED OUTPUT (JSON):**
     {
