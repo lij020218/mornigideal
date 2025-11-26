@@ -1,12 +1,20 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { supabase } from "@/lib/supabase";
+import { v4 as uuidv4 } from 'uuid';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
     try {
         console.log('[generate-curriculum] Starting curriculum generation');
-        console.log('[generate-curriculum] API Key present:', !!process.env.GEMINI_API_KEY);
+
+        // 1. Authenticate User
+        const session = await auth();
+        if (!session || !session.user || !session.user.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
         if (!process.env.GEMINI_API_KEY) {
             console.error("[generate-curriculum] GEMINI_API_KEY is missing");
@@ -19,8 +27,9 @@ export async function POST(request: Request) {
         const { job, goal, level } = await request.json();
         console.log('[generate-curriculum] Request params:', { job, goal, level });
 
+        // 2. Generate Curriculum
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
             generationConfig: {
                 responseMimeType: "application/json"
             }
@@ -78,8 +87,6 @@ export async function POST(request: Request) {
         const response = await result.response;
         const text = response.text();
 
-        console.log('[generate-curriculum] Received response, length:', text?.length);
-
         // Clean up potential markdown formatting if the model includes it
         const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
@@ -92,8 +99,37 @@ export async function POST(request: Request) {
             throw new Error('Failed to parse curriculum data');
         }
 
+        // 3. Save to Supabase
+        // Get user ID
+        const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select("id")
+            .eq("email", session.user.email)
+            .single();
+
+        if (userError || !userData) {
+            console.error("[generate-curriculum] User not found for email:", session.user.email);
+            // We still return the curriculum to the frontend even if save fails, but log error
+        } else {
+            const curriculumId = uuidv4();
+            const { error: saveError } = await supabase
+                .from("user_curriculums")
+                .insert({
+                    user_id: userData.id,
+                    curriculum_id: curriculumId,
+                    curriculum_data: curriculum
+                });
+
+            if (saveError) {
+                console.error("[generate-curriculum] Failed to save to Supabase:", saveError);
+            } else {
+                console.log("[generate-curriculum] Successfully saved to Supabase with ID:", curriculumId);
+            }
+        }
+
         console.log('[generate-curriculum] Curriculum generation successful');
         return NextResponse.json({ curriculum });
+
     } catch (error: any) {
         console.error("[generate-curriculum] Error:", {
             message: error.message,

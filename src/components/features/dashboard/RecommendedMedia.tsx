@@ -36,7 +36,7 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
         return now.toISOString().split('T')[0];
     };
 
-    const fetchRecommendations = async () => {
+    const fetchRecommendations = async (forceRefresh = false) => {
         setLoading(true);
         setError(false);
 
@@ -44,19 +44,21 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
         const cacheKey = `daily_rec_${job}_${goal}`;
         const historyKey = `rec_history_${job}`;
 
-        // 1. Check Cache
-        try {
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-                const { date, items } = JSON.parse(cached);
-                if (date === today && items.length > 0) {
-                    setRecommendations(items);
-                    setLoading(false);
-                    return;
+        // 1. Check Cache (Skip if forceRefresh is true)
+        if (!forceRefresh) {
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const { date, items } = JSON.parse(cached);
+                    if (date === today && items.length > 0) {
+                        setRecommendations(items);
+                        setLoading(false);
+                        return;
+                    }
                 }
+            } catch (e) {
+                console.error("Cache read error", e);
             }
-        } catch (e) {
-            console.error("Cache read error", e);
         }
 
         // 2. Fetch New Data (with exclusion)
@@ -111,7 +113,7 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
         return (
             <div className="text-center p-4 text-muted-foreground text-sm">
                 <p>추천 콘텐츠를 불러오지 못했습니다.</p>
-                <Button variant="link" onClick={fetchRecommendations} className="text-primary h-auto p-0 mt-1">
+                <Button variant="link" onClick={() => fetchRecommendations(true)} className="text-primary h-auto p-0 mt-1">
                     다시 시도
                 </Button>
             </div>
@@ -129,7 +131,7 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={fetchRecommendations}
+                        onClick={() => fetchRecommendations(true)}
                         className="h-8 w-8 p-0 rounded-full hover:bg-white/10"
                     >
                         <RefreshCw className="w-4 h-4 text-muted-foreground" />

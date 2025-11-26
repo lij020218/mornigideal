@@ -1708,7 +1708,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             {isMobile && (
                 <div
                     ref={scrollContainerRef}
-                    className="flex gap-3 overflow-x-auto pb-4 pt-1 scrollbar-hide snap-x snap-mandatory px-1"
+                    className="flex gap-3 overflow-x-auto py-6 scrollbar-hide snap-x snap-mandatory px-4"
                 >
                     {timelineItems.map((item, index) => {
                         const Icon = item.icon;
