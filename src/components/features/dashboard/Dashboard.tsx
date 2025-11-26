@@ -230,6 +230,7 @@ export function Dashboard({ username }: DashboardProps) {
 
         setUserProfile(updatedProfile);
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
+        saveProfileToSupabase(updatedProfile);
 
         console.log('Updated profile:', updatedProfile);
 
@@ -262,40 +263,28 @@ export function Dashboard({ username }: DashboardProps) {
         const loadProfile = async () => {
             console.log('===== Dashboard useEffect: Loading profile =====');
 
-            // First try localStorage
-            const savedProfile = localStorage.getItem("user_profile");
+            // Always try to fetch from database first for the latest data
+            try {
+                const response = await fetch("/api/user/profile");
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.profile) {
+                        console.log('Loaded profile from database:', data.profile);
+                        setUserProfile(data.profile);
+                        localStorage.setItem("user_profile", JSON.stringify(data.profile));
+                        return; // Exit early if database load successful
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch profile from database:', error);
+            }
 
+            // Fall back to localStorage if database fetch failed
+            const savedProfile = localStorage.getItem("user_profile");
             if (savedProfile) {
                 const parsed = JSON.parse(savedProfile);
-                console.log('Loaded user_profile from localStorage:', parsed);
+                console.log('Loaded user_profile from localStorage as fallback:', parsed);
                 setUserProfile(parsed);
-            } else {
-                // If not in localStorage, try fetching from Supabase
-                console.log('No localStorage profile, fetching from database...');
-                try {
-                    const response = await fetch("/api/user/profile");
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.profile) {
-                            console.log('Loaded profile from database:', data.profile);
-                            // Preserve any existing interests from localStorage
-                            const existingProfile = localStorage.getItem("user_profile");
-                            let mergedProfile = data.profile;
-                            if (existingProfile) {
-                                const existing = JSON.parse(existingProfile);
-                                mergedProfile = {
-                                    ...data.profile,
-                                    interests: existing.interests || data.profile.interests || [],
-                                    customGoals: existing.customGoals || data.profile.customGoals || []
-                                };
-                            }
-                            setUserProfile(mergedProfile);
-                            localStorage.setItem("user_profile", JSON.stringify(mergedProfile));
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch profile from database:', error);
-                }
             }
 
             // Load curriculum from API (with localStorage fallback)
