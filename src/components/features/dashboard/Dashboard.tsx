@@ -15,8 +15,7 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
-import { MaterialUploadModal } from "@/components/features/analysis/MaterialUploadModal";
-import { MaterialAnalysisView } from "@/components/features/analysis/MaterialAnalysisView";
+import { MaterialUploadDialog } from "./MaterialUploadDialog";
 
 interface DashboardProps {
     username: string;
@@ -81,9 +80,7 @@ export function Dashboard({ username }: DashboardProps) {
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
-    const [showMaterialModal, setShowMaterialModal] = useState(false);
-    const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
-    const [showAnalysisView, setShowAnalysisView] = useState(false);
+    const [showMaterialDialog, setShowMaterialDialog] = useState(false);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -119,19 +116,6 @@ export function Dashboard({ username }: DashboardProps) {
         if (wasNew) {
             setCompletedLearning(prev => new Set([...prev, learningId]));
             setDailyGoals(getDailyGoals());
-        }
-    };
-
-    const handleMaterialAnalysisSuccess = async (materialId: string) => {
-        try {
-            const response = await fetch(`/api/materials/${materialId}`);
-            if (response.ok) {
-                const material = await response.json();
-                setSelectedMaterial(material);
-                setShowAnalysisView(true);
-            }
-        } catch (error) {
-            console.error("Error loading material:", error);
         }
     };
 
@@ -1095,7 +1079,7 @@ export function Dashboard({ username }: DashboardProps) {
                             <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
                         </h2>
                         <Button
-                            onClick={() => setShowMaterialModal(true)}
+                            onClick={() => setShowMaterialDialog(true)}
                             className="bg-white/10 hover:bg-white/20 text-white border border-white/10"
                             size="sm"
                         >
@@ -1456,23 +1440,11 @@ export function Dashboard({ username }: DashboardProps) {
                 userJob={userProfile?.job || ""}
             />
 
-            {/* Material Upload Modal */}
-            <MaterialUploadModal
-                isOpen={showMaterialModal}
-                onClose={() => setShowMaterialModal(false)}
-                onSuccess={handleMaterialAnalysisSuccess}
+            {/* Material Upload Dialog */}
+            <MaterialUploadDialog
+                isOpen={showMaterialDialog}
+                onClose={() => setShowMaterialDialog(false)}
             />
-
-            {/* Material Analysis View */}
-            {showAnalysisView && selectedMaterial && (
-                <MaterialAnalysisView
-                    material={selectedMaterial}
-                    onClose={() => {
-                        setShowAnalysisView(false);
-                        setSelectedMaterial(null);
-                    }}
-                />
-            )}
 
             {/* Schedule Notification Manager */}
             {
