@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar } from "lucide-react";
+import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ export interface CustomGoal {
     color?: string;
     daysOfWeek?: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     notificationEnabled?: boolean;
+    specificDate?: string; // YYYY-MM-DD format for specific date goals
 }
 
 interface SchedulePopupProps {
@@ -83,6 +84,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     const [notificationEnabled, setNotificationEnabled] = useState<boolean>(true);
     const [customActivityText, setCustomActivityText] = useState("");
     const [isAddingCustom, setIsAddingCustom] = useState(false);
+
+    // Calendar State
+    const [viewMode, setViewMode] = useState<'default' | 'calendar'>('default');
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
 
     const timeSlots = [];
     for (let hour = 0; hour < 24; hour++) {
@@ -177,7 +183,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             startTime: selectedTimeSlot,
             endTime: endTime,
             color: selectedActivity.color,
-            daysOfWeek: selectedDays,
+            daysOfWeek: viewMode === 'default' ? selectedDays : undefined,
+            specificDate: viewMode === 'calendar' ? formatDate(selectedDate) : undefined,
             notificationEnabled: notificationEnabled,
         };
 
@@ -198,7 +205,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             startTime: selectedTimeSlot,
             endTime: endTime,
             color: 'primary',
-            daysOfWeek: selectedDays,
+            daysOfWeek: viewMode === 'default' ? selectedDays : undefined,
+            specificDate: viewMode === 'calendar' ? formatDate(selectedDate) : undefined,
             notificationEnabled: notificationEnabled,
         };
 
@@ -284,13 +292,76 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         return timeValue >= startValue && timeValue < endValue;
     };
 
+    // Calendar Helpers
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        return { daysInMonth, firstDayOfMonth };
+    };
+
+    const formatDate = (date: Date) => {
+        return date.toISOString().split('T')[0];
+    };
+
+    const isSameDay = (d1: Date, d2: Date) => {
+        return d1.getFullYear() === d2.getFullYear() &&
+            d1.getMonth() === d2.getMonth() &&
+            d1.getDate() === d2.getDate();
+    };
+
+    const handlePrevMonth = () => {
+        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+    };
+
+    const handleNextMonth = () => {
+        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+    };
+
+    const handleDateClick = (day: number) => {
+        const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+        setSelectedDate(newDate);
+        setViewMode('calendar');
+    };
+
     const getScheduledActivityAtTime = (time: string) => {
+        // Base schedule always applies unless overridden (TODO: Allow override)
         if (schedule.wakeUp === time) return { label: '기상', color: 'yellow', icon: Sun };
         if (schedule.sleep === time) return { label: '취침', color: 'blue', icon: Moon };
         if (schedule.workStart === time) return { label: '업무 시작', color: 'purple', icon: Briefcase };
         if (schedule.workEnd === time) return { label: '업무 종료', color: 'green', icon: Briefcase };
 
+        const targetDateStr = viewMode === 'calendar' ? formatDate(selectedDate) : null;
+        const targetDay = viewMode === 'calendar' ? selectedDate.getDay() : null;
+
+        // 1. Priority: Specific Date Goals (Only in Calendar Mode)
+        if (viewMode === 'calendar') {
+            for (const goal of customGoals) {
+                if (!goal.specificDate || goal.specificDate !== targetDateStr) continue;
+
+                if (goal.startTime && goal.endTime) {
+                    if (goal.startTime === time) {
+                        const ActivityIcon = PRESET_ACTIVITIES.find(a => a.label === goal.text)?.icon || Target;
+                        return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: true };
+                    }
+                    if (isTimeInRange(time, goal.startTime, goal.endTime)) {
+                        const ActivityIcon = PRESET_ACTIVITIES.find(a => a.label === goal.text)?.icon || Target;
+                        return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: false };
+                    }
+                } else if (goal.text.startsWith(time)) {
+                    return { label: goal.text.split(' - ')[1] || goal.text, color: goal.color || 'primary', icon: Target };
+                }
+            }
+        }
+
+        // 2. Recurring Goals
         for (const goal of customGoals) {
+            if (goal.specificDate) continue; // Skip specific date goals
+
+            // In calendar view, check day match. In default view, show all recurring.
+            if (viewMode === 'calendar' && goal.daysOfWeek && !goal.daysOfWeek.includes(targetDay!)) continue;
+
             if (goal.startTime && goal.endTime) {
                 if (goal.startTime === time) {
                     const ActivityIcon = PRESET_ACTIVITIES.find(a => a.label === goal.text)?.icon || Target;
@@ -355,9 +426,41 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     >
                         {/* Header */}
                         <div className="flex justify-between items-center p-6 border-b border-white/10 shrink-0">
-                            <h2 className="text-xl font-bold flex items-center gap-2">
-                                <Clock className="w-5 h-5 text-primary" /> 일정 관리
-                            </h2>
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-xl font-bold flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-primary" /> 일정 관리
+                                </h2>
+                                <div className="flex bg-white/5 rounded-lg p-1 border border-white/10">
+                                    <button
+                                        onClick={() => {
+                                            setViewMode('default');
+                                            resetPickers();
+                                        }}
+                                        className={cn(
+                                            "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                                            viewMode === 'default'
+                                                ? "bg-primary text-white shadow-lg"
+                                                : "text-muted-foreground hover:text-white"
+                                        )}
+                                    >
+                                        기본 일정
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setViewMode('calendar');
+                                            resetPickers();
+                                        }}
+                                        className={cn(
+                                            "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                                            viewMode === 'calendar'
+                                                ? "bg-primary text-white shadow-lg"
+                                                : "text-muted-foreground hover:text-white"
+                                        )}
+                                    >
+                                        캘린더
+                                    </button>
+                                </div>
+                            </div>
                             <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-white/10">
                                 <X className="w-5 h-5" />
                             </Button>
@@ -370,7 +473,9 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 <div className="col-span-7 space-y-2">
                                     <div className="flex items-center justify-between mb-4">
                                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                                            시간대별 일정표
+                                            {viewMode === 'calendar'
+                                                ? `${selectedDate.getFullYear()}년 ${selectedDate.getMonth() + 1}월 ${selectedDate.getDate()}일 일정`
+                                                : "시간대별 일정표"}
                                         </h3>
                                         <p className="text-xs text-muted-foreground">클릭하여 일정 추가/수정</p>
                                     </div>
@@ -420,6 +525,66 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                 {/* Right: Activity Picker & Options */}
                                 <div className="col-span-5 space-y-4">
+                                    {/* Calendar View Grid */}
+                                    {viewMode === 'calendar' && !selectedTimeSlot && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="bg-white/5 border border-white/10 rounded-xl p-4"
+                                        >
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h4 className="text-sm font-semibold flex items-center gap-2">
+                                                    <CalendarIcon className="w-4 h-4 text-primary" />
+                                                    {currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월
+                                                </h4>
+                                                <div className="flex gap-1">
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handlePrevMonth}>
+                                                        <ChevronLeft className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleNextMonth}>
+                                                        <ChevronRight className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-7 gap-1 mb-2">
+                                                {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+                                                    <div key={day} className="text-center text-xs text-muted-foreground py-1">
+                                                        {day}
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="grid grid-cols-7 gap-1">
+                                                {Array.from({ length: getDaysInMonth(currentMonth).firstDayOfMonth }).map((_, i) => (
+                                                    <div key={`empty-${i}`} className="aspect-square" />
+                                                ))}
+                                                {Array.from({ length: getDaysInMonth(currentMonth).daysInMonth }).map((_, i) => {
+                                                    const day = i + 1;
+                                                    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                                                    const isSelected = isSameDay(date, selectedDate);
+                                                    const isToday = isSameDay(date, new Date());
+
+                                                    return (
+                                                        <button
+                                                            key={day}
+                                                            onClick={() => handleDateClick(day)}
+                                                            className={cn(
+                                                                "aspect-square rounded-lg text-sm flex items-center justify-center transition-all relative",
+                                                                isSelected
+                                                                    ? "bg-primary text-white font-bold shadow-lg shadow-primary/25"
+                                                                    : "hover:bg-white/10 text-muted-foreground hover:text-white",
+                                                                isToday && !isSelected && "border border-primary/50 text-primary"
+                                                            )}
+                                                        >
+                                                            {day}
+                                                            {/* Dot for events? (Optional) */}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </motion.div>
+                                    )}
                                     {/* Edit/Delete Options */}
                                     {showEditOptions && selectedTimeSlot && (
                                         <motion.div
@@ -472,7 +637,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                         >
                                             <div className="flex items-center justify-between mb-4">
                                                 <h4 className="text-sm font-semibold flex items-center gap-2">
-                                                    <Calendar className="w-4 h-4 text-primary" />
+                                                    <CalendarIcon className="w-4 h-4 text-primary" />
                                                     요일 선택
                                                 </h4>
                                                 <Button

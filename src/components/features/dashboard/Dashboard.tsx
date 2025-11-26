@@ -15,7 +15,6 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
-import { JarvisAssistant } from "../jarvis/JarvisAssistant";
 
 interface DashboardProps {
     username: string;
@@ -468,140 +467,22 @@ export function Dashboard({ username }: DashboardProps) {
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
 
             {/* Header */}
-            <header className="flex justify-between items-center">
+            <header className="flex justify-between items-center pt-4">
                 <div>
                     <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 pb-1">
                         Good {currentTime.getHours() < 12 ? "Morning" : currentTime.getHours() < 18 ? "Afternoon" : "Evening"}, {username}
                     </h1>
-                    <p className="text-muted-foreground mt-1">오늘도 성장을 위한 하루가 시작되었습니다.</p>
+                    <p className="text-muted-foreground mt-1">
+                        {(() => {
+                            const hour = currentTime.getHours();
+                            if (hour >= 5 && hour < 12) return "상쾌한 아침입니다. 오늘 하루도 힘차게 시작해보세요! ☀️";
+                            if (hour >= 12 && hour < 18) return "나른한 오후, 잠시 휴식을 취하며 재충전해보세요. ☕";
+                            if (hour >= 18 && hour < 22) return "오늘 하루도 수고 많으셨습니다. 편안한 저녁 보내세요. 🌙";
+                            return "늦은 밤입니다. 내일을 위해 푹 쉬세요. 😴";
+                        })()}
+                    </p>
                 </div>
-                <div className="flex gap-4 items-center">
-                    <div className="relative">
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="rounded-full glass hover:bg-white/10 transition-colors"
-                            onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-                        >
-                            <Bell className="w-5 h-5" />
-                            {/* Notification badge */}
-                            {(userProfile?.schedule || (userProfile?.customGoals && userProfile.customGoals.some(g =>
-                                g.daysOfWeek?.includes(new Date().getDay()) && g.notificationEnabled
-                            ))) && (
-                                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-background" />
-                                )}
-                        </Button>
-                        {userProfile && (
-                            <NotificationDropdown
-                                goals={[
-                                    // Add basic schedule as custom goals for notifications
-                                    ...(userProfile.schedule ? [
-                                        {
-                                            id: 'wake-up',
-                                            text: '기상',
-                                            time: 'morning' as const,
-                                            startTime: userProfile.schedule.wakeUp,
-                                            endTime: userProfile.schedule.wakeUp,
-                                            color: 'yellow',
-                                            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'work-start',
-                                            text: '업무 시작',
-                                            time: 'morning' as const,
-                                            startTime: userProfile.schedule.workStart,
-                                            endTime: userProfile.schedule.workStart,
-                                            color: 'purple',
-                                            daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'work-end',
-                                            text: '업무 종료',
-                                            time: 'evening' as const,
-                                            startTime: userProfile.schedule.workEnd,
-                                            endTime: userProfile.schedule.workEnd,
-                                            color: 'green',
-                                            daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'sleep',
-                                            text: '취침',
-                                            time: 'evening' as const,
-                                            startTime: userProfile.schedule.sleep,
-                                            endTime: userProfile.schedule.sleep,
-                                            color: 'blue',
-                                            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                            notificationEnabled: true,
-                                        },
-                                    ] : []),
-                                    // Add custom goals
-                                    ...(userProfile.customGoals || []),
-                                ]}
-                                isOpen={showNotificationDropdown}
-                                onClose={() => setShowNotificationDropdown(false)}
-                            />
-                        )}
-                    </div>
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowProfileMenu(!showProfileMenu)}
-                            className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-purple-600 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all shadow-lg shadow-primary/20"
-                        />
-                        <AnimatePresence>
-                            {showProfileMenu && (
-                                <>
-                                    <div
-                                        className="fixed inset-0 z-40"
-                                        onClick={() => setShowProfileMenu(false)}
-                                    />
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                        className="absolute right-0 top-12 w-56 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 py-2 backdrop-blur-xl"
-                                    >
-                                        <div className="px-4 py-3 border-b border-white/5 mb-2">
-                                            <p className="text-sm font-medium text-white">{username}</p>
-                                            <p className="text-xs text-muted-foreground truncate">{userProfile?.job || "User"}</p>
-                                        </div>
-                                        {/* Daily Briefing Button */}
-                                        <button
-                                            onClick={() => {
-                                                loadOrGenerateBriefing();
-                                                setShowProfileMenu(false);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-yellow-400 hover:text-yellow-300 flex items-center gap-3"
-                                        >
-                                            <Sparkles className="w-4 h-4" />
-                                            일일 브리핑
-                                        </button>
-
-                                        <Link
-                                            href="/mypage"
-                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
-                                            onClick={() => setShowProfileMenu(false)}
-                                        >
-                                            <User className="w-4 h-4" />
-                                            마이페이지
-                                        </Link>
-                                        <Link
-                                            href="/settings"
-                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
-                                            onClick={() => setShowProfileMenu(false)}
-                                        >
-                                            <Settings className="w-4 h-4" />
-                                            설정
-                                        </Link>
-                                    </motion.div>
-                                </>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            </header >
+            </header>
 
             <motion.div
                 variants={containerVariants}
@@ -629,28 +510,136 @@ export function Dashboard({ username }: DashboardProps) {
                     <div className="flex flex-col gap-4 md:hidden">
                         {/* 1. Goals (Mobile) */}
                         <div className="grid grid-cols-2 gap-3">
-                            {/* Wake Up Goal */}
-                            <motion.button
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => updateDailyGoal("wakeUp", !dailyGoals.wakeUp)}
-                                className={cn(
-                                    "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
-                                    dailyGoals.wakeUp
-                                        ? "bg-green-500/10 border-green-500/30"
-                                        : "bg-white/5 border-white/10"
-                                )}
-                            >
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center",
-                                    dailyGoals.wakeUp ? "bg-green-500 text-black" : "bg-white/10 text-muted-foreground"
-                                )}>
-                                    <Sun className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <p className="font-semibold text-sm">기상</p>
-                                    <p className="text-xs text-muted-foreground">{userSettings.wakeUpTime}</p>
-                                </div>
-                            </motion.button>
+                            {(() => {
+                                // Dynamic Goal Card Logic (Same as Desktop)
+                                const now = new Date();
+                                const currentDay = now.getDay();
+                                const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+
+                                const baseItems: Array<{ id: string; text: string; startTime: string; icon: any; color: string; type: string; endTime?: string }> = [];
+                                if (userProfile?.schedule) {
+                                    const { wakeUp, workStart, workEnd, sleep } = userProfile.schedule;
+                                    if (wakeUp) baseItems.push({ id: 'wake-up', text: '기상', startTime: wakeUp, icon: Sun, color: 'yellow', type: 'base' });
+                                    if (workStart) baseItems.push({ id: 'work-start', text: '업무 시작', startTime: workStart, icon: Briefcase, color: 'purple', type: 'base' });
+                                    if (workEnd) baseItems.push({ id: 'work-end', text: '업무 종료', startTime: workEnd, icon: Briefcase, color: 'green', type: 'base' });
+                                    if (sleep) baseItems.push({ id: 'sleep', text: '취침', startTime: sleep, icon: Moon, color: 'blue', type: 'base' });
+                                }
+
+                                baseItems.sort((a, b) => {
+                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                    const [bH, bM] = b.startTime.split(':').map(Number);
+                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                });
+
+                                const baseScheduleWithDuration = baseItems.map((item, index) => {
+                                    const nextItem = baseItems[(index + 1) % baseItems.length];
+                                    return { ...item, endTime: nextItem.startTime };
+                                });
+
+                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+                                const customItems = userProfile?.customGoals?.filter(g => {
+                                    if (g.specificDate) {
+                                        return g.specificDate === todayStr;
+                                    }
+                                    return g.daysOfWeek?.includes(currentDay);
+                                }).map(g => ({
+                                    id: g.id,
+                                    text: g.text,
+                                    startTime: g.startTime!,
+                                    endTime: g.endTime!,
+                                    icon: Target,
+                                    color: g.color || 'primary',
+                                    type: 'custom'
+                                })) || [];
+
+                                const allSchedules = [...baseScheduleWithDuration, ...customItems];
+
+                                allSchedules.sort((a, b) => {
+                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                    const [bH, bM] = b.startTime.split(':').map(Number);
+                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                });
+
+                                let targetSchedule = allSchedules.find(s => {
+                                    const [sH, sM] = s.startTime.split(':').map(Number);
+                                    const [eH, eM] = s.endTime.split(':').map(Number);
+                                    let start = sH * 60 + sM;
+                                    let end = eH * 60 + eM;
+                                    if (end < start) end += 24 * 60;
+                                    return currentTimeValue >= start && currentTimeValue < end;
+                                });
+
+                                if (!targetSchedule) {
+                                    targetSchedule = allSchedules.find(s => {
+                                        const [sH, sM] = s.startTime.split(':').map(Number);
+                                        const start = sH * 60 + sM;
+                                        return start > currentTimeValue;
+                                    });
+                                }
+
+                                if (!targetSchedule && allSchedules.length > 0) {
+                                    targetSchedule = allSchedules[0];
+                                }
+
+                                if (targetSchedule) {
+                                    const completionStatus = getTodayCompletions()[targetSchedule.id];
+                                    const isCompleted = completionStatus?.completed === true;
+                                    const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
+                                    const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
+                                    let start = sH * 60 + sM;
+                                    let end = eH * 60 + eM;
+                                    if (end < start) end += 24 * 60;
+                                    const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
+                                    const Icon = targetSchedule.icon;
+
+                                    const colorMap: Record<string, string> = {
+                                        yellow: "bg-yellow-500",
+                                        purple: "bg-purple-500",
+                                        green: "bg-green-500",
+                                        blue: "bg-blue-500",
+                                        red: "bg-red-500",
+                                        orange: "bg-orange-500",
+                                        pink: "bg-pink-500",
+                                        primary: "bg-primary"
+                                    };
+                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
+
+                                    return (
+                                        <motion.button
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => {
+                                                if (targetSchedule.id === 'wake-up') updateDailyGoal("wakeUp", !dailyGoals.wakeUp);
+                                            }}
+                                            className={cn(
+                                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
+                                                isCompleted ? "bg-green-500/10 border-green-500/30" :
+                                                    isActive ? "bg-primary/10 border-primary/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
+                                                        "bg-white/5 border-white/10"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center",
+                                                isCompleted ? "bg-green-500 text-black" :
+                                                    isActive ? `${bgClass} text-white` :
+                                                        "bg-white/10 text-muted-foreground"
+                                            )}>
+                                                {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Icon className={cn("w-4 h-4", isActive && "animate-pulse")} />}
+                                            </div>
+                                            <div>
+                                                <p className={cn("font-semibold text-sm", isActive && "text-primary")}>{targetSchedule.text}</p>
+                                                <p className="text-xs text-muted-foreground">{targetSchedule.startTime}</p>
+                                            </div>
+                                        </motion.button>
+                                    );
+                                } else {
+                                    return (
+                                        <div className="p-3 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                                            <p className="text-xs">일정이 없습니다</p>
+                                        </div>
+                                    );
+                                }
+                            })()}
 
                             {/* Learning Goal */}
                             <div className={cn(
@@ -716,7 +705,7 @@ export function Dashboard({ username }: DashboardProps) {
                         </div>
 
                         {/* 2. Timeline (Mobile - Horizontal) */}
-                        <Card className="glass-card border-none overflow-hidden">
+                        <Card className="glass-card border-none">
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="font-semibold flex items-center gap-2 text-sm">
@@ -1290,12 +1279,55 @@ export function Dashboard({ username }: DashboardProps) {
                                     })}
                                 </div>
                             ) : (
-                                <div className="text-center py-12 flex flex-col items-center justify-center h-full">
-                                    <p className="text-muted-foreground mb-4">아직 생성된 커리큘럼이 없습니다.</p>
-                                    <Button onClick={handleGenerateCurriculum} disabled={generatingCurriculum}>
-                                        {generatingCurriculum ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                                        커리큘럼 생성하기
-                                    </Button>
+                                <div className="text-center py-12 flex flex-col items-center justify-center h-full min-h-[300px]">
+                                    {generatingCurriculum ? (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="flex flex-col items-center gap-6"
+                                        >
+                                            <div className="relative">
+                                                <motion.div
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                                    className="w-16 h-16 rounded-full border-2 border-primary/20 border-t-primary"
+                                                />
+                                                <motion.div
+                                                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                                                    transition={{ duration: 2, repeat: Infinity }}
+                                                    className="absolute inset-0 flex items-center justify-center"
+                                                >
+                                                    <Sparkles className="w-6 h-6 text-primary" />
+                                                </motion.div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <p className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                                                    맞춤형 커리큘럼 설계 중...
+                                                </p>
+                                                <p className="text-sm text-muted-foreground animate-pulse">
+                                                    AI가 당신의 목표와 수준을 분석하고 있습니다
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    ) : (
+                                        <>
+                                            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-6 ring-1 ring-white/10">
+                                                <BookOpen className="w-8 h-8 text-muted-foreground" />
+                                            </div>
+                                            <h3 className="text-lg font-medium mb-2">아직 생성된 커리큘럼이 없습니다</h3>
+                                            <p className="text-muted-foreground mb-6 max-w-xs mx-auto">
+                                                목표 달성을 위한 최적의 학습 로드맵을 AI가 생성해드립니다.
+                                            </p>
+                                            <Button
+                                                onClick={handleGenerateCurriculum}
+                                                size="lg"
+                                                className="gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
+                                            >
+                                                <Sparkles className="w-4 h-4" />
+                                                커리큘럼 생성하기
+                                            </Button>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </CardContent>
@@ -1400,7 +1432,6 @@ export function Dashboard({ username }: DashboardProps) {
                     />
                 )
             }
-            <JarvisAssistant />
         </div >
     );
 }
@@ -1532,9 +1563,15 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         ];
 
     // Filter custom goals for today
-    const todaysGoals = customGoals?.filter(goal =>
-        goal.daysOfWeek?.includes(currentDayOfWeek)
-    ) || [];
+    const currentDate = new Date();
+    const todayStr = currentDate.getFullYear() + '-' + String(currentDate.getMonth() + 1).padStart(2, '0') + '-' + String(currentDate.getDate()).padStart(2, '0');
+
+    const todaysGoals = customGoals?.filter(goal => {
+        if (goal.specificDate) {
+            return goal.specificDate === todayStr;
+        }
+        return goal.daysOfWeek?.includes(currentDayOfWeek);
+    }) || [];
 
     // Add today's custom goals to timeline
     todaysGoals.forEach(goal => {

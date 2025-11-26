@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: "나의 하루, 학습, 성장을 운영해주는 AI 시스템",
 };
 
+import { Header } from "@/components/layout/Header";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,6 +28,7 @@ export default function RootLayout({
           "antialiased bg-background text-foreground min-h-screen font-sans"
         )}
       >
+        <Header />
         {children}
       </body>
     </html>

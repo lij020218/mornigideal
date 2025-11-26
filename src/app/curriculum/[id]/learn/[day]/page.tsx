@@ -12,6 +12,8 @@ import confetti from "canvas-confetti";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import LoadingView from "./LoadingView";
+
 interface Slide {
     slideNumber: number;
     title: string;
@@ -190,6 +192,11 @@ export default function LearningPage() {
         })
     };
 
+    // Loading State with Animation
+    if (loading) {
+        return <LoadingView />;
+    }
+
     if (!curriculum) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -208,8 +215,12 @@ export default function LearningPage() {
     // Pre-learning state
     if (!started) {
         return (
-            <div className="min-h-screen bg-background selection:bg-primary/30">
-                <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
+            <div className="min-h-screen bg-background selection:bg-primary/30 overflow-hidden relative">
+                {/* Animated Background */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[100px] animate-pulse" />
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[100px] animate-pulse delay-1000" />
+                </div>
 
                 <header className="sticky top-0 z-50 glass border-b border-white/5 backdrop-blur-lg">
                     <div className="max-w-4xl mx-auto px-6 py-4">
@@ -217,7 +228,7 @@ export default function LearningPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => router.push(`/curriculum/${curriculumId}`)}
-                            className="gap-2 hover:bg-white/5 rounded-full"
+                            className="gap-2 hover:bg-white/5 rounded-full transition-colors"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             뒤로
@@ -225,36 +236,43 @@ export default function LearningPage() {
                     </div>
                 </header>
 
-                <main className="max-w-2xl mx-auto px-6 py-16 relative z-10">
+                <main className="max-w-2xl mx-auto px-6 py-16 relative z-10 flex flex-col items-center justify-center min-h-[80vh]">
                     <motion.div
-                        initial={{ y: 20, opacity: 0 }}
+                        initial={{ y: 30, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.5 }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
+                        className="w-full"
                     >
-                        <Card className="glass-card border-none p-10 text-center space-y-8 bg-black/20 backdrop-blur-xl">
+                        <Card className="glass-card border-white/10 p-10 text-center space-y-10 bg-black/40 backdrop-blur-2xl shadow-2xl shadow-primary/5 relative overflow-hidden group">
+                            {/* Card Shine Effect */}
+                            <div className="absolute inset-0 bg-gradient-to-tr from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+
                             <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: "spring", delay: 0.2 }}
-                                className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto ring-1 ring-primary/20"
+                                initial={{ scale: 0, rotate: -180 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.2 }}
+                                className="w-28 h-28 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-full flex items-center justify-center mx-auto ring-1 ring-white/10 shadow-inner shadow-white/5 relative"
                             >
-                                <BookOpen className="w-10 h-10 text-primary" />
+                                <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
+                                <BookOpen className="w-12 h-12 text-primary relative z-10" />
                             </motion.div>
 
-                            <div className="space-y-3">
-                                <motion.p
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
+                            <div className="space-y-4">
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.3 }}
-                                    className="text-sm font-medium text-primary uppercase tracking-wider"
+                                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-primary uppercase tracking-wider"
                                 >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                                     Day {day}
-                                </motion.p>
+                                </motion.div>
+
                                 <motion.h1
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 }}
-                                    className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60"
+                                    className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60 tracking-tight text-balance leading-snug px-4"
                                 >
                                     {curriculum.title}
                                 </motion.h1>
@@ -262,7 +280,7 @@ export default function LearningPage() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     transition={{ delay: 0.5 }}
-                                    className="text-lg text-muted-foreground"
+                                    className="text-xl text-muted-foreground font-light"
                                 >
                                     {curriculum.subtitle}
                                 </motion.p>
@@ -272,30 +290,26 @@ export default function LearningPage() {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 transition={{ delay: 0.6 }}
-                                className="pt-4 space-y-6"
+                                className="pt-6 space-y-8"
                             >
-                                <p className="text-sm text-muted-foreground bg-white/5 py-3 px-4 rounded-lg inline-block">
-                                    AI가 당신의 수준(<span className="text-primary font-semibold">{userProfile?.level === 'junior' ? '입문자' : userProfile?.level === 'senior' ? '고급자' : '중급자'}</span>)에 맞춰
-                                    <br />오늘의 핵심 학습 콘텐츠를 생성합니다.
-                                </p>
+                                <div className="bg-white/5 border border-white/5 rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-purple-500" />
+                                    <p className="text-base text-muted-foreground leading-relaxed">
+                                        AI가 당신의 수준(<span className="text-primary font-bold">{userProfile?.level === 'junior' ? '입문자' : userProfile?.level === 'senior' ? '고급자' : '중급자'}</span>)에 맞춰
+                                        <br />오늘의 핵심 학습 콘텐츠를 생성합니다.
+                                    </p>
+                                </div>
 
                                 <Button
                                     size="lg"
-                                    className="w-full h-14 text-lg gap-2 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
+                                    className="w-full h-16 text-xl font-semibold gap-3 rounded-2xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-primary to-purple-600 border-none relative overflow-hidden group/btn"
                                     onClick={startLearning}
-                                    disabled={loading}
                                 >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            맞춤형 콘텐츠 생성 중...
-                                        </>
-                                    ) : (
-                                        <>
-                                            학습 시작하기
-                                            <ArrowRight className="w-5 h-5" />
-                                        </>
-                                    )}
+                                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
+                                    <span className="relative z-10 flex items-center gap-2">
+                                        학습 시작하기
+                                        <ArrowRight className="w-6 h-6 group-hover/btn:translate-x-1 transition-transform" />
+                                    </span>
                                 </Button>
                             </motion.div>
                         </Card>

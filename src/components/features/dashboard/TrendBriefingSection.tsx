@@ -12,6 +12,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import { RecommendedMedia } from "./RecommendedMedia";
 
 interface TrendBriefing {
     id: string;
@@ -244,6 +245,8 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                     ))}
                 </div>
             )}
+            {/* Recommended Media Section */}
+            <RecommendedMedia job={job} goal={goal} interests={interests} />
         </motion.section>
     );
 }
