@@ -193,3 +193,71 @@ export async function saveDetailCache(trendId: string, detail: any): Promise<voi
         console.error('[NewsCache] Error saving detail cache:', error);
     }
 }
+
+/**
+ * Get cached daily briefing for today
+ */
+export async function getDailyBriefingCache(): Promise<any | null> {
+    try {
+        const userEmail = await getUserEmail();
+        if (!userEmail) {
+            console.warn('[NewsCache] No user email, skipping briefing cache lookup');
+            return null;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        const { data, error } = await supabase
+            .from('daily_briefings')
+            .select('briefing_data, created_at')
+            .eq('email', userEmail)
+            .eq('date', today)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No rows found - normal case
+                console.log('[NewsCache] No cached daily briefing for today');
+                return null;
+            }
+            throw error;
+        }
+
+        return data?.briefing_data || null;
+    } catch (error) {
+        console.error('[NewsCache] Error fetching daily briefing cache:', error);
+        return null;
+    }
+}
+
+/**
+ * Save daily briefing to cache
+ */
+export async function saveDailyBriefingCache(briefingData: any): Promise<void> {
+    try {
+        const userEmail = await getUserEmail();
+        if (!userEmail) {
+            console.warn('[NewsCache] No user email, skipping briefing cache save');
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        const { error } = await supabase
+            .from('daily_briefings')
+            .upsert({
+                email: userEmail,
+                date: today,
+                briefing_data: briefingData,
+                created_at: new Date().toISOString()
+            }, {
+                onConflict: 'email,date'
+            });
+
+        if (error) throw error;
+
+        console.log(`[NewsCache] Saved daily briefing to cache for ${userEmail}`);
+    } catch (error) {
+        console.error('[NewsCache] Error saving daily briefing cache:', error);
+    }
+}

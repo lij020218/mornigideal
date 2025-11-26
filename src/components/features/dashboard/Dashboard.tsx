@@ -356,7 +356,24 @@ export function Dashboard({ username }: DashboardProps) {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         const cacheKey = `daily_briefing_${today}`;
 
-        // Check localStorage first
+        // Step 1: Check Supabase cache first (pre-generated at 5 AM)
+        try {
+            const { getDailyBriefingCache } = await import("@/lib/newsCache");
+            const cachedBriefing = await getDailyBriefingCache();
+
+            if (cachedBriefing) {
+                console.log('[Dashboard] Loading pre-generated briefing from cache');
+                setDailyBriefingData(cachedBriefing);
+                setShowDailyBriefing(true);
+                localStorage.setItem(cacheKey, JSON.stringify(cachedBriefing));
+                localStorage.setItem("last_briefing_date", today);
+                return;
+            }
+        } catch (error) {
+            console.error('[Dashboard] Error loading cached briefing:', error);
+        }
+
+        // Step 2: Check localStorage as fallback
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
             try {
@@ -366,11 +383,11 @@ export function Dashboard({ username }: DashboardProps) {
                 return;
             } catch (e) {
                 console.error('Failed to parse cached briefing', e);
-                // Continue to generate new briefing if cache is corrupted
             }
         }
 
-        // Generate new briefing
+        // Step 3: Generate new briefing (only if no cache available)
+        console.log('[Dashboard] No cached briefing found, generating new one...');
         if (!userProfile) return;
 
         setIsGeneratingBriefing(true);
@@ -400,9 +417,13 @@ export function Dashboard({ username }: DashboardProps) {
             if (response.ok) {
                 const data = await response.json();
                 setDailyBriefingData(data);
-                // Save to localStorage
+                // Save to both localStorage and Supabase cache
                 localStorage.setItem(cacheKey, JSON.stringify(data));
                 localStorage.setItem("last_briefing_date", today);
+
+                // Save to Supabase for future use
+                const { saveDailyBriefingCache } = await import("@/lib/newsCache");
+                await saveDailyBriefingCache(data);
             } else {
                 setShowDailyBriefing(false);
             }

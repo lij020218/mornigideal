@@ -1,154 +1,194 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { saveTrendsCache, saveDetailCache, generateTrendId } from "@/lib/newsCache";
-import { fetchOgImage } from "@/lib/fetchOgImage";
+import { saveDailyBriefingCache } from "@/lib/newsCache";
+import { supabase } from "@/lib/supabase";
+import { getDailyGoals } from "@/lib/dailyGoals";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
 export async function GET(request: Request) {
     try {
-        // Verify the request is authorized (optional: add API key check)
+        // Verify the request is authorized
         const authHeader = request.headers.get('authorization');
         if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[CRON] Starting daily news generation...');
+        console.log('[CRON] Starting daily briefing generation at 5:00 AM...');
 
-        // Step 1: Fetch trending news
+        // Step 1: Get all users with profiles
+        const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('email, profile')
+            .not('profile', 'is', null);
+
+        if (usersError) {
+            console.error('[CRON] Error fetching users:', usersError);
+            return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+        }
+
+        if (!users || users.length === 0) {
+            console.log('[CRON] No users found with profiles');
+            return NextResponse.json({ success: true, message: 'No users to process' });
+        }
+
+        console.log(`[CRON] Found ${users.length} users to generate briefings for`);
+
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
+            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            generationConfig: { responseMimeType: "application/json" }
         });
 
-        const today = new Date().toISOString().split('T')[0];
-        const job = "Marketer"; // TODO: Make this configurable per user
+        const results = [];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayDate = yesterday.toISOString().split('T')[0];
 
-        const trendsPrompt = `
-      You are a trend analyst for a ${job}.
-      Today's date is ${today}.
-
-      Search the web and find 6 current, hot trending news items or topics that are highly relevant to a ${job} professional.
-      Focus on recent news from the past 1-3 days.
-
-      For each item, provide:
-      - category: A short category name in English (e.g., "Marketing", "Tech", "AI", "Design", "Business").
-      - title: A catchy headline in Korean that captures the essence of the news.
-      - time: Relative time (e.g., "2시간 전", "1일 전", "3일 전").
-      - imageColor: A Tailwind CSS background color class (e.g., "bg-blue-500/20", "bg-purple-500/20", "bg-green-500/20", "bg-pink-500/20", "bg-orange-500/20").
-      - originalUrl: The actual URL to the original news source.
-      - imageUrl: The URL of the main/thumbnail image from the article. Look for og:image meta tag or the first prominent image in the article. If no image found, leave empty string.
-      - summary: A brief 1-2 sentence summary in Korean of what the news is about.
-
-      Return the response ONLY as a valid JSON array of objects.
-      Example:
-      [
-        { "category": "...", "title": "...", "time": "...", "imageColor": "...", "originalUrl": "...", "imageUrl": "...", "summary": "..." },
-        ...
-      ]
-    `;
-
-        const trendsResult = await model.generateContent(trendsPrompt);
-        const trendsResponse = await trendsResult.response;
-        const trendsText = trendsResponse.text();
-        const cleanedTrendsText = trendsText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const trends = JSON.parse(cleanedTrendsText);
-
-        // Add unique IDs to trends
-        const trendsWithIds: any[] = trends.map((trend: any) => ({
-            ...trend,
-            id: generateTrendId(trend.title)
-        }));
-
-        // Fetch og:image for each trend from originalUrl
-        console.log('[CRON] Fetching og:image for each trend...');
-        for (const trend of trendsWithIds) {
+        // Step 2: Generate briefing for each user
+        for (const user of users) {
             try {
-                const ogImage = await fetchOgImage(trend.originalUrl);
-                if (ogImage) {
-                    trend.imageUrl = ogImage;
-                    console.log(`[CRON] Found og:image for: ${trend.title}`);
+                const userEmail = user.email;
+                const userProfile = user.profile as any;
+
+                console.log(`[CRON] Generating briefing for: ${userEmail}`);
+
+                // Get yesterday's goals for this user
+                // Note: We can't use getDailyGoals here as it's localStorage-based
+                // For now, we'll use default values and enhance this later
+                const yesterdayGoals = {
+                    wakeUp: false,
+                    learning: 0,
+                    trendBriefing: 0,
+                    exercise: false,
+                    customGoals: {}
+                };
+
+                // Get yesterday's trends for this user
+                const { data: trendsData, error: trendsError } = await supabase
+                    .from('trends_cache')
+                    .select('trends')
+                    .eq('email', userEmail)
+                    .eq('date', yesterdayDate)
+                    .single();
+
+                const yesterdayTrends = trendsData?.trends || [];
+
+                // Get today's schedule
+                const todaySchedule = userProfile.schedule || {
+                    wakeUp: "07:00",
+                    workStart: "09:00",
+                    workEnd: "18:00",
+                    sleep: "23:00"
+                };
+
+                // Generate briefing using Gemini
+                const prompt = `
+You are an inspiring personal mentor for a ${userProfile.level || 'Intermediate'} ${userProfile.job || 'Professional'}.
+The user has just woken up. Your goal is to review yesterday's performance, summarize key news they missed while sleeping (or from yesterday), and motivate them for today.
+
+**USER CONTEXT:**
+- Job: ${userProfile.job || 'Professional'}
+- Goal: ${userProfile.goal || 'Professional growth'}
+- Yesterday's Goals: ${JSON.stringify(yesterdayGoals)}
+- Today's Schedule: ${JSON.stringify(todaySchedule)}
+
+**YESTERDAY'S TRENDS (News from the last 24h):**
+${JSON.stringify(yesterdayTrends?.slice(0, 6) || [])}
+
+**YOUR MISSION:**
+Generate a structured morning briefing in Korean.
+
+**REQUIRED OUTPUT (JSON):**
+{
+  "greeting": "Warm, personalized morning greeting in Korean (e.g., '좋은 아침이에요! 오늘도 성장할 준비 되셨나요?')",
+  "yesterdayReview": "1-2 sentences in Korean reviewing yesterday's goal completion. Be encouraging but honest. If they missed goals, suggest how to recover today.",
+  "yesterdayStats": {
+    "wakeUp": ${yesterdayGoals.wakeUp || false},
+    "learning": ${yesterdayGoals.learning || 0},
+    "trendBriefing": ${yesterdayGoals.trendBriefing || 0}
+  },
+  "trendSummary": [
+    "Summary of Article 1 in Korean (1 sentence)",
+    "Summary of Article 2 in Korean (1 sentence)",
+    "Summary of Article 3 in Korean (1 sentence)",
+    "Summary of Article 4 in Korean (1 sentence)",
+    "Summary of Article 5 in Korean (1 sentence)",
+    "Summary of Article 6 in Korean (1 sentence)"
+  ],
+  "todayFocus": "Advice for today's schedule in Korean. Highlight the most important task or mindset based on their schedule.",
+  "importantSchedule": {
+    "time": "${todaySchedule.workStart || '09:00'}",
+    "title": "업무 시작",
+    "type": "work"
+  },
+  "closing": "A short, punchy closing statement in Korean to start the day with energy (e.g., '오늘도 멋진 하루 만드세요!')"
+}
+
+**TONE:**
+- Professional yet warm
+- Motivating and actionable
+- Korean language (natural and fluent)
+- Ensure 'trendSummary' has EXACTLY 6 items corresponding to the input trends. If fewer trends available, create general motivational insights.
+`;
+
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const text = response.text();
+
+                let briefingData;
+                try {
+                    briefingData = JSON.parse(text);
+                } catch (parseError) {
+                    console.error(`[CRON] Failed to parse briefing for ${userEmail}:`, parseError);
+                    continue; // Skip this user
                 }
-            } catch (error) {
-                console.error(`[CRON] Error fetching og:image for "${trend.title}":`, error);
-            }
-        }
 
-        // Save trends to cache
-        await saveTrendsCache(trendsWithIds);
-        console.log(`[CRON] Saved ${trendsWithIds.length} trends to cache`);
+                // Save to cache using the user's email context
+                // We need to save directly to Supabase since saveDailyBriefingCache uses auth session
+                const today = new Date().toISOString().split('T')[0];
 
-        // Step 2: Pre-generate detail pages for each news item
-        const detailsGenerated: string[] = [];
+                const { error: saveError } = await supabase
+                    .from('daily_briefings')
+                    .upsert({
+                        email: userEmail,
+                        date: today,
+                        briefing_data: briefingData,
+                        created_at: new Date().toISOString()
+                    }, {
+                        onConflict: 'email,date'
+                    });
 
-        for (const trend of trendsWithIds) {
-            try {
-                const detailPrompt = `
-          You are a mentor for an Intermediate ${job}.
-          The user wants to understand the news titled: "${trend.title}".
-          Brief summary: ${trend.summary}
-          Original source: ${trend.originalUrl}
+                if (saveError) {
+                    console.error(`[CRON] Error saving briefing for ${userEmail}:`, saveError);
+                } else {
+                    console.log(`[CRON] Successfully generated and cached briefing for ${userEmail}`);
+                    results.push({ email: userEmail, status: 'success' });
+                }
 
-          Search the web if needed to get more context about this news.
-
-          Reconstruct this news content to be:
-          1. Easy to understand for an Intermediate level ${job}.
-          2. Actionable (what should they do/learn from this?).
-          3. In Korean language.
-          4. Include practical implications for their career.
-          5. 3-5 paragraphs with clear structure.
-
-          Provide:
-          - title: A refined, engaging title in Korean.
-          - content: A detailed explanation in Korean (3-5 paragraphs). Use markdown formatting with ## for sections, **bold** for key points.
-          - keyTakeaways: An array of 3-4 key takeaway bullet points in Korean.
-          - actionItems: An array of 2-3 actionable items the user can do, in Korean.
-
-          Return ONLY valid JSON.
-          Example:
-          {
-            "title": "...",
-            "content": "...",
-            "keyTakeaways": ["...", "..."],
-            "actionItems": ["...", "..."]
-          }
-        `;
-
-                const detailResult = await model.generateContent(detailPrompt);
-                const detailResponse = await detailResult.response;
-                const detailText = detailResponse.text();
-                const cleanedDetailText = detailText.replace(/```json/g, "").replace(/```/g, "").trim();
-                const detail = JSON.parse(cleanedDetailText);
-
-                await saveDetailCache(trend.id, {
-                    ...detail,
-                    originalUrl: trend.originalUrl
-                });
-
-                detailsGenerated.push(trend.title);
-                console.log(`[CRON] Generated detail for: ${trend.title}`);
-
-                // Add a small delay to avoid rate limiting
+                // Add delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 1000));
+
             } catch (error) {
-                console.error(`[CRON] Error generating detail for "${trend.title}":`, error);
+                console.error(`[CRON] Error processing user ${user.email}:`, error);
+                results.push({ email: user.email, status: 'error', error: error instanceof Error ? error.message : 'Unknown error' });
             }
         }
 
-        console.log('[CRON] Daily news generation completed');
+        console.log('[CRON] Daily briefing generation completed');
 
         return NextResponse.json({
             success: true,
-            trendsCount: trendsWithIds.length,
-            detailsGenerated: detailsGenerated.length,
+            processed: users.length,
+            successful: results.filter(r => r.status === 'success').length,
+            failed: results.filter(r => r.status === 'error').length,
+            results,
             timestamp: new Date().toISOString()
         });
+
     } catch (error) {
-        console.error('[CRON] Error in daily news generation:', error);
+        console.error('[CRON] Error in daily briefing generation:', error);
         return NextResponse.json({
-            error: 'Failed to generate daily news',
+            error: 'Failed to generate daily briefings',
             details: error instanceof Error ? error.message : 'Unknown error'
         }, { status: 500 });
     }

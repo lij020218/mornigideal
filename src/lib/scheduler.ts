@@ -8,9 +8,9 @@ export function initializeScheduler() {
         return;
     }
 
-    // Schedule to run every day at 4:00 AM
-    cron.schedule('0 4 * * *', async () => {
-        console.log('[Scheduler] Running daily news generation at 4:00 AM');
+    // Schedule to run every day at 5:00 AM
+    cron.schedule('0 5 * * *', async () => {
+        console.log('[Scheduler] Running daily news generation at 5:00 AM');
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/cron/generate-daily-news`, {
                 method: 'GET',
@@ -33,5 +33,5 @@ export function initializeScheduler() {
     });
 
     isSchedulerInitialized = true;
-    console.log('[Scheduler] Initialized - Daily news will be generated at 4:00 AM KST');
+    console.log('[Scheduler] Initialized - Daily news will be generated at 5:00 AM KST');
 }
