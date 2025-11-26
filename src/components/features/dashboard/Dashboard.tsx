@@ -75,7 +75,7 @@ export function Dashboard({ username }: DashboardProps) {
     });
     const [completedLearning, setCompletedLearning] = useState<Set<string>>(new Set());
     const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set());
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
@@ -243,6 +243,7 @@ export function Dashboard({ username }: DashboardProps) {
     };
 
     useEffect(() => {
+        setCurrentTime(new Date());
         const interval = setInterval(() => {
             setCurrentTime(new Date());
         }, 60000);
@@ -273,19 +274,25 @@ export function Dashboard({ username }: DashboardProps) {
                         console.log('Loaded profile from database:', data.profile);
                         setUserProfile(data.profile);
                         localStorage.setItem("user_profile", JSON.stringify(data.profile));
-                        return; // Exit early if database load successful
+                    }
+                } else {
+                    // Fall back to localStorage if database fetch failed
+                    const savedProfile = localStorage.getItem("user_profile");
+                    if (savedProfile) {
+                        const parsed = JSON.parse(savedProfile);
+                        console.log('Loaded user_profile from localStorage as fallback:', parsed);
+                        setUserProfile(parsed);
                     }
                 }
             } catch (error) {
                 console.error('Failed to fetch profile from database:', error);
-            }
-
-            // Fall back to localStorage if database fetch failed
-            const savedProfile = localStorage.getItem("user_profile");
-            if (savedProfile) {
-                const parsed = JSON.parse(savedProfile);
-                console.log('Loaded user_profile from localStorage as fallback:', parsed);
-                setUserProfile(parsed);
+                // Fall back to localStorage if database fetch failed
+                const savedProfile = localStorage.getItem("user_profile");
+                if (savedProfile) {
+                    const parsed = JSON.parse(savedProfile);
+                    console.log('Loaded user_profile from localStorage as fallback:', parsed);
+                    setUserProfile(parsed);
+                }
             }
 
             // Load curriculum from API (with localStorage fallback)
@@ -500,16 +507,20 @@ export function Dashboard({ username }: DashboardProps) {
             <header className="flex justify-between items-center pt-4">
                 <div>
                     <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 pb-1">
-                        Good {currentTime.getHours() < 12 ? "Morning" : currentTime.getHours() < 18 ? "Afternoon" : "Evening"}, {username}
+                        {currentTime ? (
+                            <>Good {currentTime.getHours() < 12 ? "Morning" : currentTime.getHours() < 18 ? "Afternoon" : "Evening"}, {username}</>
+                        ) : (
+                            <span className="opacity-0">Good Morning, {username}</span>
+                        )}
                     </h1>
-                    <p className="text-muted-foreground mt-1">
-                        {(() => {
+                    <p className="text-muted-foreground mt-1 min-h-[1.5em]">
+                        {currentTime ? (() => {
                             const hour = currentTime.getHours();
                             if (hour >= 5 && hour < 12) return "상쾌한 아침입니다. 오늘 하루도 힘차게 시작해보세요! ☀️";
                             if (hour >= 12 && hour < 18) return "나른한 오후, 잠시 휴식을 취하며 재충전해보세요. ☕";
                             if (hour >= 18 && hour < 22) return "오늘 하루도 수고 많으셨습니다. 편안한 저녁 보내세요. 🌙";
                             return "늦은 밤입니다. 내일을 위해 푹 쉬세요. 😴";
-                        })()}
+                        })() : ""}
                     </p>
                 </div>
             </header>
@@ -542,7 +553,8 @@ export function Dashboard({ username }: DashboardProps) {
                         <div className="grid grid-cols-2 gap-3">
                             {(() => {
                                 // Dynamic Goal Card Logic (Same as Desktop)
-                                const now = new Date();
+                                if (!currentTime) return null;
+                                const now = currentTime;
                                 const currentDay = now.getDay();
                                 const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
@@ -756,6 +768,7 @@ export function Dashboard({ username }: DashboardProps) {
                                     dailyGoals={dailyGoals}
                                     toggleCustomGoal={toggleCustomGoal}
                                     isMobile={true}
+                                    currentTime={currentTime}
                                 />
                             </CardContent>
                         </Card>
@@ -784,6 +797,7 @@ export function Dashboard({ username }: DashboardProps) {
                                         customGoals={userProfile?.customGoals}
                                         dailyGoals={dailyGoals}
                                         toggleCustomGoal={toggleCustomGoal}
+                                        currentTime={currentTime}
                                     />
                                 </div>
 
@@ -804,7 +818,8 @@ export function Dashboard({ username }: DashboardProps) {
                                             {/* Dynamic Schedule Goal */}
                                             {(() => {
                                                 // Find current or next schedule
-                                                const now = new Date();
+                                                if (!currentTime) return null;
+                                                const now = currentTime;
                                                 const currentDay = now.getDay();
                                                 // --- Daily Flow Logic ---
                                                 const currentTimeValue = now.getHours() * 60 + now.getMinutes();
@@ -1471,12 +1486,13 @@ export function Dashboard({ username }: DashboardProps) {
     );
 }
 
-function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGoal, isMobile = false }: {
+function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGoal, isMobile = false, currentTime }: {
     schedule?: UserProfile['schedule'];
     customGoals?: CustomGoal[];
     dailyGoals: DailyGoals;
     toggleCustomGoal: (id: string) => void;
     isMobile?: boolean;
+    currentTime: Date | null;
 }) {
     const [todayCompletions, setTodayCompletions] = useState<Record<string, any>>({});
 
@@ -1496,10 +1512,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     // Note: This useEffect needs schedule-dependent variables, but must be here for hooks order
     // It will safely handle the case when schedule is undefined
     useEffect(() => {
-        if (!schedule || !isMobile || !scrollContainerRef.current) return;
+        if (!schedule || !isMobile || !scrollContainerRef.current || !currentTime) return;
 
         // These variables are calculated below, so we need to recalculate them here
-        const now = new Date();
+        const now = currentTime;
         const currentDayOfWeek = now.getDay();
         const currentHour = now.getHours();
         const currentMinute = now.getMinutes();
@@ -1553,7 +1569,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 behavior: 'smooth'
             });
         }
-    }, [isMobile, schedule, customGoals]);
+    }, [isMobile, schedule, customGoals, currentTime]);
 
     if (!schedule) return (
         <div className="text-center text-muted-foreground py-10 flex flex-col items-center gap-4">
@@ -1562,11 +1578,12 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         </div>
     );
 
-    const now = new Date();
+    const now = currentTime || new Date(0); // Fallback to epoch if null (server-side safe)
     const currentDayOfWeek = now.getDay();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
-    const currentTimeValue = currentHour * 60 + currentMinute;
+    // If currentTime is null, set a value that won't match any schedule (e.g. -1)
+    const currentTimeValue = currentTime ? currentHour * 60 + currentMinute : -1;
 
     // Map activity labels to icons
     const activityIcons: Record<string, any> = {
