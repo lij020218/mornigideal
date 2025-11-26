@@ -80,7 +80,7 @@ export async function POST(request: Request) {
           title: item.snippet?.title || "Unknown Title",
           channel: item.snippet?.channelTitle || "Unknown Channel",
           type: 'youtube',
-          tags: item.snippet?.tags?.slice(0, 3) || [interests[0] || "General"],
+          tags: videoDetail.snippet?.tags?.slice(0, 3) || [interests[0] || "General"],
           duration: parseDuration(videoDetail.contentDetails?.duration || "PT0M"),
           description: item.snippet?.description?.slice(0, 100) + "..." || "No description available."
         };
