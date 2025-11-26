@@ -16,6 +16,7 @@ import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
 import { MaterialUploadModal } from "@/components/features/analysis/MaterialUploadModal";
+import { MaterialAnalysisView } from "@/components/features/analysis/MaterialAnalysisView";
 
 interface DashboardProps {
     username: string;
@@ -81,6 +82,8 @@ export function Dashboard({ username }: DashboardProps) {
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
     const [showMaterialModal, setShowMaterialModal] = useState(false);
+    const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
+    const [showAnalysisView, setShowAnalysisView] = useState(false);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -116,6 +119,19 @@ export function Dashboard({ username }: DashboardProps) {
         if (wasNew) {
             setCompletedLearning(prev => new Set([...prev, learningId]));
             setDailyGoals(getDailyGoals());
+        }
+    };
+
+    const handleMaterialAnalysisSuccess = async (materialId: string) => {
+        try {
+            const response = await fetch(`/api/materials/${materialId}`);
+            if (response.ok) {
+                const material = await response.json();
+                setSelectedMaterial(material);
+                setShowAnalysisView(true);
+            }
+        } catch (error) {
+            console.error("Error loading material:", error);
         }
     };
 
@@ -1444,9 +1460,19 @@ export function Dashboard({ username }: DashboardProps) {
             <MaterialUploadModal
                 isOpen={showMaterialModal}
                 onClose={() => setShowMaterialModal(false)}
-                onUploadSuccess={() => setShowMaterialModal(false)}
-                userId={userProfile?.job || "user"}
+                onSuccess={handleMaterialAnalysisSuccess}
             />
+
+            {/* Material Analysis View */}
+            {showAnalysisView && selectedMaterial && (
+                <MaterialAnalysisView
+                    material={selectedMaterial}
+                    onClose={() => {
+                        setShowAnalysisView(false);
+                        setSelectedMaterial(null);
+                    }}
+                />
+            )}
 
             {/* Schedule Notification Manager */}
             {
