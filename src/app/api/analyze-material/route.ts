@@ -4,9 +4,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+// Use service role key for server-side operations to bypass RLS
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false
+        }
+    }
 );
 
 export async function POST(request: NextRequest) {
@@ -32,8 +40,9 @@ export async function POST(request: NextRequest) {
         const content = await file.text();
         console.log("[analyze-material] Content length:", content.length);
 
-        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3-pro-preview" });
-        console.log("[analyze-material] Calling Gemini with model:", process.env.GEMINI_MODEL || "gemini-3-pro-preview");
+        const modelName = "gemini-2.0-flash-thinking-exp-01-21";
+        const model = genAI.getGenerativeModel({ model: modelName });
+        console.log("[analyze-material] Calling Gemini with model:", modelName);
 
         const isExam = type === "exam";
         const prompt = isExam
