@@ -61,6 +61,7 @@ export function Dashboard({ username }: DashboardProps) {
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [curriculum, setCurriculum] = useState<CurriculumItem[]>([]);
     const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
+    const [loadingCurriculum, setLoadingCurriculum] = useState(true);
     const [dailyGoals, setDailyGoals] = useState<DailyGoals>({
         wakeUp: false,
         learning: 0,
@@ -309,6 +310,8 @@ export function Dashboard({ username }: DashboardProps) {
                 }
             } catch (error) {
                 console.error('Failed to fetch curriculum from API:', error);
+            } finally {
+                setLoadingCurriculum(false);
             }
 
             const savedSettings = localStorage.getItem("user_settings");
@@ -1179,6 +1182,11 @@ export function Dashboard({ username }: DashboardProps) {
                                         <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
                                         <span className="text-sm md:text-base">성장 여정 시작하기</span>
                                     </Button>
+                                </div>
+                            ) : loadingCurriculum ? (
+                                <div className="flex flex-col items-center justify-center text-center py-12">
+                                    <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4" />
+                                    <p className="text-muted-foreground">커리큘럼을 불러오는 중...</p>
                                 </div>
                             ) : curriculum.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
