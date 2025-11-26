@@ -260,6 +260,22 @@ export function Header() {
                                             <Settings className="w-4 h-4" />
                                             설정
                                         </Link>
+
+                                        <div className="border-t border-white/5 my-2" />
+
+                                        <button
+                                            onClick={async () => {
+                                                // Clear all localStorage data
+                                                localStorage.clear();
+                                                // Sign out
+                                                const { signOut } = await import('@/auth');
+                                                await signOut({ redirectTo: '/login' });
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-red-400 hover:text-red-300 flex items-center gap-3"
+                                        >
+                                            <LogOut className="w-4 h-4" />
+                                            로그아웃
+                                        </button>
                                     </motion.div>
                                 </>
                             )}
