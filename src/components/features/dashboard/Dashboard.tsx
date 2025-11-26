@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle } from "lucide-react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -15,6 +15,7 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
+import { MaterialUploadModal } from "@/components/features/analysis/MaterialUploadModal";
 
 interface DashboardProps {
     username: string;
@@ -79,6 +80,7 @@ export function Dashboard({ username }: DashboardProps) {
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
+    const [showMaterialModal, setShowMaterialModal] = useState(false);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -1072,9 +1074,19 @@ export function Dashboard({ username }: DashboardProps) {
 
                 {/* 2. Today's Growth (Curriculum) */}
                 <motion.section variants={itemVariants} className="space-y-4">
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
-                    </h2>
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
+                        </h2>
+                        <Button
+                            onClick={() => setShowMaterialModal(true)}
+                            className="bg-white/10 hover:bg-white/20 text-white border border-white/10"
+                            size="sm"
+                        >
+                            <FileText className="w-4 h-4 mr-2" />
+                            자료 분석
+                        </Button>
+                    </div>
 
                     {/* Progress Overview Card */}
                     <Card className="glass-card border-none overflow-hidden">
@@ -1426,6 +1438,14 @@ export function Dashboard({ username }: DashboardProps) {
                 }}
                 userLevel={userProfile?.level || ""}
                 userJob={userProfile?.job || ""}
+            />
+
+            {/* Material Upload Modal */}
+            <MaterialUploadModal
+                isOpen={showMaterialModal}
+                onClose={() => setShowMaterialModal(false)}
+                onUploadSuccess={() => setShowMaterialModal(false)}
+                userId={userProfile?.job || "user"}
             />
 
             {/* Schedule Notification Manager */}
