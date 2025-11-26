@@ -15,7 +15,6 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
-import { MaterialUploadDialog } from "./MaterialUploadDialog";
 
 interface DashboardProps {
     username: string;
@@ -80,7 +79,6 @@ export function Dashboard({ username }: DashboardProps) {
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
-    const [showMaterialDialog, setShowMaterialDialog] = useState(false);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -1074,19 +1072,9 @@ export function Dashboard({ username }: DashboardProps) {
 
                 {/* 2. Today's Growth (Curriculum) */}
                 <motion.section variants={itemVariants} className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
-                        </h2>
-                        <Button
-                            onClick={() => setShowMaterialDialog(true)}
-                            className="bg-white/10 hover:bg-white/20 text-white border border-white/10"
-                            size="sm"
-                        >
-                            <FileText className="w-4 h-4 mr-2" />
-                            자료 분석
-                        </Button>
-                    </div>
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
+                    </h2>
 
                     {/* Progress Overview Card */}
                     <Card className="glass-card border-none overflow-hidden">
@@ -1440,11 +1428,7 @@ export function Dashboard({ username }: DashboardProps) {
                 userJob={userProfile?.job || ""}
             />
 
-            {/* Material Upload Dialog */}
-            <MaterialUploadDialog
-                isOpen={showMaterialDialog}
-                onClose={() => setShowMaterialDialog(false)}
-            />
+
 
             {/* Schedule Notification Manager */}
             {
