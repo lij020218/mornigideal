@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
         // 2. Generate Curriculum
         const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
             generationConfig: {
                 responseMimeType: "application/json"
             }
