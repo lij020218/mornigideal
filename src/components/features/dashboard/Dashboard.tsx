@@ -15,6 +15,8 @@ import { requestNotificationPermission, getTodayCompletions } from "@/lib/schedu
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
+import { MaterialUploadDialog } from "./MaterialUploadDialog";
+
 
 interface DashboardProps {
     username: string;
@@ -79,6 +81,7 @@ export function Dashboard({ username }: DashboardProps) {
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
+    const [showMaterialUpload, setShowMaterialUpload] = useState(false);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -1382,6 +1385,32 @@ export function Dashboard({ username }: DashboardProps) {
                             )}
                         </CardContent>
                     </Card>
+
+                    {/* Material Analysis Card */}
+                    <Card className="glass-card border-none">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                                        <FileText className="w-6 h-6 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold">자료 분석</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            시험 자료나 업무 자료를 AI로 분석하세요
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button
+                                    onClick={() => setShowMaterialUpload(true)}
+                                    className="gap-2 bg-primary hover:bg-primary/90"
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    자료 분석
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </motion.section>
 
                 {/* 3. Trend Briefing Section */}
@@ -1428,7 +1457,11 @@ export function Dashboard({ username }: DashboardProps) {
                 userJob={userProfile?.job || ""}
             />
 
-
+            {/* Material Upload Dialog */}
+            <MaterialUploadDialog
+                open={showMaterialUpload}
+                onOpenChange={setShowMaterialUpload}
+            />
 
             {/* Schedule Notification Manager */}
             {

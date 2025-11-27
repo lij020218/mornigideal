@@ -123,76 +123,54 @@ export async function GET(request: Request) {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const articlesForPrompt = rssArticles.slice(0, 80).map((article, index) => ({
+        const articlesForPrompt = rssArticles.slice(0, 50).map((article, index) => ({
             id: index,
             title: article.title,
             source: article.sourceName,
-            snippet: article.contentSnippet?.substring(0, 250),
             date: article.pubDate
         }));
 
-        const prompt = `
-You are an expert news curator specializing in personalized content for professionals.
+        const interestList = interests ? interests.split(',').map(i => i.trim()).join(', ') : "비즈니스, 기술";
 
-**AVAILABLE ARTICLES (${articlesForPrompt.length} from last 7 days):**
+        const prompt = `You are selecting 6 news articles for a ${job}.
+
+ARTICLES (${articlesForPrompt.length} available):
 ${JSON.stringify(articlesForPrompt, null, 2)}
 
-**USER PROFILE:**
-- **직업 (Job):** ${job}
-- **목표 (Goal):** ${goal || "전문성 향상"}
-- **관심사 (Interests):** ${interests || "비즈니스, 기술, 전략"}
-- **언어 (Language):** 한국어 (Korean)
+USER:
+- Job: ${job}
+- Goal: ${goal || "전문성 향상"}
+- Interests: ${interestList}
 
-**YOUR MISSION:**
-Select exactly 6 articles that are PERFECTLY tailored to this user's profile.
+TASK: Select 6 most relevant articles.
 
-**SELECTION CRITERIA (in priority order):**
+CRITERIA:
+1. Match interests (${interestList}) - minimum 3 articles
+2. Valuable for ${job} daily work
+3. Support goal: ${goal || "career growth"}
+4. Mix of topics and sources (global + Korean)
 
-1. **관심사 매칭 (Interest Match) - 40% weight**
-   - MUST include at least 3 articles directly related to: ${interests || ""}
-   - ${interests ? interests.split(',').map(i => `Articles about "${i.trim()}" are HIGH PRIORITY`).join('\n   - ') : ""}
-
-2. **직무 관련성 (Job Relevance) - 30% weight**
-   - How valuable is this for a ${job}?
-   - Will it help them in their daily work?
-   - Does it provide actionable insights for ${job}?
-
-3. **목표 정렬 (Goal Alignment) - 20% weight**
-   - ${goal ? `Does it support their goal: "${goal}"?` : "Does it support professional growth?"}
-
-4. **다양성 (Diversity) - 10% weight**
-   - Mix of topics: business, tech, innovation, sports, finance
-   - Mix of sources: global (Reuters, BBC, Bloomberg, NYT) + Korean (한국경제, 조선일보)
-
-**PERSONALIZATION RULES:**
-✓ Translate ALL titles to clear, natural Korean
-✓ Write summaries explaining **WHY** this matters to a ${job}
-✓ Focus on practical value and actionable insights
-✓ Use professional but accessible language
-✓ Emphasize how this helps achieve: ${goal || "professional excellence"}
-
-**OUTPUT (JSON):**
+OUTPUT JSON:
 {
   "selectedArticles": [
     {
-      "id": <article id>,
-      "title_korean": "명확하고 구체적인 한국어 제목",
-      "category": "AI | Business | Tech | Finance | Strategy | Innovation | Sports",
-      "summary_korean": "${job}에게 이 기사가 왜 중요한지 2-3문장으로 설명. ${interests ? `특히 ${interests} 관련하여` : ''}",
-      "relevance_korean": "${job}로서 이 기사로부터 얻을 수 있는 구체적인 가치 한 문장",
-      "interest_match_tags": ["${interests ? interests.split(',')[0]?.trim() : 'business'}"], 
-      "relevance_score": <1-10, how relevant to this user>
+      "id": <number>,
+      "title_korean": "명확한 한국어 제목",
+      "category": "AI|Business|Tech|Finance|Strategy|Innovation|Sports",
+      "summary_korean": "${job}에게 왜 중요한지 2문장",
+      "relevance_korean": "구체적 가치 1문장",
+      "interest_match_tags": ["태그"],
+      "relevance_score": <1-10>
     }
   ]
 }
 
-**CRITICAL:**
-- Select the 6 MOST RELEVANT articles for THIS SPECIFIC ${job}
-- ${interests ? `AT LEAST 3 must match interests: ${interests}` : ""}
-- All content in natural, professional Korean
-- Focus on actionable value
+Requirements:
+- All Korean text (titles, summaries)
+- Focus on practical value for ${job}
+- ${interests ? `At least 3 articles matching: ${interestList}` : ""}
 
-Start now.`;
+Select now.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -270,49 +248,29 @@ export async function POST(request: Request) {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const prompt = `
-You are an expert mentor for ${level}-level ${job} professionals.
+        const prompt = `Create a briefing for ${level} ${job}.
 
-**CONTEXT:**
-- Article Title: "${title}"
-- Basic Summary: ${summary}
-- Source: ${originalUrl}
+ARTICLE:
+- Title: "${title}"
+- Summary: ${summary}
+- URL: ${originalUrl}
 
-**YOUR TASK:**
-Create a comprehensive briefing that helps ${level} ${job} understand this news deeply.
+SECTIONS NEEDED:
+1. 핵심 내용: What happened and why it matters
+2. ${level} ${job}인 당신에게: Impact on ${job} professionals
+3. 주요 인사이트: 3-4 key takeaways
+4. 실행 아이템: 3 actionable steps for ${level} ${job}
 
-**REQUIRED SECTIONS:**
-
-1. **핵심 내용 (Core Content)**
-   - What happened? Key facts and context
-   - Why is this significant?
-   - What's the bigger picture?
-
-2. **${level} ${job}인 당신에게 (For You as ${level} ${job})**
-   - How does this directly impact ${job} professionals?
-   - What opportunities or challenges does this present?
-   - Industry-specific implications
-
-3. **이 브리핑에서 얻을 수 있는 것 (Key Takeaways)**
-   - 3-4 bullet points of critical insights
-   - Actionable knowledge
-   - Strategic implications
-
-4. **실행 가능한 액션 아이템 (Action Items)**
-   - 3 specific actions ${level} ${job} can take
-   - Both short-term and long-term suggestions
-   - Practical and concrete
-
-**OUTPUT FORMAT (JSON):**
+OUTPUT JSON:
 {
-  "title": "Engaging Korean title (clear and specific)",
-  "content": "### 핵심 내용\\n\\n[detailed content]\\n\\n### ${level} ${job}인 당신에게\\n\\n[personalized analysis]\\n\\n### 이 브리핑에서 얻을 수 있는 것\\n\\n- **포인트 1**\\n- **포인트 2**\\n- **포인트 3**",
+  "title": "Korean title",
+  "content": "### 핵심 내용\\n\\n[content]\\n\\n### ${level} ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
   "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
   "actionItems": ["Action 1", "Action 2", "Action 3"],
   "originalUrl": "${originalUrl}"
 }
 
-Write in Korean. Be insightful, practical, and tailored to ${level} ${job}.`;
+Write in Korean. Be practical and specific for ${level} ${job}.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
