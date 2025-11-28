@@ -22,21 +22,25 @@ export async function POST(request: Request) {
     You are a helpful content curator for a ${job} whose goal is "${goal}".
     The user is interested in: ${interests.join(", ")}.
 
-    Generate 3 broad, searchable YouTube queries to find popular videos about their interests.
+    Generate 3 broad, searchable YouTube queries in ENGLISH to find popular videos about their interests.
 
     **CRITICAL INSTRUCTIONS:**
-    1. Use SIMPLE, BROAD keywords that are commonly used in popular videos
+    1. Use SIMPLE, BROAD ENGLISH keywords that are commonly used in popular videos
     2. DO NOT combine too many concepts - keep each query to 1-2 words maximum
-    3. Use the EXACT interest name or a broader category (e.g. "엔비디아" not "엔비디아 경영 전략")
-    4. Think about what casual viewers would search for, not academic terms
-    5. Queries should be in Korean for Korean topics, English for English topics
+    3. ALWAYS translate Korean terms to English (e.g. "엔비디아" → "nvidia", "인공지능" → "AI", "파이썬" → "python")
+    4. Use industry-standard English terms (e.g. "React", "TypeScript", "Machine Learning")
+    5. Think about what casual viewers would search for, not academic terms
+    6. ALL queries must be in ENGLISH only
 
     **EXAMPLES:**
-    ❌ BAD: "엔비디아 경영 전략 분석" (too specific, won't find popular videos)
-    ✅ GOOD: "엔비디아" (broad, will find many popular videos)
+    ❌ BAD: "엔비디아 경영 전략" (Korean, too specific)
+    ✅ GOOD: "nvidia" (English, broad)
 
-    ❌ BAD: "React 19 새로운 기능 상세 가이드" (too long, too specific)
-    ✅ GOOD: "React 강의" (broad, commonly searched)
+    ❌ BAD: "React 19 새로운 기능" (Korean, too specific)
+    ✅ GOOD: "React tutorial" (English, broad)
+
+    ❌ BAD: "인공지능 딥러닝 설명" (Korean, too long)
+    ✅ GOOD: "AI tutorial" (English, simple)
 
     **REQUIRED OUTPUT (JSON):**
     {
@@ -62,15 +66,20 @@ export async function POST(request: Request) {
     // 2. Search YouTube for each query with view count filtering
     const videoPromises = queries.slice(0, 3).map(async (q) => {
       try {
+        // Calculate date 6 months ago for recency boost
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const publishedAfter = sixMonthsAgo.toISOString();
+
         // Get more results to filter by view count
         const searchRes = await youtube.search.list({
           part: ["snippet"],
           q: q,
-          maxResults: 10, // Get 10 results to filter
+          maxResults: 15, // Get 15 results to have more options after filtering
           type: ["video"],
           videoDuration: "medium", // Avoid shorts
-          relevanceLanguage: "ko",
-          order: "relevance" // Sort by relevance first
+          publishedAfter: publishedAfter, // Only get videos from last 6 months
+          order: "viewCount" // Sort by view count to get popular videos
         });
 
         if (!searchRes.data.items || searchRes.data.items.length === 0) return null;
@@ -91,15 +100,32 @@ export async function POST(request: Request) {
         const MIN_VIEW_COUNT = 100000;
         const qualityVideos = videoRes.data.items.filter(video => {
           const viewCount = parseInt(video.statistics?.viewCount || "0");
-          return viewCount >= MIN_VIEW_COUNT;
+          const title = video.snippet?.title || "";
+
+          // Filter out videos we've already shown (from exclude list)
+          const alreadyShown = exclude.some((excludedTitle: string) =>
+            title.toLowerCase().includes(excludedTitle.toLowerCase()) ||
+            excludedTitle.toLowerCase().includes(title.toLowerCase())
+          );
+
+          return viewCount >= MIN_VIEW_COUNT && !alreadyShown;
         });
 
-        // Sort by view count (descending) and pick the top one
-        const topVideo = qualityVideos.sort((a, b) => {
-          const viewsA = parseInt(a.statistics?.viewCount || "0");
-          const viewsB = parseInt(b.statistics?.viewCount || "0");
-          return viewsB - viewsA;
-        })[0];
+        // Sort by recency-weighted popularity score
+        const scoredVideos = qualityVideos.map(video => {
+          const viewCount = parseInt(video.statistics?.viewCount || "0");
+          const publishedAt = new Date(video.snippet?.publishedAt || "");
+          const daysOld = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60 * 24);
+
+          // Newer videos get a boost (exponential decay over 180 days)
+          const recencyBoost = Math.exp(-daysOld / 180);
+          const score = viewCount * (1 + recencyBoost * 2); // Up to 3x boost for newest content
+
+          return { video, score };
+        });
+
+        // Pick the highest scoring video
+        const topVideo = scoredVideos.sort((a, b) => b.score - a.score)[0]?.video;
 
         if (!topVideo) {
           console.log(`No videos with ${MIN_VIEW_COUNT}+ views found for query: "${q}"`);

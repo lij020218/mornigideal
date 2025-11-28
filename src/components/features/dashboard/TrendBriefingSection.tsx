@@ -44,24 +44,60 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [isCached, setIsCached] = useState(false);
     const [newInterest, setNewInterest] = useState("");
     const [isInterestOpen, setIsInterestOpen] = useState(false);
+    const [viewedTitles, setViewedTitles] = useState<string[]>([]); // 이미 본 뉴스 제목 추적
 
     const fetchBriefings = async (forceRefresh = false) => {
         try {
             setLoading(true);
+
+            // 1. forceRefresh가 아니면 먼저 사전 생성된 브리핑 확인
+            if (!forceRefresh) {
+                console.log('[TrendBriefing] Checking for pre-generated briefing...');
+                const pregenResponse = await fetch('/api/trend-briefing/get');
+
+                if (pregenResponse.ok) {
+                    const pregenData = await pregenResponse.json();
+                    if (pregenData.trends && pregenData.trends.length > 0) {
+                        console.log('[TrendBriefing] Found pre-generated briefing!');
+                        setBriefings(pregenData.trends);
+                        setLastUpdated(pregenData.generated_at || new Date().toISOString());
+                        setIsCached(true);
+                        setLoading(false);
+
+                        // 이미 본 뉴스 제목 저장
+                        setViewedTitles(prev => [...prev, ...pregenData.trends.map((t: any) => t.title)]);
+                        return;
+                    }
+                }
+                console.log('[TrendBriefing] No pre-generated briefing, generating on-demand...');
+            }
+
+            // 2. 실시간 생성 (fallback 또는 forceRefresh)
             const params = new URLSearchParams({ job });
             if (goal) params.append("goal", goal);
             if (interests.length > 0) params.append("interests", interests.join(","));
             if (forceRefresh) params.append("forceRefresh", "true");
 
+            // 새로고침 시 이미 본 뉴스 제외
+            if (forceRefresh && viewedTitles.length > 0) {
+                params.append("exclude", viewedTitles.join("|||")); // |||로 구분
+            }
+
             const response = await fetch(`/api/trend-briefing?${params.toString()}`);
             if (!response.ok) throw new Error("Failed to fetch briefings");
 
             const data = await response.json();
-            setBriefings(data.trends || []);
-            setLastUpdated(data.lastUpdated || "");
+            const newTrends = data.trends || [];
+            setBriefings(newTrends);
+            setLastUpdated(data.lastUpdated || new Date().toISOString());
             setIsCached(data.cached || false);
+
+            // 새로 본 뉴스 제목 추가
+            if (forceRefresh) {
+                setViewedTitles(prev => [...prev, ...newTrends.map((t: any) => t.title)]);
+            }
         } catch (error) {
-            console.error("Error fetching briefings:", error);
+            console.error("[TrendBriefing] Error fetching briefings:", error);
         } finally {
             setLoading(false);
             setRefreshing(false);

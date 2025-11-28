@@ -28,6 +28,8 @@ import { usePathname } from "next/navigation";
 export function Header() {
     const pathname = usePathname();
     const isLearningPage = pathname?.includes("/learn/");
+    const isLandingPage = pathname === "/";
+    const isOnboardingPage = pathname === "/onboarding";
 
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -74,6 +76,7 @@ export function Header() {
         const today = new Date().toISOString().split('T')[0];
         const cacheKey = `daily_briefing_${today}`;
 
+        // 1. Check localStorage first (fastest)
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
             try {
@@ -81,7 +84,7 @@ export function Header() {
                 setShowDailyBriefing(true);
                 return;
             } catch (e) {
-                console.error('Failed to parse cached briefing', e);
+                console.error('[Header] Failed to parse cached briefing', e);
             }
         }
 
@@ -91,6 +94,25 @@ export function Header() {
         setShowDailyBriefing(true);
 
         try {
+            // 2. Try to load pre-generated briefing from API
+            console.log('[Header] Checking for pre-generated briefing...');
+            const pregenResponse = await fetch('/api/daily-briefing/get');
+
+            if (pregenResponse.ok) {
+                const pregenData = await pregenResponse.json();
+                if (pregenData.briefing) {
+                    console.log('[Header] Found pre-generated briefing!');
+                    setDailyBriefingData(pregenData.briefing);
+                    localStorage.setItem(cacheKey, JSON.stringify(pregenData.briefing));
+                    localStorage.setItem("last_briefing_date", today);
+                    setIsGeneratingBriefing(false);
+                    return;
+                }
+            }
+
+            // 3. If no pre-generated briefing, generate on-demand (fallback)
+            console.log('[Header] No pre-generated briefing found, generating now...');
+
             const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
             const trendsData = await trendsResponse.json();
 
@@ -117,14 +139,14 @@ export function Header() {
                 setShowDailyBriefing(false);
             }
         } catch (error) {
-            console.error("Error generating briefing:", error);
+            console.error("[Header] Error loading/generating briefing:", error);
             setShowDailyBriefing(false);
         } finally {
             setIsGeneratingBriefing(false);
         }
     };
 
-    if (isLearningPage) return null;
+    if (isLearningPage || isLandingPage || isOnboardingPage) return null;
 
     return (
         <>

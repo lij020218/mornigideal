@@ -2,11 +2,15 @@
   "crons": [
     {
       "path": "/api/batch-news",
-      "schedule": "0 * * * *"
+      "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/generate-daily-news",
-      "schedule": "0 4 * * *"
+      "path": "/api/cron/generate-trend-briefings",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/generate-daily-briefing",
+      "schedule": "0 5 * * *"
     }
   ]
 }

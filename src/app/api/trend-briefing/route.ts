@@ -89,20 +89,26 @@ export async function GET(request: Request) {
         const goal = searchParams.get("goal");
         const interests = searchParams.get("interests");
         const forceRefresh = searchParams.get("forceRefresh") === "true";
+        const excludeTitles = searchParams.get("exclude")?.split("|||") || []; // 이미 본 뉴스 제목
 
-        // Check cache first
-        const cachedData = await getTrendsCache();
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        if (!forceRefresh && cachedData && cachedData.trends.length > 0) {
-            const cacheDate = new Date(cachedData.lastUpdated).toISOString().split('T')[0];
-            if (cacheDate === today) {
-                console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
-                return NextResponse.json({
-                    trends: cachedData.trends,
-                    cached: true,
-                    lastUpdated: cachedData.lastUpdated
-                });
+        console.log('[API] Exclude count:', excludeTitles.length);
+
+        // Check cache first (only if not force refreshing and no exclusions)
+        if (!forceRefresh && excludeTitles.length === 0) {
+            const cachedData = await getTrendsCache();
+
+            if (cachedData && cachedData.trends.length > 0) {
+                const cacheDate = new Date(cachedData.lastUpdated).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+                if (cacheDate === today) {
+                    console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
+                    return NextResponse.json({
+                        trends: cachedData.trends,
+                        cached: true,
+                        lastUpdated: cachedData.lastUpdated
+                    });
+                }
             }
         }
 
@@ -132,15 +138,45 @@ export async function GET(request: Request) {
 
         const interestList = interests ? interests.split(',').map(i => i.trim()).join(', ') : "비즈니스, 기술";
 
+        // 제외할 뉴스가 있으면 필터링
+        let filteredArticles = articlesForPrompt;
+        if (excludeTitles.length > 0) {
+            console.log('[API] Filtering out already viewed articles...');
+            filteredArticles = articlesForPrompt.filter(article =>
+                !excludeTitles.some(excludeTitle =>
+                    article.title.toLowerCase().includes(excludeTitle.toLowerCase()) ||
+                    excludeTitle.toLowerCase().includes(article.title.toLowerCase())
+                )
+            );
+            console.log(`[API] Filtered: ${articlesForPrompt.length} -> ${filteredArticles.length} articles`);
+        }
+
+        if (filteredArticles.length < 6) {
+            console.log('[API] Not enough new articles, fetching more RSS feeds...');
+            // 더 많은 뉴스가 필요하면 전체 풀 사용
+            filteredArticles = rssArticles.slice(0, 100).map((article, index) => ({
+                id: index,
+                title: article.title,
+                source: article.sourceName,
+                date: article.pubDate
+            })).filter(article =>
+                !excludeTitles.some(excludeTitle =>
+                    article.title.toLowerCase().includes(excludeTitle.toLowerCase())
+                )
+            );
+        }
+
         const prompt = `You are selecting 6 news articles for a ${job}.
 
-ARTICLES (${articlesForPrompt.length} available):
-${JSON.stringify(articlesForPrompt, null, 2)}
+ARTICLES (${filteredArticles.length} available):
+${JSON.stringify(filteredArticles.slice(0, 50), null, 2)}
 
 USER:
 - Job: ${job}
 - Goal: ${goal || "전문성 향상"}
 - Interests: ${interestList}
+
+**IMPORTANT**: Select 6 DIFFERENT articles that the user has NOT seen before.
 
 TASK: Select 6 most relevant articles.
 
@@ -149,6 +185,7 @@ CRITERIA:
 2. Valuable for ${job} daily work
 3. Support goal: ${goal || "career growth"}
 4. Mix of topics and sources (global + Korean)
+5. **FRESH content - select different articles from previous selections**
 
 OUTPUT JSON:
 {

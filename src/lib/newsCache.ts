@@ -36,7 +36,7 @@ export async function getTrendsCache(): Promise<{ trends: any[]; lastUpdated: st
             return null;
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         const { data, error } = await supabase
             .from('trends_cache')
@@ -101,7 +101,7 @@ export async function saveTrendsCache(trends: any[], clearExisting: boolean = fa
             return;
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // If clearExisting, delete old cache first
         if (clearExisting) {
@@ -205,7 +205,7 @@ export async function getDailyBriefingCache(): Promise<any | null> {
             return null;
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         const { data, error } = await supabase
             .from('daily_briefings')
@@ -241,7 +241,7 @@ export async function saveDailyBriefingCache(briefingData: any): Promise<void> {
             return;
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         const { error } = await supabase
             .from('daily_briefings')

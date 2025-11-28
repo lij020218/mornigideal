@@ -286,7 +286,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                                         className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
                                                     >
                                                         <XCircle className="w-3 h-3 mr-1" />
-                                                        못함
+                                                        {notification.status === 'missed' ? '놓침' : '못함'}
                                                     </Button>
                                                 </div>
                                             )}

@@ -16,6 +16,7 @@ import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
 import { MaterialUploadDialog } from "./MaterialUploadDialog";
+import { RecentMaterialsList } from "./RecentMaterialsList";
 
 
 interface DashboardProps {
@@ -1387,30 +1388,34 @@ export function Dashboard({ username }: DashboardProps) {
                     </Card>
 
                     {/* Material Analysis Card */}
-                    <Card className="glass-card border-none">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-                                        <FileText className="w-6 h-6 text-primary" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold">자료 분석</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            시험 자료나 업무 자료를 AI로 분석하세요
-                                        </p>
-                                    </div>
+                    {/* Material Analysis Card */}
+                    <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent p-6 transition-all hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] group">
+                        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors" />
+
+                        <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
+                                    <FileText className="w-7 h-7 text-white" />
                                 </div>
-                                <Button
-                                    onClick={() => setShowMaterialUpload(true)}
-                                    className="gap-2 bg-primary hover:bg-primary/90"
-                                >
-                                    <FileText className="w-4 h-4" />
-                                    자료 분석
-                                </Button>
+                                <div>
+                                    <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                                        AI 자료 분석
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        시험 자료나 업무 문서를 업로드하고<br className="hidden md:block" />
+                                        AI와 함께 심층적으로 분석해보세요.
+                                    </p>
+                                </div>
                             </div>
-                        </CardContent>
-                    </Card>
+
+                            <Link href="/materials">
+                                <Button size="lg" className="relative bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white border-0 shadow-lg shadow-blue-500/20 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-[1.02]">
+                                    <span className="mr-2">분석 시작하기</span>
+                                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
                 </motion.section>
 
                 {/* 3. Trend Briefing Section */}

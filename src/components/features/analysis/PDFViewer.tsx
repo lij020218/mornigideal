@@ -11,9 +11,16 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 interface PDFViewerProps {
     fileUrl: string;
     onPageChange?: (page: number) => void;
+    renderControls?: (controls: {
+        pageNumber: number;
+        numPages: number;
+        scale: number;
+        zoomIn: () => void;
+        zoomOut: () => void;
+    }) => React.ReactNode;
 }
 
-export function PDFViewer({ fileUrl, onPageChange }: PDFViewerProps) {
+export function PDFViewer({ fileUrl, onPageChange, renderControls }: PDFViewerProps) {
     const [numPages, setNumPages] = useState<number>(0);
     const [pageNumber, setPageNumber] = useState<number>(1);
     const [scale, setScale] = useState<number>(1.0);
@@ -59,76 +66,65 @@ export function PDFViewer({ fileUrl, onPageChange }: PDFViewerProps) {
     }
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Controls */}
-            <div className="flex items-center justify-between p-4 border-b bg-muted/30">
-                <div className="flex items-center gap-2">
-                    <Button
-                        onClick={previousPage}
-                        disabled={pageNumber <= 1}
-                        size="sm"
-                        variant="outline"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="text-sm font-medium">
-                        {pageNumber} / {numPages}
-                    </span>
-                    <Button
-                        onClick={nextPage}
-                        disabled={pageNumber >= numPages}
-                        size="sm"
-                        variant="outline"
-                    >
-                        <ChevronRight className="w-4 h-4" />
-                    </Button>
-                </div>
+        <div className="flex flex-col h-full relative group/pdf">
+            {/* Custom Controls (rendered by parent) */}
+            {renderControls && renderControls({ pageNumber, numPages, scale, zoomIn, zoomOut })}
 
-                <div className="flex items-center gap-2">
-                    <Button onClick={zoomOut} size="sm" variant="outline">
-                        <ZoomOut className="w-4 h-4" />
-                    </Button>
-                    <span className="text-sm font-medium">{Math.round(scale * 100)}%</span>
-                    <Button onClick={zoomIn} size="sm" variant="outline">
-                        <ZoomIn className="w-4 h-4" />
-                    </Button>
-                </div>
-            </div>
+            {/* Side Navigation Buttons (Always Visible on Hover) */}
+            <Button
+                onClick={previousPage}
+                disabled={pageNumber <= 1}
+                variant="ghost"
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm opacity-0 group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0"
+            >
+                <ChevronLeft className="w-6 h-6" />
+            </Button>
+
+            <Button
+                onClick={nextPage}
+                disabled={pageNumber >= numPages}
+                variant="ghost"
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm opacity-0 group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0"
+            >
+                <ChevronRight className="w-6 h-6" />
+            </Button>
 
             {/* PDF Display */}
-            <div className="flex-1 overflow-auto flex items-center justify-center bg-muted/10 p-4">
-                {error ? (
-                    <div className="text-center text-destructive">
-                        <p className="font-semibold">PDF 로드 실패</p>
-                        <p className="text-sm mt-2">{error}</p>
-                        <p className="text-xs mt-2 text-muted-foreground">URL: {fileUrl}</p>
-                    </div>
-                ) : (
-                    <Document
-                        file={fileUrl}
-                        onLoadSuccess={onDocumentLoadSuccess}
-                        onLoadError={onDocumentLoadError}
-                        loading={
-                            <div className="text-center text-muted-foreground">
-                                <p>PDF 로딩 중...</p>
-                            </div>
-                        }
-                        className="max-w-full"
-                    >
-                        <Page
-                            pageNumber={pageNumber}
-                            scale={scale}
-                            renderTextLayer={true}
-                            renderAnnotationLayer={true}
+            <div className="flex-1 overflow-auto bg-black/20 p-4 custom-scrollbar">
+                <div className="flex items-start justify-center min-h-full">
+                    {error ? (
+                        <div className="text-center text-destructive bg-destructive/10 p-6 rounded-xl border border-destructive/20">
+                            <p className="font-semibold">PDF 로드 실패</p>
+                            <p className="text-sm mt-2 opacity-80">{error}</p>
+                        </div>
+                    ) : (
+                        <Document
+                            file={fileUrl}
+                            onLoadSuccess={onDocumentLoadSuccess}
+                            onLoadError={onDocumentLoadError}
                             loading={
-                                <div className="text-center text-muted-foreground">
-                                    <p>페이지 로딩 중...</p>
+                                <div className="flex flex-col items-center gap-4 py-20">
+                                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-sm text-muted-foreground animate-pulse">PDF 문서를 불러오는 중...</p>
                                 </div>
                             }
-                            className="shadow-lg"
-                        />
-                    </Document>
-                )}
+                            className="shadow-2xl"
+                        >
+                            <Page
+                                pageNumber={pageNumber}
+                                scale={scale}
+                                renderTextLayer={true}
+                                renderAnnotationLayer={true}
+                                loading={
+                                    <div className="w-[600px] h-[800px] bg-white/5 animate-pulse rounded-lg flex items-center justify-center">
+                                        <p className="text-sm text-muted-foreground">페이지 로딩 중...</p>
+                                    </div>
+                                }
+                                className="shadow-2xl rounded-lg overflow-hidden bg-white"
+                            />
+                        </Document>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -19,7 +19,7 @@ const supabase = createClient(
   }
 );
 
-const PAGES_PER_BATCH = 10; // 10페이지씩 묶어서 chunk 생성 (49페이지 → 5 batches)
+const PAGES_PER_BATCH = 5; // 5페이지씩 묶어서 chunk 생성 (최적화: reasoning depth 방지)
 const TARGET_CHUNKS = 12; // 목표 chunk 개수 (10-15개 권장)
 const CHUNK_MODEL = "gpt-5-mini-2025-08-07"; // 비용 절감: chunk 요약용 저렴한 모델
 const FINAL_MODEL = "gpt-5.1-2025-11-13"; // 최종 통합용 고품질 모델
@@ -252,10 +252,17 @@ ${finalInput}
 **임무**: 이 Topic 요약들을 기반으로 대학생용 최종 학습 슬라이드를 생성하세요.
 
 **목표**:
-- 전체 내용을 15-20개의 슬라이드로 압축
+- 전체 내용을 슬라이드로 압축 (마지막 2페이지는 전체 요약)
 - 각 슬라이드는 하나의 핵심 주제를 다룸
 - 시험에 나올 만한 핵심 내용만 포함
 - Topic간 논리적 흐름 유지
+
+**content 작성 규칙** (매우 중요!):
+1. **Markdown 형식 사용**: 문단 구분을 위해 빈 줄(\\n\\n) 사용
+2. **중요한 개념, 용어, 정의는 반드시 \`**굵게**\` 강조**
+3. **예시**: "**Google의 수익 모델**을 이해하는 핵심은 **트래픽**이라는 변수에 있다.\\n\\nGmail, YouTube 같은 무료 서비스는..."
+4. 문단 사이에 빈 줄 넣어서 읽기 쉽게
+5. 긴 설명은 2-3개 문단으로 나누기
 
 다음 JSON 형식으로 응답하세요:
 
@@ -264,10 +271,24 @@ ${finalInput}
     {
       "page": 1,
       "title": "슬라이드 제목",
-      "content": "자연스럽게 흐르는 설명 텍스트. 핵심개념: ... 시험포인트: ... 중요: ..."
+      "content": "**핵심 개념**은 이렇다.\\n\\n첫 번째 문단 설명...\\n\\n두 번째 문단 설명...",
+      "keyPoints": [
+        "시험에 나올 핵심 포인트 1 (공식, 정의, 개념)",
+        "시험에 나올 핵심 포인트 2 (적용 방법)",
+        "시험에 나올 핵심 포인트 3 (주의사항이나 함정)"
+      ]
     }
   ]
-}`
+}
+
+**마지막 2페이지 (필수!)**:
+- **page N-1**: "핵심 개념 총정리" - 전체 내용의 핵심 개념들을 체계적으로 정리
+- **page N**: "시험 대비 요약" - 시험에 꼭 나올 내용만 압축 정리
+
+**중요**:
+- content는 "핵심개념:", "시험포인트:" 같은 라벨 없이 자연스럽게 작성
+- 중요한 개념은 **반드시** \`**굵게**\` 표시
+- 문단 사이 빈 줄(\\n\\n) 필수`
     : `당신은 비즈니스 문서 분석 전문가입니다. 다음은 업무 자료를 주제별로 압축한 ${topicSummaries.length}개의 Topic 요약입니다.
 
 ${finalInput}
@@ -275,10 +296,17 @@ ${finalInput}
 **임무**: 이 Topic 요약들을 기반으로 업무용 최종 슬라이드를 생성하세요.
 
 **목표**:
-- 전체 내용을 15-20개의 슬라이드로 압축
+- 전체 내용을 슬라이드로 압축 (마지막 2페이지는 전체 요약) 
 - 각 슬라이드는 하나의 업무 프로세스나 주제를 다룸
 - 실무에 활용 가능한 핵심 내용만 포함
 - Topic간 논리적 흐름 유지
+
+**content 작성 규칙** (매우 중요!):
+1. **Markdown 형식 사용**: 문단 구분을 위해 빈 줄(\\n\\n) 사용
+2. **중요한 프로세스, 용어, 주의사항은 반드시 \`**굵게**\` 강조**
+3. **예시**: "이 **프로세스 변경의 핵심**은 데이터 일관성 보장에 있다.\\n\\n기존 A 방식은..."
+4. 문단 사이에 빈 줄 넣어서 읽기 쉽게
+5. 긴 설명은 2-3개 문단으로 나누기
 
 다음 JSON 형식으로 응답하세요:
 
@@ -287,10 +315,24 @@ ${finalInput}
     {
       "page": 1,
       "title": "슬라이드 제목",
-      "content": "자연스럽게 흐르는 설명 텍스트. 핵심개념: ... 업무포인트: ... 중요: ..."
+      "content": "**핵심 프로세스**는 이렇다.\\n\\n첫 번째 문단 설명...\\n\\n두 번째 문단 설명...",
+      "keyPoints": [
+        "실무에 바로 적용 가능한 핵심 인사이트 1",
+        "업무 효율을 높이는 핵심 인사이트 2",
+        "주의사항이나 Best Practice"
+      ]
     }
   ]
-}`;
+}
+
+**마지막 2페이지 (필수!)**:
+- **page N-1**: "핵심 프로세스 총정리" - 전체 업무 흐름과 핵심 내용 체계적 정리
+- **page N**: "실무 적용 요약" - 실무에 바로 적용 가능한 핵심만 압축 정리
+
+**중요**:
+- content는 "핵심개념:", "업무포인트:" 같은 라벨 없이 자연스럽게 작성
+- 중요한 프로세스/용어는 **반드시** \`**굵게**\` 표시
+- 문단 사이 빈 줄(\\n\\n) 필수`;
 
   const completion = await openai.chat.completions.create({
     model: FINAL_MODEL, // 5.1 사용 (단 1회)
@@ -349,7 +391,7 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       // Upload PDF to Supabase Storage - sanitize all special characters
-      const sanitizedEmail = session.user.email.replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedEmail = (session.user.email || '').replace(/[^a-zA-Z0-9]/g, '_');
       // Keep only alphanumeric, dot, dash, underscore
       const sanitizedFileName = file.name
         .replace(/\s+/g, '_')  // spaces to underscore
@@ -401,16 +443,13 @@ export async function POST(request: NextRequest) {
         batches.push(pages.slice(i, i + PAGES_PER_BATCH));
       }
 
-      console.log(`[PDF] Processing ${batches.length} batches SEQUENTIALLY (${PAGES_PER_BATCH} pages per batch)`);
+      console.log(`[PDF] Processing ${batches.length} batches IN PARALLEL (${PAGES_PER_BATCH} pages per batch)`);
       console.log(`[COST] Using ${CHUNK_MODEL} for chunk analysis (90% cost reduction)`);
-      console.log(`[IMPORTANT] Sequential processing to avoid rate limits`);
+      console.log(`[SPEED] Parallel batch processing for 10-20x speedup`);
 
-      // Analyze all batches SEQUENTIALLY (not in parallel)
-      const chunkAnalyses: any[] = [];
-
-      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-        const batch = batches[batchIdx];
-        console.log(`[BATCH ${batchIdx + 1}/${batches.length}] Processing pages ${batch[0].pageNum}-${batch[batch.length - 1].pageNum}...`);
+      // Analyze all batches IN PARALLEL
+      const batchPromises = batches.map(async (batch, batchIdx) => {
+        console.log(`[BATCH ${batchIdx + 1}/${batches.length}] Starting pages ${batch[0].pageNum}-${batch[batch.length - 1].pageNum}...`);
         const batchText = batch.map((p, idx) =>
           `=== 페이지 ${p.pageNum} ===\n${p.text}`
         ).join("\n\n");
@@ -438,7 +477,12 @@ ${batchText}
     {
       "page": 1,
       "title": "슬라이드 제목 (핵심 주제를 한 문장으로)",
-      "content": "세계 최고 수준의 명료함과 깊이로 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 논리적 흐름으로 연결되어야 합니다."
+      "content": "세계 최고 수준의 명료함과 깊이로 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 논리적 흐름으로 연결되어야 합니다.",
+      "keyPoints": [
+        "시험에 나올 핵심 포인트 1 (구체적으로)",
+        "시험에 나올 핵심 포인트 2 (공식, 정의, 개념 등)",
+        "시험에 나올 핵심 포인트 3 (적용 방법이나 주의사항)"
+      ]
     }
   ]
 }
@@ -447,7 +491,8 @@ ${batchText}
 1. ${batch.length}페이지를 2-3개의 슬라이드로 압축
 2. 각 슬라이드는 하나의 주제를 깊이 있게 설명
 3. 제목 페이지, 목차, 반복 내용은 생략
-4. 시험에 critical한 내용을 자연스럽게 강조`
+4. 시험에 critical한 내용을 자연스럽게 강조
+5. keyPoints: 시험에 꼭 나올 만한 내용을 3-5개 추출 (공식, 정의, 개념, 적용법 등)`
           : `당신은 회사에서 동료에게 업무 내용을 설명하는 시니어 직원입니다.
 다음 ${batch.length}개 페이지의 업무 자료를 동료가 이해할 수 있도록 자연스럽게 설명해주세요.
 
@@ -470,7 +515,12 @@ ${batchText}
     {
       "page": 1,
       "title": "슬라이드 제목 (핵심 주제를 한 문장으로)",
-      "content": "동료에게 설명하듯이 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 이야기처럼 연결되어야 합니다."
+      "content": "동료에게 설명하듯이 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 이야기처럼 연결되어야 합니다.",
+      "keyPoints": [
+        "실무에 바로 적용 가능한 핵심 인사이트 1",
+        "업무 효율을 높이는 핵심 인사이트 2",
+        "주의해야 할 중요 포인트나 Best Practice"
+      ]
     }
   ]
 }
@@ -479,7 +529,8 @@ ${batchText}
 1. ${batch.length}페이지를 2-3개의 슬라이드로 압축
 2. 각 슬라이드는 하나의 업무 프로세스를 자연스럽게 설명
 3. 제목 페이지, 목차, 반복 내용은 생략
-4. 실무에 필요한 내용을 자연스럽게 강조`;
+4. 실무에 필요한 내용을 자연스럽게 강조
+5. keyPoints: 실무에 바로 적용 가능한 핵심 인사이트 3-5개 추출`;
 
         // Use mini model for chunk analysis (cost-effective)
         const completion = await openai.chat.completions.create({
@@ -500,12 +551,23 @@ ${batchText}
 
         const result = JSON.parse(completion.choices[0].message.content || "{}");
         const batchPages = result.pages || [];
-        chunkAnalyses.push(...batchPages);
 
         console.log(`[BATCH ${batchIdx + 1}] Complete. Generated ${batchPages.length} chunks`);
-      }
 
-      console.log(`[PDF] Step 2 complete. ${chunkAnalyses.length} chunks analyzed with ${CHUNK_MODEL}`);
+        return {
+          batchIdx,
+          pages: batchPages
+        };
+      });
+
+      // Wait for all batches to complete in parallel
+      const batchResults = await Promise.all(batchPromises);
+
+      // Sort by batch index to maintain page order
+      batchResults.sort((a, b) => a.batchIdx - b.batchIdx);
+      const chunkAnalyses = batchResults.flatMap(r => r.pages);
+
+      console.log(`[PDF] Step 2 complete. ${chunkAnalyses.length} chunks analyzed with ${CHUNK_MODEL} (PARALLEL)`);
 
       // Step 3 & 4: Embedding + Clustering + Final Integration
       if (USE_FINAL_INTEGRATION && chunkAnalyses.length > 3) {
@@ -540,9 +602,9 @@ ${batchText}
 
     // Save to database
     const insertData: any = {
-      user_id: session.user.email,
+      user_id: session.user.email, // Use email as user_id
       title: file.name,
-      content: fullContent,
+      content: fullContent.substring(0, 50000), // Limit content size to avoid payload too large
       type: type,
       analysis: { page_analyses: pageAnalyses },
     };
@@ -550,6 +612,14 @@ ${batchText}
     if (fileUrl) {
       insertData.file_url = fileUrl;
     }
+
+    console.log("[DB] Saving material:", {
+      user_id: session.user.email,
+      title: file.name,
+      type: type,
+      has_file_url: !!fileUrl,
+      num_pages: pageAnalyses.length
+    });
 
     const { data: material, error: insertError } = await supabase
       .from("materials")
@@ -559,14 +629,20 @@ ${batchText}
 
     if (insertError) {
       console.error("[DB] Insert error:", insertError);
+      console.error("[DB] Insert error details:", JSON.stringify(insertError, null, 2));
       return NextResponse.json(
         { error: "Failed to save material", details: insertError.message },
         { status: 500 }
       );
     }
 
-    console.log("[SUCCESS] Material saved:", material.id);
-    return NextResponse.json({ id: material.id, analysis: { page_analyses: pageAnalyses } });
+    console.log("[SUCCESS] Material saved with ID:", material.id);
+    console.log("[SUCCESS] Material data:", material);
+    return NextResponse.json({
+      id: material.id,
+      analysis: { page_analyses: pageAnalyses },
+      success: true
+    });
   } catch (error: any) {
     console.error("[ERROR]", error);
 
