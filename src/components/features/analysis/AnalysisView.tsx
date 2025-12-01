@@ -93,6 +93,24 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         return () => clearInterval(interval);
     }, [material.id, pageAnalyses.length]);
 
+    // Auto-generate quiz in background when analysis is complete
+    useEffect(() => {
+        const autoGenerateQuiz = async () => {
+            // Only generate if:
+            // 1. We have slides (analysis complete)
+            // 2. Quiz hasn't been generated yet
+            // 3. Not currently loading
+            if (pageAnalyses.length > 0 && !quiz && !isLoadingQuiz) {
+                console.log('[QUIZ] Auto-generating quiz in background...');
+                await loadQuiz();
+            }
+        };
+
+        // Wait a bit after analysis completes to avoid race condition
+        const timer = setTimeout(autoGenerateQuiz, 3000);
+        return () => clearTimeout(timer);
+    }, [pageAnalyses.length]); // Only trigger when slide count changes
+
 
     const loadQuiz = async () => {
         if (quiz) return; // Already loaded
@@ -151,9 +169,8 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
 
     const handleTabChange = (tab: 'summary' | 'quiz') => {
         setActiveTab(tab);
-        if (tab === 'quiz' && !quiz && !isLoadingQuiz) {
-            loadQuiz();
-        }
+        // No need to manually load quiz - it's auto-generated in background
+        // User will see loading state if quiz is still being generated
     };
 
     console.log("AnalysisView render:", {
