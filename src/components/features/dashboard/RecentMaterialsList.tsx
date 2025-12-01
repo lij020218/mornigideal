@@ -55,36 +55,46 @@ export function RecentMaterialsList() {
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {materials.map((material) => (
                 <Link key={material.id} href={`/analysis/${material.id}`}>
                     <div
-                        className="group relative h-full p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 transition-all duration-300 overflow-hidden"
+                        className="group relative h-full min-h-[180px] p-5 rounded-xl border border-white/10 bg-gradient-to-br from-white/5 to-white/0 hover:from-white/10 hover:to-white/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 overflow-hidden flex flex-col justify-between"
                     >
-                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        {/* Decorative Gradient Blob */}
+                        <div className={`absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 ${material.type === 'exam' ? 'bg-blue-500' : 'bg-purple-500'
+                            }`} />
 
-                        <div className="flex justify-between items-start mb-3">
-                            <div className={`px-2 py-1 rounded-md text-[10px] font-medium border ${material.type === 'exam'
+                        <div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase border ${material.type === 'exam'
                                     ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                     : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                }`}>
-                                {material.type === 'exam' ? '시험' : '업무'}
+                                    }`}>
+                                    {material.type === 'exam' ? 'Exam Prep' : 'Work Doc'}
+                                </div>
+                                <span className="text-[11px] text-muted-foreground font-mono">
+                                    {new Date(material.created_at).toLocaleDateString()}
+                                </span>
                             </div>
-                            <span className="text-[10px] text-muted-foreground">
-                                {new Date(material.created_at).toLocaleDateString()}
-                            </span>
+
+                            <h4 className="text-lg font-bold mb-2 line-clamp-2 group-hover:text-white transition-colors leading-snug">
+                                {material.title}
+                            </h4>
                         </div>
 
-                        <h4 className="text-sm font-semibold mb-2 line-clamp-2 group-hover:text-blue-400 transition-colors">
-                            {material.title}
-                        </h4>
-
-                        <div className="flex items-center justify-between mt-auto pt-2">
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                                <div className="w-1 h-1 rounded-full bg-blue-500" />
-                                {material.analysis?.page_analyses?.length || 0} 슬라이드
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+                            <span className="text-xs text-muted-foreground flex items-center gap-2">
+                                <div className={`w-1.5 h-1.5 rounded-full ${material.type === 'exam' ? 'bg-blue-500' : 'bg-purple-500'
+                                    }`} />
+                                {material.analysis?.page_analyses?.length || 0} Pages
                             </span>
-                            <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-white group-hover:translate-x-1 transition-all" />
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${material.type === 'exam'
+                                    ? 'bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white'
+                                    : 'bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white'
+                                }`}>
+                                <ArrowRight className="w-4 h-4" />
+                            </div>
                         </div>
                     </div>
                 </Link>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,8 @@ const PRESET_ACTIVITIES = [
     { id: 'exercise', label: '운동', icon: Dumbbell, color: 'pink', needsDuration: true, isCore: false },
     { id: 'reading', label: '독서', icon: BookOpen, color: 'cyan', needsDuration: true, isCore: false },
     { id: 'study', label: '자기계발', icon: Target, color: 'indigo', needsDuration: true, isCore: false },
+    { id: 'hospital', label: '병원', icon: Heart, color: 'red', needsDuration: true, isCore: false },
+    { id: 'leisure', label: '휴식/여가', icon: Gamepad2, color: 'green', needsDuration: true, isCore: false },
 ];
 
 const DAYS_OF_WEEK = [
@@ -157,8 +159,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
         if (isRecurring) {
-            // Recurring: Add for this day of week as a custom goal (even for core activities)
-            const newGoal: CustomGoal = {
+            // Recurring: Add template with daysOfWeek only (rendering will apply to all matching days)
+            const templateGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: selectedActivity.label,
                 time: timeOfDay,
@@ -168,9 +170,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 daysOfWeek: [selectedDayOfWeek],
                 notificationEnabled: notificationEnabled,
             };
-            setCustomGoals([...customGoals, newGoal]);
+
+            setCustomGoals([...customGoals, templateGoal]);
         } else {
-            // One-time: Add for specific date
+            // One-time: Add for specific date only
             let targetDate: Date;
             if (viewMode === 'calendar' && selectedDate) {
                 targetDate = selectedDate;
@@ -332,7 +335,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     };
 
     const formatDate = (date: Date) => {
-        return date.toISOString().split('T')[0];
+        return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
     };
 
     const getDaysInMonth = (date: Date) => {
@@ -589,7 +592,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 ? `${selectedDate.getFullYear()}년 ${selectedDate.getMonth() + 1}월 ${selectedDate.getDate()}일 (${DAYS_OF_WEEK.find(d => d.id === selectedDate.getDay())?.label}) 일정`
                                                 : '날짜를 선택하세요'}
                                     </h3>
-                                    <p className="text-xs text-muted-foreground mt-1">시간을 클릭하여 일정 추가/수정</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {viewMode === 'weekly'
+                                            ? '매주 반복되는 일정을 설정합니다. 시간을 클릭하여 일정 추가/수정'
+                                            : '특정 날짜의 일정을 설정합니다. 시간을 클릭하여 일정 추가/수정'}
+                                    </p>
                                 </div>
 
                                 <div className="space-y-1">
@@ -862,31 +869,37 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             </div>
                                         )}
 
-                                        {/* Recurring question - show for all views */}
-                                        <p className="text-sm text-muted-foreground">
-                                            {viewMode === 'weekly'
-                                                ? `매주 ${DAYS_OF_WEEK.find(d => d.id === selectedDayOfWeek)?.fullLabel} ${selectedTimeSlot}에 ${selectedActivity.label}하시나요?`
-                                                : `매주 같은 요일 ${selectedTimeSlot}에 ${selectedActivity.label}하시나요?`
-                                            }
-                                        </p>
-                                        <div className="flex flex-col gap-2">
+                                        {/* Recurring question - only show for calendar view */}
+                                        {viewMode === 'calendar' ? (
+                                            <>
+                                                <p className="text-sm text-muted-foreground">
+                                                    매주 같은 요일 {selectedTimeSlot}에 {selectedActivity.label}하시나요?
+                                                </p>
+                                                <div className="flex flex-col gap-2">
+                                                    <Button
+                                                        onClick={() => handleRecurringConfirm(true, selectedActivity.needsDuration)}
+                                                        className="w-full"
+                                                    >
+                                                        네, 매주 반복됩니다
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={() => handleRecurringConfirm(false, selectedActivity.needsDuration)}
+                                                        className="w-full"
+                                                    >
+                                                        아니요, 이날만 해당됩니다
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            /* Weekly mode - automatically save as recurring */
                                             <Button
                                                 onClick={() => handleRecurringConfirm(true, selectedActivity.needsDuration)}
                                                 className="w-full"
                                             >
-                                                네, 매주 반복됩니다
+                                                일정 추가하기
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => handleRecurringConfirm(false, selectedActivity.needsDuration)}
-                                                className="w-full"
-                                            >
-                                                {viewMode === 'weekly'
-                                                    ? `아니요, 이번 주 ${DAYS_OF_WEEK.find(d => d.id === selectedDayOfWeek)?.label}만 해당됩니다`
-                                                    : '아니요, 이날만 해당됩니다'
-                                                }
-                                            </Button>
-                                        </div>
+                                        )}
                                     </motion.div>
                                 )}
 

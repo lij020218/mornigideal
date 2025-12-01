@@ -11,7 +11,7 @@ export async function GET() {
         }
 
         const userEmail = session.user.email;
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         console.log(`[daily-briefing/get] Fetching briefing for ${userEmail} on ${today}`);
 

@@ -100,8 +100,40 @@ export async function GET(request: Request) {
             const cachedData = await getTrendsCache();
 
             if (cachedData && cachedData.trends.length > 0) {
-                const cacheDate = new Date(cachedData.lastUpdated).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+                const lastUpdatedDate = new Date(cachedData.lastUpdated);
+                const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+                // Calculate 5 AM KST for today
+                const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+                const cutoffTime = new Date(nowKST);
+                cutoffTime.setHours(5, 0, 0, 0);
+
+                // If currently before 5 AM, we compare with yesterday's 5 AM (or just rely on date check)
+                // But simpler logic: If cache is from today, AND (it was generated after 5 AM OR it's currently before 5 AM)
+                // Actually, user wants: "New briefing at 5 AM".
+                // So if now >= 5 AM, cache must be >= 5 AM.
+                // If now < 5 AM, cache can be from anytime today (00:00-04:59).
+
+                let isCacheValid = false;
                 if (cacheDate === today) {
+                    if (nowKST.getHours() >= 5) {
+                        // It's past 5 AM. Cache must be after 5 AM.
+                        // We need to convert lastUpdated (UTC) to KST hour to check, or just compare timestamps if we construct cutoff correctly.
+                        // Constructing cutoff timestamp in UTC is tricky without libraries.
+                        // Let's use the KST string conversion for safety.
+                        const lastUpdatedKST = new Date(lastUpdatedDate.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+                        if (lastUpdatedKST.getHours() >= 5) {
+                            isCacheValid = true;
+                        } else {
+                            console.log('[API] Cache is from today but before 5 AM. Invalidating for new 5 AM briefing.');
+                        }
+                    } else {
+                        // It's before 5 AM. Any cache from today is fine.
+                        isCacheValid = true;
+                    }
+                }
+
+                if (isCacheValid) {
                     console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
                     return NextResponse.json({
                         trends: cachedData.trends,
@@ -122,6 +154,32 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "No articles found in RSS feeds" }, { status: 500 });
         }
 
+        // Sort articles by date (newest first) and calculate recency scores
+        const now = new Date();
+        const sortedArticles = rssArticles
+            .map(article => {
+                const pubDate = article.pubDate ? new Date(article.pubDate) : null;
+                const ageInDays = pubDate ? (now.getTime() - pubDate.getTime()) / (1000 * 60 * 60 * 24) : 999;
+
+                // Recency score: 100 for today, 90 for yesterday, 70 for 2 days ago, then decay
+                let recencyScore = 0;
+                if (ageInDays < 1) recencyScore = 100;
+                else if (ageInDays < 2) recencyScore = 90;
+                else if (ageInDays < 3) recencyScore = 70;
+                else if (ageInDays < 7) recencyScore = 50;
+                else recencyScore = 20;
+
+                return { ...article, recencyScore, ageInDays };
+            })
+            .sort((a, b) => b.recencyScore - a.recencyScore || a.ageInDays - b.ageInDays);
+
+        console.log('[API] Article age distribution:', {
+            today: sortedArticles.filter(a => a.ageInDays < 1).length,
+            yesterday: sortedArticles.filter(a => a.ageInDays >= 1 && a.ageInDays < 2).length,
+            twoDaysAgo: sortedArticles.filter(a => a.ageInDays >= 2 && a.ageInDays < 3).length,
+            older: sortedArticles.filter(a => a.ageInDays >= 3).length
+        });
+
         // Step 2: Use Gemini to filter and select relevant articles
         const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
         const model = genAI.getGenerativeModel({
@@ -129,11 +187,13 @@ export async function GET(request: Request) {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const articlesForPrompt = rssArticles.slice(0, 50).map((article, index) => ({
+        // Prioritize recent articles (first 100 sorted by recency)
+        const articlesForPrompt = sortedArticles.slice(0, 100).map((article, index) => ({
             id: index,
             title: article.title,
             source: article.sourceName,
-            date: article.pubDate
+            date: article.pubDate,
+            recencyScore: article.recencyScore
         }));
 
         const interestList = interests ? interests.split(',').map(i => i.trim()).join(', ') : "비즈니스, 기술";
@@ -152,13 +212,14 @@ export async function GET(request: Request) {
         }
 
         if (filteredArticles.length < 6) {
-            console.log('[API] Not enough new articles, fetching more RSS feeds...');
-            // 더 많은 뉴스가 필요하면 전체 풀 사용
-            filteredArticles = rssArticles.slice(0, 100).map((article, index) => ({
+            console.log('[API] Not enough new articles, using full sorted pool...');
+            // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
+            filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
                 id: index,
                 title: article.title,
                 source: article.sourceName,
-                date: article.pubDate
+                date: article.pubDate,
+                recencyScore: article.recencyScore
             })).filter(article =>
                 !excludeTitles.some(excludeTitle =>
                     article.title.toLowerCase().includes(excludeTitle.toLowerCase())
@@ -166,7 +227,12 @@ export async function GET(request: Request) {
             );
         }
 
-        const prompt = `You are selecting 6 news articles for a ${job}.
+        const excludeInfo = excludeTitles.length > 0
+            ? `\n\n🚫 ALREADY VIEWED (${excludeTitles.length} articles) - DO NOT SELECT SIMILAR ARTICLES:\n${excludeTitles.slice(0, 10).map((t, i) => `${i + 1}. "${t}"`).join('\n')}`
+            : '';
+
+        const prompt = `You are selecting 6 COMPLETELY NEW news articles for a ${job}.
+${excludeInfo}
 
 ARTICLES (${filteredArticles.length} available):
 ${JSON.stringify(filteredArticles.slice(0, 50), null, 2)}
@@ -176,16 +242,20 @@ USER:
 - Goal: ${goal || "전문성 향상"}
 - Interests: ${interestList}
 
-**IMPORTANT**: Select 6 DIFFERENT articles that the user has NOT seen before.
+⚠️ **CRITICAL**: You MUST select 6 DIFFERENT articles. DO NOT repeat previous selections!
+${excludeTitles.length > 0 ? '❌ The user has ALREADY SEEN the articles listed above. Select FRESH content ONLY!' : ''}
 
-TASK: Select 6 most relevant articles.
+TASK: Select 6 most relevant NEW articles.
 
-CRITERIA:
-1. Match interests (${interestList}) - minimum 3 articles
-2. Valuable for ${job} daily work
-3. Support goal: ${goal || "career growth"}
-4. Mix of topics and sources (global + Korean)
-5. **FRESH content - select different articles from previous selections**
+CRITERIA (IN ORDER OF PRIORITY):
+1. **🔥 RECENCY (HIGHEST PRIORITY)**: Strongly prefer articles with recencyScore >= 70 (published within last 2 days: today=100, yesterday=90, 2 days ago=70). Fresh news is CRITICAL.
+2. Match interests (${interestList}) - minimum 3 articles
+3. Valuable for ${job} daily work
+4. Support goal: ${goal || "career growth"}
+5. Mix of topics and sources (global + Korean)
+6. **FRESH content - select different articles from previous selections**
+
+⭐ NOTE: Each article has a "recencyScore" field. Prioritize articles with scores 100, 90, 70 over older articles (50, 20).
 
 OUTPUT JSON:
 {
@@ -229,7 +299,12 @@ Select now.`;
 
         // Step 3: Map selected articles back to original RSS articles
         const trends = selectedArticles.map((selected: any) => {
-            const originalArticle = rssArticles[selected.id];
+            // Find the original article by matching the id from filteredArticles
+            const filteredArticle = filteredArticles[selected.id];
+            const originalArticle = rssArticles.find(article =>
+                article.title === filteredArticle?.title &&
+                article.sourceName === filteredArticle?.source
+            );
             const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
 
             return {

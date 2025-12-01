@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText } from "lucide-react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -17,6 +17,7 @@ import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { DailyBriefingModal } from "./DailyBriefingModal";
 import { MaterialUploadDialog } from "./MaterialUploadDialog";
 import { RecentMaterialsList } from "./RecentMaterialsList";
+import { EmailSummarySection } from "./EmailSummarySection";
 
 
 interface DashboardProps {
@@ -171,6 +172,65 @@ export function Dashboard({ username }: DashboardProps) {
         }
     };
 
+    const migrateGoalsToCalendar = (profile: UserProfile): UserProfile => {
+        if (!profile.customGoals || profile.customGoals.length === 0) {
+            console.log('[Migration] No customGoals to migrate');
+            return profile;
+        }
+
+        console.log('[Migration] Starting migration, customGoals count:', profile.customGoals.length);
+        const migratedGoals = [...profile.customGoals];
+        const today = new Date();
+        let hasChanges = false;
+
+        profile.customGoals.forEach((goal: any) => {
+            // If goal has daysOfWeek but no specificDate, it's a template
+            if (goal.daysOfWeek && goal.daysOfWeek.length > 0 && !goal.specificDate) {
+                console.log('[Migration] Found template! Converting to calendar events:', goal.text, 'days:', goal.daysOfWeek);
+                hasChanges = true;
+
+                // Generate calendar events for next 8 weeks
+                goal.daysOfWeek.forEach((dayOfWeek: number) => {
+                    for (let week = 0; week < 8; week++) {
+                        const targetDate = new Date(today);
+                        const currentDay = today.getDay();
+                        let daysUntilTarget = dayOfWeek - currentDay + (week * 7);
+                        if (week === 0 && daysUntilTarget < 0) {
+                            daysUntilTarget += 7;
+                        }
+                        targetDate.setDate(today.getDate() + daysUntilTarget);
+
+                        const dateStr = targetDate.getFullYear() + '-' +
+                            String(targetDate.getMonth() + 1).padStart(2, '0') + '-' +
+                            String(targetDate.getDate()).padStart(2, '0');
+
+                        migratedGoals.push({
+                            id: `${goal.id}-${dayOfWeek}-${week}-${Date.now()}`,
+                            text: goal.text,
+                            time: goal.time,
+                            startTime: goal.startTime,
+                            endTime: goal.endTime,
+                            color: goal.color,
+                            specificDate: dateStr,
+                            notificationEnabled: goal.notificationEnabled || false,
+                        });
+                    }
+                });
+            }
+        });
+
+        if (hasChanges) {
+            console.log('[Migration] Migration completed! New customGoals count:', migratedGoals.length);
+            return {
+                ...profile,
+                customGoals: migratedGoals
+            };
+        }
+
+        console.log('[Migration] No changes needed');
+        return profile;
+    };
+
     const handleAddInterest = (interest: string) => {
         if (!userProfile) return;
         const currentInterests = userProfile.interests || [];
@@ -199,10 +259,55 @@ export function Dashboard({ username }: DashboardProps) {
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
         saveProfileToSupabase(updatedProfile);
     };
-
     const handleSaveSchedule = (newSchedule: any, newCustomGoals: any) => {
         console.log('Saving schedule:', newSchedule);
         console.log('Saving custom goals:', newCustomGoals);
+
+        // Migrate daysOfWeek-only goals to calendar events
+        const migratedGoals = [...newCustomGoals];
+        const today = new Date();
+
+        newCustomGoals.forEach((goal: any) => {
+            // If goal has daysOfWeek but no specificDate, it's a template
+            if (goal.daysOfWeek && goal.daysOfWeek.length > 0 && !goal.specificDate) {
+                // Check if calendar events already exist for this template
+                const hasCalendarEvents = newCustomGoals.some((g: any) =>
+                    g.specificDate &&
+                    g.text === goal.text &&
+                    g.startTime === goal.startTime
+                );
+
+                if (!hasCalendarEvents) {
+                    // Generate calendar events for next 8 weeks
+                    goal.daysOfWeek.forEach((dayOfWeek: number) => {
+                        for (let week = 0; week < 8; week++) {
+                            const targetDate = new Date(today);
+                            const currentDay = today.getDay();
+                            let daysUntilTarget = dayOfWeek - currentDay + (week * 7);
+                            if (week === 0 && daysUntilTarget < 0) {
+                                daysUntilTarget += 7;
+                            }
+                            targetDate.setDate(today.getDate() + daysUntilTarget);
+
+                            const dateStr = targetDate.getFullYear() + '-' +
+                                String(targetDate.getMonth() + 1).padStart(2, '0') + '-' +
+                                String(targetDate.getDate()).padStart(2, '0');
+
+                            migratedGoals.push({
+                                id: `${goal.id}-${dayOfWeek}-${week}`,
+                                text: goal.text,
+                                time: goal.time,
+                                startTime: goal.startTime,
+                                endTime: goal.endTime,
+                                color: goal.color,
+                                specificDate: dateStr,
+                                notificationEnabled: goal.notificationEnabled || false,
+                            });
+                        }
+                    });
+                }
+            }
+        });
 
         let updatedProfile: UserProfile;
 
@@ -210,7 +315,7 @@ export function Dashboard({ username }: DashboardProps) {
             updatedProfile = {
                 ...userProfile,
                 schedule: newSchedule,
-                customGoals: newCustomGoals
+                customGoals: migratedGoals
             };
         } else {
             // If userProfile is null, we need to load it from localStorage or create a minimal one
@@ -220,7 +325,7 @@ export function Dashboard({ username }: DashboardProps) {
                 updatedProfile = {
                     ...parsed,
                     schedule: newSchedule,
-                    customGoals: newCustomGoals
+                    customGoals: migratedGoals
                 } as UserProfile;
             } else {
                 // Create a minimal profile - this shouldn't happen in normal flow
@@ -228,7 +333,7 @@ export function Dashboard({ username }: DashboardProps) {
                     job: "",
                     goal: "",
                     level: "", schedule: newSchedule,
-                    customGoals: newCustomGoals
+                    customGoals: migratedGoals
                 } as UserProfile;
             }
         }
@@ -236,6 +341,9 @@ export function Dashboard({ username }: DashboardProps) {
         setUserProfile(updatedProfile);
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
         saveProfileToSupabase(updatedProfile);
+
+        // Notify Header to reload profile
+        window.dispatchEvent(new Event('profile-updated'));
 
         console.log('Updated profile:', updatedProfile);
 
@@ -276,8 +384,17 @@ export function Dashboard({ username }: DashboardProps) {
                     const data = await response.json();
                     if (data.profile) {
                         console.log('Loaded profile from database:', data.profile);
-                        setUserProfile(data.profile);
-                        localStorage.setItem("user_profile", JSON.stringify(data.profile));
+
+                        // Auto-migrate daysOfWeek goals to calendar events
+                        const migratedProfile = migrateGoalsToCalendar(data.profile);
+
+                        setUserProfile(migratedProfile);
+                        localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
+
+                        // Save migrated profile back to database
+                        if (migratedProfile !== data.profile) {
+                            saveProfileToSupabase(migratedProfile);
+                        }
                     }
                 } else {
                     // Fall back to localStorage if database fetch failed
@@ -285,7 +402,10 @@ export function Dashboard({ username }: DashboardProps) {
                     if (savedProfile) {
                         const parsed = JSON.parse(savedProfile);
                         console.log('Loaded user_profile from localStorage as fallback:', parsed);
-                        setUserProfile(parsed);
+
+                        const migratedProfile = migrateGoalsToCalendar(parsed);
+                        setUserProfile(migratedProfile);
+                        localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
                     }
                 }
             } catch (error) {
@@ -295,7 +415,10 @@ export function Dashboard({ username }: DashboardProps) {
                 if (savedProfile) {
                     const parsed = JSON.parse(savedProfile);
                     console.log('Loaded user_profile from localStorage as fallback:', parsed);
-                    setUserProfile(parsed);
+
+                    const migratedProfile = migrateGoalsToCalendar(parsed);
+                    setUserProfile(migratedProfile);
+                    localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
                 }
             }
 
@@ -562,33 +685,11 @@ export function Dashboard({ username }: DashboardProps) {
                                 const currentDay = now.getDay();
                                 const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
-                                const baseItems: Array<{ id: string; text: string; startTime: string; icon: any; color: string; type: string; endTime?: string }> = [];
-                                if (userProfile?.schedule) {
-                                    const { wakeUp, workStart, workEnd, sleep } = userProfile.schedule;
-                                    if (wakeUp) baseItems.push({ id: 'wake-up', text: '기상', startTime: wakeUp, icon: Sun, color: 'yellow', type: 'base' });
-                                    if (workStart) baseItems.push({ id: 'work-start', text: '업무 시작', startTime: workStart, icon: Briefcase, color: 'purple', type: 'base' });
-                                    if (workEnd) baseItems.push({ id: 'work-end', text: '업무 종료', startTime: workEnd, icon: Briefcase, color: 'green', type: 'base' });
-                                    if (sleep) baseItems.push({ id: 'sleep', text: '취침', startTime: sleep, icon: Moon, color: 'blue', type: 'base' });
-                                }
-
-                                baseItems.sort((a, b) => {
-                                    const [aH, aM] = a.startTime.split(':').map(Number);
-                                    const [bH, bM] = b.startTime.split(':').map(Number);
-                                    return (aH * 60 + aM) - (bH * 60 + bM);
-                                });
-
-                                const baseScheduleWithDuration = baseItems.map((item, index) => {
-                                    const nextItem = baseItems[(index + 1) % baseItems.length];
-                                    return { ...item, endTime: nextItem.startTime };
-                                });
-
                                 const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
+                                // Only show events with specificDate matching today (calendar events only)
                                 const customItems = userProfile?.customGoals?.filter(g => {
-                                    if (g.specificDate) {
-                                        return g.specificDate === todayStr;
-                                    }
-                                    return g.daysOfWeek?.includes(currentDay);
+                                    return g.specificDate === todayStr;
                                 }).map(g => ({
                                     id: g.id,
                                     text: g.text,
@@ -599,7 +700,8 @@ export function Dashboard({ username }: DashboardProps) {
                                     type: 'custom'
                                 })) || [];
 
-                                const allSchedules = [...baseScheduleWithDuration, ...customItems];
+                                // Only use calendar events (customItems)
+                                const allSchedules = [...customItems];
 
                                 allSchedules.sort((a, b) => {
                                     const [aH, aM] = a.startTime.split(':').map(Number);
@@ -828,33 +930,15 @@ export function Dashboard({ username }: DashboardProps) {
                                                 // --- Daily Flow Logic ---
                                                 const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
-                                                // 1. Prepare Base Schedule Items with inferred durations
-                                                const baseItems: Array<{ id: string; text: string; startTime: string; icon: any; color: string; type: string; endTime?: string }> = [];
-                                                if (userProfile?.schedule) {
-                                                    const { wakeUp, workStart, workEnd, sleep } = userProfile.schedule;
-                                                    if (wakeUp) baseItems.push({ id: 'wake-up', text: '기상', startTime: wakeUp, icon: Sun, color: 'yellow', type: 'base' });
-                                                    if (workStart) baseItems.push({ id: 'work-start', text: '업무 시작', startTime: workStart, icon: Briefcase, color: 'purple', type: 'base' });
-                                                    if (workEnd) baseItems.push({ id: 'work-end', text: '업무 종료', startTime: workEnd, icon: Briefcase, color: 'green', type: 'base' });
-                                                    if (sleep) baseItems.push({ id: 'sleep', text: '취침', startTime: sleep, icon: Moon, color: 'blue', type: 'base' });
-                                                }
+                                                // 1. Prepare Custom Goals (both recurring and specific date)
+                                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
-                                                // Sort base items to infer end times
-                                                baseItems.sort((a, b) => {
-                                                    const [aH, aM] = a.startTime.split(':').map(Number);
-                                                    const [bH, bM] = b.startTime.split(':').map(Number);
-                                                    return (aH * 60 + aM) - (bH * 60 + bM);
-                                                });
-
-                                                // Assign end times to base items (until next item starts)
-                                                const baseScheduleWithDuration = baseItems.map((item, index) => {
-                                                    const nextItem = baseItems[(index + 1) % baseItems.length];
-                                                    return { ...item, endTime: nextItem.startTime };
-                                                });
-
-                                                // 2. Prepare Custom Goals
-                                                const customItems = userProfile?.customGoals?.filter(g =>
-                                                    g.daysOfWeek?.includes(currentDay)
-                                                ).map(g => ({
+                                                // Show events that either match today's date OR recurring events for today's day of week
+                                                const customItems = userProfile?.customGoals?.filter(g => {
+                                                    const isSpecificDate = g.specificDate === todayStr;
+                                                    const isRecurringToday = g.daysOfWeek?.includes(currentDay);
+                                                    return isSpecificDate || isRecurringToday;
+                                                }).map(g => ({
                                                     id: g.id,
                                                     text: g.text,
                                                     startTime: g.startTime!,
@@ -864,8 +948,8 @@ export function Dashboard({ username }: DashboardProps) {
                                                     type: 'custom'
                                                 })) || [];
 
-                                                // 3. Combine All Schedules
-                                                const allSchedules = [...baseScheduleWithDuration, ...customItems];
+                                                // 2. Use filtered calendar and recurring events
+                                                const allSchedules = [...customItems];
 
                                                 // 4. Find Active or Next Schedule
                                                 // Sort by start time
@@ -1388,33 +1472,38 @@ export function Dashboard({ username }: DashboardProps) {
                     </Card>
 
                     {/* Material Analysis Card */}
-                    {/* Material Analysis Card */}
-                    <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent p-6 transition-all hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] group">
-                        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors" />
+                    {/* Material Analysis Section */}
+                    <div className="space-y-4">
+                        <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent p-6 transition-all hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] group">
+                            <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors" />
 
-                        <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
-                                    <FileText className="w-7 h-7 text-white" />
+                            <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
+                                        <FileText className="w-7 h-7 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                                            AI 자료 분석
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            시험 자료나 업무 문서를 업로드하고<br className="hidden md:block" />
+                                            AI와 함께 심층적으로 분석해보세요.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
-                                        AI 자료 분석
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        시험 자료나 업무 문서를 업로드하고<br className="hidden md:block" />
-                                        AI와 함께 심층적으로 분석해보세요.
-                                    </p>
-                                </div>
+
+                                <Link href="/materials">
+                                    <Button size="lg" className="relative bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white border-0 shadow-lg shadow-blue-500/20 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-[1.02]">
+                                        <span className="mr-2">분석 시작하기</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                </Link>
                             </div>
-
-                            <Link href="/materials">
-                                <Button size="lg" className="relative bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white border-0 shadow-lg shadow-blue-500/20 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-[1.02]">
-                                    <span className="mr-2">분석 시작하기</span>
-                                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                </Button>
-                            </Link>
                         </div>
+
+                        {/* Recent Analysis Cards */}
+                        <RecentMaterialsList />
                     </div>
                 </motion.section>
 
@@ -1439,6 +1528,15 @@ export function Dashboard({ username }: DashboardProps) {
                         }}
                     />
                 )}
+
+                {/* 4. Email Summary Section */}
+                <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                >
+                    <EmailSummarySection />
+                </motion.section>
 
             </motion.div>
 
@@ -1629,17 +1727,33 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     const activityIcons: Record<string, any> = {
         '기상': Sun,
         '업무 시작': Briefcase,
+        '업무/수업 시작': Briefcase,
         '업무 종료': Briefcase,
+        '업무/수업 종료': Briefcase,
         '취침': Moon,
         '아침 식사': Coffee,
         '점심 식사': Coffee,
         '저녁 식사': Coffee,
-        '운동': Target,
+        '운동': Dumbbell,
         '독서': BookOpen,
         '자기계발': Target,
+        '병원': Heart,
+        '휴식/여가': Gamepad2,
     };
 
-    // Build base timeline items from schedule
+    // Filter custom goals for today (both recurring and specific date)
+    const currentDate = currentTime || new Date();
+    const todayStr = currentDate.getFullYear() + '-' + String(currentDate.getMonth() + 1).padStart(2, '0') + '-' + String(currentDate.getDate()).padStart(2, '0');
+
+    const todaysGoals = customGoals?.filter(goal => {
+        // Include goals that match today's specific date
+        const isSpecificDate = goal.specificDate === todayStr;
+        // Include recurring goals for today's day of week
+        const isRecurringToday = goal.daysOfWeek?.includes(currentDayOfWeek);
+        return isSpecificDate || isRecurringToday;
+    }) || [];
+
+    // Build timeline items
     const baseTimelineItems: Array<{
         time: string;
         label: string;
@@ -1647,23 +1761,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         color: string;
         goalId: string;
         endTime?: string;
-    }> = [
-            ...(schedule?.wakeUp ? [{ time: schedule.wakeUp, label: "기상", icon: Sun, color: "yellow", goalId: 'wake-up' }] : []),
-            ...(schedule?.workStart ? [{ time: schedule.workStart, label: "업무 시작", icon: Briefcase, color: "purple", goalId: 'work-start' }] : []),
-            ...(schedule?.workEnd ? [{ time: schedule.workEnd, label: "업무 종료", icon: Briefcase, color: "green", goalId: 'work-end' }] : []),
-            ...(schedule?.sleep ? [{ time: schedule.sleep, label: "취침", icon: Moon, color: "blue", goalId: 'sleep' }] : []),
-        ];
+    }> = [];
 
-    // Filter custom goals for today
-    const currentDate = new Date();
-    const todayStr = currentDate.getFullYear() + '-' + String(currentDate.getMonth() + 1).padStart(2, '0') + '-' + String(currentDate.getDate()).padStart(2, '0');
-
-    const todaysGoals = customGoals?.filter(goal => {
-        if (goal.specificDate) {
-            return goal.specificDate === todayStr;
-        }
-        return goal.daysOfWeek?.includes(currentDayOfWeek);
-    }) || [];
+    // Note: Base schedule items (schedule.wakeUp, etc.) are no longer added here.
+    // We rely entirely on customGoals to ensure only user-configured schedules for the specific date are shown.
 
     // Add today's custom goals to timeline
     todaysGoals.forEach(goal => {
@@ -1680,8 +1781,15 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         }
     });
 
+    // Remove duplicates: same time + same label = keep only first occurrence
+    const uniqueItems = baseTimelineItems.filter((item, index, self) => {
+        return index === self.findIndex(t =>
+            t.time === item.time && t.label === item.label
+        );
+    });
+
     // Sort by time
-    const timelineItems = baseTimelineItems.sort((a, b) => {
+    const timelineItems = uniqueItems.sort((a, b) => {
         const [aHour, aMin] = a.time.split(':').map(Number);
         const [bHour, bMin] = b.time.split(':').map(Number);
         return (aHour * 60 + aMin) - (bHour * 60 + bMin);

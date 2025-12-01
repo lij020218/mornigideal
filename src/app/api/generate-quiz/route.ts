@@ -1,133 +1,178 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import OpenAI from "openai";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
-export async function POST(request: Request) {
-    try {
-        // Enhanced logging for debugging
-        console.log('[generate-quiz] Starting quiz generation request');
-        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        console.log('[generate-quiz] API Key present:', !!apiKey);
-        console.log('[generate-quiz] Model:', process.env.GEMINI_MODEL || "gemini-3-pro-preview");
+const MINI_MODEL = "gpt-5-mini-2025-08-07";
+const FINAL_MODEL = "gpt-5.1-2025-11-13";
 
-        if (!apiKey) {
-            console.error("[generate-quiz] GOOGLE_API_KEY or GEMINI_API_KEY is missing");
-            return NextResponse.json({
-                error: "Server configuration error: Missing API Key",
-                hint: "Please set GOOGLE_API_KEY or GEMINI_API_KEY environment variable in Vercel"
-            }, { status: 500 });
-        }
-
-        let body;
-        try {
-            body = await request.json();
-        } catch (e) {
-            console.error("[generate-quiz] Invalid JSON body:", e);
-            return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-        }
-
-        const { userType, major, field, goal } = body;
-        console.log('[generate-quiz] Request params:', { userType, major, field, goal });
-
-        if (!userType || !field || !goal) {
-            console.error("[generate-quiz] Missing required fields:", { userType, field, goal });
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
-
-        console.log('[generate-quiz] Initializing Gemini model...');
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        });
-
-        const userContext = userType === "대학생"
-            ? `전공: ${major}, 관심 분야: ${field}`
-            : `업무 분야: ${field}`;
-
-        const prompt = `
-      You are an expert interviewer and skill assessor.
-      The user has the following profile:
-      - 유형: ${userType}
-      ${major ? `- 전공: ${major}` : ''}
-      - 분야: ${field}
-      - 목표: ${goal}
-
-      **TASK:**
-      Generate a **10-question multiple-choice quiz** to assess the user's strengths and weaknesses in ${field}.
-
-      **Requirements:**
-      1. Questions should range from basic to advanced difficulty
-      2. Questions should be practical and scenario-based, covering different aspects of ${field}
-      3. Language: **Korean**
-      4. Provide 4 options for each question
-      5. Indicate the correct answer index (0-3)
-      6. For ${userType === "대학생" ? "students" : "professionals"}, focus on ${userType === "대학생" ? "fundamental concepts and career preparation" : "practical workplace scenarios"}
-
-      Return ONLY a valid JSON array of objects.
-      Example:
-      [
-        {
-          "question": "...",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "answer": 2
-        }
-      ]
-    `;
-
-        console.log(`[generate-quiz] Generating quiz for ${userType} in ${field}...`);
-
-        let result;
-        try {
-            result = await model.generateContent(prompt);
-        } catch (apiError: any) {
-            console.error("[generate-quiz] Gemini API call failed:", {
-                message: apiError.message,
-                status: apiError.status,
-                statusText: apiError.statusText,
-                error: apiError
-            });
-            return NextResponse.json({
-                error: "Gemini API call failed",
-                details: apiError.message,
-                hint: "Check if GEMINI_API_KEY is valid and model is accessible"
-            }, { status: 500 });
-        }
-
-        const response = await result.response;
-        const text = response.text();
-
-        console.log('[generate-quiz] Received response from Gemini, length:', text?.length);
-
-        if (!text) {
-            console.error("[generate-quiz] Empty response from Gemini");
-            throw new Error("Empty response from Gemini");
-        }
-
-        let quiz;
-        try {
-            const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            quiz = JSON.parse(cleanedText);
-            console.log('[generate-quiz] Successfully parsed quiz with', quiz.length, 'questions');
-        } catch (e) {
-            console.error("[generate-quiz] Failed to parse Gemini response:", text.substring(0, 500));
-            throw new Error("Failed to parse quiz data");
-        }
-
-        console.log('[generate-quiz] Quiz generation successful');
-        return NextResponse.json({ quiz });
-    } catch (error: any) {
-        console.error("[generate-quiz] Error generating quiz:", {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
-        return NextResponse.json({
-            error: "Failed to generate quiz",
-            details: error.message,
-            errorType: error.name
-        }, { status: 500 });
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { pageAnalyses, type } = await request.json();
+
+    if (!pageAnalyses || !Array.isArray(pageAnalyses)) {
+      return NextResponse.json(
+        { error: "Page analyses are required" },
+        { status: 400 }
+      );
+    }
+
+    // Combine all page content for quiz generation
+    const allContent = pageAnalyses
+      .map((page: any, idx: number) =>
+        `[슬라이드 ${idx + 1}: ${page.title}]\n${page.content}\n\nKey Points:\n${page.keyPoints?.join('\n') || 'N/A'}`
+      )
+      .join("\n\n==========\n\n");
+
+    console.log("[QUIZ] Generating T/F and MC with gpt-5-mini (parallel), Essay with gpt-5.1...");
+
+    // Generate T/F and Multiple Choice with gpt-5-mini in parallel
+    const [tfResult, mcResult, essayResult] = await Promise.all([
+      // T/F questions with mini model
+      openai.chat.completions.create({
+        model: MINI_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: type === "exam"
+              ? "당신은 시험 출제 전문가입니다. 정확하고 명확한 참/거짓 문제를 출제합니다."
+              : "당신은 업무 교육 전문가입니다. 실무 중심의 참/거짓 문제를 출제합니다."
+          },
+          {
+            role: "user",
+            content: `다음 학습 자료를 기반으로 5개의 참/거짓 문제를 출제하세요.
+
+${allContent}
+
+다음 JSON 형식으로 응답:
+{
+  "questions": [
+    {
+      "question": "명확한 진술문",
+      "answer": true,
+      "explanation": "정답에 대한 설명",
+      "page": 1
+    }
+  ]
+}
+
+**중요**: 정확히 5개의 문제를 포함해야 합니다.`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 1.0,
+      }),
+
+      // Multiple Choice questions with mini model
+      openai.chat.completions.create({
+        model: MINI_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: type === "exam"
+              ? "당신은 시험 출제 전문가입니다. 정확한 객관식 문제를 출제합니다."
+              : "당신은 업무 교육 전문가입니다. 실무 중심의 객관식 문제를 출제합니다."
+          },
+          {
+            role: "user",
+            content: `다음 학습 자료를 기반으로 5개의 객관식 문제를 출제하세요. 각 문제는 4개의 선택지를 가집니다.
+
+${allContent}
+
+다음 JSON 형식으로 응답:
+{
+  "questions": [
+    {
+      "question": "문제 내용",
+      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
+      "answer": 0,
+      "explanation": "정답 설명",
+      "page": 1
+    }
+  ]
+}
+
+**중요**: 정확히 5개의 문제를 포함해야 합니다.`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 1.0,
+      }),
+
+      // Essay questions with GPT-5.1
+      openai.chat.completions.create({
+        model: FINAL_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: type === "exam"
+              ? "당신은 시험 출제 전문가입니다. 깊이 있는 이해를 평가하는 서술형 문제를 출제합니다."
+              : "당신은 업무 교육 전문가입니다. 실무 적용 능력을 평가하는 서술형 문제를 출제합니다."
+          },
+          {
+            role: "user",
+            content: `다음 학습 자료를 기반으로 5개의 서술형 문제를 출제하세요. 각 문제는 2-4 문장으로 답변 가능한 수준입니다.
+
+${allContent}
+
+다음 JSON 형식으로 응답:
+{
+  "questions": [
+    {
+      "question": "서술형 문제",
+      "modelAnswer": "모범 답안 (2-4 문장)",
+      "keyPoints": ["핵심 키워드1", "핵심 키워드2", "핵심 키워드3"],
+      "page": 1
+    }
+  ]
+}
+
+**중요**: 정확히 5개의 문제를 포함해야 합니다.`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 1.0,
+      })
+    ]);
+
+    // Parse results
+    const tfData = JSON.parse(tfResult.choices[0].message.content || "{}");
+    const mcData = JSON.parse(mcResult.choices[0].message.content || "{}");
+    const essayData = JSON.parse(essayResult.choices[0].message.content || "{}");
+
+    const quiz = {
+      trueFalse: (tfData.questions || []).slice(0, 5),
+      multipleChoice: (mcData.questions || []).slice(0, 5),
+      essay: (essayData.questions || []).slice(0, 5)
+    };
+
+    console.log(`[QUIZ] Generated: ${quiz.trueFalse.length} T/F, ${quiz.multipleChoice.length} MC, ${quiz.essay.length} Essay`);
+
+    return NextResponse.json({ quiz, success: true });
+  } catch (error: any) {
+    console.error("[QUIZ ERROR] Full error:", error);
+    console.error("[QUIZ ERROR] Error message:", error.message);
+    console.error("[QUIZ ERROR] Stack trace:", error.stack);
+    if (error.response) {
+      console.error("[QUIZ ERROR] API Response:", error.response.data);
+      console.error("[QUIZ ERROR] API Status:", error.response.status);
+    }
+    return NextResponse.json(
+      {
+        error: "Quiz generation failed",
+        details: error.message,
+        stack: error.stack,
+        apiError: error.response?.data || null
+      },
+      { status: 500 }
+    );
+  }
 }

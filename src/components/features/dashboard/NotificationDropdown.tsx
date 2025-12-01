@@ -38,17 +38,23 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
     const loadNotifications = () => {
         const now = new Date();
-        const currentDayOfWeek = now.getDay();
+        const currentDayOfWeek = now.getDay(); // 0=일요일, 1=월요일, ..., 6=토요일
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+
+        console.log('[NotificationDropdown] Current day of week:', currentDayOfWeek, '(0=일,1=월,2=화,3=수,4=목,5=금,6=토)');
+        console.log('[NotificationDropdown] Current time:', currentTime, 'All goals:', goals);
 
         const completions = getTodayCompletions();
         setTodayCompletions(completions);
 
         // Filter goals for today
-        const todaysGoals = goals.filter(goal =>
-            goal.daysOfWeek?.includes(currentDayOfWeek) && goal.notificationEnabled
-        );
+        const todaysGoals = goals.filter(goal => {
+            const hasDay = goal.daysOfWeek?.includes(currentDayOfWeek);
+            const hasNotif = goal.notificationEnabled;
+            console.log(`[NotificationDropdown] Goal "${goal.text}": daysOfWeek=${goal.daysOfWeek}, includes today=${hasDay}, notif=${hasNotif}`);
+            return hasDay && hasNotif;
+        });
 
         // Create notification items - only show schedules that have started
         const items: (NotificationItem & { isFuture: boolean })[] = todaysGoals.map(goal => {

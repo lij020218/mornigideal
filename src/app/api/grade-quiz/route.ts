@@ -1,0 +1,207 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
+const FINAL_MODEL = "gpt-5.1-2025-11-13";
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { quiz, answers, type } = await request.json();
+
+    console.log("[GRADING] Starting quiz grading...");
+
+    // Grade T/F (straightforward)
+    let tfCorrect = 0;
+    const tfResults = quiz.trueFalse.map((q: any, idx: number) => {
+      const isCorrect = answers.trueFalse[idx] === q.answer;
+      if (isCorrect) tfCorrect++;
+      return {
+        question: q.question,
+        userAnswer: answers.trueFalse[idx],
+        correctAnswer: q.answer,
+        isCorrect,
+        explanation: q.explanation,
+        page: q.page
+      };
+    });
+
+    // Grade Multiple Choice (straightforward)
+    let mcCorrect = 0;
+    const mcResults = quiz.multipleChoice.map((q: any, idx: number) => {
+      const isCorrect = answers.multipleChoice[idx] === q.answer;
+      if (isCorrect) mcCorrect++;
+      return {
+        question: q.question,
+        userAnswer: answers.multipleChoice[idx],
+        correctAnswer: q.answer,
+        isCorrect,
+        explanation: q.explanation,
+        page: q.page
+      };
+    });
+
+    // Grade Essay Questions with GPT-5.1
+    console.log("[GRADING] Using GPT-5.1 to grade essay questions...");
+
+    const essayGradingPromises = quiz.essay.map(async (q: any, idx: number) => {
+      const userAnswer = answers.essay[idx];
+
+      const gradingPrompt = `다음 서술형 문제의 답변을 채점하세요.
+
+**문제**: ${q.question}
+
+**학생 답변**: ${userAnswer}
+
+**모범 답안**: ${q.modelAnswer}
+
+**채점 기준 (핵심 키워드)**:
+${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
+
+**채점 방식**:
+1. 학생 답변이 핵심 키워드를 얼마나 포함하고 있는지 평가
+2. 개념의 정확성과 설명의 논리성 평가
+3. 100점 만점으로 점수 부여 (0-100)
+4. 부분 점수 허용 (핵심 개념을 일부만 포함한 경우)
+
+다음 JSON 형식으로 응답:
+
+{
+  "score": 85,
+  "feedback": "핵심 개념을 잘 이해하고 있으나, X 부분에 대한 설명이 부족합니다.",
+  "missingPoints": ["부족한 핵심 키워드1", "부족한 핵심 키워드2"]
+}`;
+
+      const grading = await openai.chat.completions.create({
+        model: FINAL_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: type === "exam"
+              ? "당신은 공정하고 정확한 채점을 하는 대학 교수입니다."
+              : "당신은 실무 지식을 정확히 평가하는 시니어 전문가입니다."
+          },
+          { role: "user", content: gradingPrompt }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+      });
+
+      const result = JSON.parse(grading.choices[0].message.content || "{}");
+      return {
+        question: q.question,
+        userAnswer,
+        modelAnswer: q.modelAnswer,
+        score: result.score || 0,
+        feedback: result.feedback || "",
+        missingPoints: result.missingPoints || [],
+        page: q.page
+      };
+    });
+
+    const essayResults = await Promise.all(essayGradingPromises);
+    const essayTotalScore = essayResults.reduce((sum, r) => sum + r.score, 0);
+
+    console.log("[GRADING] Essay grading complete");
+
+    // Calculate total score
+    const totalScore = tfCorrect + mcCorrect + (essayTotalScore / 100) * 5;
+    const percentage = (totalScore / 15) * 100;
+
+    // Analyze strengths and weaknesses
+    const incorrectTF = tfResults.filter(r => !r.isCorrect);
+    const incorrectMC = mcResults.filter(r => !r.isCorrect);
+    const weakEssays = essayResults.filter(r => r.score < 70);
+
+    const strengths: string[] = [];
+    if (tfCorrect >= 4) strengths.push("참/거짓 문제에서 정확한 개념 이해 보유");
+    if (mcCorrect >= 4) strengths.push("객관식 문제에서 우수한 응용 능력 발휘");
+    if (essayTotalScore / 5 >= 75) strengths.push("서술형 답변에서 깊이 있는 이해도 표현");
+
+    const weaknesses: Array<{ concept: string; pages: number[] }> = [];
+    const weakPages = new Set<number>();
+
+    [...incorrectTF, ...incorrectMC].forEach(r => {
+      weakPages.add(r.page);
+    });
+
+    weakEssays.forEach(r => {
+      if (r.missingPoints.length > 0) {
+        weaknesses.push({
+          concept: `${r.question.substring(0, 40)}... - ${r.missingPoints.join(', ')}`,
+          pages: [r.page]
+        });
+      }
+    });
+
+    // Generate AI advice
+    console.log("[GRADING] Generating personalized advice with GPT-5.1...");
+
+    const advicePrompt = `학생의 퀴즈 결과를 분석하여 맞춤형 학습 조언을 제공하세요.
+
+**점수**: ${percentage.toFixed(0)}%
+**강점**: ${strengths.join(', ') || '없음'}
+**약점**: ${weaknesses.map(w => w.concept).join(', ') || '없음'}
+
+**오답 세부사항**:
+- 참/거짓 오답: ${incorrectTF.length}개
+- 객관식 오답: ${incorrectMC.length}개
+- 서술형 낮은 점수: ${weakEssays.length}개
+
+2-3문장으로 구체적이고 실행 가능한 학습 조언을 제공하세요.`;
+
+    const adviceResult = await openai.chat.completions.create({
+      model: FINAL_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "당신은 학생들의 학습을 돕는 멘토입니다. 구체적이고 실행 가능한 조언을 제공합니다."
+        },
+        { role: "user", content: advicePrompt }
+      ],
+      temperature: 0.7,
+    });
+
+    const advice = adviceResult.choices[0].message.content || "계속해서 학습을 이어가세요!";
+
+    const result = {
+      score: Math.round(totalScore * 10) / 10,
+      totalScore: 15,
+      percentage: Math.round(percentage * 10) / 10,
+      strengths,
+      weaknesses,
+      advice,
+      breakdown: {
+        trueFalse: { correct: tfCorrect, total: 5 },
+        multipleChoice: { correct: mcCorrect, total: 5 },
+        essay: { score: essayTotalScore / 20, total: 5 } // Convert to /5 scale
+      },
+      details: {
+        trueFalse: tfResults,
+        multipleChoice: mcResults,
+        essay: essayResults
+      }
+    };
+
+    console.log("[GRADING] Complete:", { score: result.score, percentage: result.percentage });
+
+    return NextResponse.json({ result, success: true });
+  } catch (error: any) {
+    console.error("[GRADING ERROR]", error);
+    return NextResponse.json(
+      {
+        error: "Grading failed",
+        details: error.message,
+      },
+      { status: 500 }
+    );
+  }
+}

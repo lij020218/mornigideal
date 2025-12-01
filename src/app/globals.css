@@ -147,3 +147,19 @@ body {
 .animate-slide-up {
   animation: slide-up 0.5s ease-out forwards;
 }
+
+/* Remove markdown styling inside blockquotes (Note boxes) */
+.blockquote-content strong {
+  background: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-weight: 600;
+}
+
+.blockquote-content em {
+  background: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-style: normal;
+  font-weight: inherit;
+}

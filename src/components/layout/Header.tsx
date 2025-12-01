@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NotificationDropdown } from "@/components/features/dashboard/NotificationDropdown";
 import { DailyBriefingModal } from "@/components/features/dashboard/DailyBriefingModal";
 import { getDailyGoals } from "@/lib/dailyGoals";
+import { signOut } from "next-auth/react";
 
 interface UserProfile {
     job: string;
@@ -44,7 +45,7 @@ export function Header() {
     useEffect(() => {
         const loadProfile = async () => {
             // Load username
-            // In a real app, this would come from auth session. 
+            // In a real app, this would come from auth session.
             // For now, we'll try to get it from localStorage or default to "User"
             // The Dashboard prop 'username' was passed from page.tsx which got it from searchParams or default.
             // We'll assume a default or stored value if possible, but for now "User" is safe.
@@ -70,6 +71,20 @@ export function Header() {
         };
 
         loadProfile();
+
+        // Listen for profile updates from Dashboard
+        const handleProfileUpdate = () => {
+            const savedProfile = localStorage.getItem("user_profile");
+            if (savedProfile) {
+                console.log("[Header] Profile updated, reloading from localStorage");
+                setUserProfile(JSON.parse(savedProfile));
+            }
+        };
+
+        window.addEventListener('profile-updated', handleProfileUpdate);
+        return () => {
+            window.removeEventListener('profile-updated', handleProfileUpdate);
+        };
     }, []);
 
     const loadOrGenerateBriefing = async () => {
@@ -289,9 +304,8 @@ export function Header() {
                                             onClick={async () => {
                                                 // Clear all localStorage data
                                                 localStorage.clear();
-                                                // Sign out
-                                                const { signOut } = await import('@/auth');
-                                                await signOut({ redirectTo: '/login' });
+                                                // Sign out using NextAuth client-side signOut
+                                                await signOut({ callbackUrl: '/login' });
                                             }}
                                             className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-red-400 hover:text-red-300 flex items-center gap-3"
                                         >

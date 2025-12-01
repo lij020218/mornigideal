@@ -1,5 +1,6 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
 import { z } from "zod"
 import { validateUser } from "@/lib/users"
 
@@ -14,17 +15,30 @@ declare module "next-auth" {
             email?: string | null
             username?: string
         }
+        accessToken?: string
     }
 }
 
 declare module "@auth/core/jwt" {
     interface JWT {
         username?: string
+        accessToken?: string
     }
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
+        Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            authorization: {
+                params: {
+                    scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+                    access_type: "offline",
+                    prompt: "consent",
+                }
+            }
+        }),
         Credentials({
             credentials: {
                 email: { label: "Email", type: "email" },
@@ -65,15 +79,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         signIn: "/login",
     },
     callbacks: {
-        async jwt({ token, user }) {
+        async jwt({ token, user, account }) {
             if (user) {
                 token.username = user.username
+            }
+            if (account?.access_token) {
+                token.accessToken = account.access_token
             }
             return token
         },
         async session({ session, token }) {
             if (session.user) {
                 session.user.username = token.username
+            }
+            if (token.accessToken) {
+                session.accessToken = token.accessToken as string
             }
             return session
         },

@@ -22,8 +22,8 @@ export async function GET() {
 
         // Fetch pre-generated trend briefing from Supabase
         const { data, error } = await supabase
-            .from('trend_briefings')
-            .select('briefing_data, created_at, selected_articles')
+            .from('trends_cache')
+            .select('trends, last_updated')
             .eq('email', userEmail)
             .eq('date', today)
             .single();
@@ -47,11 +47,8 @@ export async function GET() {
 
         // Return in the format expected by the frontend
         return NextResponse.json({
-            trends: data.briefing_data.trends || [],
-            overall_insight: data.briefing_data.overall_insight,
-            key_message: data.briefing_data.key_message,
-            action_items: data.briefing_data.action_items,
-            generated_at: data.created_at
+            trends: data.trends || [],
+            generated_at: data.last_updated
         });
 
     } catch (error) {

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
-import pdfParse from "pdf-parse-fork";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -66,292 +68,159 @@ const WORK_SYSTEM_PROMPT = `당신은 해당 분야에서 10년+ 경력의 시�
 
 항상 시니어 전문가 수준의 명료함과 깊이로 설명하세요.`;
 
-// Step 3: Embedding + Clustering helper
-async function groupSimilarChunks(chunks: any[]): Promise<any[][]> {
-  if (chunks.length <= 3) return [chunks]; // Too few to cluster
+// Step 3: Global Summary (Cost Optimization)
+async function generateGlobalSummary(chunkAnalyses: any[], type: string): Promise<string> {
+  console.log(`[SUMMARY] Generating global summary from ${chunkAnalyses.length} chunks using ${CHUNK_MODEL}...`);
 
-  console.log(`[EMBEDDING] Creating embeddings for ${chunks.length} chunks (BATCH PARALLEL: 10 at a time)`);
+  const allContent = chunkAnalyses.map((c, i) =>
+    `[Chunk ${i + 1}] ${c.title}:\n${c.content}`
+  ).join("\n\n");
 
-  // Create embeddings in batches of 10 (parallel within batch)
-  const chunksWithEmbeddings = [];
-  const EMBEDDING_BATCH_SIZE = 10;
+  const summaryPrompt = type === "exam"
+    ? `다음은 강의 자료를 여러 chunk로 분석한 결과입니다.
 
-  for (let batchStart = 0; batchStart < chunks.length; batchStart += EMBEDDING_BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + EMBEDDING_BATCH_SIZE, chunks.length);
-    const batch = chunks.slice(batchStart, batchEnd);
+전체 내용:
+${allContent}
 
-    console.log(`[EMBEDDING BATCH] Processing chunks ${batchStart + 1}-${batchEnd} (${batch.length} parallel)...`);
+**당신의 임무**: 이 강의의 전체 구조와 핵심 개념을 600-800 tokens로 정리하세요.
 
-    // Process this batch in parallel
-    const batchPromises = batch.map(async (chunk) => {
-      const text = `${chunk.title}\n${chunk.content}`;
-      const response = await openai.embeddings.create({
-        model: EMBEDDING_MODEL,
-        input: text,
-      });
-      return {
-        chunk,
-        embedding: response.data[0].embedding,
-      };
-    });
+다음을 포함해야 합니다:
+1. 강의의 주제와 목표
+2. 핵심 개념들 (5-8개)과 그 관계
+3. 논리적 흐름 (어떤 순서로 가르쳐야 하는가)
+4. 중요한 수식이나 이론
+5. 학생들이 반드시 알아야 할 시험 포인트
 
-    const batchResults = await Promise.all(batchPromises);
-    chunksWithEmbeddings.push(...batchResults);
+자연어로 작성하되, 슬라이드 구성에 필요한 모든 정보를 담으세요.`
+    : `다음은 업무 자료를 여러 chunk로 분석한 결과입니다.
 
-    console.log(`[EMBEDDING BATCH] Complete. Total: ${chunksWithEmbeddings.length}/${chunks.length}`);
-  }
+전체 내용:
+${allContent}
 
-  // Simple clustering: calculate similarity and group similar chunks
-  const groups: any[][] = [];
-  const used = new Set<number>();
+**당신의 임무**: 이 자료의 전체 구조와 핵심 내용을 600-800 tokens로 정리하세요.
 
-  for (let i = 0; i < chunksWithEmbeddings.length; i++) {
-    if (used.has(i)) continue;
+다음을 포함해야 합니다:
+1. 자료의 목적과 핵심 메시지
+2. 주요 프로세스나 전략 (5-8개)
+3. 논리적 흐름 (배경 -> 실행 -> 결과)
+4. 실무 적용 포인트와 주의사항
+5. 의사결정에 필요한 핵심 데이터/근거
 
-    const group = [chunksWithEmbeddings[i].chunk];
-    used.add(i);
-
-    // Find similar chunks
-    for (let j = i + 1; j < chunksWithEmbeddings.length; j++) {
-      if (used.has(j)) continue;
-
-      const similarity = cosineSimilarity(
-        chunksWithEmbeddings[i].embedding,
-        chunksWithEmbeddings[j].embedding
-      );
-
-      // Group if similarity > threshold (high similarity)
-      if (similarity > SIMILARITY_THRESHOLD) {
-        group.push(chunksWithEmbeddings[j].chunk);
-        used.add(j);
-      }
-    }
-
-    groups.push(group);
-  }
-
-  console.log(`[CLUSTERING] Grouped ${chunks.length} chunks into ${groups.length} clusters`);
-  return groups;
-}
-
-// Cosine similarity helper
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-// Step 4: Final integration with high-quality model
-async function integrateClusters(groups: any[][], type: string): Promise<any[]> {
-  console.log(`[INTEGRATION STEP 1/2] Compressing ${groups.length} clusters using ${CHUNK_MODEL} (BATCH PARALLEL: 3 at a time)`);
-
-  // STEP 1: Compress each cluster into a topic summary using MINI model (batch parallel)
-  const topicSummaries: string[] = [];
-  const COMPRESSION_BATCH_SIZE = 3;
-
-  for (let batchStart = 0; batchStart < groups.length; batchStart += COMPRESSION_BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + COMPRESSION_BATCH_SIZE, groups.length);
-    const batchGroups = groups.slice(batchStart, batchEnd);
-
-    console.log(`[CLUSTER BATCH] Processing clusters ${batchStart + 1}-${batchEnd} (${batchGroups.length} parallel)...`);
-
-    // Process this batch in parallel
-    const batchPromises = batchGroups.map(async (group, batchIdx) => {
-      const idx = batchStart + batchIdx;
-      const mainTopic = group[0].title;
-
-      // Combine all chunks in this cluster
-      const allContents = group.map((c, i) =>
-        `[Chunk ${i + 1}] ${c.title}:\n${c.content}`
-      ).join("\n\n");
-
-      // Use MINI to compress this cluster into a single topic summary
-      const compressionPrompt = type === "exam"
-        ? `다음은 같은 주제로 묶인 ${group.length}개의 학습 내용입니다:
-
-${allContents}
-
-**임무**: 이 내용들을 강의실에서 설명하듯이 자연스럽게 하나의 긴 설명으로 통합하세요.
-
-**작성 방식**:
-- 중복된 내용은 제거하되, 핵심 내용은 모두 포함
-- 강의하듯이 자연스럽게 흐르는 설명 (딱딱한 라벨 금지)
-- 시험에 중요한 내용을 자연스럽게 강조
-- 500-800 단어 정도의 긴 설명
-
-다음 JSON 형식으로 응답:
-{
-  "topic": "주제 제목",
-  "summary": "강의실에서 설명하듯이 자연스럽게 흐르는 긴 텍스트..."
-}`
-        : `다음은 같은 주제로 묶인 ${group.length}개의 업무 내용입니다:
-
-${allContents}
-
-**임무**: 이 내용들을 동료에게 설명하듯이 자연스럽게 하나의 긴 설명으로 통합하세요.
-
-**작성 방식**:
-- 중복된 내용은 제거하되, 핵심 내용은 모두 포함
-- 동료에게 말하듯이 자연스럽게 흐르는 설명 (딱딱한 라벨 금지)
-- 실무에 필요한 내용을 자연스럽게 강조
-- 500-800 단어 정도의 긴 설명
-
-다음 JSON 형식으로 응답:
-{
-  "topic": "주제 제목",
-  "summary": "동료에게 설명하듯이 자연스럽게 흐르는 긴 텍스트..."
-}`;
-
-      const compression = await openai.chat.completions.create({
-        model: CHUNK_MODEL, // mini 사용으로 비용 절감
-        messages: [
-          {
-            role: "system",
-            content: type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT
-          },
-          { role: "user", content: compressionPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 1.0,
-      });
-
-      const result = JSON.parse(compression.choices[0].message.content || "{}");
-      return {
-        idx: idx + 1,
-        summary: `### Topic ${idx + 1}: ${result.topic}\n\n${result.summary}`
-      };
-    });
-
-    const batchResults = await Promise.all(batchPromises);
-
-    // Sort by index to maintain order
-    batchResults.sort((a, b) => a.idx - b.idx);
-    topicSummaries.push(...batchResults.map(r => r.summary));
-
-    console.log(`[CLUSTER BATCH] Complete. Total: ${topicSummaries.length}/${groups.length}`);
-  }
-
-  // STEP 2: Use GPT-5.1 to integrate compressed topics (토큰 40-70% 감소)
-  console.log(`[INTEGRATION STEP 2/2] Using ${FINAL_MODEL} for final integration (1 call only)`);
-
-  const finalInput = topicSummaries.join("\n\n====================\n\n");
-
-  const prompt = type === "exam"
-    ? `당신은 대학 시험 대비 전문 튜터입니다. 다음은 강의 자료를 주제별로 압축한 ${topicSummaries.length}개의 Topic 요약입니다.
-
-${finalInput}
-
-**임무**: 이 Topic 요약들을 기반으로 대학생용 최종 학습 슬라이드를 생성하세요.
-
-**목표**:
-- 전체 내용을 슬라이드로 압축 (마지막 2페이지는 전체 요약)
-- 각 슬라이드는 하나의 핵심 주제를 다룸
-- 시험에 나올 만한 핵심 내용만 포함
-- Topic간 논리적 흐름 유지
-
-**content 작성 규칙** (매우 중요!):
-1. **Markdown 형식 사용**: 문단 구분을 위해 빈 줄(\\n\\n) 사용
-2. **중요한 개념, 용어, 정의는 반드시 \`**굵게**\` 강조**
-3. **예시**: "**Google의 수익 모델**을 이해하는 핵심은 **트래픽**이라는 변수에 있다.\\n\\nGmail, YouTube 같은 무료 서비스는..."
-4. 문단 사이에 빈 줄 넣어서 읽기 쉽게
-5. 긴 설명은 2-3개 문단으로 나누기
-
-다음 JSON 형식으로 응답하세요:
-
-{
-  "pages": [
-    {
-      "page": 1,
-      "title": "슬라이드 제목",
-      "content": "**핵심 개념**은 이렇다.\\n\\n첫 번째 문단 설명...\\n\\n두 번째 문단 설명...",
-      "keyPoints": [
-        "시험에 나올 핵심 포인트 1 (공식, 정의, 개념)",
-        "시험에 나올 핵심 포인트 2 (적용 방법)",
-        "시험에 나올 핵심 포인트 3 (주의사항이나 함정)"
-      ]
-    }
-  ]
-}
-
-**마지막 2페이지 (필수!)**:
-- **page N-1**: "핵심 개념 총정리" - 전체 내용의 핵심 개념들을 체계적으로 정리
-- **page N**: "시험 대비 요약" - 시험에 꼭 나올 내용만 압축 정리
-
-**중요**:
-- content는 "핵심개념:", "시험포인트:" 같은 라벨 없이 자연스럽게 작성
-- 중요한 개념은 **반드시** \`**굵게**\` 표시
-- 문단 사이 빈 줄(\\n\\n) 필수`
-    : `당신은 비즈니스 문서 분석 전문가입니다. 다음은 업무 자료를 주제별로 압축한 ${topicSummaries.length}개의 Topic 요약입니다.
-
-${finalInput}
-
-**임무**: 이 Topic 요약들을 기반으로 업무용 최종 슬라이드를 생성하세요.
-
-**목표**:
-- 전체 내용을 슬라이드로 압축 (마지막 2페이지는 전체 요약) 
-- 각 슬라이드는 하나의 업무 프로세스나 주제를 다룸
-- 실무에 활용 가능한 핵심 내용만 포함
-- Topic간 논리적 흐름 유지
-
-**content 작성 규칙** (매우 중요!):
-1. **Markdown 형식 사용**: 문단 구분을 위해 빈 줄(\\n\\n) 사용
-2. **중요한 프로세스, 용어, 주의사항은 반드시 \`**굵게**\` 강조**
-3. **예시**: "이 **프로세스 변경의 핵심**은 데이터 일관성 보장에 있다.\\n\\n기존 A 방식은..."
-4. 문단 사이에 빈 줄 넣어서 읽기 쉽게
-5. 긴 설명은 2-3개 문단으로 나누기
-
-다음 JSON 형식으로 응답하세요:
-
-{
-  "pages": [
-    {
-      "page": 1,
-      "title": "슬라이드 제목",
-      "content": "**핵심 프로세스**는 이렇다.\\n\\n첫 번째 문단 설명...\\n\\n두 번째 문단 설명...",
-      "keyPoints": [
-        "실무에 바로 적용 가능한 핵심 인사이트 1",
-        "업무 효율을 높이는 핵심 인사이트 2",
-        "주의사항이나 Best Practice"
-      ]
-    }
-  ]
-}
-
-**마지막 2페이지 (필수!)**:
-- **page N-1**: "핵심 프로세스 총정리" - 전체 업무 흐름과 핵심 내용 체계적 정리
-- **page N**: "실무 적용 요약" - 실무에 바로 적용 가능한 핵심만 압축 정리
-
-**중요**:
-- content는 "핵심개념:", "업무포인트:" 같은 라벨 없이 자연스럽게 작성
-- 중요한 프로세스/용어는 **반드시** \`**굵게**\` 표시
-- 문단 사이 빈 줄(\\n\\n) 필수`;
+자연어로 작성하되, 슬라이드 구성에 필요한 모든 정보를 담으세요.`;
 
   const completion = await openai.chat.completions.create({
-    model: FINAL_MODEL, // 5.1 사용 (단 1회)
+    model: CHUNK_MODEL, // gpt-5-mini (Cheap)
     messages: [
-      {
-        role: "system",
-        content: type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
+      { role: "system", content: "당신은 문서 요약 전문가입니다." },
+      { role: "user", content: summaryPrompt }
+    ],
+    temperature: 0.7,
+    // max_tokens: 1000 // Optional, let model decide but keep it concise
+  });
+
+  const summary = completion.choices[0].message.content || "";
+  console.log(`[SUMMARY] Generated summary (${summary.length} chars)`);
+  return summary;
+}
+
+// Step 4: Final Generation from Summary (High Quality, Low Cost)
+async function generateFinalSlidesFromSummary(summary: string, type: string): Promise<any[]> {
+  console.log(`[FINAL] Generating slides from summary using ${FINAL_MODEL}...`);
+
+  const finalPrompt = type === "exam"
+    ? `당신은 MIT, Stanford급 대학 교수입니다.
+
+**강의 요약**:
+${summary}
+
+이 요약을 바탕으로 최고 품질의 학습 슬라이드를 생성하세요.
+
+**목표**:
+- 전체 내용을 3-5장의 슬라이드로 구성 (마지막 2장은 요약 페이지)
+- 각 슬라이드는 하나의 핵심 주제를 다룸
+- 시험에 나올 만한 핵심 내용만 포함
+- 논리적 흐름 유지
+
+**content 작성 규칙** (매우 중요!):
+1. **섹션 구조화**: 각 content는 반드시 다음 섹션들로 구성:
+   - ### 📌 핵심 정의
+   - ### 📖 상세 설명
+   - ### 💡 시험 전략 (선택적)
+
+2. **Markdown 형식 사용**:
+   - 섹션 제목은 \`### 이모지 제목\` 형식
+   - 문단 구분을 위해 빈 줄(\\n\\n) 사용
+   - 중요한 개념, 용어, 정의는 반드시 \`**굵게**\` 강조
+
+다음 JSON 형식으로 응답하세요:
+
+{
+  "pages": [
+    {
+      "page": 1,
+      "title": "슬라이드 제목",
+      "content": "### 📌 핵심 정의\\n\\n**핵심 개념**은...\\n\\n### 📖 상세 설명\\n\\n...",
+      "keyPoints": ["포인트 1", "포인트 2"]
+    }
+  ]
+}
+
+**마지막 2페이지 (필수!)**:
+- **page N-1**: "핵심 개념 총정리"
+- **page N**: "시험 대비 요약"`
+    : `당신은 비즈니스 문서 분석 전문가입니다.
+
+**업무 요약**:
+${summary}
+
+이 요약을 바탕으로 최고 품질의 업무 슬라이드를 생성하세요.
+
+**목표**:
+- 전체 내용을 3-5장의 슬라이드로 구성 (마지막 2장은 요약 페이지)
+- 각 슬라이드는 하나의 핵심 프로세스나 주제를 다룸
+- 실무에 활용 가능한 핵심 내용만 포함
+- 논리적 흐름 유지
+
+**content 작성 규칙** (매우 중요!):
+1. **섹션 구조화**: 각 content는 반드시 다음 섹션들로 구성:
+   - ### 📌 핵심 개념
+   - ### 📖 상세 설명
+   - ### 💼 실무 적용 (선택적)
+
+2. **Markdown 형식 사용**:
+   - 섹션 제목은 \`### 이모지 제목\` 형식
+   - 문단 구분을 위해 빈 줄(\\n\\n) 사용
+   - 중요한 프로세스, 용어는 반드시 \`**굵게**\` 강조
+
+다음 JSON 형식으로 응답하세요:
+
+{
+  "pages": [
+    {
+      "page": 1,
+      "title": "슬라이드 제목",
+      "content": "### 📌 핵심 개념\\n\\n**핵심**은...\\n\\n### 📖 상세 설명\\n\\n...",
+      "keyPoints": ["인사이트 1", "인사이트 2"]
+    }
+  ]
+}
+
+**마지막 2페이지 (필수!)**:
+- **page N-1**: "핵심 프로세스 총정리"
+- **page N**: "실무 적용 요약"`;
+
+  const completion = await openai.chat.completions.create({
+    model: FINAL_MODEL, // gpt-5.1 (Expensive but input is short now)
+    messages: [
+      { role: "system", content: type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT },
+      { role: "user", content: finalPrompt }
     ],
     response_format: { type: "json_object" },
     temperature: 1.0,
   });
 
   const result = JSON.parse(completion.choices[0].message.content || "{}");
-  console.log(`[INTEGRATION] Created ${result.pages?.length || 0} final slides`);
+  console.log(`[FINAL] Created ${result.pages?.length || 0} final slides`);
   return result.pages || [];
 }
 
@@ -392,205 +261,169 @@ export async function POST(request: NextRequest) {
 
       // Upload PDF to Supabase Storage - sanitize all special characters
       const sanitizedEmail = (session.user.email || '').replace(/[^a-zA-Z0-9]/g, '_');
-      // Keep only alphanumeric, dot, dash, underscore
       const sanitizedFileName = file.name
-        .replace(/\s+/g, '_')  // spaces to underscore
-        .replace(/[^\w.-]/g, ''); // remove everything except word chars, dot, dash
-      const fileName = `${Date.now()}_${sanitizedEmail}_${sanitizedFileName}`;
-      console.log("[PDF] Uploading to storage:", fileName);
+        .replace(/\s+/g, '_')
+        .replace(/[^\w.-]/g, '');
+      const fileName = `${sanitizedEmail}_${sanitizedFileName}`; // Removed timestamp to allow caching by filename
+      console.log("[PDF] Target filename:", fileName);
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // 1. Check Cache (Chunks & Embeddings)
+      // Cache key includes chunk size to invalidate when settings change
+      const CHUNK_VERSION = "9600"; // Update this when MAX_CHARS changes
+      const chunksCachePath = `${fileName}_chunks_${CHUNK_VERSION}.json`;
+      const embeddingsCachePath = `${fileName}_embeddings_${CHUNK_VERSION}.json`;
+
+      console.log("[CACHE] Checking for existing analysis...");
+      const { data: cachedChunks, error: chunksError } = await supabase.storage
         .from("materials")
-        .upload(fileName, buffer, {
-          contentType: "application/pdf",
-          upsert: false,
-        });
+        .download(chunksCachePath);
 
-      if (uploadError) {
-        console.error("[PDF] Upload error:", uploadError);
-        console.error("[PDF] Error details:", JSON.stringify(uploadError, null, 2));
+      const { data: cachedEmbeddings, error: embeddingsError } = await supabase.storage
+        .from("materials")
+        .download(embeddingsCachePath);
+
+      if (cachedChunks && !chunksError) {
+        console.log("[CACHE] HIT! Found cached chunks. Skipping parsing & chunking.");
+        const chunksText = await cachedChunks.text();
+        const chunkAnalyses = JSON.parse(chunksText);
+
+        if (USE_FINAL_INTEGRATION && chunkAnalyses.length > 0) {
+          console.log(`[STEP 3] Generating Global Summary (Cached Chunks)...`);
+          const summary = await generateGlobalSummary(chunkAnalyses, type);
+
+          console.log(`[STEP 4] Generating Final Slides (Cached Chunks)...`);
+          pageAnalyses = await generateFinalSlidesFromSummary(summary, type);
+        } else {
+          pageAnalyses = chunkAnalyses;
+        }
       } else {
-        console.log("[PDF] Upload success:", uploadData);
-        const { data: publicUrlData } = supabase.storage
+        // NO CACHE - Full Process
+        console.log("[CACHE] MISS. Starting fresh analysis...");
+
+        // Upload file (if not exists)
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from("materials")
-          .getPublicUrl(fileName);
-        fileUrl = publicUrlData.publicUrl;
-        console.log("[PDF] File URL:", fileUrl);
-      }
+          .upload(fileName, buffer, {
+            contentType: "application/pdf",
+            upsert: true, // Overwrite to ensure we have the file
+          });
 
-      // Extract text
-      const pdfData = await pdfParse(buffer);
-      fullContent = pdfData.text;
-      const totalPages = pdfData.numpages;
-      console.log(`[PDF] Extracted ${fullContent.length} chars from ${totalPages} pages`);
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from("materials")
+            .getPublicUrl(fileName);
+          fileUrl = publicUrlData.publicUrl;
+        }
 
-      // Split text by pages (approximation)
-      const avgCharsPerPage = Math.ceil(fullContent.length / totalPages);
-      const pages: Array<{ pageNum: number; text: string }> = [];
+        // Extract text
+        const pdfData = await pdf(buffer);
+        fullContent = pdfData.text;
+        console.log(`[PDF] Extracted ${fullContent.length} chars`);
 
-      for (let i = 0; i < totalPages; i++) {
-        const start = i * avgCharsPerPage;
-        const end = Math.min((i + 1) * avgCharsPerPage, fullContent.length);
-        pages.push({
-          pageNum: i + 1,
-          text: fullContent.substring(start, end),
-        });
-      }
+        // Token-based Chunking (Sliding Window)
+        // Approx: 1 token ~= 4 chars for English, ~2 chars for Korean
+        // Target: 20-22 chunks (reduced from 43)
+        const MAX_CHARS = 9600;  // ~2400 tokens (doubled to reduce chunk count)
+        const OVERLAP_CHARS = 1200;  // ~300 tokens
 
-      // Process pages in batches of 7
-      const batches: Array<Array<{ pageNum: number; text: string }>> = [];
-      for (let i = 0; i < pages.length; i += PAGES_PER_BATCH) {
-        batches.push(pages.slice(i, i + PAGES_PER_BATCH));
-      }
+        const chunks: string[] = [];
+        let start = 0;
+        while (start < fullContent.length) {
+          const end = Math.min(start + MAX_CHARS, fullContent.length);
+          chunks.push(fullContent.substring(start, end));
+          if (end === fullContent.length) break;
+          start += (MAX_CHARS - OVERLAP_CHARS);
+        }
 
-      console.log(`[PDF] Processing ${batches.length} batches IN PARALLEL (${PAGES_PER_BATCH} pages per batch)`);
-      console.log(`[COST] Using ${CHUNK_MODEL} for chunk analysis (90% cost reduction)`);
-      console.log(`[SPEED] Parallel batch processing for 10-20x speedup`);
+        console.log(`[CHUNK] Created ${chunks.length} chunks (Max ${MAX_CHARS} chars, Overlap ${OVERLAP_CHARS})`);
 
-      // Analyze all batches IN PARALLEL
-      const batchPromises = batches.map(async (batch, batchIdx) => {
-        console.log(`[BATCH ${batchIdx + 1}/${batches.length}] Starting pages ${batch[0].pageNum}-${batch[batch.length - 1].pageNum}...`);
-        const batchText = batch.map((p, idx) =>
-          `=== 페이지 ${p.pageNum} ===\n${p.text}`
-        ).join("\n\n");
+        // Analyze chunks IN PARALLEL
+        // We treat each chunk like a "page" in the previous logic
+        console.log(`[ANALYSIS] Analyzing ${chunks.length} chunks with ${CHUNK_MODEL}...`);
 
-        const prompt = type === "exam"
-          ? `당신은 강의실에서 학생들에게 직접 강의하는 교수입니다.
-다음 ${batch.length}개 페이지의 내용을 학생들이 시험 대비할 수 있도록 자연스럽게 설명해주세요.
+        const chunkPromises = chunks.map(async (chunkText, idx) => {
+          const prompt = type === "exam"
+            ? `당신은 강의실에서 학생들에게 직접 강의하는 교수입니다.
+다음 텍스트 덩어리(Chunk ${idx + 1})의 내용을 학생들이 시험 대비할 수 있도록 설명해주세요.
 
-${batchText}
+${chunkText}
 
 **작성 방식**:
 - 개념의 본질을 명료하게 설명
-- "핵심은 ~이다", "왜 이것이 중요한가", "이것이 의미하는 바는" 같은 전문적이면서도 명확한 표현 사용
-- 개념 → 원리 → 적용 → 함의 순서로 논리적 흐름 구성
-- "핵심개념:", "시험포인트:", "중요:" 같은 딱딱한 라벨 절대 사용 금지
-- 한 문단이 다음 문단으로 자연스럽게 이어지되, 각 문단은 명확한 통찰 제공
+- "핵심은 ~이다", "왜 이것이 중요한가" 같은 표현 사용
+- 딱딱한 라벨("핵심개념:" 등) 사용 금지
+- 자연스럽게 흐르는 문단으로 작성
 
-**좋은 예시**:
-"Bayes 정리를 이해하는 핵심은 조건부 확률의 방향성에 있다. P(A|B)는 B가 주어졌을 때 A의 확률이고, P(B|A)는 A가 주어졌을 때 B의 확률이다. 이 둘은 전혀 다른 의미를 가지며, 이것이 데이터 분석에서 critical한 이유는 원인과 결과의 방향을 정확히 파악해야 하기 때문이다. 예를 들어 질병 진단에서 '증상이 있을 때 질병일 확률'과 '질병이 있을 때 증상이 나타날 확률'은 완전히 다르다. 시험에서 이 개념을 설명할 때는 단순히 공식만 쓰는 것이 아니라, 이 방향성의 의미를 명확히 서술해야 한다."
-
-다음 형식의 JSON 배열로 응답해주세요:
-
+다음 JSON으로 응답:
 {
   "pages": [
     {
-      "page": 1,
-      "title": "슬라이드 제목 (핵심 주제를 한 문장으로)",
-      "content": "세계 최고 수준의 명료함과 깊이로 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 논리적 흐름으로 연결되어야 합니다.",
-      "keyPoints": [
-        "시험에 나올 핵심 포인트 1 (구체적으로)",
-        "시험에 나올 핵심 포인트 2 (공식, 정의, 개념 등)",
-        "시험에 나올 핵심 포인트 3 (적용 방법이나 주의사항)"
-      ]
+      "page": ${idx + 1},
+      "title": "Chunk ${idx + 1} 핵심 주제",
+      "content": "자연스럽게 흐르는 설명...",
+      "keyPoints": ["포인트 1", "포인트 2", "포인트 3"]
     }
   ]
-}
+}`
+            : `당신은 시니어 직원입니다.
+다음 업무 자료 텍스트(Chunk ${idx + 1})를 동료에게 설명해주세요.
 
-**지침**:
-1. ${batch.length}페이지를 2-3개의 슬라이드로 압축
-2. 각 슬라이드는 하나의 주제를 깊이 있게 설명
-3. 제목 페이지, 목차, 반복 내용은 생략
-4. 시험에 critical한 내용을 자연스럽게 강조
-5. keyPoints: 시험에 꼭 나올 만한 내용을 3-5개 추출 (공식, 정의, 개념, 적용법 등)`
-          : `당신은 회사에서 동료에게 업무 내용을 설명하는 시니어 직원입니다.
-다음 ${batch.length}개 페이지의 업무 자료를 동료가 이해할 수 있도록 자연스럽게 설명해주세요.
-
-${batchText}
+${chunkText}
 
 **작성 방식**:
 - 동료에게 말하듯이 자연스럽게 설명
-- "여기서 중요한 건", "실무에서는 이렇게", "주의할 점은" 같은 자연스러운 표현 사용
-- 배경 → 핵심 내용 → 실제 적용 → 중요성 설명 순서로 자연스럽게 이어지게 작성
-- "핵심개념:", "업무포인트:", "중요:" 같은 딱딱한 라벨 절대 사용 금지
-- 한 문단이 다음 문단으로 자연스럽게 흐르도록 작성
+- "여기서 중요한 건", "실무에서는" 같은 표현 사용
+- 딱딱한 라벨 금지
 
-**좋은 예시**:
-"이 프로세스를 이해하려면 먼저 배경을 알아야 하는데요, 기존에는 A 방식으로 하다가 문제가 생겨서 B 방식으로 바꾼 거예요. 실무에서는 이렇게 적용하면 되는데, 여기서 주의할 점은 X와 Y를 반드시 확인해야 한다는 거죠. 이게 중요한 이유는 나중에 문제 생기면 되돌리기 어렵거든요."
-
-다음 형식의 JSON 배열로 응답해주세요:
-
+다음 JSON으로 응답:
 {
   "pages": [
     {
-      "page": 1,
-      "title": "슬라이드 제목 (핵심 주제를 한 문장으로)",
-      "content": "동료에게 설명하듯이 자연스럽게 흐르는 긴 문단으로 작성하세요. 단락을 나누어 가독성을 높이되, 전체적으로 하나의 이야기처럼 연결되어야 합니다.",
-      "keyPoints": [
-        "실무에 바로 적용 가능한 핵심 인사이트 1",
-        "업무 효율을 높이는 핵심 인사이트 2",
-        "주의해야 할 중요 포인트나 Best Practice"
-      ]
+      "page": ${idx + 1},
+      "title": "Chunk ${idx + 1} 핵심 주제",
+      "content": "자연스럽게 흐르는 설명...",
+      "keyPoints": ["인사이트 1", "인사이트 2", "주의사항"]
     }
   ]
-}
+}`;
 
-**지침**:
-1. ${batch.length}페이지를 2-3개의 슬라이드로 압축
-2. 각 슬라이드는 하나의 업무 프로세스를 자연스럽게 설명
-3. 제목 페이지, 목차, 반복 내용은 생략
-4. 실무에 필요한 내용을 자연스럽게 강조
-5. keyPoints: 실무에 바로 적용 가능한 핵심 인사이트 3-5개 추출`;
+          const completion = await openai.chat.completions.create({
+            model: CHUNK_MODEL,
+            messages: [
+              { role: "system", content: type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT },
+              { role: "user", content: prompt },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 1.0,
+          });
 
-        // Use mini model for chunk analysis (cost-effective)
-        const completion = await openai.chat.completions.create({
-          model: CHUNK_MODEL, // gpt-5-mini로 비용 90% 절감
-          messages: [
-            {
-              role: "system",
-              content: type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT,
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 1.0,
+          const result = JSON.parse(completion.choices[0].message.content || "{}");
+          return result.pages?.[0] || { page: idx + 1, title: "Error", content: "Failed to analyze", keyPoints: [] };
         });
 
-        const result = JSON.parse(completion.choices[0].message.content || "{}");
-        const batchPages = result.pages || [];
+        const chunkAnalyses = await Promise.all(chunkPromises);
+        console.log(`[ANALYSIS] Complete. Analyzed ${chunkAnalyses.length} chunks.`);
 
-        console.log(`[BATCH ${batchIdx + 1}] Complete. Generated ${batchPages.length} chunks`);
+        // Save Chunks to Cache
+        console.log("[CACHE] Saving chunks to storage...");
+        await supabase.storage
+          .from("materials")
+          .upload(chunksCachePath, JSON.stringify(chunkAnalyses), { contentType: "application/json", upsert: true });
 
-        return {
-          batchIdx,
-          pages: batchPages
-        };
-      });
+        // Step 3 & 4
+        if (USE_FINAL_INTEGRATION && chunkAnalyses.length > 0) {
+          console.log(`[STEP 3] Generating Global Summary...`);
+          const summary = await generateGlobalSummary(chunkAnalyses, type);
 
-      // Wait for all batches to complete in parallel
-      const batchResults = await Promise.all(batchPromises);
-
-      // Sort by batch index to maintain page order
-      batchResults.sort((a, b) => a.batchIdx - b.batchIdx);
-      const chunkAnalyses = batchResults.flatMap(r => r.pages);
-
-      console.log(`[PDF] Step 2 complete. ${chunkAnalyses.length} chunks analyzed with ${CHUNK_MODEL} (PARALLEL)`);
-
-      // Step 3 & 4: Embedding + Clustering + Final Integration
-      if (USE_FINAL_INTEGRATION && chunkAnalyses.length > 3) {
-        try {
-          console.log(`[STEP 3] Starting embedding and clustering...`);
-          const groups = await groupSimilarChunks(chunkAnalyses);
-
-          console.log(`[STEP 4] Starting final integration with ${FINAL_MODEL}...`);
-          pageAnalyses = await integrateClusters(groups, type);
-
-          console.log(`[SUCCESS] Final integration complete. ${pageAnalyses.length} slides created`);
-        } catch (integrationError: any) {
-          console.warn(`[FALLBACK] Integration failed, using chunk analyses directly:`, integrationError.message);
-          pageAnalyses = chunkAnalyses; // Fallback to chunk analyses
+          console.log(`[STEP 4] Generating Final Slides...`);
+          pageAnalyses = await generateFinalSlidesFromSummary(summary, type);
+        } else {
+          pageAnalyses = chunkAnalyses;
         }
-      } else {
-        console.log(`[SKIP] Final integration disabled or too few chunks, using chunk analyses directly`);
-        pageAnalyses = chunkAnalyses;
       }
     } else {
-      // Text file
+      // Text file logic (unchanged)
       fullContent = await file.text();
-      // For text files, create single page analysis
       pageAnalyses = [{
         page: 1,
         summary: "Text file content",

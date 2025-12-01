@@ -16,6 +16,7 @@ export const metadata: Metadata = {
 };
 
 import { Header } from "@/components/layout/Header";
+import { SessionProvider } from "@/components/providers/SessionProvider";
 
 export default function RootLayout({
   children,
@@ -30,8 +31,10 @@ export default function RootLayout({
           "antialiased bg-background text-foreground min-h-screen font-sans"
         )}
       >
-        <Header />
-        {children}
+        <SessionProvider>
+          <Header />
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

@@ -40,9 +40,10 @@ export async function GET(request: Request) {
         });
 
         const results = [];
-        const yesterday = new Date();
+        const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+        const yesterday = new Date(nowKST);
         yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayDate = yesterday.toISOString().split('T')[0];
+        const yesterdayDate = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // Step 2: Generate briefing for each user
         for (const user of users) {
@@ -145,7 +146,7 @@ Generate a structured morning briefing in Korean.
 
                 // Save to cache using the user's email context
                 // We need to save directly to Supabase since saveDailyBriefingCache uses auth session
-                const today = new Date().toISOString().split('T')[0];
+                const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
                 const { error: saveError } = await supabase
                     .from('daily_briefings')

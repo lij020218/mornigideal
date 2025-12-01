@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles } from "lucide-react";
@@ -46,9 +46,33 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [isInterestOpen, setIsInterestOpen] = useState(false);
     const [viewedTitles, setViewedTitles] = useState<string[]>([]); // 이미 본 뉴스 제목 추적
 
+    const lastFetchParamsRef = useRef<string>("");
+
     const fetchBriefings = async (forceRefresh = false) => {
         try {
+            // Create a unique key for current parameters
+            const currentParamsKey = JSON.stringify({ job, goal, interests: interests.sort() });
+
+            // Prevent double fetch if parameters haven't changed and not forcing refresh
+            if (!forceRefresh && lastFetchParamsRef.current === currentParamsKey && briefings.length > 0) {
+                console.log('[TrendBriefing] Skipping duplicate fetch for same parameters');
+                return;
+            }
+
             setLoading(true);
+
+            // Clean up old localStorage cache
+            const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+            const cacheTimestamp = localStorage.getItem('trends_cache_timestamp');
+            if (cacheTimestamp) {
+                const cacheDate = new Date(cacheTimestamp).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+                if (cacheDate !== today) {
+                    console.log('[TrendBriefing] Clearing outdated cache from', cacheDate);
+                    localStorage.removeItem('trends_cache');
+                    localStorage.removeItem('trends_cache_timestamp');
+                    lastFetchParamsRef.current = ""; // Reset ref on new day
+                }
+            }
 
             // 1. forceRefresh가 아니면 먼저 사전 생성된 브리핑 확인
             if (!forceRefresh) {
@@ -63,6 +87,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                         setLastUpdated(pregenData.generated_at || new Date().toISOString());
                         setIsCached(true);
                         setLoading(false);
+                        lastFetchParamsRef.current = currentParamsKey; // Update ref
 
                         // 이미 본 뉴스 제목 저장
                         setViewedTitles(prev => [...prev, ...pregenData.trends.map((t: any) => t.title)]);
@@ -91,6 +116,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             setBriefings(newTrends);
             setLastUpdated(data.lastUpdated || new Date().toISOString());
             setIsCached(data.cached || false);
+            lastFetchParamsRef.current = currentParamsKey; // Update ref
 
             // 새로 본 뉴스 제목 추가
             if (forceRefresh) {
@@ -141,8 +167,8 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             className="space-y-6"
         >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
-                    <Newspaper className="w-5 h-5 md:w-6 md:h-6 text-blue-400" />
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                    <Newspaper className="w-5 h-5 text-blue-400" />
                     <span className="hidden sm:inline">오늘의 트렌드 브리핑</span>
                     <span className="sm:hidden">트렌드 브리핑</span>
                 </h2>

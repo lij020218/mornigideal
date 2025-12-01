@@ -36,6 +36,7 @@
     "next-auth": "^5.0.0-beta.30",
     "node-cron": "^4.2.1",
     "openai": "^6.9.1",
+    "pdf-parse": "^2.4.5",
     "pdf-parse-fork": "^1.2.0",
     "pdfjs-dist": "^5.4.394",
     "pg": "^8.16.3",
