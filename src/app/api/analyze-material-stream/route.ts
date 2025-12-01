@@ -347,7 +347,7 @@ ${compressedSummaries.join('\n\n====================\n\n')}
 6. **추가 설명은 > 인용구** (시안 블루 카드)
 
 **올바른 예시**:
-"**IDF (Inverse Document Frequency)**는 단어의 희소성을 측정한다.\\n\\n공식은 $$IDF(t) = \\\\log(N / (1 + n_t))$$이다. 여기서 \`N\`은 전체 문서 수, \`n_t\`는 단어 t가 등장한 문서 수를 의미한다. *흔한 단어일수록 IDF 값이 낮아진다.*\\n\\n> 💡 **한 걸음 더**: 모든 문서에 등장하는 단어(n_t=N)는 IDF가 0에 가까워져 중요도가 낮아진다. 이것이 'the', 'a' 같은 불용어가 자동으로 필터링되는 원리다."
+"**IDF (Inverse Document Frequency)**는 단어의 희소성을 측정한다.\\n\\n공식은 $$IDF(t) = \\\\log(N / (1 + n_t))$$이다. 여기서 'N'은 전체 문서 수, 'n_t'는 단어 t가 등장한 문서 수를 의미한다. *흔한 단어일수록 IDF 값이 낮아진다.*\\n\\n> 💡 **한 걸음 더**: 모든 문서에 등장하는 단어(n_t=N)는 IDF가 0에 가까워져 중요도가 낮아진다. 이것이 'the', 'a' 같은 불용어가 자동으로 필터링되는 원리다."
 
 **잘못된 예시 (절대 하지 마라)**:
 "[코드블록]IDF(t) = log(N / (1 + n_t))[코드블록]\\n\\n로, 여기서\\n\\n[코드블록]N[코드블록]\\n\\n은 전체 문서 수"
@@ -373,14 +373,11 @@ ${compressedSummaries.join('\n\n====================\n\n')}
   ]
 }
 
-**마지막 2페이지 (필수!)**:
-- **page N-1**: "핵심 개념 총정리" - 전체 내용의 핵심 개념들을 체계적으로 정리
-- **page N**: "시험 대비 요약" - 시험에 꼭 나올 내용만 압축 정리
-
 **중요**:
 - content는 "핵심개념:", "시험포인트:" 같은 라벨 없이 자연스럽게 작성
 - 중요한 개념은 **반드시** **굵게** 표시
-- 문단 사이 빈 줄(\\n\\n) 필수`
+- 문단 사이 빈 줄(\\n\\n) 필수
+- **마지막 2페이지(복습 가이드)는 생성하지 마세요 - 별도로 생성됩니다**`
           : `당신은 비즈니스 문서 분석 전문가입니다. 다음은 업무 자료를 주제별로 압축한 ${compressedSummaries.length}개의 Topic 요약입니다.
 
 ${compressedSummaries.join('\n\n====================\n\n')}
@@ -428,14 +425,11 @@ ${compressedSummaries.join('\n\n====================\n\n')}
   ]
 }
 
-**마지막 2페이지 (필수!)**:
-- **page N-1**: "핵심 프로세스 총정리" - 전체 업무 흐름과 핵심 내용 체계적 정리
-- **page N**: "실무 적용 요약" - 실무에 바로 적용 가능한 핵심만 압축 정리
-
 **중요**:
 - content는 "핵심개념:", "업무포인트:" 같은 라벨 없이 자연스럽게 작성
 - 중요한 프로세스/용어는 **반드시** **굵게** 표시
-- 문단 사이 빈 줄(\\n\\n) 필수`;
+- 문단 사이 빈 줄(\\n\\n) 필수
+- **마지막 2페이지(복습 가이드)는 생성하지 마세요 - 별도로 생성됩니다**`;
 
         console.log(`[FINAL] Calling gpt-5.1 for final integration (SINGLE CALL)`);
         const finalCompletion = await openai.chat.completions.create({
@@ -443,11 +437,24 @@ ${compressedSummaries.join('\n\n====================\n\n')}
           messages: [
             {
               role: "system",
-              content: `You are a direct and efficient assistant.
-
-${type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT}`
+              content: [
+                {
+                  type: "text",
+                  text: `You are a direct and efficient assistant.\n\n${type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT}`,
+                  cache_control: { type: "ephemeral" }  // Cache system prompt
+                }
+              ] as any
             },
-            { role: "user", content: finalPrompt }
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: finalPrompt,
+                  cache_control: { type: "ephemeral" }  // Cache compressed summaries
+                }
+              ] as any
+            }
           ],
           response_format: { type: "json_object" },
           temperature: 1.0,
@@ -456,15 +463,104 @@ ${type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT}`
 
         const finalData = JSON.parse(finalCompletion.choices[0].message.content || "{}");
         const slides = finalData.slides || [];
-        console.log(`[FINAL] Generated ${slides.length} slides`);
+        console.log(`[FINAL] Generated ${slides.length} main slides`);
 
-        // Create page objects
-        const allPages = slides.map((slide: any, idx: number) => ({
+        // Create page objects for main slides
+        let allPages = slides.map((slide: any, idx: number) => ({
           page: idx + 1,
           title: slide.title || `슬라이드 ${idx + 1}`,
           content: slide.content || "",
           keyPoints: slide.keyPoints || []
         }));
+
+        // Generate final 2 pages (review guide) using gpt-5-mini for cost optimization
+        console.log(`[REVIEW] Generating final review pages with gpt-5-mini...`);
+        const reviewPrompt = type === "exam"
+          ? `다음은 시험 자료의 주요 슬라이드들입니다:
+
+${slides.map((s: any, i: number) => `[${i + 1}] ${s.title}\n${s.content}\n\n핵심 포인트:\n${s.keyPoints?.map((k: string) => `- ${k}`).join('\n') || ''}`).join('\n\n---\n\n')}
+
+**임무**: 마지막 2페이지를 생성하세요.
+
+**page ${slides.length + 1}**: "핵심 개념 총정리"
+- 전체 내용의 핵심 개념들을 체계적으로 정리
+- 중요 개념은 **굵게**, 핵심 문장은 *기울임*
+- > 인용구로 암기 팁 추가
+
+**page ${slides.length + 2}**: "시험 대비 요약"
+- 시험에 꼭 나올 내용만 압축 정리
+- 예상 출제 포인트 강조
+- 최종 체크리스트 형태
+
+JSON 형식으로 응답:
+{
+  "reviewPages": [
+    {
+      "title": "핵심 개념 총정리",
+      "content": "마크다운 형식 내용...",
+      "keyPoints": ["암기해야 할 핵심 1", "암기해야 할 핵심 2", "암기해야 할 핵심 3"]
+    },
+    {
+      "title": "시험 대비 요약",
+      "content": "마크다운 형식 내용...",
+      "keyPoints": ["예상 문제 1", "예상 문제 2", "예상 문제 3"]
+    }
+  ]
+}`
+          : `다음은 업무 자료의 주요 슬라이드들입니다:
+
+${slides.map((s: any, i: number) => `[${i + 1}] ${s.title}\n${s.content}\n\n핵심 인사이트:\n${s.keyPoints?.map((k: string) => `- ${k}`).join('\n') || ''}`).join('\n\n---\n\n')}
+
+**임무**: 마지막 2페이지를 생성하세요.
+
+**page ${slides.length + 1}**: "핵심 프로세스 총정리"
+- 전체 업무 흐름과 핵심 내용 체계적 정리
+- 중요 프로세스는 **굵게**, 핵심 문장은 *기울임*
+- > 인용구로 실무 팁 추가
+
+**page ${slides.length + 2}**: "실무 적용 요약"
+- 실무에 바로 적용 가능한 핵심만 압축 정리
+- 체크리스트 형태로 정리
+
+JSON 형식으로 응답:
+{
+  "reviewPages": [
+    {
+      "title": "핵심 프로세스 총정리",
+      "content": "마크다운 형식 내용...",
+      "keyPoints": ["실무 핵심 1", "실무 핵심 2", "실무 핵심 3"]
+    },
+    {
+      "title": "실무 적용 요약",
+      "content": "마크다운 형식 내용...",
+      "keyPoints": ["적용 포인트 1", "적용 포인트 2", "적용 포인트 3"]
+    }
+  ]
+}`;
+
+        const reviewCompletion = await openai.chat.completions.create({
+          model: "gpt-5-mini-2025-08-07",
+          messages: [
+            { role: "system", content: "You are a study guide expert. Generate comprehensive review pages in Korean." },
+            { role: "user", content: reviewPrompt }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.7
+        });
+
+        const reviewData = JSON.parse(reviewCompletion.choices[0].message.content || "{}");
+        const reviewPages = reviewData.reviewPages || [];
+        console.log(`[REVIEW] Generated ${reviewPages.length} review pages`);
+
+        // Add review pages to allPages
+        reviewPages.forEach((page: any, idx: number) => {
+          allPages.push({
+            page: slides.length + idx + 1,
+            title: page.title,
+            content: page.content,
+            keyPoints: page.keyPoints || []
+          });
+        });
 
         // Save to DB
         await supabase
@@ -481,13 +577,20 @@ ${type === "exam" ? STUDY_SYSTEM_PROMPT : WORK_SYSTEM_PROMPT}`
         const finalInputCost = (finalCompletion.usage?.prompt_tokens || 0) * 0.000003;
         const finalOutputCost = (finalCompletion.usage?.completion_tokens || 0) * 0.000015;
         const finalCost = finalInputCost + finalOutputCost;
-        const totalCost = totalBatchCost + summaryCost + finalCost;
+
+        // Calculate review page cost (gpt-5-mini: $0.10/1M input, $0.40/1M output)
+        const reviewInputCost = (reviewCompletion.usage?.prompt_tokens || 0) * 0.0000001;
+        const reviewOutputCost = (reviewCompletion.usage?.completion_tokens || 0) * 0.0000004;
+        const reviewCost = reviewInputCost + reviewOutputCost;
+
+        const totalCost = totalBatchCost + summaryCost + finalCost + reviewCost;
 
         console.log(`[COST] Final gpt-5.1 call: $${finalCost.toFixed(4)} (input: $${finalInputCost.toFixed(4)}, output: $${finalOutputCost.toFixed(4)})`);
-        console.log(`[COST] TOTAL: $${totalCost.toFixed(4)} (batch: $${totalBatchCost.toFixed(4)}, summary: $${summaryCost.toFixed(4)}, final: $${finalCost.toFixed(4)})`);
+        console.log(`[COST] Review pages (mini): $${reviewCost.toFixed(4)} (input: $${reviewInputCost.toFixed(4)}, output: $${reviewOutputCost.toFixed(4)})`);
+        console.log(`[COST] TOTAL: $${totalCost.toFixed(4)} (batch: $${totalBatchCost.toFixed(4)}, summary: $${summaryCost.toFixed(4)}, final: $${finalCost.toFixed(4)}, review: $${reviewCost.toFixed(4)})`);
 
         // Send completion event
-        await sendEvent("complete", { success: true, total_slides: slides.length });
+        await sendEvent("complete", { success: true, total_slides: allPages.length });
       }
 
       await writer.close();
