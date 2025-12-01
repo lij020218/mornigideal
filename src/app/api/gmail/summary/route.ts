@@ -100,7 +100,7 @@ async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> 
 // Classify and summarize emails using AI
 async function classifyAndSummarizeEmails(messages: GmailMessage[], userJob: string) {
     const model = genAI.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+        model: "gemini-2.5-flash",
         generationConfig: { responseMimeType: "application/json" }
     });
 

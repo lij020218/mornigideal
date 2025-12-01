@@ -181,9 +181,8 @@ export async function GET(request: Request) {
         });
 
         // Step 2: Use Gemini to filter and select relevant articles
-        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
         const model = genAI.getGenerativeModel({
-            model: modelName,
+            model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
