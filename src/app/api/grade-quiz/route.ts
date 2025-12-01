@@ -8,6 +8,24 @@ const openai = new OpenAI({
 
 const FINAL_MODEL = "gpt-5.1-2025-11-13";
 
+interface QuizResult {
+  question: string;
+  userAnswer: any;
+  correctAnswer: any;
+  isCorrect: boolean;
+  explanation: string;
+  page: number;
+}
+
+interface EssayResult {
+  question: string;
+  userAnswer: string;
+  score: number;
+  feedback: string;
+  modelAnswer: string;
+  page: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -117,9 +135,9 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     const percentage = (totalScore / 15) * 100;
 
     // Analyze strengths and weaknesses
-    const incorrectTF = tfResults.filter(r => !r.isCorrect);
-    const incorrectMC = mcResults.filter(r => !r.isCorrect);
-    const weakEssays = essayResults.filter(r => r.score < 70);
+    const incorrectTF = tfResults.filter((r: QuizResult) => !r.isCorrect);
+    const incorrectMC = mcResults.filter((r: QuizResult) => !r.isCorrect);
+    const weakEssays = essayResults.filter((r: EssayResult) => r.score < 70);
 
     const strengths: string[] = [];
     if (tfCorrect >= 4) strengths.push("참/거짓 문제에서 정확한 개념 이해 보유");
@@ -129,11 +147,11 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     const weaknesses: Array<{ concept: string; pages: number[] }> = [];
     const weakPages = new Set<number>();
 
-    [...incorrectTF, ...incorrectMC].forEach(r => {
+    [...incorrectTF, ...incorrectMC].forEach((r: QuizResult) => {
       weakPages.add(r.page);
     });
 
-    weakEssays.forEach(r => {
+    weakEssays.forEach((r: any) => {
       if (r.missingPoints.length > 0) {
         weaknesses.push({
           concept: `${r.question.substring(0, 40)}... - ${r.missingPoints.join(', ')}`,
