@@ -1,13 +1,115 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { generateTrendId, saveDetailCache } from "@/lib/newsCache";
+import Parser from 'rss-parser';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+const parser = new Parser();
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// RSS Feed URLs for top priority sources
+const RSS_FEEDS = [
+    // International Sources - News & Business
+    { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business" },
+    { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology" },
+    { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News" },
+    { name: "BB Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
+    { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
+
+    // Tech & Startup Sources
+    { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Technology" },
+    { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Technology" },
+    { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Technology" },
+    { name: "Product Hunt", url: "https://www.producthunt.com/feed", category: "Product" },
+
+    // Marketing & Business
+    { name: "Marketing Land", url: "https://martech.org/feed/", category: "Marketing" },
+    { name: "AdAge", url: "https://adage.com/feeds/rss/news.xml", category: "Advertising" },
+    { name: "HBR", url: "https://hbr.org/feed", category: "Business" },
+
+    // Korean Sources
+    { name: "조선비즈", url: "https://biz.chosun.com/rss/", category: "Business" },
+    { name: "한경비즈", url: "https://www.hankyung.com/feed/it", category: "Technology" },
+    { name: "매경이코노미", url: "https://www.mk.co.kr/rss/30100041/", category: "Economy" },
+];
+
+async function fetchRSSArticles() {
+    const allArticles = [];
+    const now = new Date();
+
+    for (const feed of RSS_FEEDS) {
+        try {
+            console.log(`[CRON] Fetching RSS from ${feed.name}...`);
+            const rss = await parser.parseURL(feed.url);
+
+            for (const item of rss.items) {
+                if (!item.title || !item.link) continue;
+
+                const pubDate = item.pubDate ? new Date(item.pubDate) : now;
+                const ageInDays = (now.getTime() - pubDate.getTime()) / (1000 * 60 * 60 * 24);
+
+                if (ageInDays <= 3) {
+                    allArticles.push({
+                        title: item.title.trim(),
+                        link: item.link,
+                        pubDate: pubDate,
+                        ageInDays,
+                        sourceName: feed.name,
+                        category: feed.category,
+                        description: item.contentSnippet || item.content || ""
+                    });
+                }
+            }
+        } catch (error) {
+            console.error(`[CRON] Error fetching ${feed.name}:`, error);
+        }
+    }
+
+    return allArticles.sort((a, b) => a.ageInDays - b.ageInDays);
+}
+
+async function generateDetailedBriefing(trend: any, job: string) {
+    const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+    const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" }
+    });
+
+    const prompt = `Create a briefing for Intermediate ${job}.
+
+ARTICLE:
+- Title: "${trend.title}"
+- Summary: ${trend.summary}
+- URL: ${trend.originalUrl}
+
+SECTIONS NEEDED:
+1. 핵심 내용: What happened and why it matters
+2. Intermediate ${job}인 당신에게: Impact on ${job} professionals
+3. 주요 인사이트: 3-4 key takeaways
+4. 실행 아이템: 3 actionable steps for Intermediate ${job}
+
+OUTPUT JSON:
+{
+  "title": "Korean title",
+  "content": "### 핵심 내용\\n\\n[content]\\n\\n### Intermediate ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
+  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
+  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "originalUrl": "${trend.originalUrl}"
+}
+
+Write in Korean. Be practical and specific for Intermediate ${job}.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    return JSON.parse(text);
+}
 
 export async function GET(request: Request) {
     try {
@@ -17,29 +119,22 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[CRON] Starting trend briefing generation at 5:00 AM...');
+        console.log('[CRON] Starting trend briefing generation at 4:30 AM...');
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        // Step 1: 오늘의 cached_news에서 뉴스 100개 가져오기
-        const { data: newsArticles, error: newsError } = await supabase
-            .from('cached_news')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(100);
+        // Step 1: Fetch all RSS articles
+        const rssArticles = await fetchRSSArticles();
+        console.log(`[CRON] Fetched ${rssArticles.length} articles from RSS feeds`);
 
-        if (newsError || !newsArticles || newsArticles.length === 0) {
-            console.error('[CRON] No news articles found:', newsError);
+        if (rssArticles.length === 0) {
             return NextResponse.json({
-                error: 'No news articles available',
-                message: 'Run /api/batch-news first to collect news'
+                error: 'No articles available',
+                message: 'No recent articles found in RSS feeds'
             }, { status: 500 });
         }
 
-        console.log(`[CRON] Found ${newsArticles.length} news articles`);
-
-        // Step 2: 모든 사용자 프로필 가져오기
+        // Step 2: Get all users with profiles
         const { data: users, error: usersError } = await supabase
             .from('users')
             .select('email, profile')
@@ -55,14 +150,14 @@ export async function GET(request: Request) {
 
         console.log(`[CRON] Found ${users.length} users to generate trend briefings for`);
 
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+        const selectionModel = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
         const results = [];
 
-        // Step 3: 각 사용자에게 맞춤형 트렌드 브리핑 생성
+        // Step 3: Generate personalized trend briefings for each user
         for (const user of users) {
             try {
                 const userEmail = user.email;
@@ -70,152 +165,142 @@ export async function GET(request: Request) {
 
                 console.log(`[CRON] Generating trend briefing for: ${userEmail}`);
 
-                const userJob = userProfile.job || 'Professional';
-                const userGoal = userProfile.goal || 'Growth';
-                const userInterests = userProfile.interests || [];
-                const userLevel = userProfile.level || 'mid';
+                const job = userProfile.job || 'Professional';
+                const goal = userProfile.goal || 'Growth';
+                const interests = userProfile.interests || [];
+                const level = userProfile.level || 'Intermediate';
 
-                // Step 3.1: Gemini로 사용자에게 맞는 뉴스 선택 (100개 중 6-8개)
-                const selectionPrompt = `
-당신은 개인화된 뉴스 큐레이터입니다.
+                // Sort by recency
+                const sortedArticles = rssArticles.sort((a, b) => a.ageInDays - b.ageInDays);
 
-**사용자 프로필:**
-- 직무: ${userJob}
-- 목표: ${userGoal}
-- 관심사: ${userInterests.join(', ')}
-- 수준: ${userLevel}
+                // Prepare articles for Gemini selection
+                const articlesForPrompt = sortedArticles.slice(0, 100).map((article, index) => ({
+                    id: index,
+                    title: article.title,
+                    source: article.sourceName,
+                    category: article.category,
+                    age: `${article.ageInDays.toFixed(1)} days ago`,
+                    snippet: article.description?.slice(0, 200) || ""
+                }));
 
-**사용 가능한 뉴스 (${newsArticles.length}개):**
-${newsArticles.map((article, idx) => `
-${idx + 1}. [${article.category}] ${article.title_korean}
-   - 출처: ${article.source_name}
-   - 요약: ${article.summary_korean}
-   - 관심사 태그: ${article.interests?.join(', ') || ''}
-   - 관련도: ${article.relevance_score}/10
-`).join('\n')}
+                const interestList = interests.join(', ');
 
-**임무:**
-사용자의 직무, 목표, 관심사를 고려하여 가장 관련성 높은 뉴스 6-8개를 선택하세요.
+                const selectionPrompt = `You are curating news for a ${level} ${job}.
 
-**선택 기준:**
-1. 사용자의 직무와 직접적으로 관련된 뉴스 우선
-2. 사용자의 관심사와 겹치는 뉴스
-3. 사용자의 목표 달성에 도움이 되는 인사이트가 있는 뉴스
-4. 다양한 카테고리에서 균형있게 선택 (너무 한쪽에 치우치지 않게)
-5. 최신 뉴스 우선
+USER PROFILE:
+- Job: ${job}
+- Goal: ${goal}
+- Interests: ${interestList || "General business and technology"}
 
-**응답 형식 (JSON):**
+AVAILABLE ARTICLES (${articlesForPrompt.length}):
+${JSON.stringify(articlesForPrompt, null, 2)}
+
+TASK: Select EXACTLY 6 most relevant articles.
+
+CRITERIA:
+1. **Relevance to ${job}**: Directly useful for their work
+2. **Recency**: Prioritize newer articles (lower "days ago")
+3. **Diversity**: Mix of categories (avoid 6 tech articles)
+4. **Actionability**: Articles with practical takeaways
+5. **Interest match**: ${interests.length > 0 ? `At least 3 articles matching: ${interestList}` : ""}
+
+OUTPUT JSON:
 {
-  "selected_indices": [3, 7, 15, 22, 31, 45, 67, 89],
-  "selection_reasoning": "왜 이 뉴스들을 선택했는지 간단히 설명"
-}
-`;
-
-                const selectionResult = await model.generateContent(selectionPrompt);
-                const selectionResponse = await selectionResult.response;
-                const selectionText = selectionResponse.text();
-
-                let selectionData;
-                try {
-                    selectionData = JSON.parse(selectionText);
-                } catch (parseError) {
-                    console.error(`[CRON] Failed to parse selection for ${userEmail}:`, parseError);
-                    continue;
-                }
-
-                const selectedIndices = selectionData.selected_indices || [];
-                const selectedArticles = selectedIndices
-                    .filter((idx: number) => idx >= 1 && idx <= newsArticles.length)
-                    .map((idx: number) => newsArticles[idx - 1]); // 1-based to 0-based
-
-                if (selectedArticles.length === 0) {
-                    console.error(`[CRON] No valid articles selected for ${userEmail}`);
-                    continue;
-                }
-
-                console.log(`[CRON] Selected ${selectedArticles.length} articles for ${userEmail}`);
-
-                // Step 3.2: 선택된 뉴스로 개인화된 인사이트 생성
-                const insightPrompt = `
-당신은 ${userJob} 분야의 전문 멘토입니다.
-
-**사용자 정보:**
-- 직무: ${userJob}
-- 목표: ${userGoal}
-- 수준: ${userLevel}
-
-**오늘의 선별된 트렌드 뉴스:**
-${selectedArticles.map((article: any, idx: number) => `
-${idx + 1}. [${article.category}] ${article.title_korean}
-   - 요약: ${article.summary_korean}
-   - 출처: ${article.source_name}
-   - 링크: ${article.original_url}
-`).join('\n')}
-
-**임무:**
-이 뉴스들을 바탕으로 사용자에게 맞춤형 트렌드 브리핑을 작성하세요.
-
-**작성 요구사항:**
-1. **전체 인사이트**: 전체 트렌드를 관통하는 핵심 메시지 (2-3문장)
-2. **각 뉴스별 분석**:
-   - 핵심 포인트 1-2문장
-   - 사용자의 직무/목표에 어떻게 연결되는지
-   - 실행 가능한 조언이나 시사점
-3. **톤**: 전문적이면서도 친근하게, 동기부여가 되도록
-
-**응답 형식 (JSON):**
-{
-  "overall_insight": "전체 트렌드를 관통하는 핵심 인사이트 (2-3문장)",
-  "key_message": "오늘 트렌드의 한 줄 요약",
-  "trends": [
+  "selectedArticles": [
     {
-      "title": "뉴스 제목 (한국어)",
-      "summary": "핵심 내용 1-2문장",
-      "insight": "사용자에게 주는 인사이트와 조언 (2-3문장)",
-      "url": "원문 링크",
-      "source": "출처",
-      "category": "카테고리",
-      "relevance": "사용자와의 연관성 설명 (1문장)"
+      "id": <article index 0-${articlesForPrompt.length - 1}>,
+      "title_korean": "Korean translation of title",
+      "summary_korean": "2-3 sentence Korean summary focusing on why it matters for ${job}",
+      "category": "Technology|Business|Marketing|etc",
+      "relevance_korean": "1 sentence explaining relevance to ${job}"
     }
-  ],
-  "action_items": [
-    "실행 가능한 조언 1",
-    "실행 가능한 조언 2",
-    "실행 가능한 조언 3"
   ]
 }
-`;
 
-                const insightResult = await model.generateContent(insightPrompt);
-                const insightResponse = await insightResult.response;
-                const insightText = insightResponse.text();
+Requirements:
+- MUST select EXACTLY 6 articles
+- Summaries in Korean, natural and professional
+- Focus on practical value for ${job}
+- ${interests ? `At least 3 articles matching: ${interestList}` : ""}
 
-                let briefingData;
+Select now.`;
+
+                const result = await selectionModel.generateContent(selectionPrompt);
+                const response = await result.response;
+                const text = response.text();
+
+                let data;
                 try {
-                    briefingData = JSON.parse(insightText);
+                    data = JSON.parse(text);
                 } catch (parseError) {
-                    console.error(`[CRON] Failed to parse insights for ${userEmail}:`, parseError);
+                    console.error(`[CRON] Failed to parse Gemini response for ${userEmail}:`, parseError);
                     continue;
                 }
 
-                // Step 3.3: Supabase에 저장
+                const selectedArticles = data.selectedArticles || [];
+
+                if (selectedArticles.length === 0) {
+                    console.error(`[CRON] No articles selected for ${userEmail}`);
+                    continue;
+                }
+
+                // Map selected articles back to original RSS articles
+                const trends = selectedArticles.map((selected: any) => {
+                    const filteredArticle = articlesForPrompt[selected.id];
+                    const originalArticle = rssArticles.find(article =>
+                        article.title === filteredArticle?.title &&
+                        article.sourceName === filteredArticle?.source
+                    );
+                    const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+
+                    return {
+                        id: generateTrendId(selected.title_korean),
+                        title: selected.title_korean,
+                        category: selected.category || "General",
+                        summary: selected.summary_korean,
+                        time: pubDate,
+                        imageColor: "bg-blue-500/20",
+                        originalUrl: originalArticle?.link || "",
+                        imageUrl: "",
+                        source: originalArticle?.sourceName || "Unknown",
+                        relevance: selected.relevance_korean
+                    };
+                });
+
+                console.log(`[CRON] Selected ${trends.length} articles for ${userEmail}, generating detailed briefings...`);
+
+                // Step 4: Generate detailed briefings for all 6 trends in parallel
+                const detailPromises = trends.map(async (trend: any) => {
+                    try {
+                        const detail = await generateDetailedBriefing(trend, job);
+                        await saveDetailCache(trend.id, detail);
+                        console.log(`[CRON] Cached detail for: ${trend.title}`);
+                        return { success: true };
+                    } catch (error) {
+                        console.error(`[CRON] Error generating detail for ${trend.title}:`, error);
+                        return { success: false };
+                    }
+                });
+
+                await Promise.all(detailPromises);
+
+                // Step 5: Save trends to cache
                 const { error: saveError } = await supabase
-                    .from('trend_briefings')
+                    .from('trends_cache')
                     .upsert({
                         email: userEmail,
                         date: today,
-                        briefing_data: briefingData,
-                        selected_articles: selectedArticles.map((a: any) => a.id),
+                        trends: trends,
                         created_at: new Date().toISOString()
                     }, {
                         onConflict: 'email,date'
                     });
 
                 if (saveError) {
-                    console.error(`[CRON] Error saving trend briefing for ${userEmail}:`, saveError);
+                    console.error(`[CRON] Error saving trends for ${userEmail}:`, saveError);
                 } else {
-                    console.log(`[CRON] Successfully generated trend briefing for ${userEmail}`);
-                    results.push({ email: userEmail, status: 'success' });
+                    console.log(`[CRON] Successfully generated and cached trends + details for ${userEmail}`);
+                    results.push({ email: userEmail, status: 'success', trends: trends.length });
                 }
 
                 // Rate limiting delay

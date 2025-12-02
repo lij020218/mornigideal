@@ -45,8 +45,12 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                 // Check if notification is enabled
                 if (!goal.notificationEnabled) return false;
 
-                // Check if today is in the selected days
-                if (!goal.daysOfWeek?.includes(currentDay)) return false;
+                // Check if today is in the selected days OR if it's the specific date
+                const todayStr = getTodayDateString();
+                const isDayMatch = goal.daysOfWeek?.includes(currentDay);
+                const isDateMatch = goal.specificDate === todayStr;
+
+                if (!isDayMatch && !isDateMatch) return false;
 
                 // Check if it's the exact start time
                 if (goal.startTime === currentTime) return true;

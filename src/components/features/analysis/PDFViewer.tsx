@@ -11,6 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 interface PDFViewerProps {
     fileUrl: string;
     onPageChange?: (page: number) => void;
+    initialPage?: number;
     renderControls?: (controls: {
         pageNumber: number;
         numPages: number;
@@ -20,19 +21,28 @@ interface PDFViewerProps {
     }) => React.ReactNode;
 }
 
-export function PDFViewer({ fileUrl, onPageChange, renderControls }: PDFViewerProps) {
+export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }: PDFViewerProps) {
     const [numPages, setNumPages] = useState<number>(0);
     const [pageNumber, setPageNumber] = useState<number>(1);
     const [scale, setScale] = useState<number>(1.0);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Sync page number when initialPage changes
+    useEffect(() => {
+        if (initialPage && initialPage > 0) {
+            setPageNumber(initialPage);
+        }
+    }, [initialPage]);
+
     function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
         setNumPages(numPages);
-        setPageNumber(1);
+        // If initialPage is provided, use it, otherwise default to 1
+        const startPage = initialPage && initialPage > 0 && initialPage <= numPages ? initialPage : 1;
+        setPageNumber(startPage);
         setLoading(false);
         setError(null);
-        onPageChange?.(1);
+        onPageChange?.(startPage);
     }
 
     function onDocumentLoadError(error: Error) {

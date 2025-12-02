@@ -41,9 +41,7 @@ export async function GET(request: Request) {
 
         const results = [];
         const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-        const yesterday = new Date(nowKST);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayDate = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const today = nowKST.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // Step 2: Generate briefing for each user
         for (const user of users) {
@@ -64,15 +62,15 @@ export async function GET(request: Request) {
                     customGoals: {}
                 };
 
-                // Get yesterday's trends for this user
+                // Get TODAY's trends for this user (generated at 5AM with latest news)
                 const { data: trendsData, error: trendsError } = await supabase
                     .from('trends_cache')
                     .select('trends')
                     .eq('email', userEmail)
-                    .eq('date', yesterdayDate)
+                    .eq('date', today)
                     .single();
 
-                const yesterdayTrends = trendsData?.trends || [];
+                const todayTrends = trendsData?.trends || [];
 
                 // Get today's schedule
                 const todaySchedule = userProfile.schedule || {
@@ -85,7 +83,7 @@ export async function GET(request: Request) {
                 // Generate briefing using Gemini
                 const prompt = `
 You are an inspiring personal mentor for a ${userProfile.level || 'Intermediate'} ${userProfile.job || 'Professional'}.
-The user has just woken up. Your goal is to review yesterday's performance, summarize key news they missed while sleeping (or from yesterday), and motivate them for today.
+The user has just woken up. Your goal is to review yesterday's performance, summarize key news from this morning's briefing, and motivate them for today.
 
 **USER CONTEXT:**
 - Job: ${userProfile.job || 'Professional'}
@@ -93,8 +91,8 @@ The user has just woken up. Your goal is to review yesterday's performance, summ
 - Yesterday's Goals: ${JSON.stringify(yesterdayGoals)}
 - Today's Schedule: ${JSON.stringify(todaySchedule)}
 
-**YESTERDAY'S TRENDS (News from the last 24h):**
-${JSON.stringify(yesterdayTrends?.slice(0, 6) || [])}
+**TODAY'S MORNING TRENDS (Latest news curated for them):**
+${JSON.stringify(todayTrends?.slice(0, 6) || [])}
 
 **YOUR MISSION:**
 Generate a structured morning briefing in Korean.
@@ -146,8 +144,6 @@ Generate a structured morning briefing in Korean.
 
                 // Save to cache using the user's email context
                 // We need to save directly to Supabase since saveDailyBriefingCache uses auth session
-                const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
-
                 const { error: saveError } = await supabase
                     .from('daily_briefings')
                     .upsert({

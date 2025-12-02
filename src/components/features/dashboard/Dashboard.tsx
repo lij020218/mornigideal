@@ -22,6 +22,10 @@ import { EmailSummarySection } from "./EmailSummarySection";
 
 interface DashboardProps {
     username: string;
+    initialProfile: UserProfile | null;
+    initialMaterials: any[];
+    initialCurriculum: CurriculumItem[];
+    initialTrendBriefing: any;
 }
 
 interface UserProfile {
@@ -57,15 +61,21 @@ interface UserSettings {
     exerciseEnabled: boolean;
 }
 
-export function Dashboard({ username }: DashboardProps) {
+export function Dashboard({
+    username,
+    initialProfile,
+    initialMaterials,
+    initialCurriculum,
+    initialTrendBriefing
+}: DashboardProps) {
 
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-    const [curriculum, setCurriculum] = useState<CurriculumItem[]>([]);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
+    const [curriculum, setCurriculum] = useState<CurriculumItem[]>(initialCurriculum);
     const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
-    const [loadingCurriculum, setLoadingCurriculum] = useState(true);
+    // const [loadingCurriculum, setLoadingCurriculum] = useState(true); // No longer needed
     const [dailyGoals, setDailyGoals] = useState<DailyGoals>({
         wakeUp: false,
         learning: 0,
@@ -81,7 +91,7 @@ export function Dashboard({ username }: DashboardProps) {
     const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set());
     const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [curriculumProgress, setCurriculumProgress] = useState<Record<number, { completed: number; total: number }>>({});
-    const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
+    const [selectedBriefing, setSelectedBriefing] = useState<any>(initialTrendBriefing);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
     const [showMaterialUpload, setShowMaterialUpload] = useState(false);
 
@@ -263,15 +273,27 @@ export function Dashboard({ username }: DashboardProps) {
         console.log('Saving schedule:', newSchedule);
         console.log('Saving custom goals:', newCustomGoals);
 
+        // Deduplicate newCustomGoals first
+        const uniqueGoalsMap = new Map<string, CustomGoal>();
+        newCustomGoals.forEach((goal: CustomGoal) => {
+            const sortedDays = goal.daysOfWeek ? [...goal.daysOfWeek].sort().join(',') : '';
+            const key = `${goal.text}-${goal.startTime}-${goal.endTime}-${sortedDays}-${goal.specificDate || ''}`;
+            if (!uniqueGoalsMap.has(key)) {
+                uniqueGoalsMap.set(key, goal);
+            }
+        });
+        const uniqueCustomGoals = Array.from(uniqueGoalsMap.values());
+        console.log(`[Dashboard] Deduplicated goals: ${newCustomGoals.length} -> ${uniqueCustomGoals.length}`);
+
         // Migrate daysOfWeek-only goals to calendar events
-        const migratedGoals = [...newCustomGoals];
+        const migratedGoals = [...uniqueCustomGoals];
         const today = new Date();
 
-        newCustomGoals.forEach((goal: any) => {
+        uniqueCustomGoals.forEach((goal: any) => {
             // If goal has daysOfWeek but no specificDate, it's a template
             if (goal.daysOfWeek && goal.daysOfWeek.length > 0 && !goal.specificDate) {
                 // Check if calendar events already exist for this template
-                const hasCalendarEvents = newCustomGoals.some((g: any) =>
+                const hasCalendarEvents = uniqueCustomGoals.some((g: any) =>
                     g.specificDate &&
                     g.text === goal.text &&
                     g.startTime === goal.startTime
@@ -374,110 +396,27 @@ export function Dashboard({ username }: DashboardProps) {
     }, [completedLearning, curriculum.length]);
 
     useEffect(() => {
-        const loadProfile = async () => {
-            console.log('===== Dashboard useEffect: Loading profile =====');
+        // Clock timer
+        const timer = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        setCurrentTime(new Date());
 
-            // Always try to fetch from database first for the latest data
-            try {
-                const response = await fetch("/api/user/profile");
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.profile) {
-                        console.log('Loaded profile from database:', data.profile);
+        return () => clearInterval(timer);
+    }, []);
 
-                        // Auto-migrate daysOfWeek goals to calendar events
-                        const migratedProfile = migrateGoalsToCalendar(data.profile);
+    // Initialize daily goals from localStorage
+    useEffect(() => {
+        const savedGoals = getDailyGoals();
+        setDailyGoals(savedGoals);
 
-                        setUserProfile(migratedProfile);
-                        localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
+        // Check for completed learning
+        if (completedLearning.size > 0) {
+            // Logic to update daily goals based on completed learning if needed
+        }
 
-                        // Save migrated profile back to database
-                        if (migratedProfile !== data.profile) {
-                            saveProfileToSupabase(migratedProfile);
-                        }
-                    }
-                } else {
-                    // Fall back to localStorage if database fetch failed
-                    const savedProfile = localStorage.getItem("user_profile");
-                    if (savedProfile) {
-                        const parsed = JSON.parse(savedProfile);
-                        console.log('Loaded user_profile from localStorage as fallback:', parsed);
-
-                        const migratedProfile = migrateGoalsToCalendar(parsed);
-                        setUserProfile(migratedProfile);
-                        localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch profile from database:', error);
-                // Fall back to localStorage if database fetch failed
-                const savedProfile = localStorage.getItem("user_profile");
-                if (savedProfile) {
-                    const parsed = JSON.parse(savedProfile);
-                    console.log('Loaded user_profile from localStorage as fallback:', parsed);
-
-                    const migratedProfile = migrateGoalsToCalendar(parsed);
-                    setUserProfile(migratedProfile);
-                    localStorage.setItem("user_profile", JSON.stringify(migratedProfile));
-                }
-            }
-
-            // Load curriculum from API (with localStorage fallback)
-            const savedCurriculum = localStorage.getItem("user_curriculum");
-            if (savedCurriculum) {
-                try {
-                    setCurriculum(JSON.parse(savedCurriculum));
-                    console.log('[Dashboard] Loaded curriculum from localStorage');
-                } catch (e) {
-                    console.error('[Dashboard] Failed to parse localStorage curriculum:', e);
-                }
-            }
-
-            console.log('[Dashboard] Fetching curriculum from API...');
-            try {
-                const curriculumResponse = await fetch("/api/user/curriculum");
-                console.log('[Dashboard] Curriculum API response status:', curriculumResponse.status);
-
-                if (curriculumResponse.ok) {
-                    const curriculumData = await curriculumResponse.json();
-                    console.log('[Dashboard] Curriculum API data:', curriculumData);
-
-                    if (curriculumData.curriculums && curriculumData.curriculums.length > 0) {
-                        // Extract curriculum_data from first curriculum
-                        const latestCurriculum = curriculumData.curriculums[0];
-                        if (latestCurriculum.curriculum_data) {
-                            console.log('[Dashboard] Loaded curriculum from API:', latestCurriculum.curriculum_data);
-                            setCurriculum(latestCurriculum.curriculum_data);
-                            localStorage.setItem("user_curriculum", JSON.stringify(latestCurriculum.curriculum_data));
-                        } else {
-                            console.warn('[Dashboard] Curriculum data is empty');
-                        }
-                    } else {
-                        console.log('[Dashboard] No curriculums found in API response');
-                    }
-                } else {
-                    console.error('[Dashboard] Curriculum API returned error:', curriculumResponse.status);
-                }
-            } catch (error) {
-                console.error('[Dashboard] Failed to fetch curriculum from API:', error);
-            } finally {
-                console.log('[Dashboard] Setting loadingCurriculum to false');
-                setLoadingCurriculum(false);
-            }
-
-            const savedSettings = localStorage.getItem("user_settings");
-            if (savedSettings) {
-                setUserSettings(JSON.parse(savedSettings));
-            }
-
-            setDailyGoals(getDailyGoals());
-
-
-            // Request notification permission
-            requestNotificationPermission();
-        };
-
-        loadProfile();
+        // Request notification permission
+        requestNotificationPermission();
     }, []);
 
     const containerVariants = {
@@ -1302,11 +1241,6 @@ export function Dashboard({ username }: DashboardProps) {
                                         <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
                                         <span className="text-sm md:text-base">성장 여정 시작하기</span>
                                     </Button>
-                                </div>
-                            ) : loadingCurriculum ? (
-                                <div className="flex flex-col items-center justify-center text-center py-12">
-                                    <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4" />
-                                    <p className="text-muted-foreground">커리큘럼을 불러오는 중...</p>
                                 </div>
                             ) : curriculum.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">

@@ -48,12 +48,21 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         const completions = getTodayCompletions();
         setTodayCompletions(completions);
 
+        const todayStr = getTodayDateString();
+
         // Filter goals for today
         const todaysGoals = goals.filter(goal => {
             const hasDay = goal.daysOfWeek?.includes(currentDayOfWeek);
+            const isTodaySpecific = goal.specificDate === todayStr;
             const hasNotif = goal.notificationEnabled;
-            console.log(`[NotificationDropdown] Goal "${goal.text}": daysOfWeek=${goal.daysOfWeek}, includes today=${hasDay}, notif=${hasNotif}`);
-            return hasDay && hasNotif;
+
+            if (hasDay || isTodaySpecific) {
+                console.log(`[NotificationDropdown] Including goal: "${goal.text}" (Day: ${hasDay}, Specific: ${isTodaySpecific}, Date: ${goal.specificDate})`);
+            } else {
+                // console.log(`[NotificationDropdown] Skipping goal: "${goal.text}" (Day: ${hasDay}, Specific: ${isTodaySpecific}, Days: ${goal.daysOfWeek})`);
+            }
+
+            return (hasDay || isTodaySpecific) && hasNotif;
         });
 
         // Create notification items - only show schedules that have started
@@ -89,8 +98,28 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
             };
         });
 
+        // Deduplicate items based on unique key (text + startTime + endTime)
+        const uniqueItemsMap = new Map<string, NotificationItem & { isFuture: boolean }>();
+
+        items.forEach(item => {
+            const key = `${item.goal.text}-${item.goal.startTime}-${item.goal.endTime}`;
+            if (!uniqueItemsMap.has(key)) {
+                uniqueItemsMap.set(key, item);
+            } else {
+                // If duplicate exists, keep the one that is NOT 'notDone' or 'missed' if possible (prioritize completed/pending)
+                const existing = uniqueItemsMap.get(key)!;
+                if ((existing.status === 'notDone' || existing.status === 'missed') &&
+                    (item.status === 'completed' || item.status === 'pending')) {
+                    uniqueItemsMap.set(key, item);
+                }
+            }
+        });
+
+        const uniqueItems = Array.from(uniqueItemsMap.values());
+        console.log(`[NotificationDropdown] Deduplicated items: ${items.length} -> ${uniqueItems.length}`);
+
         // Sort by time
-        items.sort((a, b) => {
+        uniqueItems.sort((a, b) => {
             const [aHour, aMin] = a.time.split(':').map(Number);
             const [bHour, bMin] = b.time.split(':').map(Number);
             return (aHour * 60 + aMin) - (bHour * 60 + bMin);
@@ -103,14 +132,14 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         const dismissedIds = dismissed ? JSON.parse(dismissed) : [];
 
         // Only show notifications for schedules that have started or been responded to
-        const visibleItems = items.filter(item => {
+        const visibleItems = uniqueItems.filter(item => {
             if (dismissedIds.includes(item.id)) return false;
             // Don't show future schedules - only show when time comes
             if (item.isFuture) return false;
             return true;
         });
 
-        setAllTodayGoals(items);
+        setAllTodayGoals(uniqueItems);
         setNotifications(visibleItems);
     };
 

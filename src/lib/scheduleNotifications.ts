@@ -66,8 +66,12 @@ export function getSchedulesForNotification(goals: CustomGoal[]): CustomGoal[] {
         // Check if notification is enabled
         if (!goal.notificationEnabled) return false;
 
-        // Check if today is in the selected days
-        if (!goal.daysOfWeek?.includes(currentDay)) return false;
+        // Check if today is in the selected days OR if it's the specific date
+        const todayStr = getTodayDateString();
+        const isDayMatch = goal.daysOfWeek?.includes(currentDay);
+        const isDateMatch = goal.specificDate === todayStr;
+
+        if (!isDayMatch && !isDateMatch) return false;
 
         // Check if it's time for this schedule
         if (goal.startTime === currentTime) return true;
@@ -106,7 +110,7 @@ export function showNotification(goal: CustomGoal): void {
             requireInteraction: true,
         });
 
-        notification.onclick = function() {
+        notification.onclick = function () {
             window.focus();
             notification.close();
         };
