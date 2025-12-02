@@ -249,7 +249,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                                                             클릭하여 파일 업로드
                                                         </p>
                                                         <p className="text-xs text-gray-500">
-                                                            PDF, TXT, DOC, DOCX (최대 10MB)
+                                                            PDF, TXT, DOC, DOCX (최대 50MB)
                                                         </p>
                                                     </div>
                                                 </div>

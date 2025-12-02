@@ -293,6 +293,15 @@ async function compressClustersParallel(groups: any[][], type: string): Promise<
   return results.map(r => r.summary);
 }
 
+// Allow larger file uploads (up to 50MB)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
