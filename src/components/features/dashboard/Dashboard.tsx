@@ -559,6 +559,18 @@ export function Dashboard({
         return () => clearInterval(interval);
     }, [userProfile]);
 
+    // Listen for briefing open event from Header
+    useEffect(() => {
+        const handleOpenBriefing = () => {
+            loadOrGenerateBriefing();
+        };
+
+        window.addEventListener('open-daily-briefing', handleOpenBriefing);
+        return () => {
+            window.removeEventListener('open-daily-briefing', handleOpenBriefing);
+        };
+    }, [userProfile]); // Re-attach when userProfile changes
+
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
             <DailyBriefingModal

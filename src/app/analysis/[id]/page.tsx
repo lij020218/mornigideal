@@ -31,7 +31,7 @@ export default async function AnalysisPage({ params }: PageProps) {
 
     if (error || !material) {
         console.error("Failed to load material:", error);
-        redirect("/dashboard");
+        redirect("/materials");
     }
 
     console.log("Material loaded:", {
@@ -51,7 +51,7 @@ export default async function AnalysisPage({ params }: PageProps) {
             <div className="sticky top-0 z-50 border-b border-white/5 bg-background/5 backdrop-blur-xl">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <Link href="/dashboard">
+                        <Link href="/materials">
                             <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/10">
                                 <ArrowLeft className="w-5 h-5" />
                             </Button>

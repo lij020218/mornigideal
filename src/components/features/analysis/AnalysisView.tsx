@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, BookOpen, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Brain, Loader2, Pen } from "lucide-react";
+import { FileText, BookOpen, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Brain, Loader2, Pen, ThumbsUp, ThumbsDown } from "lucide-react";
 import { PDFViewer } from "./PDFViewer";
 import { AccordionContent } from "./AccordionContent";
 import { QuizView } from "./QuizView";
@@ -46,6 +46,8 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
     const [isDrawingMode, setIsDrawingMode] = useState(false);
     const [isDrawingModeRight, setIsDrawingModeRight] = useState(false);
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [qualityRating, setQualityRating] = useState<'poor' | 'good' | null>(null);
+    const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
     const pageAnalyses = material.analysis?.page_analyses || [];
     const totalSlides = pageAnalyses.length;
@@ -190,6 +192,48 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
 
     const handleNextSlide = () => {
         setCurrentSlide(prev => Math.min(totalSlides - 1, prev + 1));
+    };
+
+    // Load quality rating
+    useEffect(() => {
+        const loadRating = async () => {
+            try {
+                const response = await fetch(`/api/material/rate?materialId=${material.id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setQualityRating(data.rating);
+                }
+            } catch (error) {
+                console.error('Failed to load quality rating:', error);
+            }
+        };
+        loadRating();
+    }, [material.id]);
+
+    const handleQualityRating = async (rating: 'poor' | 'good') => {
+        setIsSubmittingRating(true);
+        try {
+            const response = await fetch('/api/material/rate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    materialId: material.id,
+                    rating
+                })
+            });
+
+            if (response.ok) {
+                setQualityRating(rating);
+                console.log(`[RATING] Submitted ${rating} rating for material ${material.id}`);
+            } else {
+                throw new Error('Failed to submit rating');
+            }
+        } catch (error) {
+            console.error('Rating submission error:', error);
+            alert('평가 제출에 실패했습니다.');
+        } finally {
+            setIsSubmittingRating(false);
+        }
     };
 
     console.log("AnalysisView render:", {
@@ -438,6 +482,40 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                                                     </ul>
                                                 </div>
                                             )}
+
+                                            {/* Quality Rating Section */}
+                                            <div className="pt-6 border-t border-white/10 mt-6">
+                                                <h4 className="text-sm font-semibold mb-3 text-gray-300">
+                                                    이 분석이 도움이 되셨나요?
+                                                </h4>
+                                                <div className="flex items-center gap-3">
+                                                    <Button
+                                                        onClick={() => handleQualityRating('good')}
+                                                        disabled={isSubmittingRating}
+                                                        variant={qualityRating === 'good' ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        className={`flex-1 ${qualityRating === 'good' ? 'bg-green-600 hover:bg-green-700' : 'border-white/20 hover:bg-white/10'}`}
+                                                    >
+                                                        <ThumbsUp className="w-4 h-4 mr-2" />
+                                                        좋음
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => handleQualityRating('poor')}
+                                                        disabled={isSubmittingRating}
+                                                        variant={qualityRating === 'poor' ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        className={`flex-1 ${qualityRating === 'poor' ? 'bg-red-600 hover:bg-red-700' : 'border-white/20 hover:bg-white/10'}`}
+                                                    >
+                                                        <ThumbsDown className="w-4 h-4 mr-2" />
+                                                        별로임
+                                                    </Button>
+                                                </div>
+                                                {qualityRating && (
+                                                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                                                        평가해 주셔서 감사합니다! 더 나은 분석을 제공하겠습니다.
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

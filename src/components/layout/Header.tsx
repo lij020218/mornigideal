@@ -6,7 +6,6 @@ import { Bell, User, Settings, Sparkles, LogOut } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationDropdown } from "@/components/features/dashboard/NotificationDropdown";
-import { DailyBriefingModal } from "@/components/features/dashboard/DailyBriefingModal";
 import { getDailyGoals } from "@/lib/dailyGoals";
 import { signOut } from "next-auth/react";
 
@@ -36,11 +35,6 @@ export function Header() {
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [username, setUsername] = useState("User");
-
-    // Daily Briefing State
-    const [showDailyBriefing, setShowDailyBriefing] = useState(false);
-    const [dailyBriefingData, setDailyBriefingData] = useState<any>(null);
-    const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -87,91 +81,16 @@ export function Header() {
         };
     }, []);
 
-    const loadOrGenerateBriefing = async () => {
-        const today = new Date().toISOString().split('T')[0];
-        const cacheKey = `daily_briefing_${today}`;
-
-        // 1. Check localStorage first (fastest)
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try {
-                setDailyBriefingData(JSON.parse(cached));
-                setShowDailyBriefing(true);
-                return;
-            } catch (e) {
-                console.error('[Header] Failed to parse cached briefing', e);
-            }
-        }
-
-        if (!userProfile) return;
-
-        setIsGeneratingBriefing(true);
-        setShowDailyBriefing(true);
-
-        try {
-            // 2. Try to load pre-generated briefing from API
-            console.log('[Header] Checking for pre-generated briefing...');
-            const pregenResponse = await fetch('/api/daily-briefing/get');
-
-            if (pregenResponse.ok) {
-                const pregenData = await pregenResponse.json();
-                if (pregenData.briefing) {
-                    console.log('[Header] Found pre-generated briefing!');
-                    setDailyBriefingData(pregenData.briefing);
-                    localStorage.setItem(cacheKey, JSON.stringify(pregenData.briefing));
-                    localStorage.setItem("last_briefing_date", today);
-                    setIsGeneratingBriefing(false);
-                    return;
-                }
-            }
-
-            // 3. If no pre-generated briefing, generate on-demand (fallback)
-            console.log('[Header] No pre-generated briefing found, generating now...');
-
-            const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
-            const trendsData = await trendsResponse.json();
-
-            const { getPreviousDailyGoals } = await import("@/lib/dailyGoals");
-            const yesterdayGoals = getPreviousDailyGoals();
-
-            const response = await fetch("/api/daily-briefing/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userProfile,
-                    yesterdayGoals: yesterdayGoals || {},
-                    todaySchedule: userProfile.schedule,
-                    yesterdayTrends: trendsData.trends || []
-                }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setDailyBriefingData(data);
-                localStorage.setItem(cacheKey, JSON.stringify(data));
-                localStorage.setItem("last_briefing_date", today);
-            } else {
-                setShowDailyBriefing(false);
-            }
-        } catch (error) {
-            console.error("[Header] Error loading/generating briefing:", error);
-            setShowDailyBriefing(false);
-        } finally {
-            setIsGeneratingBriefing(false);
-        }
+    const handleBriefingClick = () => {
+        // Trigger event that Dashboard will listen to
+        window.dispatchEvent(new CustomEvent('open-daily-briefing'));
+        setShowProfileMenu(false);
     };
 
     if (isLearningPage || isLandingPage || isOnboardingPage) return null;
 
     return (
         <>
-            <DailyBriefingModal
-                isOpen={showDailyBriefing}
-                onClose={() => setShowDailyBriefing(false)}
-                data={dailyBriefingData}
-                isLoading={isGeneratingBriefing}
-            />
-
             <header className="fixed top-0 left-0 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 bg-background/80 backdrop-blur-md border-b border-white/5">
                 <Link href="/" className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-500">
                     A.ideal
@@ -271,10 +190,7 @@ export function Header() {
                                         </div>
 
                                         <button
-                                            onClick={() => {
-                                                loadOrGenerateBriefing();
-                                                setShowProfileMenu(false);
-                                            }}
+                                            onClick={handleBriefingClick}
                                             className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-yellow-400 hover:text-yellow-300 flex items-center gap-3"
                                         >
                                             <Sparkles className="w-4 h-4" />
