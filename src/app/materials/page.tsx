@@ -211,7 +211,16 @@ export default function MaterialsPage() {
                                   body: JSON.stringify({ id: material.id }),
                                 });
                                 if (res.ok) {
-                                  setMaterials(prev => prev.filter(m => m.id !== material.id));
+                                  // 현재 페이지에서 삭제 후 남은 아이템 수 계산
+                                  const remainingItems = materials.length - 1;
+
+                                  // 현재 페이지가 비게 되고, 첫 페이지가 아니라면 이전 페이지로 이동
+                                  if (remainingItems === 0 && currentPage > 1) {
+                                    setCurrentPage(currentPage - 1);
+                                  } else {
+                                    // 같은 페이지에서 리프레시
+                                    fetchMaterials();
+                                  }
                                 } else {
                                   alert("삭제에 실패했습니다.");
                                 }
