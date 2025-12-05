@@ -14,7 +14,7 @@
     }
   ],
   "functions": {
-    "api/analyze-material-stream.ts": {
+    "src/app/api/analyze-material-stream/route.ts": {
       "maxDuration": 300
     }
   }
