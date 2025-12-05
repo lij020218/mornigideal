@@ -186,6 +186,9 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
     const getStageLabel = (stage: string) => {
         switch (stage) {
             case "upload": return "업로드";
+            case "download_and_extract": return "파일 다운로드";
+            case "image_analysis": return "이미지 분석";
+            case "chunking": return "텍스트 분할";
             case "extract": return "텍스트 추출";
             case "analyze_chunks": return "내용 분석";
             case "clustering": return "그룹화";

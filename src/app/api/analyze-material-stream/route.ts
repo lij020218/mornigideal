@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
 import crypto from "crypto";
+import { extractAndAnalyzeImages, formatImageAnalysis } from "@/lib/pdf-image-extractor";
 
 // Route segment config for large file uploads
 export const maxDuration = 300; // 5 minutes for Vercel Pro
@@ -114,10 +115,31 @@ export async function POST(request: NextRequest) {
       // Extract text from PDF
       console.log('[PDF-EXTRACT] Extracting text...');
       const pdfData = await pdfParse(buffer);
-      const extractedText = pdfData.text;
+      let extractedText = pdfData.text;
       const pageCount = pdfData.numpages;
 
       console.log(`[PDF-PARSE] Extracted ${extractedText.length} chars from ${pageCount} pages`);
+
+      // Extract and analyze images with Google Cloud Vision
+      await sendEvent("progress", {
+        stage: "image_analysis",
+        message: "이미지 분석 중... (Google Cloud Vision)"
+      });
+
+      console.log('[IMAGE-EXTRACT] Analyzing images...');
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey) {
+        const imageAnalyses = await extractAndAnalyzeImages(buffer, apiKey);
+        if (imageAnalyses.length > 0) {
+          const imageText = formatImageAnalysis(imageAnalyses);
+          extractedText = extractedText + imageText;
+          console.log(`[IMAGE-EXTRACT] Added ${imageAnalyses.length} image analyses to text`);
+        } else {
+          console.log('[IMAGE-EXTRACT] No images found or analyzed');
+        }
+      } else {
+        console.warn('[IMAGE-EXTRACT] Skipping - no API key found');
+      }
 
       // ====================
       // STEP 2: GPT-5 Mini - 스마트 청크 분할
