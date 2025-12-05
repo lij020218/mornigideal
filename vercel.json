@@ -12,5 +12,10 @@
       "path": "/api/cron/generate-daily-briefing",
       "schedule": "0 5 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/analyze-material-stream.ts": {
+      "maxDuration": 300
+    }
+  }
 }

@@ -5,6 +5,10 @@ import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
 import crypto from "crypto";
 
+// Route segment config for large file uploads
+export const maxDuration = 300; // 5 minutes for Vercel Pro
+export const dynamic = 'force-dynamic';
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
@@ -60,27 +64,32 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      const formData = await request.formData();
-      const file = formData.get("file") as File;
-      const type = formData.get("type") as "exam" | "work";
+      const body = await request.json();
+      const { blobUrl, fileName: originalFileName, type } = body;
 
-      if (!file) {
-        await sendEvent("error", { error: "No file provided" });
+      if (!blobUrl || !originalFileName) {
+        await sendEvent("error", { error: "No file URL provided" });
         await writer.close();
         return;
       }
 
-      console.log(`[START] Processing ${file.name} (${file.size} bytes)`);
+      console.log(`[START] Processing ${originalFileName} from blob: ${blobUrl}`);
 
       // ====================
-      // STEP 1: Upload PDF & Extract Text
+      // STEP 1: Download from Blob & Extract Text
       // ====================
       await sendEvent("progress", {
-        stage: "upload_and_extract",
-        message: "PDF 업로드 및 텍스트 추출 중..."
+        stage: "download_and_extract",
+        message: "파일 다운로드 및 텍스트 추출 중..."
       });
 
-      const buffer = Buffer.from(await file.arrayBuffer());
+      // Download file from blob storage
+      const blobResponse = await fetch(blobUrl);
+      if (!blobResponse.ok) {
+        throw new Error("Failed to download file from blob storage");
+      }
+
+      const buffer = Buffer.from(await blobResponse.arrayBuffer());
       const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
       const fileName = `${session.user.email}/${fileHash}.pdf`;
 
@@ -157,7 +166,7 @@ export async function POST(request: NextRequest) {
 
       const material = {
         user_id: session.user.email,
-        title: file.name.replace('.pdf', ''),
+        title: originalFileName.replace(/\.(pdf|txt|doc|docx)$/i, ''),
         content: extractedText.substring(0, 50000),
         type,
         file_url: fileUrl,
