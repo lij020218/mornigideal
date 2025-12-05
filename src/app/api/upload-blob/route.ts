@@ -1,12 +1,11 @@
-import { put } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // 60 seconds for large file uploads
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check authentication
     const session = await auth();
@@ -17,15 +16,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const body = (await request.json()) as HandleUploadBody;
 
-    if (!file) {
-      console.error('[upload-blob] No file provided');
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    }
-
-    console.log('[upload-blob] Uploading file:', file.name, file.size, 'bytes');
+    console.log('[upload-blob] Generating upload token for:', body.pathname);
 
     // Check if token exists
     const token = process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -34,15 +27,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Blob storage not configured' }, { status: 500 });
     }
 
-    // Upload to Vercel Blob with custom token
-    const blob = await put(file.name, file, {
-      access: 'public',
-      addRandomSuffix: true,
-      token: token,
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname) => {
+        // Generate a unique filename with timestamp
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(7);
+        const newPathname = `${timestamp}-${randomSuffix}-${pathname}`;
+
+        console.log('[upload-blob] Generated unique pathname:', newPathname);
+
+        return {
+          allowedContentTypes: [
+            'text/plain',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          ],
+          tokenPayload: JSON.stringify({
+            userEmail: session.user.email,
+          }),
+        };
+      },
+      onUploadCompleted: async ({ blob }) => {
+        console.log('[upload-blob] Upload completed:', blob.url);
+      },
+      token,
     });
 
-    console.log('[upload-blob] Upload success:', blob.url);
-    return NextResponse.json({ blobUrl: blob.url });
+    return NextResponse.json(jsonResponse);
   } catch (error: any) {
     console.error('[upload-blob] Error:', error);
     console.error('[upload-blob] Error stack:', error.stack);

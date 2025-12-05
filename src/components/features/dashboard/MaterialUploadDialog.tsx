@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Upload, FileText, Loader2, BookOpen, Sparkles, Check } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 
 interface MaterialUploadDialogProps {
     open: boolean;
@@ -72,20 +73,15 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
         setProgress({ stage: "starting", message: "파일 업로드 중..." });
 
         try {
-            // Step 1: Upload file to Blob Storage
-            const uploadFormData = new FormData();
-            uploadFormData.append("file", file);
+            // Step 1: Upload file directly to Blob Storage from client
+            setProgress({ stage: "uploading", message: "파일 업로드 중..." });
 
-            const uploadResponse = await fetch("/api/upload-blob", {
-                method: "POST",
-                body: uploadFormData,
+            const blob = await upload(file.name, file, {
+                access: 'public',
+                handleUploadUrl: '/api/upload-blob',
             });
 
-            if (!uploadResponse.ok) {
-                throw new Error("파일 업로드 실패");
-            }
-
-            const { blobUrl } = await uploadResponse.json();
+            const blobUrl = blob.url;
 
             // Step 2: Start analysis with blob URL
             setProgress({ stage: "starting", message: "분석 시작 중..." });
