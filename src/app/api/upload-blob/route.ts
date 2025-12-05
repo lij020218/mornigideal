@@ -1,11 +1,13 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: Request): Promise<NextResponse> {
+  const body = (await request.json()) as HandleUploadBody;
+
   try {
     // Check if token exists
     const token = process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -15,10 +17,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const jsonResponse = await handleUpload({
-      body: request,
+      body,
       request,
       onBeforeGenerateToken: async (pathname) => {
-        // Check authentication inside the callback
+        // Check authentication before generating token
         const session = await auth();
         console.log('[upload-blob] Session:', session?.user?.email);
 
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const randomSuffix = Math.random().toString(36).substring(7);
         const newPathname = `${timestamp}-${randomSuffix}-${pathname}`;
 
-        console.log('[upload-blob] Generated unique pathname:', newPathname);
+        console.log('[upload-blob] Generating token for:', newPathname);
 
         return {
           allowedContentTypes: [
@@ -56,6 +58,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error: any) {
     console.error('[upload-blob] Error:', error);
     console.error('[upload-blob] Error stack:', error.stack);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }
