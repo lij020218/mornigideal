@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // 1. Generate Search Queries using Gemini
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+      model: process.env.GEMINI_MODEL_2 || "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 
