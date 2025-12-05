@@ -20,10 +20,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Upload to Vercel Blob
+    // Upload to Vercel Blob with custom token
     const blob = await put(file.name, file, {
       access: 'public',
       addRandomSuffix: true,
+      token: process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN,
     });
 
     return NextResponse.json({ blobUrl: blob.url });
