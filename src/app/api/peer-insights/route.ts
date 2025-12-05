@@ -3,8 +3,15 @@ import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-3-pro-preview"
+// Use Gemini 2.0 Flash with Google Search grounding for real-time web data
+const searchModel = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash-exp",
+    tools: [{
+        googleSearch: {}
+    }],
+    generationConfig: {
+        temperature: 1.0,
+    }
 });
 
 export async function POST(request: Request) {
@@ -18,86 +25,127 @@ export async function POST(request: Request) {
             );
         }
 
+        console.log(`🔍 Generating achievements for ${job} (${level}) with web search...`);
+
         // Determine if job is student-like or professional
         const isStudent = /학생|대학생|고등학생|중학생|취준생|수험생/i.test(job);
 
-        const prompt = `당신은 동기부여 전문가입니다. ${job} 직군의 ${level} 경력자와 비슷한 수준의 사람들이 달성한 인상적인 성과 3-5개를 찾아 JSON 배열로 반환하세요.
+        const searchPrompt = isStudent
+            ? `${job} ${level} 학생들의 최근 성과, 수상 실적, 대회 입상, 우수 사례를 웹에서 검색하여 실제 사례를 찾아주세요.
 
-요구사항:
-1. 구체적이고 측정 가능한 성과 (예: "MVP 수상", "평균 득점 21점", "CPA 시험 응시율 80%")
-2. 실명 인물, 구체적인 대학/기관, 또는 신뢰할 수 있는 통계 데이터
-3. 경쟁심리와 동기부여를 자극하는 표현
-4. 각 성과는 1-2문장으로 간결하게
+구체적으로 찾을 내용:
+- 대학생 대회 수상자 (해커톤, 공모전, 학술대회 등)
+- 학과별 우수 학생 통계 (취업률, 자격증 취득률, 평균 스펙 등)
+- 최근 1-2년 이내의 실제 사례
+- 실명 또는 구체적인 대학명이 포함된 정보
 
-${isStudent ? `예시 (경영학과 4학년):
+검색한 실제 사례를 바탕으로 3-5개의 성과를 JSON 형식으로 반환하세요:
 [
-  { "person": "고려대학교 경영학과 4학년", "achievement": "CPA 시험에 평균 80% 이상 응시합니다" },
-  { "person": "연세대학교 4학년 학생", "achievement": "평균 1.5회 이상의 대기업 인턴 경험이 있습니다" },
-  { "person": "서울대 경영학과", "achievement": "졸업생의 60%가 졸업 전 창업 경험이 있습니다" },
-  { "person": "성균관대 경영학과", "achievement": "평균 TOEIC 점수 900점 이상을 보유하고 있습니다" }
-]` : `예시 (마케터 3년차):
+  { "person": "실제 인물/기관명", "achievement": "구체적인 성과 1-2문장" }
+]
+
+중요: 웹 검색 결과에서 찾은 실제 데이터만 사용하세요. 없으면 "검색 결과 없음"이라고 말하세요.`
+            : `${job} ${level} 직군의 최근 성과, 업계 트렌드, 수상 실적, 성공 사례를 웹에서 검색하여 실제 사례를 찾아주세요.
+
+구체적으로 찾을 내용:
+- 해당 직군의 최근 성과 사례 (프로젝트 성공, 수상, 승진 등)
+- 업계 평균 성과 지표
+- 최근 1-2년 이내의 실제 사례
+- 실명 회사 또는 구체적인 통계가 포함된 정보
+
+검색한 실제 사례를 바탕으로 3-5개의 성과를 JSON 형식으로 반환하세요:
 [
-  { "person": "네이버 마케팅팀", "achievement": "3년차 마케터 평균 ROI 300% 달성" },
-  { "person": "카카오 브랜드팀", "achievement": "연간 5개 이상의 성공적인 캠페인 런칭" },
-  { "person": "쿠팡 그로스팀", "achievement": "데이터 기반 A/B 테스트로 전환율 150% 향상" }
-]`}
+  { "person": "실제 회사/인물명", "achievement": "구체적인 성과 1-2문장" }
+]
 
-직군: ${job}
-경력/학년: ${level}
+중요: 웹 검색 결과에서 찾은 실제 데이터만 사용하세요. 없으면 "검색 결과 없음"이라고 말하세요.`;
 
-중요: JSON 배열만 반환하세요. 다른 텍스트는 포함하지 마세요.`;
-
-        console.log(`🔍 Generating achievements for ${job} (${level})...`);
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-
-        console.log("📡 Raw Gemini response:", text);
-
-        // Extract JSON from response
-        let jsonText = text.trim();
-        jsonText = jsonText.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
-
-        // Try to find JSON array
-        const arrayMatch = jsonText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
-        if (arrayMatch) {
-            jsonText = arrayMatch[0];
-        }
+        let achievements: any[] = [];
 
         try {
-            const achievements = JSON.parse(jsonText);
+            const result = await searchModel.generateContent(searchPrompt);
+            const response = await result.response;
+            const text = response.text();
+
+            console.log("📡 Web search response:", text);
+
+            // Extract JSON from response
+            let jsonText = text.trim();
+            jsonText = jsonText.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+
+            // Try to find JSON array
+            const arrayMatch = jsonText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+            if (arrayMatch) {
+                jsonText = arrayMatch[0];
+                achievements = JSON.parse(jsonText);
+            } else if (text.includes("검색 결과 없음")) {
+                console.log("⚠️ No web search results found, using fallback");
+                throw new Error("No search results");
+            }
 
             if (!Array.isArray(achievements) || achievements.length === 0) {
                 throw new Error("Invalid achievements array");
             }
 
-            console.log(`✅ Parsed ${achievements.length} achievements`);
+            console.log(`✅ Found ${achievements.length} achievements from web search`);
 
-            return NextResponse.json({
-                achievements: achievements
+        } catch (searchError) {
+            console.error("⚠️ Web search failed:", searchError);
+
+            // Fallback: Use diverse examples with higher temperature
+            const fallbackModel = genAI.getGenerativeModel({
+                model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
+                generationConfig: {
+                    temperature: 1.5, // High temperature for variety
+                }
             });
-        } catch (parseError) {
-            console.error("❌ Failed to parse response");
-            console.error("Parse error:", parseError);
 
-            // Return fallback achievements
-            const fallbackAchievements = isStudent
-                ? [
-                    { person: `성공하는 ${job}`, achievement: "체계적인 학습 계획으로 목표를 달성하고 있습니다" },
-                    { person: "상위 10% 학생", achievement: "온라인 커뮤니티에서 적극적으로 네트워킹하고 있습니다" },
-                    { person: "우수 졸업생", achievement: "졸업 전 평균 2개 이상의 프로젝트 경험을 쌓고 있습니다" }
-                ]
-                : [
-                    { person: `성공적인 ${job}`, achievement: "지속적인 학습으로 전문성을 강화하고 있습니다" },
-                    { person: `${level} 전문가`, achievement: "업계 트렌드를 선도하는 혁신적인 시도를 하고 있습니다" },
-                    { person: "동료 전문가", achievement: "커뮤니티 활동으로 영향력을 확대하고 있습니다" }
-                ];
+            const fallbackPrompt = `${job} ${level} 수준의 사람들이 달성한 인상적인 성과 3-5개를 매우 다양하게 생성하세요.
 
-            return NextResponse.json({
-                achievements: fallbackAchievements
-            });
+요구사항:
+- 매번 다른 내용으로 생성 (이전과 겹치지 않게)
+- 구체적이고 측정 가능한 성과
+- 실명 인물/기관 또는 통계 데이터
+- JSON 배열 형식으로 반환
+
+${isStudent ? `예시 형식:
+[
+  { "person": "카이스트 전산학과", "achievement": "학부생 평균 2개 이상 오픈소스 기여" },
+  { "person": "포스텍 화학과", "achievement": "SCI 논문 게재율 학부생 30%" }
+]` : `예시 형식:
+[
+  { "person": "토스 프로덕트팀", "achievement": "A/B 테스트로 전환율 200% 향상" },
+  { "person": "배민 서비스기획", "achievement": "월간 사용자 피드백 500건 이상 분석" }
+]`}`;
+
+            const fallbackResult = await fallbackModel.generateContent(fallbackPrompt);
+            const fallbackResponse = await fallbackResult.response;
+            const fallbackText = fallbackResponse.text();
+
+            let fallbackJson = fallbackText.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+            const fallbackMatch = fallbackJson.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+
+            if (fallbackMatch) {
+                achievements = JSON.parse(fallbackMatch[0]);
+            } else {
+                // Ultimate fallback
+                achievements = isStudent
+                    ? [
+                        { person: `우수 ${job}`, achievement: "체계적인 학습으로 상위 10% 성적 유지" },
+                        { person: "전국 대회 입상자", achievement: "전공 관련 공모전 3회 이상 수상" },
+                        { person: "선배 졸업생", achievement: "재학 중 인턴 2회 이상 경험" }
+                    ]
+                    : [
+                        { person: `성공하는 ${job}`, achievement: "분기별 목표 120% 달성" },
+                        { person: "동료 전문가", achievement: "업계 세미나 연 4회 이상 발표" },
+                        { person: "팀 리더", achievement: "프로젝트 성공률 90% 이상" }
+                    ];
+            }
         }
+
+        return NextResponse.json({
+            achievements: achievements
+        });
 
     } catch (error) {
         console.error("💥 Error generating peer achievements:", error);
