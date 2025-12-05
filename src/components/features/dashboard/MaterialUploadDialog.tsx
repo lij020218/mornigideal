@@ -10,7 +10,7 @@ import { Upload, FileText, Loader2, BookOpen, Sparkles, Check } from "lucide-rea
 
 interface MaterialUploadDialogProps {
     open: boolean;
-    onOpenChange: (open: boolean) => void;
+    onOpenChange: (open: boolean, shouldRefresh?: boolean) => void;
 }
 
 export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialogProps) {
@@ -33,15 +33,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
         const shouldRefresh = uploadCompleted;
         setUploadCompleted(false);
 
-        onOpenChange(false);
-
-        // Notify parent about whether to refresh
-        if (shouldRefresh) {
-            // Trigger refresh by clearing cache
-            if (typeof window !== 'undefined') {
-                sessionStorage.removeItem('materials_cache');
-            }
-        }
+        onOpenChange(false, shouldRefresh);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,7 +170,11 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
     };
 
     return (
-        <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
+        <Dialog open={open} onOpenChange={(isOpen) => {
+            if (!isOpen) {
+                handleClose();
+            }
+        }}>
             <DialogContent className="sm:max-w-md border-none bg-black/90 backdrop-blur-xl text-white shadow-2xl p-0 overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
                 <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />

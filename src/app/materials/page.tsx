@@ -60,10 +60,10 @@ export default function MaterialsPage() {
     fetchMaterials();
   }, [currentPage]);
 
-  const handleOpenChange = (open: boolean) => {
+  const handleOpenChange = (open: boolean, shouldRefresh?: boolean) => {
     setShowUploadDialog(open);
-    if (!open) {
-      fetchMaterials(); // Refresh the list when dialog closes
+    if (!open && shouldRefresh) {
+      fetchMaterials(); // Refresh the list only if upload was completed
     }
   };
 
