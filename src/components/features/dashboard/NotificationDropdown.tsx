@@ -41,28 +41,39 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         const currentDayOfWeek = now.getDay(); // 0=일요일, 1=월요일, ..., 6=토요일
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+        const todayStr = getTodayDateString();
 
         console.log('[NotificationDropdown] Current day of week:', currentDayOfWeek, '(0=일,1=월,2=화,3=수,4=목,5=금,6=토)');
-        console.log('[NotificationDropdown] Current time:', currentTime, 'All goals:', goals);
+        console.log('[NotificationDropdown] Current time:', currentTime);
+        console.log('[NotificationDropdown] Today string:', todayStr);
 
         const completions = getTodayCompletions();
         setTodayCompletions(completions);
 
-        const todayStr = getTodayDateString();
-
         // Filter goals for today
         const todaysGoals = goals.filter(goal => {
-            const hasDay = goal.daysOfWeek?.includes(currentDayOfWeek);
-            const isTodaySpecific = goal.specificDate === todayStr;
             const hasNotif = goal.notificationEnabled;
 
-            if (hasDay || isTodaySpecific) {
-                console.log(`[NotificationDropdown] Including goal: "${goal.text}" (Day: ${hasDay}, Specific: ${isTodaySpecific}, Date: ${goal.specificDate})`);
-            } else {
-                // console.log(`[NotificationDropdown] Skipping goal: "${goal.text}" (Day: ${hasDay}, Specific: ${isTodaySpecific}, Days: ${goal.daysOfWeek})`);
+            console.log(`[NotificationDropdown] Checking goal: "${goal.text}"`, {
+                notificationEnabled: hasNotif,
+                specificDate: goal.specificDate,
+                daysOfWeek: goal.daysOfWeek,
+                startTime: goal.startTime,
+                endTime: goal.endTime
+            });
+
+            // If goal has a specific date, only show on that date
+            if (goal.specificDate) {
+                const isTodaySpecific = goal.specificDate === todayStr;
+                console.log(`[NotificationDropdown] Specific date goal "${goal.text}": specificDate=${goal.specificDate}, today=${todayStr}, match=${isTodaySpecific}, hasNotif=${hasNotif}`);
+                return isTodaySpecific && hasNotif;
             }
 
-            return (hasDay || isTodaySpecific) && hasNotif;
+            // Otherwise, check if today is in daysOfWeek
+            const hasDay = goal.daysOfWeek?.includes(currentDayOfWeek);
+            console.log(`[NotificationDropdown] Recurring goal "${goal.text}": currentDay=${currentDayOfWeek}, daysOfWeek=${JSON.stringify(goal.daysOfWeek)}, match=${hasDay}, hasNotif=${hasNotif}`);
+
+            return hasDay && hasNotif;
         });
 
         // Create notification items - only show schedules that have started

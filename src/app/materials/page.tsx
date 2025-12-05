@@ -18,6 +18,7 @@ interface Material {
   created_at: string;
   analysis?: {
     page_analyses?: any[];
+    content?: string;
   };
 }
 
@@ -26,6 +27,9 @@ export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const ITEMS_PER_PAGE = 12;
 
   // Fetch materials from API (bypasses RLS issues)
   const fetchMaterials = async () => {
@@ -33,12 +37,13 @@ export default function MaterialsPage() {
       setLoading(true);
 
       // Call API route instead of direct Supabase query
-      const response = await fetch('/api/materials');
+      const response = await fetch(`/api/materials?page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
 
       if (response.ok) {
         const data = await response.json();
         console.log('[Materials] Fetched from API:', data.materials?.length || 0, 'materials');
         setMaterials(data.materials || []);
+        setTotalPages(data.totalPages || 1);
       } else {
         console.error('[Materials] API error:', await response.text());
         setMaterials([]);
@@ -53,7 +58,7 @@ export default function MaterialsPage() {
 
   useEffect(() => {
     fetchMaterials();
-  }, []);
+  }, [currentPage]);
 
   const handleOpenChange = (open: boolean) => {
     setShowUploadDialog(open);
@@ -152,7 +157,12 @@ export default function MaterialsPage() {
             {materials.map((material, index) => {
               const typeInfo = getTypeInfo(material.type);
               const TypeIcon = typeInfo.icon;
-              const slideCount = material.analysis?.page_analyses?.length || 0;
+              // Check both page_analyses and content to determine status
+              const hasAnalysis = (material.analysis?.page_analyses && material.analysis.page_analyses.length > 0) ||
+                (material.analysis?.content && material.analysis.content.length > 100); // Simple check for content existence
+
+              const slideCount = material.analysis?.page_analyses?.length ||
+                (material.analysis?.content ? material.analysis.content.split('\n').filter((l: string) => l.match(/^\s*##\s+/)).length : 0);
 
               return (
                 <Link key={material.id} href={`/analysis/${material.id}`}>
@@ -183,7 +193,7 @@ export default function MaterialsPage() {
                     <div className="flex items-center justify-between pt-4 border-t border-white/5">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-primary/50" />
-                        {slideCount > 0 ? `${slideCount}개 슬라이드` : '분석 대기 중'}
+                        {hasAnalysis ? (slideCount > 0 ? `${slideCount}개 슬라이드` : '분석 완료') : '분석 대기 중'}
                       </span>
                       <div className="flex items-center gap-2">
                         <Button
@@ -223,6 +233,45 @@ export default function MaterialsPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {!loading && materials.length > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-8">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="border-white/10 hover:bg-white/10"
+            >
+              이전
+            </Button>
+
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 p-0 ${currentPage !== page ? 'text-muted-foreground hover:text-white' : ''}`}
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="border-white/10 hover:bg-white/10"
+            >
+              다음
+            </Button>
           </div>
         )}
       </div>

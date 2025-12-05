@@ -20,6 +20,29 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState<{ stage: string; message: string; pagesGenerated?: number }>({ stage: "", message: "" });
     const [materialId, setMaterialId] = useState<string | null>(null);
+    const [uploadCompleted, setUploadCompleted] = useState(false);
+
+    const handleClose = () => {
+        // Reset state when closing
+        setFile(null);
+        setUploading(false);
+        setProgress({ stage: "", message: "" });
+        setMaterialId(null);
+
+        // Only refresh if upload was completed
+        const shouldRefresh = uploadCompleted;
+        setUploadCompleted(false);
+
+        onOpenChange(false);
+
+        // Notify parent about whether to refresh
+        if (shouldRefresh) {
+            // Trigger refresh by clearing cache
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('materials_cache');
+            }
+        }
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
@@ -93,40 +116,38 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                     console.log(`[STREAM] ${eventType}:`, data);
 
                     switch (eventType) {
-                        case "material_created":
-                            currentMaterialId = data.id;
-                            setMaterialId(data.id);
-                            break;
-
                         case "progress":
                             setProgress({
                                 stage: data.stage,
-                                message: data.message,
-                                pagesGenerated: data.pagesGenerated
+                                message: data.message
                             });
                             break;
 
-                        case "page":
-                            setProgress({
-                                stage: "generating_pages",
-                                message: `슬라이드 생성 중... (${data.index + 1}/${data.total})`,
-                                pagesGenerated: data.index + 1
-                            });
-
-                            // Navigate immediately on first page
-                            if (data.index === 0 && currentMaterialId) {
-                                console.log("[STREAM] First page ready, navigating to:", `/analysis/${currentMaterialId}`);
+                        case "content":
+                            // Content is streaming - navigate to analysis page if not already done
+                            if (!currentMaterialId) {
+                                // Wait briefly for materialId from complete event
+                                break;
+                            }
+                            // Auto-navigate on first content chunk
+                            if (currentMaterialId) {
+                                console.log("[STREAM] Content streaming started, navigating to:", `/analysis/${currentMaterialId}`);
                                 onOpenChange(false);
                                 router.push(`/analysis/${currentMaterialId}`);
+                                currentMaterialId = null; // Prevent repeated navigation
                             }
                             break;
 
                         case "complete":
                             console.log("[STREAM] Analysis complete");
-                            // If we haven't navigated yet (shouldn't happen), navigate now
-                            if (currentMaterialId) {
+                            currentMaterialId = data.materialId;
+                            setMaterialId(data.materialId);
+                            setUploadCompleted(true);
+
+                            // Navigate to analysis page
+                            if (data.materialId) {
                                 onOpenChange(false);
-                                router.push(`/analysis/${currentMaterialId}`);
+                                router.push(`/analysis/${data.materialId}`);
                             }
                             break;
 
@@ -157,7 +178,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
             <DialogContent className="sm:max-w-md border-none bg-black/90 backdrop-blur-xl text-white shadow-2xl p-0 overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
                 <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />

@@ -40,123 +40,84 @@ export interface StructuredPDF {
  */
 export function parsePDFStructure(text: string): StructuredPDF {
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
-  const sections: ParsedSection[] = [];
   const keyTerms: string[] = [];
   const formulas: string[] = [];
   const examples: ParsedSection[] = [];
 
-  let currentParagraph: string[] = [];
   let lineNumber = 0;
+  let currentSection: ParsedSection | null = null;
+  const mergedSections: ParsedSection[] = [];
 
   for (const line of lines) {
     lineNumber++;
 
     // 1. Detect titles (ALL CAPS, or ending with specific patterns)
     if (isTitle(line)) {
-      flushParagraph();
-      sections.push({
+      if (currentSection) mergedSections.push(currentSection);
+      currentSection = {
         type: 'title',
         level: 1,
         content: line,
         metadata: { lineNumber }
-      });
+      };
       continue;
     }
 
     // 2. Detect headings (numbered sections, or capitalized with keywords)
     const headingLevel = detectHeadingLevel(line);
     if (headingLevel > 0) {
-      flushParagraph();
-      sections.push({
+      if (currentSection) mergedSections.push(currentSection);
+      currentSection = {
         type: 'heading',
         level: headingLevel,
         content: line,
         metadata: { lineNumber }
-      });
-      continue;
-    }
-
-    // 3. Detect formulas (LaTeX syntax, math symbols, equations)
-    if (isFormula(line)) {
-      flushParagraph();
-      const formula: ParsedSection = {
-        type: 'formula',
-        content: line,
-        metadata: { hasFormula: true, lineNumber }
       };
-      sections.push(formula);
-      formulas.push(line);
       continue;
     }
 
-    // 4. Detect examples (keywords like "Example:", "예시:", "Case Study:")
-    if (isExampleStart(line)) {
-      flushParagraph();
-      const example: ParsedSection = {
-        type: 'example',
-        content: line,
-        metadata: { isExample: true, lineNumber }
-      };
-      sections.push(example);
-      examples.push(example);
-      continue;
-    }
+    // If we have a current section, append content to it
+    if (currentSection) {
+      // 3. Detect formulas
+      if (isFormula(line)) {
+        formulas.push(line);
+      }
 
-    // 5. Detect definitions (pattern: "Term: Definition" or "Term - Definition")
-    if (isDefinition(line)) {
-      flushParagraph();
-      const term = extractTerm(line);
-      if (term) keyTerms.push(term);
-      sections.push({
-        type: 'definition',
-        content: line,
-        metadata: { lineNumber }
-      });
-      continue;
-    }
+      // 4. Detect examples
+      if (isExampleStart(line)) {
+        const example: ParsedSection = {
+          type: 'example',
+          content: line,
+          metadata: { isExample: true, lineNumber }
+        };
+        examples.push(example);
+      }
 
-    // 6. Detect lists (bullet points, numbered lists)
-    if (isList(line)) {
-      flushParagraph();
-      sections.push({
-        type: 'list',
-        content: line,
-        metadata: { lineNumber }
-      });
-      continue;
-    }
+      // 5. Detect definitions
+      if (isDefinition(line)) {
+        const term = extractTerm(line);
+        if (term) keyTerms.push(term);
+      }
 
-    // 7. Regular paragraph - accumulate lines
-    if (line.length > 20) { // Minimum length to avoid noise
-      currentParagraph.push(line);
+      // Append all content to current section (merge)
+      if (line.length > 10) {
+        if (!currentSection.metadata) currentSection.metadata = {};
+        const existingContent = (currentSection.metadata as any).fullContent || '';
+        (currentSection.metadata as any).fullContent = existingContent + line + ' ';
+      }
     }
   }
 
-  flushParagraph();
-
-  function flushParagraph() {
-    if (currentParagraph.length > 0) {
-      const content = currentParagraph.join(' ');
-      sections.push({
-        type: 'paragraph',
-        content,
-        metadata: {
-          isKeyPoint: isKeyPoint(content),
-          hasFormula: containsFormulaSymbols(content)
-        }
-      });
-      currentParagraph = [];
-    }
-  }
+  if (currentSection) mergedSections.push(currentSection);
 
   return {
-    title: sections.find(s => s.type === 'title')?.content,
-    sections,
+    title: mergedSections.find(s => s.type === 'title')?.content,
+    sections: mergedSections,
     keyTerms: [...new Set(keyTerms)],
     formulas,
     examples,
     summary: {
-      totalSections: sections.filter(s => s.type === 'heading').length,
+      totalSections: mergedSections.filter(s => s.type === 'heading').length,
       hasFormulas: formulas.length > 0,
       hasExamples: examples.length > 0,
       estimatedReadingTime: Math.ceil(text.split(' ').length / 200) // 200 words per minute
@@ -348,43 +309,64 @@ export function createLightweightSummary(structured: StructuredPDF): string {
     parts.push(`# ${structured.title}\n`);
   }
 
-  // Key sections with their first sentences
-  const headings = structured.sections.filter(s => s.type === 'heading' || s.type === 'title');
-  const paragraphs = structured.sections.filter(s => s.type === 'paragraph');
+  // IMPORTANT: Sample evenly across ALL sections to preserve full document coverage
+  // Get all level 1-2 headings in original order
+  const allHeadingsInOrder = structured.sections
+    .filter(s => (s.type === 'heading' || s.type === 'title') && (s.level || 1) <= 2);
 
-  headings.forEach(heading => {
+  // Sample evenly: take every Nth heading to cover entire document uniformly
+  const targetCount = 20;
+  const stepSize = Math.max(1, Math.floor(allHeadingsInOrder.length / targetCount));
+
+  const allHeadings: ParsedSection[] = [];
+  for (let i = 0; i < allHeadingsInOrder.length && allHeadings.length < targetCount; i += stepSize) {
+    allHeadings.push(allHeadingsInOrder[i]);
+  }
+
+  allHeadings.forEach(heading => {
     parts.push(`## ${heading.content}`);
 
-    // Find next paragraph after this heading
-    const headingIndex = structured.sections.indexOf(heading);
-    const nextParagraph = structured.sections
-      .slice(headingIndex + 1)
-      .find(s => s.type === 'paragraph');
+    // Get content from metadata (merged during parsing)
+    const fullContent = (heading.metadata as any)?.fullContent || '';
 
-    if (nextParagraph) {
-      // Only first sentence
-      const firstSentence = nextParagraph.content.split(/[.!?]\s/)[0] + '.';
-      parts.push(firstSentence);
+    if (fullContent) {
+      // Take first 300 chars (roughly 50 words) - keeps key information
+      const content = fullContent.substring(0, 300).trim();
+      parts.push(content);
+    } else {
+      // Fallback: find next paragraph
+      const headingIndex = structured.sections.indexOf(heading);
+      const nextParagraph = structured.sections
+        .slice(headingIndex + 1, headingIndex + 5)
+        .find(s => s.type === 'paragraph');
+
+      if (nextParagraph) {
+        const content = nextParagraph.content.substring(0, 300).trim();
+        parts.push(content);
+      }
     }
     parts.push('');
   });
 
-  // Formulas
+  // Formulas (keep more, don't truncate too aggressively)
   if (structured.formulas.length > 0) {
     parts.push('\n### Formulas');
-    structured.formulas.forEach(f => parts.push(`- ${f}`));
+    structured.formulas.slice(0, 12).forEach(f => parts.push(`- ${f.substring(0, 150)}`));
   }
 
-  // Examples (titles only)
+  // Examples (keep more)
   if (structured.examples.length > 0) {
     parts.push('\n### Examples');
-    structured.examples.forEach(e => parts.push(`- ${e.content.split('\n')[0]}`));
+    structured.examples.slice(0, 6).forEach(e => {
+      const title = e.content.split('\n')[0].substring(0, 100);
+      parts.push(`- ${title}`);
+    });
   }
 
-  // Key terms
+  // Key terms (keep more)
   if (structured.keyTerms.length > 0) {
     parts.push('\n### Key Terms');
-    parts.push(structured.keyTerms.slice(0, 10).join(', '));
+    parts.push(structured.keyTerms.slice(0, 15).join(', '));
   }
 
   return parts.join('\n');

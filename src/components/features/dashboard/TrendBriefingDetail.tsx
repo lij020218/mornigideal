@@ -7,6 +7,9 @@ import { X, ExternalLink, Loader2, BookOpen, Lightbulb, CheckCircle, ArrowRight,
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from "rehype-raw";
 
 interface TrendBriefing {
     id: string;
@@ -203,7 +206,9 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                         <div className="prose prose-invert prose-lg max-w-none">
                                             <div className="text-base leading-relaxed text-gray-300 space-y-4">
                                                 <ReactMarkdown
+                                                    rehypePlugins={[rehypeRaw]}
                                                     components={{
+                                                        mark: ({ node, ...props }) => <mark className="bg-cyan-500/25 text-cyan-100 px-1.5 py-0.5 rounded font-bold border border-cyan-400/30" {...props} />,
                                                         h3: ({ node, ...props }) => <h3 className="text-xl font-semibold text-white mt-6 mb-3 flex items-center gap-2" {...props} />,
                                                         p: ({ node, ...props }) => <p className="mb-4 text-gray-300 leading-7" {...props} />,
                                                         ul: ({ node, ...props }) => <ul className="list-disc pl-5 space-y-2 mb-4 text-gray-300" {...props} />,

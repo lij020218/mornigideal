@@ -87,7 +87,13 @@ export function RecentMaterialsList() {
                             <span className="text-xs text-muted-foreground flex items-center gap-2">
                                 <div className={`w-1.5 h-1.5 rounded-full ${material.type === 'exam' ? 'bg-blue-500' : 'bg-purple-500'
                                     }`} />
-                                {material.analysis?.page_analyses?.length || 0} Pages
+                                {(() => {
+                                    // Count slides from content (new format) or page_analyses (legacy)
+                                    const slideCount = material.analysis?.content
+                                        ? (material.analysis.content.match(/^## /gm) || []).length
+                                        : (material.analysis?.page_analyses?.length || 0);
+                                    return slideCount > 0 ? `${slideCount} 슬라이드` : '분석 대기 중';
+                                })()}
                             </span>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${material.type === 'exam'
                                     ? 'bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white'

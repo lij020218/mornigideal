@@ -13,7 +13,7 @@ const supabase = createClient(
     }
 );
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
         console.log("[Materials API] Starting request...");
         const session = await auth();
@@ -26,13 +26,20 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        console.log(`[Materials API] Querying materials for user: ${session.user.email}`);
+        const { searchParams } = new URL(request.url);
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '12');
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
 
-        const { data: materials, error } = await supabase
+        console.log(`[Materials API] Querying materials for user: ${session.user.email}, page: ${page}, limit: ${limit}`);
+
+        const { data: materials, count, error } = await supabase
             .from("materials")
-            .select("*")
+            .select("*", { count: 'exact' })
             .eq("user_id", session.user.email)
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            .range(from, to);
 
         if (error) {
             console.error("[Materials API] Error:", error);
@@ -42,8 +49,14 @@ export async function GET() {
             );
         }
 
-        console.log(`[Materials API] Fetched ${materials?.length || 0} materials for user ${session.user.email}`);
-        return NextResponse.json({ materials: materials || [] });
+        console.log(`[Materials API] Fetched ${materials?.length || 0} materials (Total: ${count}) for user ${session.user.email}`);
+        return NextResponse.json({
+            materials: materials || [],
+            total: count || 0,
+            page,
+            limit,
+            totalPages: count ? Math.ceil(count / limit) : 0
+        });
     } catch (error: any) {
         console.error("[Materials API] Error:", error);
         return NextResponse.json(

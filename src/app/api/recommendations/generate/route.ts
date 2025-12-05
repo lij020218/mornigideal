@@ -19,28 +19,42 @@ export async function POST(request: Request) {
     });
 
     const prompt = `
-    You are a helpful content curator for a ${job} whose goal is "${goal}".
+    You are a professional content curator for a ${job} whose goal is "${goal}".
     The user is interested in: ${interests.join(", ")}.
 
-    Generate 3 broad, searchable YouTube queries in ENGLISH to find popular videos about their interests.
+    Generate 3 broad, searchable YouTube queries in ENGLISH to find EDUCATIONAL and PROFESSIONALLY RELEVANT videos that will help this specific ${job} achieve their goal.
 
     **CRITICAL INSTRUCTIONS:**
-    1. Use SIMPLE, BROAD ENGLISH keywords that are commonly used in popular videos
-    2. DO NOT combine too many concepts - keep each query to 1-2 words maximum
-    3. ALWAYS translate Korean terms to English (e.g. "엔비디아" → "nvidia", "인공지능" → "AI", "파이썬" → "python")
-    4. Use industry-standard English terms (e.g. "React", "TypeScript", "Machine Learning")
-    5. Think about what casual viewers would search for, not academic terms
+    1. **THINK ABOUT THE USER'S PROFESSION FIRST**: What skills, knowledge, and insights does a ${job} need to grow professionally?
+    2. **MATCH CONTENT TO THEIR JOB**: Every query must be directly useful for a ${job} - not generic, not entertainment
+    3. Use SIMPLE, BROAD ENGLISH keywords (1-3 words max) that are commonly used in popular educational videos
+    4. ALWAYS translate Korean terms to English (e.g. "엔비디아" → "nvidia", "인공지능" → "AI", "미용" → "hairstyling")
+    5. Use industry-standard English terms specific to their field
     6. ALL queries must be in ENGLISH only
+    7. **STRICTLY EXCLUDE**: entertainment, ASMR, gaming, music videos, vlogs, memes, pranks, unboxing, reactions, and any non-educational content
+    8. **FOCUS ON**: tutorials, skill development, industry trends, professional techniques, career advice, expert insights
 
-    **EXAMPLES:**
-    ❌ BAD: "엔비디아 경영 전략" (Korean, too specific)
-    ✅ GOOD: "nvidia" (English, broad)
+    **PROFESSION-SPECIFIC EXAMPLES:**
 
-    ❌ BAD: "React 19 새로운 기능" (Korean, too specific)
-    ✅ GOOD: "React tutorial" (English, broad)
+    For Business Student (경영학과):
+    ❌ BAD: "ASMR study music", "funny business fails" (Entertainment)
+    ✅ GOOD: "business strategy", "marketing tutorial", "finance basics"
 
-    ❌ BAD: "인공지능 딥러닝 설명" (Korean, too long)
-    ✅ GOOD: "AI tutorial" (English, simple)
+    For Hairstylist (미용사):
+    ❌ BAD: "hair transformation reaction", "salon vlog" (Entertainment)
+    ✅ GOOD: "hair cutting techniques", "color theory hair", "salon business tips"
+
+    For Athlete (운동선수):
+    ❌ BAD: "funny gym fails", "workout music" (Entertainment)
+    ✅ GOOD: "strength training", "sports nutrition", "injury prevention"
+
+    For Software Developer (개발자):
+    ❌ BAD: "coding memes", "programmer lifestyle vlog" (Entertainment)
+    ✅ GOOD: "React tutorial", "system design", "coding interview"
+
+    **YOUR TASK FOR THIS ${job}:**
+    Think: "What 3 topics would genuinely help a ${job} improve their skills and achieve '${goal}'?"
+    Then convert those topics into simple, broad English search queries.
 
     **REQUIRED OUTPUT (JSON):**
     {

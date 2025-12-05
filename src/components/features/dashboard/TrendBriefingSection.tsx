@@ -148,7 +148,28 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
         }
     };
 
+    // Extract the most relevant category from multi-category string
+    const getPrimaryCategory = (category: string): string => {
+        if (!category) return "General";
+
+        // If multiple categories separated by / or , pick the first one
+        const categories = category.split(/[\/,]/).map(c => c.trim());
+
+        // Priority order for category selection (based on relevance)
+        const priorityOrder = ["AI", "Tech", "Finance", "Business", "Strategy", "Innovation"];
+
+        // Find the highest priority category from the list
+        for (const priority of priorityOrder) {
+            const found = categories.find(c => c.toLowerCase() === priority.toLowerCase());
+            if (found) return found;
+        }
+
+        // If no priority match, return the first category
+        return categories[0] || "General";
+    };
+
     const getCategoryColor = (category: string) => {
+        const primaryCat = getPrimaryCategory(category);
         const colors: Record<string, string> = {
             "AI": "bg-purple-500/20 text-purple-300 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.2)]",
             "Business": "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
@@ -157,7 +178,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             "Strategy": "bg-rose-500/20 text-rose-300 border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.2)]",
             "Innovation": "bg-cyan-500/20 text-cyan-300 border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]",
         };
-        return colors[category] || "bg-gray-500/20 text-gray-300 border-gray-500/30";
+        return colors[primaryCat] || "bg-gray-500/20 text-gray-300 border-gray-500/30";
     };
 
     return (
@@ -284,7 +305,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             <div className="space-y-3">
                                 <div className="flex justify-between items-start">
                                     <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider", getCategoryColor(briefing.category))}>
-                                        {briefing.category}
+                                        {getPrimaryCategory(briefing.category)}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground font-mono">{briefing.time}</span>
                                 </div>

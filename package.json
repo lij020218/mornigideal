@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google-cloud/vision": "^5.3.4",
     "@google/genai": "^1.30.0",
     "@google/generative-ai": "^0.24.1",
     "@openai/agents": "^0.3.3",
@@ -24,6 +25,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/pg": "^8.15.6",
     "@types/uuid": "^10.0.0",
+    "canvas": "^3.2.0",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -36,8 +38,9 @@
     "next-auth": "^5.0.0-beta.30",
     "node-cron": "^4.2.1",
     "openai": "^6.9.1",
-    "pdf-parse": "^2.4.5",
+    "pdf-lib": "^1.17.1",
     "pdf-parse-fork": "^1.2.0",
+    "pdf.js-extract": "^0.2.1",
     "pdfjs-dist": "^5.4.394",
     "pg": "^8.16.3",
     "react": "19.2.0",
@@ -45,9 +48,11 @@
     "react-markdown": "^10.1.0",
     "react-pdf": "^10.2.0",
     "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "rss-parser": "^3.13.0",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0",
     "zod": "^3.23.8"

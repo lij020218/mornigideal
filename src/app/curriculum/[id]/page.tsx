@@ -178,7 +178,7 @@ export default function CurriculumDetailPage() {
                 animate={{ y: 0, opacity: 1 }}
                 className="sticky top-0 z-50 glass border-b border-white/5 backdrop-blur-xl"
             >
-                <div className="max-w-7xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between">
+                <div className="max-w-7xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center">
                     <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                         <Button
                             variant="ghost"
@@ -194,14 +194,6 @@ export default function CurriculumDetailPage() {
                                 {statusLabel[progress.status]}
                             </span>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-1 md:gap-2 shrink-0">
-                        <Button variant="ghost" size="icon" className="hover:bg-white/5 rounded-full w-8 h-8 md:w-10 md:h-10">
-                            <Bell className="w-4 h-4 md:w-5 md:h-5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => router.push("/mypage")} className="hover:bg-white/5 rounded-full w-8 h-8 md:w-10 md:h-10">
-                            <User className="w-4 h-4 md:w-5 md:h-5" />
-                        </Button>
                     </div>
                 </div>
             </motion.header>

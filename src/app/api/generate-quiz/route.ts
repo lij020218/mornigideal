@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 const MINI_MODEL = "gpt-5-mini-2025-08-07";
 const FINAL_MODEL = "gpt-5.1-2025-11-13";
@@ -16,13 +28,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { pageAnalyses, type } = await request.json();
+    const { pageAnalyses, type, materialId } = await request.json();
 
     if (!pageAnalyses || !Array.isArray(pageAnalyses)) {
       return NextResponse.json(
         { error: "Page analyses are required" },
         { status: 400 }
       );
+    }
+
+    // Check if quiz already exists in DB
+    if (materialId) {
+      const { data: material } = await supabase
+        .from("materials")
+        .select("analysis")
+        .eq("id", materialId)
+        .single();
+
+      if (material?.analysis?.quiz) {
+        console.log("[QUIZ] Returning cached quiz from DB");
+        return NextResponse.json({
+          quiz: material.analysis.quiz,
+          cached: true,
+        });
+      }
     }
 
     // Combine all page content for quiz generation
@@ -156,7 +185,47 @@ ${allContent}
 
     console.log(`[QUIZ] Generated: ${quiz.trueFalse.length} T/F, ${quiz.multipleChoice.length} MC, ${quiz.essay.length} Essay`);
 
-    return NextResponse.json({ quiz, success: true });
+    // Calculate cost (3 API calls: T/F with Mini, MC with Mini, Essay with 5.1)
+    const allContentTokens = Math.ceil(allContent.length / 4);
+    const tfCost = (allContentTokens / 1_000_000) * 0.15 + (500 / 1_000_000) * 0.60; // Mini cost
+    const mcCost = (allContentTokens / 1_000_000) * 0.15 + (500 / 1_000_000) * 0.60; // Mini cost
+    const essayCost = (allContentTokens / 1_000_000) * 2.50 + (500 / 1_000_000) * 10.00; // 5.1 cost
+    const totalQuizCost = tfCost + mcCost + essayCost;
+
+    console.log(`[QUIZ] Estimated cost: $${totalQuizCost.toFixed(4)} (T/F: $${tfCost.toFixed(4)}, MC: $${mcCost.toFixed(4)}, Essay: $${essayCost.toFixed(4)})`);
+
+    // Save quiz to DB if materialId is provided
+    if (materialId) {
+      const { data: material } = await supabase
+        .from("materials")
+        .select("analysis")
+        .eq("id", materialId)
+        .single();
+
+      if (material) {
+        // Add quiz cost to existing metrics
+        const updatedMetrics = {
+          ...(material.analysis?.metrics || {}),
+          quizCost: totalQuizCost,
+          totalCost: (material.analysis?.metrics?.estimatedCost || 0) + totalQuizCost,
+        };
+
+        await supabase
+          .from("materials")
+          .update({
+            analysis: {
+              ...material.analysis,
+              quiz: quiz,
+              metrics: updatedMetrics,
+            },
+          })
+          .eq("id", materialId);
+
+        console.log("[QUIZ] Saved to DB with cost tracking");
+      }
+    }
+
+    return NextResponse.json({ quiz, success: true, cached: false, cost: totalQuizCost });
   } catch (error: any) {
     console.error("[QUIZ ERROR] Full error:", error);
     console.error("[QUIZ ERROR] Error message:", error.message);

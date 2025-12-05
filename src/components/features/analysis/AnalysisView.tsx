@@ -27,6 +27,9 @@ interface Material {
     file_url?: string | null;
     analysis: {
         page_analyses?: PageAnalysis[];
+        content?: string;
+        concepts_content?: string;
+        quiz?: any; // Added quiz to material analysis
     };
     created_at: string;
 }
@@ -36,20 +39,66 @@ interface AnalysisViewProps {
     onPageChange?: (page: number) => void;
 }
 
+// Helper to parse markdown content into slides
+function parseContentToSlides(content: string): PageAnalysis[] {
+    if (!content) return [];
+
+    const lines = content.split('\n');
+    const slides: PageAnalysis[] = [];
+    let currentSlide: PageAnalysis | null = null;
+    let slideIndex = 0;
+
+    for (const line of lines) {
+        // Match ## Title pattern (allow leading whitespace)
+        const headingMatch = line.match(/^\s*##\s+(.+)$/);
+
+        if (headingMatch) {
+            // Save previous slide
+            if (currentSlide) {
+                slides.push(currentSlide);
+            }
+
+            // Start new slide
+            currentSlide = {
+                page: slideIndex + 1,
+                title: headingMatch[1].trim(),
+                content: '',
+                keyPoints: [] // Key points are now embedded in content
+            };
+            slideIndex++;
+        } else if (currentSlide) {
+            // Add line to current slide
+            currentSlide.content += line + '\n';
+        }
+    }
+
+    // Add last slide
+    if (currentSlide) {
+        slides.push(currentSlide);
+    }
+
+    // Filter out slides with empty content (whitespace only)
+    return slides.filter(slide => slide.content.trim().length > 0);
+}
+
 export function AnalysisView({ material: initialMaterial, onPageChange }: AnalysisViewProps) {
     const [material, setMaterial] = useState<Material>(initialMaterial);
-    const [activeTab, setActiveTab] = useState<'summary' | 'quiz'>('summary');
-    const [quiz, setQuiz] = useState<any>(null);
+    const [activeTab, setActiveTab] = useState<'summary' | 'concepts' | 'quiz'>('summary');
+    const [quiz, setQuiz] = useState<any>(initialMaterial.analysis?.quiz || null); // Initialize with existing quiz if available
     const [quizResult, setQuizResult] = useState<any>(null);
     const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
     const [isGradingQuiz, setIsGradingQuiz] = useState(false);
+    const [conceptsContent, setConceptsContent] = useState<string | null>(initialMaterial.analysis?.concepts_content || null);
+    const [isLoadingConcepts, setIsLoadingConcepts] = useState(false);
     const [isDrawingMode, setIsDrawingMode] = useState(false);
     const [isDrawingModeRight, setIsDrawingModeRight] = useState(false);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [qualityRating, setQualityRating] = useState<'poor' | 'good' | null>(null);
     const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
-    const pageAnalyses = material.analysis?.page_analyses || [];
+    // Derive slides from either legacy page_analyses or new content string
+    const pageAnalyses = material.analysis?.page_analyses ||
+        (material.analysis?.content ? parseContentToSlides(material.analysis.content) : []);
     const totalSlides = pageAnalyses.length;
 
     // Sync with parent when slide changes
@@ -70,9 +119,22 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                         const newPageCount = data.material.analysis?.page_analyses?.length || 0;
                         const oldPageCount = material.analysis?.page_analyses?.length || 0;
 
-                        if (newPageCount > oldPageCount) {
-                            console.log(`[POLLING] New pages detected: ${oldPageCount} -> ${newPageCount}`);
+                        const newContentLength = data.material.analysis?.content?.length || 0;
+                        const oldContentLength = material.analysis?.content?.length || 0;
+
+                        if (newPageCount > oldPageCount || newContentLength > oldContentLength) {
+                            console.log(`[POLLING] Update detected: Pages ${oldPageCount}->${newPageCount}, Content ${oldContentLength}->${newContentLength}`);
                             setMaterial(data.material);
+                        }
+
+                        // Update concepts if generated elsewhere
+                        if (data.material.analysis?.concepts_content && !conceptsContent) {
+                            setConceptsContent(data.material.analysis.concepts_content);
+                        }
+
+                        // Update quiz if generated elsewhere
+                        if (data.material.analysis?.quiz && !quiz) {
+                            setQuiz(data.material.analysis.quiz);
                         }
                     }
                 }
@@ -104,7 +166,7 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         }, 2000);
 
         return () => clearInterval(interval);
-    }, [material.id, pageAnalyses.length]);
+    }, [material.id, pageAnalyses.length, conceptsContent, quiz]);
 
     // Auto-generate quiz in background when analysis is complete
     useEffect(() => {
@@ -129,18 +191,22 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         if (quiz) return; // Already loaded
 
         setIsLoadingQuiz(true);
+        console.log('[QUIZ] Loading quiz...', { pageAnalysesCount: pageAnalyses.length, materialId: material.id });
+
         try {
             const response = await fetch('/api/generate-quiz', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     pageAnalyses,
-                    type: material.type
+                    type: material.type,
+                    materialId: material.id
                 })
             });
 
             const data = await response.json();
             if (data.success) {
+                console.log('[QUIZ] Quiz loaded successfully');
                 setQuiz(data.quiz);
             } else {
                 throw new Error(data.error || 'Failed to generate quiz');
@@ -150,6 +216,33 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
             // alert('퀴즈 생성에 실패했습니다: ' + error.message);
         } finally {
             setIsLoadingQuiz(false);
+        }
+    };
+
+    const loadConcepts = async () => {
+        if (conceptsContent) return; // Already loaded
+
+        setIsLoadingConcepts(true);
+        try {
+            const response = await fetch('/api/generate-concepts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    materialId: material.id
+                })
+            });
+
+            const data = await response.json();
+            if (data.concepts) {
+                setConceptsContent(data.concepts);
+            } else {
+                throw new Error(data.error || 'Failed to generate concepts');
+            }
+        } catch (error: any) {
+            console.error('Concepts generation error:', error);
+            alert('핵심 개념 생성에 실패했습니다: ' + error.message);
+        } finally {
+            setIsLoadingConcepts(false);
         }
     };
 
@@ -180,10 +273,15 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         }
     };
 
-    const handleTabChange = (tab: 'summary' | 'quiz') => {
+    const handleTabChange = (tab: 'summary' | 'concepts' | 'quiz') => {
         setActiveTab(tab);
-        // No need to manually load quiz - it's auto-generated in background
-        // User will see loading state if quiz is still being generated
+        if (tab === 'concepts' && !conceptsContent) {
+            loadConcepts();
+        }
+        if (tab === 'quiz' && !quiz && !isLoadingQuiz) {
+            // Retry loading quiz if it failed previously or hasn't started
+            loadQuiz();
+        }
     };
 
     const handlePrevSlide = () => {
@@ -241,7 +339,10 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         file_url: material.file_url,
         title: material.title,
         totalSlides,
-        currentSlide
+        currentSlide,
+        activeTab,
+        hasQuiz: !!quiz,
+        isLoadingQuiz
     });
 
     return (
@@ -377,12 +478,21 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                                     AI 요약
                                 </Button>
                                 <Button
+                                    onClick={() => handleTabChange('concepts')}
+                                    size="sm"
+                                    variant={activeTab === 'concepts' ? 'default' : 'ghost'}
+                                    className={`text-xs ${activeTab === 'concepts' ? '' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    <Brain className="w-3 h-3 mr-1" />
+                                    핵심 개념
+                                </Button>
+                                <Button
                                     onClick={() => handleTabChange('quiz')}
                                     size="sm"
                                     variant={activeTab === 'quiz' ? 'default' : 'ghost'}
                                     className={`text-xs ${activeTab === 'quiz' ? '' : 'text-gray-400 hover:text-white'}`}
                                 >
-                                    <Brain className="w-3 h-3 mr-1" />
+                                    <FileText className="w-3 h-3 mr-1" />
                                     퀴즈
                                 </Button>
                             </div>
@@ -527,6 +637,33 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                                     <p>분석 결과가 아직 생성되지 않았습니다.</p>
                                 </div>
                             )
+                        ) : activeTab === 'concepts' ? (
+                            /* Core Concepts Content */
+                            isLoadingConcepts ? (
+                                <div className="flex flex-col items-center justify-center h-full gap-4">
+                                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                                    <p className="text-sm text-muted-foreground">핵심 개념 추출 중...</p>
+                                    <p className="text-xs text-muted-foreground">AI가 중요한 개념을 정리하고 있습니다</p>
+                                </div>
+                            ) : conceptsContent ? (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="relative">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-green-500 to-teal-500 rounded-full" />
+                                        <div className="pl-6">
+                                            <h3 className="text-xl font-bold mb-6 text-gradient">핵심 개념 정리</h3>
+                                            <AccordionContent content={conceptsContent} />
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full gap-4">
+                                    <Brain className="w-16 h-16 text-primary opacity-50" />
+                                    <p className="text-sm text-muted-foreground">핵심 개념을 불러올 수 없습니다</p>
+                                    <Button onClick={loadConcepts} variant="outline" size="sm">
+                                        다시 시도
+                                    </Button>
+                                </div>
+                            )
                         ) : (
                             /* Quiz Content */
                             isLoadingQuiz ? (
@@ -549,6 +686,9 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                                 <div className="flex flex-col items-center justify-center h-full gap-4">
                                     <Brain className="w-16 h-16 text-primary opacity-50" />
                                     <p className="text-sm text-muted-foreground">퀴즈를 불러오는 중 오류가 발생했습니다</p>
+                                    <Button onClick={loadQuiz} variant="outline" size="sm">
+                                        다시 시도
+                                    </Button>
                                 </div>
                             )
                         )}
@@ -566,7 +706,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                         </div>
                     )}
                 </div>
-
             </div>
         </div>
     );

@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 import LoadingView from "./LoadingView";
 
@@ -406,7 +407,9 @@ export default function LearningPage() {
                                         >
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
+                                                rehypePlugins={[rehypeRaw]}
                                                 components={{
+                                                    mark: ({ node, ...props }) => <mark className="bg-cyan-500/25 text-cyan-100 px-1.5 py-0.5 rounded font-bold border border-cyan-400/30" {...props} />,
                                                     h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-white mt-6 mb-4" {...props} />,
                                                     h2: ({ node, ...props }) => <h2 className="text-xl font-bold text-white/90 mt-5 mb-3" {...props} />,
                                                     h3: ({ node, ...props }) => <h3 className="text-lg font-semibold text-primary mt-4 mb-2" {...props} />,

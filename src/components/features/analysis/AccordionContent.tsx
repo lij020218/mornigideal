@@ -5,7 +5,9 @@ import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 
 interface Section {
     title: string;
@@ -17,15 +19,15 @@ interface AccordionContentProps {
     content: string;
 }
 
-// Parse content into sections based on ### headings
+// Parse content into sections based on ## headings
 function parseSections(content: string): Section[] {
     const lines = content.split('\n');
     const sections: Section[] = [];
     let currentSection: Section | null = null;
 
     for (const line of lines) {
-        // Match ### 🔸 Title pattern
-        const headingMatch = line.match(/^###\s+([\p{Emoji}])\s+(.+)$/u);
+        // Match ## Title pattern (GPT generates this format)
+        const headingMatch = line.match(/^##\s+(.+)$/);
 
         if (headingMatch) {
             // Save previous section if exists
@@ -33,10 +35,15 @@ function parseSections(content: string): Section[] {
                 sections.push(currentSection);
             }
 
+            const fullTitle = headingMatch[1].trim();
+
+            // Try to extract emoji from title (e.g., "🔸 Title" or just "Title")
+            const emojiMatch = fullTitle.match(/^([\p{Emoji}])\s+(.+)$/u);
+
             // Start new section
             currentSection = {
-                emoji: headingMatch[1],
-                title: headingMatch[2].trim(),
+                emoji: emojiMatch ? emojiMatch[1] : '📄',
+                title: emojiMatch ? emojiMatch[2].trim() : fullTitle,
                 content: ''
             };
         } else if (currentSection) {
@@ -54,82 +61,52 @@ function parseSections(content: string): Section[] {
 }
 
 export function AccordionContent({ content }: AccordionContentProps) {
-    const sections = parseSections(content);
-    const [openSections, setOpenSections] = useState<Set<number>>(new Set([0])); // First section open by default
-
-    const toggleSection = (index: number) => {
-        const newOpenSections = new Set(openSections);
-        if (newOpenSections.has(index)) {
-            newOpenSections.delete(index);
-        } else {
-            newOpenSections.add(index);
-        }
-        setOpenSections(newOpenSections);
-    };
-
-    // If no sections parsed (content doesn't have ### headings), render normally
-    if (sections.length === 0) {
-        return (
-            <div className="text-sm leading-[1.8] text-gray-300 markdown-content">
-                <ReactMarkdown
-                    remarkPlugins={[remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={getMarkdownComponents()}
-                >
-                    {content}
-                </ReactMarkdown>
-            </div>
-        );
-    }
+    // Split content by "한걸음 더!" sections
+    const parts = content.split(/(###\s*💡\s*한걸음\s*더![\s\S]*?)(?=###\s*💡\s*한걸음\s*더!|$)/);
 
     return (
-        <div className="space-y-3">
-            {sections.map((section, index) => {
-                const isOpen = openSections.has(index);
+        <div className="text-sm leading-[1.8] text-gray-300 markdown-content">
+            {parts.map((part, index) => {
+                // Check if this part is a "한걸음 더!" section
+                if (part.match(/###\s*💡\s*한걸음\s*더!/)) {
+                    return (
+                        <div key={index} className="my-6 p-6 rounded-2xl bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border border-cyan-500/30 backdrop-blur-md shadow-xl relative overflow-hidden">
+                            {/* Glassmorphism effect */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/5 via-blue-400/5 to-transparent pointer-events-none" />
+                            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 blur-2xl opacity-60 pointer-events-none" />
 
-                return (
-                    <div key={index} className="border border-white/10 rounded-xl overflow-hidden bg-white/5 backdrop-blur-sm">
-                        {/* Header */}
-                        <button
-                            onClick={() => toggleSection(index)}
-                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/5 transition-colors group"
-                        >
-                            <div className="flex items-center gap-3">
-                                <span className="text-2xl">{section.emoji}</span>
-                                <h3 className="text-base font-bold text-white group-hover:text-primary transition-colors">
-                                    {section.title}
-                                </h3>
-                            </div>
-                            <ChevronDown
-                                className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
-                                    isOpen ? 'rotate-180' : ''
-                                }`}
-                            />
-                        </button>
-
-                        {/* Content */}
-                        <AnimatePresence initial={false}>
-                            {isOpen && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2, ease: "easeInOut" }}
-                                    className="overflow-hidden"
+                            {/* Content */}
+                            <div className="relative">
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkMath, remarkGfm]}
+                                    rehypePlugins={[rehypeRaw, rehypeKatex]}
+                                    components={{
+                                        ...getMarkdownComponents(),
+                                        h3: ({ node, ...props }: any) => (
+                                            <h3 className="text-base font-bold mb-4 text-cyan-300 flex items-center gap-2" {...props} />
+                                        ),
+                                        p: ({ node, ...props }: any) => (
+                                            <p className="mb-3 last:mb-0 leading-[1.8] text-cyan-50" {...props} />
+                                        ),
+                                    }}
                                 >
-                                    <div className="px-5 pb-5 pt-2 text-sm leading-[1.8] text-gray-300 markdown-content">
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkMath]}
-                                            rehypePlugins={[rehypeKatex]}
-                                            components={getMarkdownComponents()}
-                                        >
-                                            {section.content.trim()}
-                                        </ReactMarkdown>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                                    {part}
+                                </ReactMarkdown>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Regular content
+                return (
+                    <ReactMarkdown
+                        key={index}
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeRaw, rehypeKatex]}
+                        components={getMarkdownComponents()}
+                    >
+                        {part}
+                    </ReactMarkdown>
                 );
             })}
         </div>
@@ -139,6 +116,10 @@ export function AccordionContent({ content }: AccordionContentProps) {
 // Shared markdown components
 function getMarkdownComponents() {
     return {
+        // <mark> 태그 -> 시안/청록색 하이라이트 (가장 중요한 강조)
+        mark: ({ node, ...props }: any) => (
+            <mark className="bg-cyan-500/25 text-cyan-100 px-1.5 py-0.5 rounded font-bold border border-cyan-400/30" {...props} />
+        ),
         // **단어 강조** -> 퍼플 하이라이트
         strong: ({ node, ...props }: any) => (
             <span className="bg-purple-500/20 text-purple-200 px-1 rounded font-semibold" {...props} />
@@ -163,13 +144,13 @@ function getMarkdownComponents() {
             } else {
                 // Note 박스 - 시안 블루 유리 글래스
                 return (
-                    <div className="my-4 p-5 rounded-xl bg-gradient-to-br from-cyan-500/15 via-blue-500/10 to-cyan-600/15 border border-cyan-400/30 backdrop-blur-md shadow-[0_8px_32px_rgba(6,182,212,0.25)] relative overflow-hidden blockquote-content" {...props}>
+                    <div className="my-4 p-5 rounded-xl bg-gradient-to-br from-purple-500/15 via-violet-500/10 to-purple-600/15 border border-purple-400/30 backdrop-blur-md shadow-[0_8px_32px_rgba(168,85,247,0.25)] relative overflow-hidden blockquote-content" {...props}>
                         {/* Glass effect overlay */}
                         <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
                         {/* Glow effect */}
-                        <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 blur-xl opacity-50 pointer-events-none" />
+                        <div className="absolute -inset-1 bg-gradient-to-r from-purple-500/20 to-violet-500/20 blur-xl opacity-50 pointer-events-none" />
                         {/* Content */}
-                        <div className="relative text-cyan-50 font-medium leading-[1.8]">{props.children}</div>
+                        <div className="relative text-purple-50 font-medium leading-[1.8]">{props.children}</div>
                     </div>
                 );
             }
@@ -211,8 +192,12 @@ function getMarkdownComponents() {
         h4: ({ node, ...props }: any) => (
             <h4 className="text-sm font-semibold mt-5 mb-3 text-white" {...props} />
         ),
-        // h3는 이미 섹션 헤더로 처리되므로 제거
-        h3: () => null,
+        // h2는 이미 섹션 헤더로 처리되므로 제거
+        h2: () => null,
+        // h3 -> 중간 제목
+        h3: ({ node, ...props }: any) => (
+            <h3 className="text-base font-bold mt-6 mb-4 text-white" {...props} />
+        ),
         // Table support
         table: ({ node, ...props }: any) => (
             <div className="my-4 overflow-x-auto">

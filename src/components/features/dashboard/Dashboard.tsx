@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell } from "lucide-react";
@@ -14,7 +14,6 @@ import { NotificationDropdown } from "./NotificationDropdown";
 import { requestNotificationPermission, getTodayCompletions } from "@/lib/scheduleNotifications";
 import { TrendBriefingSection } from "./TrendBriefingSection";
 import { TrendBriefingDetail } from "./TrendBriefingDetail";
-import { DailyBriefingModal } from "./DailyBriefingModal";
 import { MaterialUploadDialog } from "./MaterialUploadDialog";
 import { RecentMaterialsList } from "./RecentMaterialsList";
 import { EmailSummarySection } from "./EmailSummarySection";
@@ -73,7 +72,32 @@ export function Dashboard({
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
-    const [curriculum, setCurriculum] = useState<CurriculumItem[]>(initialCurriculum);
+
+    // Process curriculum data - handle both direct array and nested curriculum property
+    const processedCurriculum = useMemo(() => {
+        console.log('[Dashboard] Initial curriculum raw:', initialCurriculum);
+
+        if (!initialCurriculum || initialCurriculum.length === 0) return [];
+
+        // Check if first item has 'curriculum_data' property (from user_curriculums table)
+        if (initialCurriculum[0] && typeof initialCurriculum[0] === 'object' && 'curriculum_data' in initialCurriculum[0]) {
+            const extracted = initialCurriculum[0].curriculum_data;
+            console.log('[Dashboard] Extracted curriculum_data:', extracted);
+            return Array.isArray(extracted) ? extracted : [];
+        }
+
+        // Check if first item has 'curriculum' property (legacy structure)
+        if (initialCurriculum[0] && typeof initialCurriculum[0] === 'object' && 'curriculum' in initialCurriculum[0]) {
+            const extracted = initialCurriculum[0].curriculum;
+            console.log('[Dashboard] Extracted nested curriculum:', extracted);
+            return Array.isArray(extracted) ? extracted : [];
+        }
+
+        // Direct array structure (already processed)
+        return initialCurriculum;
+    }, [initialCurriculum]);
+
+    const [curriculum, setCurriculum] = useState<CurriculumItem[]>(processedCurriculum);
     const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
     // const [loadingCurriculum, setLoadingCurriculum] = useState(true); // No longer needed
     const [dailyGoals, setDailyGoals] = useState<DailyGoals>({
@@ -440,145 +464,9 @@ export function Dashboard({
         }
     };
 
-    const [showDailyBriefing, setShowDailyBriefing] = useState(false);
-    const [dailyBriefingData, setDailyBriefingData] = useState<any>(null);
-    const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
-
-    // Load or generate daily briefing (with caching)
-    const loadOrGenerateBriefing = async () => {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-        const cacheKey = `daily_briefing_${today}`;
-
-        // Step 1: Check Supabase cache first (pre-generated at 5 AM)
-        try {
-            const { getDailyBriefingCache } = await import("@/lib/newsCache");
-            const cachedBriefing = await getDailyBriefingCache();
-
-            if (cachedBriefing) {
-                console.log('[Dashboard] Loading pre-generated briefing from cache');
-                setDailyBriefingData(cachedBriefing);
-                setShowDailyBriefing(true);
-                localStorage.setItem(cacheKey, JSON.stringify(cachedBriefing));
-                localStorage.setItem("last_briefing_date", today);
-                return;
-            }
-        } catch (error) {
-            console.error('[Dashboard] Error loading cached briefing:', error);
-        }
-
-        // Step 2: Check localStorage as fallback
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try {
-                const data = JSON.parse(cached);
-                setDailyBriefingData(data);
-                setShowDailyBriefing(true);
-                return;
-            } catch (e) {
-                console.error('Failed to parse cached briefing', e);
-            }
-        }
-
-        // Step 3: Generate new briefing (only if no cache available)
-        console.log('[Dashboard] No cached briefing found, generating new one...');
-        if (!userProfile) return;
-
-        setIsGeneratingBriefing(true);
-        setShowDailyBriefing(true);
-
-        try {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-
-            const trendsResponse = await fetch(`/api/trend-briefing?job=${userProfile.job}&interests=${userProfile.interests?.join(',')}`);
-            const trendsData = await trendsResponse.json();
-
-            const { getPreviousDailyGoals } = await import("@/lib/dailyGoals");
-            const yesterdayGoals = getPreviousDailyGoals();
-
-            const response = await fetch("/api/daily-briefing/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userProfile,
-                    yesterdayGoals: yesterdayGoals || {},
-                    todaySchedule: userProfile.schedule,
-                    yesterdayTrends: trendsData.trends || []
-                }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setDailyBriefingData(data);
-                // Save to both localStorage and Supabase cache
-                localStorage.setItem(cacheKey, JSON.stringify(data));
-                localStorage.setItem("last_briefing_date", today);
-
-                // Save to Supabase for future use
-                const { saveDailyBriefingCache } = await import("@/lib/newsCache");
-                await saveDailyBriefingCache(data);
-            } else {
-                setShowDailyBriefing(false);
-            }
-        } catch (error) {
-            console.error("Error generating briefing:", error);
-            setShowDailyBriefing(false);
-        } finally {
-            setIsGeneratingBriefing(false);
-        }
-    };
-
-    // ... (existing helper functions)
-
-    // Daily Briefing Trigger Logic
-    useEffect(() => {
-        const checkAndTriggerBriefing = async () => {
-            if (!userProfile?.schedule?.wakeUp) return;
-
-            const now = new Date();
-            const todayStr = now.toISOString().split('T')[0]; // Use ISO format for consistency
-            const lastBriefingDate = localStorage.getItem("last_briefing_date");
-
-            // 1. Check if already shown today
-            if (lastBriefingDate === todayStr) return;
-
-            // 2. Check if it's past wake-up time
-            const [wakeH, wakeM] = userProfile.schedule.wakeUp.split(':').map(Number);
-            const wakeTime = new Date(now);
-            wakeTime.setHours(wakeH, wakeM, 0, 0);
-
-            if (now >= wakeTime) {
-                // Trigger Briefing using cached function
-                loadOrGenerateBriefing();
-            }
-        };
-
-        const interval = setInterval(checkAndTriggerBriefing, 60000); // Check every minute
-        checkAndTriggerBriefing(); // Check on mount
-
-        return () => clearInterval(interval);
-    }, [userProfile]);
-
-    // Listen for briefing open event from Header
-    useEffect(() => {
-        const handleOpenBriefing = () => {
-            loadOrGenerateBriefing();
-        };
-
-        window.addEventListener('open-daily-briefing', handleOpenBriefing);
-        return () => {
-            window.removeEventListener('open-daily-briefing', handleOpenBriefing);
-        };
-    }, [userProfile]); // Re-attach when userProfile changes
 
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
-            <DailyBriefingModal
-                isOpen={showDailyBriefing}
-                onClose={() => setShowDailyBriefing(false)}
-                data={dailyBriefingData}
-                isLoading={isGeneratingBriefing}
-            />
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
 
             {/* Header */}
@@ -1257,7 +1145,16 @@ export function Dashboard({
                             ) : curriculum.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                                     {curriculum.map((item, index) => {
-                                        const learningId = `curriculum_${index}_${item.title}`;
+                                        // Debug logging
+                                        if (index === 0) {
+                                            console.log('[Dashboard] Curriculum item:', item);
+                                        }
+
+                                        // Fallback for missing data
+                                        const title = item.title || `학습 과정 ${index + 1}`;
+                                        const subtitle = item.subtitle || '학습 내용을 시작해보세요';
+
+                                        const learningId = `curriculum_${index}_${title}`;
                                         const isCompleted = completedLearning.has(learningId);
                                         const progress = curriculumProgress[index] || { completed: 0, total: 12 };
                                         const completedLessons = progress.completed;
@@ -1285,10 +1182,10 @@ export function Dashboard({
                                                         <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className={cn("font-semibold text-sm md:text-base mb-0.5 md:mb-1", isCompleted && "line-through text-muted-foreground")}>
-                                                            {item.title}
+                                                        <p className={cn("font-semibold text-sm md:text-base mb-0.5 md:mb-1", isCompleted ? "line-through text-muted-foreground" : "text-white")} style={!isCompleted ? { color: 'white' } : undefined}>
+                                                            {title}
                                                         </p>
-                                                        <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2">{item.subtitle}</p>
+                                                        <p className="text-[10px] md:text-xs text-gray-400 line-clamp-2" style={{ color: '#9ca3af' }}>{subtitle}</p>
                                                     </div>
                                                 </div>
 

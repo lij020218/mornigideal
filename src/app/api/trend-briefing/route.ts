@@ -118,14 +118,26 @@ export async function GET(request: Request) {
                 if (cacheDate === today) {
                     if (nowKST.getHours() >= 5) {
                         // It's past 5 AM. Cache must be after 5 AM.
-                        // We need to convert lastUpdated (UTC) to KST hour to check, or just compare timestamps if we construct cutoff correctly.
-                        // Constructing cutoff timestamp in UTC is tricky without libraries.
-                        // Let's use the KST string conversion for safety.
-                        const lastUpdatedKST = new Date(lastUpdatedDate.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-                        if (lastUpdatedKST.getHours() >= 5) {
+                        // Convert UTC lastUpdatedDate to KST properly
+                        const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
+                            timeZone: "Asia/Seoul",
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                        });
+                        const lastUpdatedKST = new Date(lastUpdatedKSTStr);
+                        const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr.split(', ')[1].split(':')[0]);
+
+                        console.log('[API] Cache check - Now:', nowKST.toISOString(), 'Cache updated:', lastUpdatedKSTStr, 'Hour:', lastUpdatedHourKST);
+
+                        if (lastUpdatedHourKST >= 5) {
                             isCacheValid = true;
                         } else {
-                            console.log('[API] Cache is from today but before 5 AM. Invalidating for new 5 AM briefing.');
+                            console.log('[API] Cache is from today but before 5 AM KST. Invalidating for new 5 AM briefing.');
                         }
                     } else {
                         // It's before 5 AM. Any cache from today is fine.
@@ -324,6 +336,60 @@ Select now.`;
 
         // Save to cache
         await saveTrendsCache(trends, true);
+
+        // Pre-generate details for all trends in background
+        console.log('[API] Pre-generating details for all trends...');
+        Promise.all(trends.map(async (trend: any) => {
+            try {
+                const detailPrompt = `You are a professional news analyst. Create detailed analysis for ${job}.
+
+ARTICLE:
+Title: ${trend.title}
+Summary: ${trend.summary}
+Source: ${trend.source}
+URL: ${trend.originalUrl}
+
+USER PROFILE:
+- Job: ${job}
+- Goal: ${goal || "전문성 향상"}
+- Interests: ${interestList}
+
+Create comprehensive analysis in Korean:
+
+OUTPUT JSON:
+{
+  "title": "${trend.title}",
+  "fullSummary": "상세 요약 (3-4 문단, 구체적 내용)",
+  "keyInsights": [
+    "핵심 인사이트 1",
+    "핵심 인사이트 2",
+    "핵심 인사이트 3"
+  ],
+  "actionableItems": [
+    "실행 가능한 행동 1",
+    "실행 가능한 행동 2"
+  ],
+  "relatedTopics": ["관련 주제1", "관련 주제2"],
+  "whyItMatters": "${job}에게 중요한 이유 (2-3문장)"
+}
+
+Requirements:
+- All Korean text
+- Specific and actionable
+- Focus on value for ${job}
+- Professional tone`;
+
+                const detailResult = await model.generateContent(detailPrompt);
+                const detailResponse = await detailResult.response;
+                const detailText = detailResponse.text();
+
+                const detail = JSON.parse(detailText);
+                await saveDetailCache(trend.id, detail);
+                console.log(`[API] Pre-generated detail for: ${trend.title}`);
+            } catch (error) {
+                console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
+            }
+        })).catch(err => console.error('[API] Error in detail pre-generation:', err));
 
         return NextResponse.json({
             trends,
