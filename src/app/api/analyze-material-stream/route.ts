@@ -390,7 +390,6 @@ ${converted}`;
       }
 
       // Note: "한걸음 더!" 섹션은 각 청크 변환 시 이미 병렬로 추가됨
-      // Note: 핵심 개념은 사용자가 "핵심 개념" 버튼 클릭 시 on-demand로 생성됩니다.
 
       // ====================
       // STEP 5: Update DB with final content
@@ -428,6 +427,115 @@ ${converted}`;
         .eq("id", insertedMaterial.id);
 
       console.log(`[METRICS] Complete: ${(totalDuration / 1000).toFixed(2)}s, ~$${estimatedCost.toFixed(4)}`);
+
+      // ====================
+      // STEP 6: Generate Core Concepts (Background)
+      // ====================
+      console.log('[CONCEPTS] Starting background generation...');
+
+      // Generate concepts in background without blocking response
+      (async () => {
+        try {
+          const conceptsPrompt = type === "exam"
+            ? `다음은 시험 대비 학습 자료입니다. 핵심 개념을 추출하여 정리해주세요.
+
+**학습 자료 내용**:
+${fullContent.substring(0, 30000)}
+
+**목표**: 시험에 꼭 나올 핵심 개념만 엄선하여 정리
+
+**추출 규칙**:
+1. **개념 개수**: 8-12개 (많지 않게)
+2. **각 개념 구조**:
+   - **제목**: 핵심 키워드 (3-5단어)
+   - **정의**: 1-2문장으로 명확하게
+   - **핵심 포인트**: 시험에 나올 중요 사항 2-3개
+   - **예시/공식**: 있다면 LaTeX 형식으로
+3. **절대 금지**: 원문에 없는 내용 추가, 일반적인 조언
+
+**출력 형식** (마크다운):
+
+## 개념 1: 제목
+
+**정의**: 간단명료한 정의
+
+**핵심 포인트**:
+- 포인트 1
+- 포인트 2
+- 포인트 3
+
+**공식/예시**: (있다면)
+
+---
+
+(다음 개념 반복)`
+            : `다음은 업무 자료입니다. 핵심 개념을 추출하여 정리해주세요.
+
+**업무 자료 내용**:
+${fullContent.substring(0, 30000)}
+
+**목표**: 업무에 꼭 필요한 핵심 개념만 정리
+
+**추출 규칙**:
+1. **개념 개수**: 8-12개
+2. **각 개념 구조**:
+   - **제목**: 핵심 키워드
+   - **설명**: 실무에서 어떻게 사용되는지
+   - **주요 사항**: 주의할 점, 중요 프로세스
+   - **예시**: 있다면 구체적으로
+3. **절대 금지**: 원문에 없는 내용 추가
+
+**출력 형식** (마크다운):
+
+## 개념 1: 제목
+
+**설명**: 간단명료한 설명
+
+**주요 사항**:
+- 사항 1
+- 사항 2
+- 사항 3
+
+**예시**: (있다면)
+
+---
+
+(다음 개념 반복)`;
+
+          const conceptsResponse = await openai.chat.completions.create({
+            model: MINI_MODEL,
+            messages: [{ role: "user", content: conceptsPrompt }],
+            temperature: 0.7,
+          });
+
+          const conceptsContent = conceptsResponse.choices[0].message.content!.trim()
+            .replace(/^```[a-z]*\n/gm, '')
+            .replace(/\n```$/gm, '')
+            .trim();
+
+          // Get current analysis first
+          const { data: currentMaterial } = await supabase
+            .from("materials")
+            .select("analysis")
+            .eq("id", insertedMaterial.id)
+            .single();
+
+          await supabase
+            .from("materials")
+            .update({
+              analysis: {
+                ...(currentMaterial?.analysis || {}),
+                concepts_content: conceptsContent,
+              }
+            })
+            .eq("id", insertedMaterial.id);
+
+          console.log('[CONCEPTS] Background generation completed');
+        } catch (error) {
+          console.error('[CONCEPTS] Background generation failed:', error);
+          // Don't block main flow if concepts generation fails
+        }
+      })();
 
       await sendEvent("complete", {
         materialId: insertedMaterial.id,
