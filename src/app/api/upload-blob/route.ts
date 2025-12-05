@@ -7,19 +7,6 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // Check authentication
-    const session = await auth();
-    console.log('[upload-blob] Session:', session?.user?.email);
-
-    if (!session?.user?.email) {
-      console.error('[upload-blob] Unauthorized - no session');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = (await request.json()) as HandleUploadBody;
-
-    console.log('[upload-blob] Generating upload token for:', body.pathname);
-
     // Check if token exists
     const token = process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
@@ -28,9 +15,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const jsonResponse = await handleUpload({
-      body,
+      body: request,
       request,
       onBeforeGenerateToken: async (pathname) => {
+        // Check authentication inside the callback
+        const session = await auth();
+        console.log('[upload-blob] Session:', session?.user?.email);
+
+        if (!session?.user?.email) {
+          console.error('[upload-blob] Unauthorized - no session');
+          throw new Error('Unauthorized');
+        }
+
         // Generate a unique filename with timestamp
         const timestamp = Date.now();
         const randomSuffix = Math.random().toString(36).substring(7);
