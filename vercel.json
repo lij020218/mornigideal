@@ -16,6 +16,9 @@
   "functions": {
     "src/app/api/analyze-material-stream/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/upload-blob/route.ts": {
+      "maxDuration": 60
     }
   }
 }

@@ -72,38 +72,22 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
         setProgress({ stage: "starting", message: "파일 업로드 중..." });
 
         try {
-            // Step 1: Get upload URL from API (not uploading file yet)
-            const response = await fetch("/api/upload-blob", {
+            // Step 1: Upload file to Blob Storage
+            const uploadFormData = new FormData();
+            uploadFormData.append("file", file);
+
+            const uploadResponse = await fetch("/api/upload-blob", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    filename: file.name,
-                    contentType: file.type
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error("업로드 URL 생성 실패");
-            }
-
-            const { uploadUrl, blobUrl } = await response.json();
-
-            // Step 2: Upload file directly to Blob Storage from client
-            setProgress({ stage: "uploading", message: "파일 업로드 중..." });
-
-            const uploadResponse = await fetch(uploadUrl, {
-                method: "PUT",
-                body: file,
-                headers: {
-                    "Content-Type": file.type,
-                },
+                body: uploadFormData,
             });
 
             if (!uploadResponse.ok) {
                 throw new Error("파일 업로드 실패");
             }
 
-            // Step 3: Start analysis with blob URL
+            const { blobUrl } = await uploadResponse.json();
+
+            // Step 2: Start analysis with blob URL
             setProgress({ stage: "starting", message: "분석 시작 중..." });
 
             const analysisResponse = await fetch("/api/analyze-material-stream", {

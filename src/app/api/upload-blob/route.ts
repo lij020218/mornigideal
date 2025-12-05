@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // 60 seconds for large file uploads
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,14 +17,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { filename, contentType } = await request.json();
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
 
-    if (!filename) {
-      console.error('[upload-blob] No filename provided');
-      return NextResponse.json({ error: 'No filename provided' }, { status: 400 });
+    if (!file) {
+      console.error('[upload-blob] No file provided');
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    console.log('[upload-blob] Generating upload URL for:', filename);
+    console.log('[upload-blob] Uploading file:', file.name, file.size, 'bytes');
 
     // Check if token exists
     const token = process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -32,23 +34,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Blob storage not configured' }, { status: 500 });
     }
 
-    // Generate a unique filename
-    const timestamp = Date.now();
-    const randomSuffix = Math.random().toString(36).substring(7);
-    const uniqueFilename = `${timestamp}-${randomSuffix}-${filename}`;
-
-    // Create a presigned upload URL
-    const { url: uploadUrl } = await put(uniqueFilename, new Blob([]), {
+    // Upload to Vercel Blob with custom token
+    const blob = await put(file.name, file, {
       access: 'public',
+      addRandomSuffix: true,
       token: token,
-      contentType: contentType || 'application/octet-stream',
     });
 
-    // The final blob URL will be the same as upload URL
-    const blobUrl = uploadUrl;
-
-    console.log('[upload-blob] Upload URL generated');
-    return NextResponse.json({ uploadUrl, blobUrl });
+    console.log('[upload-blob] Upload success:', blob.url);
+    return NextResponse.json({ blobUrl: blob.url });
   } catch (error: any) {
     console.error('[upload-blob] Error:', error);
     console.error('[upload-blob] Error stack:', error.stack);
