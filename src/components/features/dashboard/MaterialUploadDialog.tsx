@@ -46,10 +46,10 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ];
 
-            // Check file size (10MB limit with Blob Storage)
-            const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+            // Check file size (50MB limit with Blob Storage)
+            const maxSize = 50 * 1024 * 1024; // 50MB in bytes
             if (selectedFile.size > maxSize) {
-                alert("파일 크기가 너무 큽니다. 10MB 이하의 파일만 업로드 가능합니다.");
+                alert("파일 크기가 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다.");
                 e.target.value = ""; // Reset input
                 return;
             }
@@ -72,25 +72,41 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
         setProgress({ stage: "starting", message: "파일 업로드 중..." });
 
         try {
-            // Step 1: Upload file to Blob Storage
-            const uploadFormData = new FormData();
-            uploadFormData.append("file", file);
-
-            const uploadResponse = await fetch("/api/upload-blob", {
+            // Step 1: Get upload URL from API (not uploading file yet)
+            const response = await fetch("/api/upload-blob", {
                 method: "POST",
-                body: uploadFormData,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filename: file.name,
+                    contentType: file.type
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("업로드 URL 생성 실패");
+            }
+
+            const { uploadUrl, blobUrl } = await response.json();
+
+            // Step 2: Upload file directly to Blob Storage from client
+            setProgress({ stage: "uploading", message: "파일 업로드 중..." });
+
+            const uploadResponse = await fetch(uploadUrl, {
+                method: "PUT",
+                body: file,
+                headers: {
+                    "Content-Type": file.type,
+                },
             });
 
             if (!uploadResponse.ok) {
                 throw new Error("파일 업로드 실패");
             }
 
-            const { blobUrl } = await uploadResponse.json();
-
-            // Step 2: Start analysis with blob URL
+            // Step 3: Start analysis with blob URL
             setProgress({ stage: "starting", message: "분석 시작 중..." });
 
-            const response = await fetch("/api/analyze-material-stream", {
+            const analysisResponse = await fetch("/api/analyze-material-stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -100,11 +116,11 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                 }),
             });
 
-            if (!response.ok) {
+            if (!analysisResponse.ok) {
                 throw new Error("분석 시작 실패");
             }
 
-            const reader = response.body?.getReader();
+            const reader = analysisResponse.body?.getReader();
             const decoder = new TextDecoder();
 
             if (!reader) {
@@ -179,7 +195,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
         } catch (error: any) {
             console.error("Upload error:", error);
             const errorMessage = error.message.includes('413') || error.message.includes('Content Too Large')
-                ? '파일이 너무 큽니다. 10MB 이하의 파일만 업로드 가능합니다.'
+                ? '파일이 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다.'
                 : `분석 실패: ${error.message}`;
             alert(errorMessage);
             setUploading(false);
@@ -297,7 +313,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                                                             클릭하여 파일 업로드
                                                         </p>
                                                         <p className="text-xs text-gray-500">
-                                                            PDF, TXT, DOC, DOCX (최대 10MB)
+                                                            PDF, TXT, DOC, DOCX (최대 50MB)
                                                         </p>
                                                     </div>
                                                 </div>

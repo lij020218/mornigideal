@@ -16,15 +16,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const { filename, contentType } = await request.json();
 
-    if (!file) {
-      console.error('[upload-blob] No file provided');
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!filename) {
+      console.error('[upload-blob] No filename provided');
+      return NextResponse.json({ error: 'No filename provided' }, { status: 400 });
     }
 
-    console.log('[upload-blob] File:', file.name, file.size, 'bytes');
+    console.log('[upload-blob] Generating upload URL for:', filename);
 
     // Check if token exists
     const token = process.env.moringaidealblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -33,17 +32,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Blob storage not configured' }, { status: 500 });
     }
 
-    console.log('[upload-blob] Token exists:', !!token);
+    // Generate a unique filename
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(7);
+    const uniqueFilename = `${timestamp}-${randomSuffix}-${filename}`;
 
-    // Upload to Vercel Blob with custom token
-    const blob = await put(file.name, file, {
+    // Create a presigned upload URL
+    const { url: uploadUrl } = await put(uniqueFilename, new Blob([]), {
       access: 'public',
-      addRandomSuffix: true,
       token: token,
+      contentType: contentType || 'application/octet-stream',
     });
 
-    console.log('[upload-blob] Upload success:', blob.url);
-    return NextResponse.json({ blobUrl: blob.url });
+    // The final blob URL will be the same as upload URL
+    const blobUrl = uploadUrl;
+
+    console.log('[upload-blob] Upload URL generated');
+    return NextResponse.json({ uploadUrl, blobUrl });
   } catch (error: any) {
     console.error('[upload-blob] Error:', error);
     console.error('[upload-blob] Error stack:', error.stack);
