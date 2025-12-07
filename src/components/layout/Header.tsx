@@ -114,51 +114,7 @@ export function Header() {
                         </Button>
                         {userProfile && (
                             <NotificationDropdown
-                                goals={[
-                                    ...(userProfile.schedule ? [
-                                        {
-                                            id: 'wake-up',
-                                            text: '기상',
-                                            time: 'morning' as const,
-                                            startTime: userProfile.schedule.wakeUp,
-                                            endTime: userProfile.schedule.wakeUp,
-                                            color: 'yellow',
-                                            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'work-start',
-                                            text: '업무 시작',
-                                            time: 'morning' as const,
-                                            startTime: userProfile.schedule.workStart,
-                                            endTime: userProfile.schedule.workStart,
-                                            color: 'purple',
-                                            daysOfWeek: [1, 2, 3, 4, 5],
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'work-end',
-                                            text: '업무 종료',
-                                            time: 'evening' as const,
-                                            startTime: userProfile.schedule.workEnd,
-                                            endTime: userProfile.schedule.workEnd,
-                                            color: 'green',
-                                            daysOfWeek: [1, 2, 3, 4, 5],
-                                            notificationEnabled: true,
-                                        },
-                                        {
-                                            id: 'sleep',
-                                            text: '취침',
-                                            time: 'evening' as const,
-                                            startTime: userProfile.schedule.sleep,
-                                            endTime: userProfile.schedule.sleep,
-                                            color: 'blue',
-                                            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                            notificationEnabled: true,
-                                        },
-                                    ] : []),
-                                    ...(userProfile.customGoals || []),
-                                ]}
+                                goals={userProfile.customGoals || []}
                                 isOpen={showNotificationDropdown}
                                 onClose={() => setShowNotificationDropdown(false)}
                             />

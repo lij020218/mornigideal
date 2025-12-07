@@ -7,10 +7,12 @@ export interface ScheduleCompletion {
     timestamp: number;
 }
 
-// Get today's date in YYYY-MM-DD format
+// Get today's date in YYYY-MM-DD format (KST timezone)
 export function getTodayDateString(): string {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // Convert to KST (UTC+9)
+    const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
 }
 
 // Get all completions for today

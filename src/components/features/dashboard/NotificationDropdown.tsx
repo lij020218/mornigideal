@@ -38,9 +38,11 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
     const loadNotifications = () => {
         const now = new Date();
-        const currentDayOfWeek = now.getDay(); // 0=일요일, 1=월요일, ..., 6=토요일
-        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+        // Get KST date and time
+        const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const currentDayOfWeek = kstDate.getDay(); // 0=일요일, 1=월요일, ..., 6=토요일
+        const currentTime = `${String(kstDate.getHours()).padStart(2, '0')}:${String(kstDate.getMinutes()).padStart(2, '0')}`;
+        const currentTimeValue = kstDate.getHours() * 60 + kstDate.getMinutes();
         const todayStr = getTodayDateString();
 
         console.log('[NotificationDropdown] Current day of week:', currentDayOfWeek, '(0=일,1=월,2=화,3=수,4=목,5=금,6=토)');
