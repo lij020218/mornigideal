@@ -205,7 +205,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                 handleClose();
             }
         }}>
-            <DialogContent className="sm:max-w-md border-none bg-black/90 backdrop-blur-xl text-white shadow-2xl p-0 overflow-hidden">
+            <DialogContent className="w-[90%] sm:w-full sm:max-w-md border-none bg-black/90 backdrop-blur-xl text-white shadow-2xl p-0 overflow-hidden [&>button]:z-50 rounded-2xl">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
                 <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
 

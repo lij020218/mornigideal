@@ -6,11 +6,7 @@
     },
     {
       "path": "/api/cron/generate-trend-briefings",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/cron/generate-daily-briefing",
-      "schedule": "0 5 * * *"
+      "schedule": "15 4 * * *"
     }
   ],
   "functions": {

@@ -17,6 +17,7 @@ import { TrendBriefingDetail } from "./TrendBriefingDetail";
 import { MaterialUploadDialog } from "./MaterialUploadDialog";
 import { RecentMaterialsList } from "./RecentMaterialsList";
 import { EmailSummarySection } from "./EmailSummarySection";
+import { DailyBriefingPopup } from "./DailyBriefingPopup";
 
 
 interface DashboardProps {
@@ -75,21 +76,17 @@ export function Dashboard({
 
     // Process curriculum data - handle both direct array and nested curriculum property
     const processedCurriculum = useMemo(() => {
-        console.log('[Dashboard] Initial curriculum raw:', initialCurriculum);
-
         if (!initialCurriculum || initialCurriculum.length === 0) return [];
 
         // Check if first item has 'curriculum_data' property (from user_curriculums table)
         if (initialCurriculum[0] && typeof initialCurriculum[0] === 'object' && 'curriculum_data' in initialCurriculum[0]) {
             const extracted = initialCurriculum[0].curriculum_data;
-            console.log('[Dashboard] Extracted curriculum_data:', extracted);
             return Array.isArray(extracted) ? extracted : [];
         }
 
         // Check if first item has 'curriculum' property (legacy structure)
         if (initialCurriculum[0] && typeof initialCurriculum[0] === 'object' && 'curriculum' in initialCurriculum[0]) {
             const extracted = initialCurriculum[0].curriculum;
-            console.log('[Dashboard] Extracted nested curriculum:', extracted);
             return Array.isArray(extracted) ? extracted : [];
         }
 
@@ -118,6 +115,92 @@ export function Dashboard({
     const [selectedBriefing, setSelectedBriefing] = useState<any>(initialTrendBriefing);
     const [showBriefingDetail, setShowBriefingDetail] = useState(false);
     const [showMaterialUpload, setShowMaterialUpload] = useState(false);
+
+    // Daily Briefing States
+    const [showDailyBriefing, setShowDailyBriefing] = useState(false);
+    const [dailyBriefingData, setDailyBriefingData] = useState<any>(null);
+    const dailyBriefingDataRef = useRef(dailyBriefingData);
+
+    useEffect(() => {
+        dailyBriefingDataRef.current = dailyBriefingData;
+    }, [dailyBriefingData]);
+
+    useEffect(() => {
+        const fetchBriefing = async () => {
+            try {
+                const res = await fetch('/api/user/daily-briefing');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.briefing) {
+                        setDailyBriefingData(data.briefing);
+                        if (!data.briefing.is_read) {
+                            setShowDailyBriefing(true);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch daily briefing", e);
+            }
+        };
+        fetchBriefing();
+
+        const handleOpenDailyBriefing = async () => {
+            console.log("Dashboard: 'open-daily-briefing' event received!");
+            const currentData = dailyBriefingDataRef.current;
+
+            if (currentData) {
+                console.log("Showing existing briefing data");
+                setShowDailyBriefing(true);
+            } else {
+                console.log("No data, starting auto-generation...");
+
+                // Show loading state immediately (Popup handles null data by showing spinner)
+                setShowDailyBriefing(true);
+
+                try {
+                    const res = await fetch("/api/user/daily-briefing/generate", { method: "POST" });
+
+                    if (res.ok) {
+                        const data = await res.json();
+
+                        // Use the returned briefing directly from generation response
+                        if (data.briefing) {
+                            console.log("Briefing generated and received:", data.briefing);
+                            setDailyBriefingData(data.briefing);
+                            // Popup is already showing loading, it will update to content
+                        } else {
+                            // Only if not returned in body, try fetching as fallback
+                            console.log("Briefing generated but not in body, trying fetch...");
+                            const fetchRes = await fetch('/api/user/daily-briefing');
+                            if (fetchRes.ok) {
+                                const fetchData = await fetchRes.json();
+                                if (fetchData.briefing) {
+                                    setDailyBriefingData(fetchData.briefing);
+                                } else {
+                                    console.error("Briefing generated but not returned (fallback failed)");
+                                    setShowDailyBriefing(false);
+                                }
+                            } else {
+                                console.error("Generation OK but fetch failed");
+                                setShowDailyBriefing(false);
+                            }
+                        }
+                    } else {
+                        console.error("Generation failed");
+                        setShowDailyBriefing(false);
+                    }
+                } catch (e) {
+                    console.error("Error generating briefing", e);
+                    setShowDailyBriefing(false);
+                }
+            }
+        };
+
+        window.addEventListener('open-daily-briefing', handleOpenDailyBriefing);
+        return () => window.removeEventListener('open-daily-briefing', handleOpenDailyBriefing);
+    }, []);
+
+
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
@@ -441,7 +524,105 @@ export function Dashboard({
 
         // Request notification permission
         requestNotificationPermission();
-    }, []);
+
+        // Fetch Daily Briefing
+        const fetchBriefing = async () => {
+            try {
+                const res = await fetch('/api/user/daily-briefing');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.briefing) {
+                        setDailyBriefingData(data.briefing);
+                        if (!data.briefing.is_read) {
+                            setShowDailyBriefing(true);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch daily briefing", e);
+            }
+        };
+        fetchBriefing();
+
+        // Listen for open daily briefing event from Header
+        // Use Ref to access latest data without triggering re-renders of the effect
+        const handleOpenDailyBriefing = async () => {
+            console.log("Dashboard: 'open-daily-briefing' event received!");
+            const currentData = dailyBriefingDataRef.current;
+
+            if (currentData) {
+                console.log("Showing existing briefing data");
+                setShowDailyBriefing(true);
+            } else {
+                console.log("No data, starting auto-generation...");
+
+                // Show loading state immediately (Popup handles null data by showing spinner)
+                setShowDailyBriefing(true);
+
+                try {
+                    const res = await fetch("/api/user/daily-briefing/generate", { method: "POST" });
+
+                    if (res.ok) {
+                        const data = await res.json();
+
+                        // Use the returned briefing directly from generation response
+                        if (data.briefing) {
+                            console.log("Briefing generated and received:", data.briefing);
+                            setDailyBriefingData(data.briefing);
+                        } else {
+                            // Fallback fetch
+                            const fetchRes = await fetch('/api/user/daily-briefing');
+                            if (fetchRes.ok) {
+                                const fetchData = await fetchRes.json();
+                                if (fetchData.briefing) {
+                                    setDailyBriefingData(fetchData.briefing);
+                                } else {
+                                    console.error("Briefing generated but not returned (fallback failed)");
+                                    setShowDailyBriefing(false);
+                                }
+                            } else {
+                                console.error("Generation OK but fetch failed");
+                                setShowDailyBriefing(false);
+                            }
+                        }
+                    } else {
+                        console.error("Generation failed");
+                        setShowDailyBriefing(false);
+                    }
+                } catch (e) {
+                    console.error("Error generating briefing", e);
+                    setShowDailyBriefing(false);
+                }
+            }
+        };
+
+        window.addEventListener('open-daily-briefing', handleOpenDailyBriefing);
+
+        return () => {
+            window.removeEventListener('open-daily-briefing', handleOpenDailyBriefing);
+        };
+    }, []); // Empty dependency array to prevent infinite re-renders
+
+    // Handler for closing the briefing popup
+    const handleCloseBriefing = async () => {
+        setShowDailyBriefing(false);
+
+        if (dailyBriefingData?.id && !dailyBriefingData.is_read) {
+            try {
+                // Call API to mark as read
+                await fetch('/api/user/daily-briefing', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ briefingId: dailyBriefingData.id })
+                });
+
+                // Update local state to reflect read status
+                setDailyBriefingData(prev => prev ? { ...prev, is_read: true } : null);
+            } catch (e) {
+                console.error("Failed to mark briefing as read", e);
+            }
+        }
+    };
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -468,6 +649,14 @@ export function Dashboard({
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
+            {showDailyBriefing && dailyBriefingData && (
+                <DailyBriefingPopup
+                    isOpen={showDailyBriefing}
+                    onClose={handleCloseBriefing}
+                    data={dailyBriefingData.content}
+                    username={(userProfile as any)?.name || '사용자'}
+                />
+            )}
 
             {/* Header */}
             <header className="flex justify-between items-center pt-4">
@@ -1145,11 +1334,6 @@ export function Dashboard({
                             ) : curriculum.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                                     {curriculum.map((item, index) => {
-                                        // Debug logging
-                                        if (index === 0) {
-                                            console.log('[Dashboard] Curriculum item:', item);
-                                        }
-
                                         // Fallback for missing data
                                         const title = item.title || `학습 과정 ${index + 1}`;
                                         const subtitle = item.subtitle || '학습 내용을 시작해보세요';
@@ -1407,6 +1591,13 @@ export function Dashboard({
             <MaterialUploadDialog
                 open={showMaterialUpload}
                 onOpenChange={setShowMaterialUpload}
+            />
+
+            <DailyBriefingPopup
+                isOpen={showDailyBriefing}
+                onClose={handleCloseBriefing}
+                data={dailyBriefingData}
+                username={username}
             />
 
             {/* Schedule Notification Manager */}

@@ -433,6 +433,7 @@ ${converted}`;
       // ====================
       console.log('[CONCEPTS] Starting background generation...');
 
+      
       // Generate concepts in background without blocking response
       (async () => {
         try {

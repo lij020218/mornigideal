@@ -26,7 +26,8 @@ function getDefaultGoals(): DailyGoals {
 }
 
 function getTodayString(): string {
-    return new Date().toDateString();
+    // Return YYYY-MM-DD for consistency with API
+    return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 }
 
 export function getDailyGoals(): DailyGoals {
@@ -37,6 +38,7 @@ export function getDailyGoals(): DailyGoals {
 
     try {
         const { date, goals }: StoredGoals = JSON.parse(stored);
+
         // Reset if it's a new day
         if (date !== getTodayString()) {
             // Archive yesterday's goals before resetting
@@ -69,6 +71,36 @@ export function getPreviousDailyGoals(): DailyGoals | null {
     }
 }
 
+async function syncToApi(goals: DailyGoals) {
+    try {
+        const completed_goals: string[] = [];
+        if (goals.wakeUp) completed_goals.push('wakeUp');
+        if (goals.exercise) completed_goals.push('exercise');
+        // Add custom goals
+        Object.entries(goals.customGoals).forEach(([id, completed]) => {
+            if (completed) completed_goals.push(id);
+        });
+
+        // We assume learning and trendBriefing are tracked by counts, 
+        // but daily_goals API expects completed_goals array. 
+        // We can add virtual items like 'learning_1', 'learning_2' etc if we want detailed tracking,
+        // or just rely on the fact that we are mainly interested in 'completion rate' which is vague.
+        // For now let's just push everything.
+
+        await fetch('/api/user/goals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                date: getTodayString(),
+                completed_goals
+                // read_trends logic is separate in this file? No, it's not here.
+            })
+        });
+    } catch (e) {
+        console.warn('Failed to sync goals to API', e);
+    }
+}
+
 export function saveDailyGoals(goals: DailyGoals): void {
     if (typeof window === "undefined") return;
 
@@ -76,6 +108,9 @@ export function saveDailyGoals(goals: DailyGoals): void {
         date: getTodayString(),
         goals,
     }));
+
+    // Fire and forget sync
+    syncToApi(goals).catch(err => console.error("Sync error:", err));
 }
 
 

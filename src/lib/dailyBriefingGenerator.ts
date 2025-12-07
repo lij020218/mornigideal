@@ -1,0 +1,186 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabaseAdmin } from "./supabase-admin";
+import { getTrendsCache } from "./newsCache";
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+
+interface DailyBriefingContent {
+    greeting: string;
+    yesterday_summary: string;
+    yesterday_score: number;
+    today_schedule_summary: string;
+    trend_summary: string;
+    cheering_message: string;
+}
+
+export async function generateDailyBriefings() {
+    console.log('[DailyBriefing] Starting generation job...');
+
+    // 1. Fetch all users
+    const { data: users, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, name, profile, email');
+
+    if (userError || !users) {
+        console.error('[DailyBriefing] Failed to fetch users:', userError);
+        return;
+    }
+
+    console.log(`[DailyBriefing] Found ${users.length} users.`);
+
+    // 2. Fetch Trends (Shared for all users, but personalized filtering)
+    // We'll fetch the cached trends once
+    const trendCache = await getTrendsCache();
+    const allTrends = trendCache?.trends || [];
+
+    // 3. Calculate Dates in KST
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // Today YYYY-MM-DD in KST
+
+    // Calculate Yesterday Date (subtract 24 hours to be safe for timezone crossing, or simple setDate)
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // Yesterday YYYY-MM-DD in KST
+
+    // 3. Process each user
+    for (const user of users) {
+        try {
+            console.log(`[DailyBriefing] Processing user: ${user.name} (${user.id})`);
+
+            const profile = user.profile || {};
+            const job = profile.job || "전문가";
+            const interests = profile.interests || [];
+            const userSchedule = profile.schedule || {};
+            const customGoals = profile.customGoals || [];
+
+            // A. Fetch Yesterday's Activity
+            const { data: yesterdayGoals } = await supabaseAdmin
+                .from('daily_goals')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('date', yesterdayStr)
+                .single();
+
+            // Calculate Score
+            // Total Goals = WakeUp + Learning(2) + Briefing(6) + CustomGoals(active)
+            // This is complex to estimate perfectly without historical config, 
+            // so we'll approximate based on what we have.
+            // Let's assume:
+            // - WakeUp: 10pts
+            // - Learning: 20pts
+            // - Briefing: 20pts
+            // - Custom Goals: 50pts total distributed
+            // Simply: use the completed_goals array count vs expected.
+
+            // Or simpler: Let Gemini narrative it based on data.
+            // We pass the raw data to Gemini.
+
+            // Format Schedule for Today
+            // Check customGoals for today
+            const todayDay = now.getDay(); // 0=Sun
+            const todayEvents = customGoals.filter((g: any) => {
+                if (g.specificDate === dateStr) return true;
+                if (g.daysOfWeek && g.daysOfWeek.includes(todayDay) && !g.specificDate) return true;
+                return false;
+            });
+
+            // Format Trends for User
+            // Filter by interests or pick top 3
+            const relevantTrends = allTrends
+                .filter((t: any) => {
+                    if (interests.length === 0) return true; // No interest = all relevant
+                    return interests.some((i: string) =>
+                        t.title.includes(i) || t.category.includes(i) || t.summary.includes(i)
+                    );
+                })
+                .slice(0, 3);
+
+            // Fallback if no relevant trends
+            const finalTrends = relevantTrends.length > 0 ? relevantTrends : allTrends.slice(0, 3);
+
+            // B. Generate Content with Gemini
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+            const prompt = `Create a morning briefing for ${user.name} (Job: ${job}).
+            
+            CONTEXT:
+            1. YESTERDAY'S ACTIVITY (${yesterdayStr}):
+               - Data: ${JSON.stringify(yesterdayGoals || { completed_goals: [], read_trends: [] })}
+               - Core Goals: WakeUp, Learning, TrendBriefing
+               - Note: If data is empty, it means they didn't record activity.
+            
+            2. TODAY'S SCHEDULE (${dateStr}):
+               - Events: ${JSON.stringify(todayEvents.map((e: any) => ({ time: e.startTime, text: e.text })))}
+               - WakeUp Time: ${userSchedule.wakeUp || "07:00"}
+            
+            3. TRENDS FOR YOU:
+               - Top Articles: ${JSON.stringify(finalTrends.map((t: any) => t.title))}
+            
+            TASK: Generate a JSON response with the following fields (in Korean):
+            - greeting: Warm morning greeting emphasizing ${job} role.
+            - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
+            - yesterday_score: integer 0-100 (estimate based on activity).
+            - today_schedule_summary: 1 sentence summary of key events or "free day".
+            - trend_summary: Provide a DETAILED and COMPREHENSIVE summary of the top 3 trend articles. ***CRITICAL: Use line breaks (\n\n) to separate each article clearly.*** Start each article with a bullet point (•). For EACH article coverage: (1) Core topic, (2) Why it matters to ${job}, (3) Key insights.
+            - cheering_message: A short energetic quote or message.
+
+            OUTPUT JSON:
+            {
+               "greeting": "...",
+               "yesterday_summary": "...",
+               "yesterday_score": 80,
+               "today_schedule_summary": "...",
+               "trend_summary": "• 첫 번째 트렌드: [주제]에 대한 내용입니다. [핵심 내용]... 이를 통해 [인사이트]를 얻을 수 있습니다.\\n\\n• 두 번째 트렌드: [주제] 관련 소식입니다. [내용]... ${job}에게 [시사점]이 있습니다.\\n\\n• 세 번째 트렌드: [주제]가 주목받고 있습니다. [상세 설명]...",
+               "cheering_message": "..."
+            }
+            `;
+
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text();
+
+            let content: DailyBriefingContent;
+            try {
+                // Sanitize json - remove markdown code blocks and control characters
+                let jsonStr = responseText.replace(/```json|```/g, "").trim();
+                // Remove control characters (0x00-0x1F except whitespace like \n, \r, \t)
+                jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+                content = JSON.parse(jsonStr);
+            } catch (e) {
+                console.error("Failed to parse Gemini briefing", e);
+                console.error("Response text:", responseText);
+                // Fallback
+                content = {
+                    greeting: `좋은 아침입니다, ${user.name}님!`,
+                    yesterday_summary: "어제도 수고 많으셨습니다.",
+                    yesterday_score: 50,
+                    today_schedule_summary: "오늘 하루도 화이팅하세요.",
+                    trend_summary: "최신 트렌드를 확인해보세요.",
+                    cheering_message: "오늘도 멋진 하루가 될 거예요!"
+                };
+            }
+
+            // C. Save to DB
+            console.log(`[DailyBriefing] Saving for user ${user.id}, Date: ${dateStr}`);
+            const { error: insertError } = await supabaseAdmin
+                .from('daily_briefings')
+                .upsert({
+                    user_id: user.id,
+                    date: dateStr,
+                    content,
+                    is_read: false
+                }, { onConflict: 'user_id, date' })
+                .select(); // Add select to verify return if needed
+
+            if (insertError) {
+                console.error(`[DailyBriefing] Failed to save for ${user.name}:`, JSON.stringify(insertError));
+            } else {
+                console.log(`[DailyBriefing] Successfully saved for ${user.name}`);
+            }
+
+        } catch (err) {
+            console.error(`[DailyBriefing] CRITICAL Error processing user ${user.id}:`, err);
+        }
+    }
+
+    console.log('[DailyBriefing] Job complete.');
+}

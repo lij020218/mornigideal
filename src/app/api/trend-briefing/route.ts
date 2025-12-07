@@ -260,11 +260,12 @@ TASK: Select 6 most relevant NEW articles.
 
 CRITERIA (IN ORDER OF PRIORITY):
 1. **🔥 RECENCY (HIGHEST PRIORITY)**: Strongly prefer articles with recencyScore >= 70 (published within last 2 days: today=100, yesterday=90, 2 days ago=70). Fresh news is CRITICAL.
-2. Match interests (${interestList}) - minimum 3 articles
-3. Valuable for ${job} daily work
-4. Support goal: ${goal || "career growth"}
-5. Mix of topics and sources (global + Korean)
-6. **FRESH content - select different articles from previous selections**
+2. **🌍 SOURCE BALANCE (MANDATORY)**: MUST select EXACTLY 3 international articles (Reuters, Bloomberg, BBC, CNN, TechCrunch, WSJ, NYT, AP News, etc.) and EXACTLY 3 Korean articles (한국경제, 조선일보, 매일경제, etc.)
+3. Match interests (${interestList}) - minimum 3 articles
+4. Valuable for ${job} daily work
+5. Support goal: ${goal || "career growth"}
+6. Mix of topics and categories
+7. **FRESH content - select different articles from previous selections**
 
 ⭐ NOTE: Each article has a "recencyScore" field. Prioritize articles with scores 100, 90, 70 over older articles (50, 20).
 
@@ -278,7 +279,8 @@ OUTPUT JSON:
       "summary_korean": "${job}에게 왜 중요한지 2문장",
       "relevance_korean": "구체적 가치 1문장",
       "interest_match_tags": ["태그"],
-      "relevance_score": <1-10>
+      "relevance_score": <1-10>,
+      "source_type": "international|korean"
     }
   ]
 }
@@ -287,6 +289,7 @@ Requirements:
 - All Korean text (titles, summaries)
 - Focus on practical value for ${job}
 - ${interests ? `At least 3 articles matching: ${interestList}` : ""}
+- **MANDATORY: Exactly 3 international + 3 Korean articles (total 6)**
 
 Select now.`;
 
@@ -339,53 +342,50 @@ Select now.`;
 
         // Pre-generate details for all trends in background
         console.log('[API] Pre-generating details for all trends...');
+        const detailModel = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
         Promise.all(trends.map(async (trend: any) => {
             try {
-                const detailPrompt = `You are a professional news analyst. Create detailed analysis for ${job}.
+                const detailPrompt = `Create a briefing for senior ${job}.
 
 ARTICLE:
-Title: ${trend.title}
-Summary: ${trend.summary}
-Source: ${trend.source}
-URL: ${trend.originalUrl}
+- Title: "${trend.title}"
+- Summary: ${trend.summary}
+- URL: ${trend.originalUrl}
 
-USER PROFILE:
-- Job: ${job}
-- Goal: ${goal || "전문성 향상"}
-- Interests: ${interestList}
-
-Create comprehensive analysis in Korean:
+SECTIONS NEEDED:
+1. 핵심 내용: What happened and why it matters
+2. senior ${job}인 당신에게: Impact on ${job} professionals
+3. 주요 인사이트: 3-4 key takeaways
+4. 실행 아이템: 3 actionable steps for senior ${job}
 
 OUTPUT JSON:
 {
-  "title": "${trend.title}",
-  "fullSummary": "상세 요약 (3-4 문단, 구체적 내용)",
-  "keyInsights": [
-    "핵심 인사이트 1",
-    "핵심 인사이트 2",
-    "핵심 인사이트 3"
-  ],
-  "actionableItems": [
-    "실행 가능한 행동 1",
-    "실행 가능한 행동 2"
-  ],
-  "relatedTopics": ["관련 주제1", "관련 주제2"],
-  "whyItMatters": "${job}에게 중요한 이유 (2-3문장)"
+  "title": "Korean title",
+  "content": "### 핵심 내용\\n\\n[content]\\n\\n### senior ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
+  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
+  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "originalUrl": "${trend.originalUrl}"
 }
 
-Requirements:
-- All Korean text
-- Specific and actionable
-- Focus on value for ${job}
-- Professional tone`;
+Write in Korean. Be practical and specific for senior ${job}.`;
 
-                const detailResult = await model.generateContent(detailPrompt);
+                const detailResult = await detailModel.generateContent(detailPrompt);
                 const detailResponse = await detailResult.response;
                 const detailText = detailResponse.text();
 
                 const detail = JSON.parse(detailText);
-                await saveDetailCache(trend.id, detail);
-                console.log(`[API] Pre-generated detail for: ${trend.title}`);
+
+                // Validate structure
+                if (detail.content && detail.keyTakeaways && detail.actionItems) {
+                    await saveDetailCache(trend.id, detail);
+                    console.log(`[API] Pre-generated detail for: ${trend.title}`);
+                } else {
+                    console.warn(`[API] Invalid detail structure for ${trend.title}:`, Object.keys(detail));
+                }
             } catch (error) {
                 console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
             }
@@ -398,14 +398,21 @@ Requirements:
         });
 
     } catch (error) {
-        console.error("Error fetching trends:", error);
-        return NextResponse.json({ error: "Failed to fetch trends" }, { status: 500 });
+        console.error("[API] Error fetching trends:", error);
+        console.error("[API] Error stack:", error instanceof Error ? error.stack : 'No stack');
+        console.error("[API] Error message:", error instanceof Error ? error.message : String(error));
+        return NextResponse.json({
+            error: "Failed to fetch trends",
+            details: error instanceof Error ? error.message : String(error)
+        }, { status: 500 });
     }
 }
 
 export async function POST(request: Request) {
     try {
         const { title, level, job, originalUrl, summary, trendId } = await request.json();
+
+        console.log('[API POST] Received request for detail:', { title, level, job, trendId });
 
         // Check cache first
         if (trendId) {
@@ -415,11 +422,29 @@ export async function POST(request: Request) {
             })();
 
             if (cachedDetail) {
-                return NextResponse.json({ detail: cachedDetail, cached: true });
+                console.log('[API] Found cached detail, checking structure...');
+                console.log('[API] Cached detail keys:', Object.keys(cachedDetail));
+
+                // Validate cache has required fields
+                if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems) {
+                    console.log('[API] Cache is valid, returning cached detail');
+                    return NextResponse.json({ detail: cachedDetail, cached: true });
+                } else {
+                    console.warn('[API] Cache is invalid (missing required fields), regenerating...');
+                }
             }
         }
 
-        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        // Check API key
+        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            console.error('[API] No Gemini API key found');
+            throw new Error('Gemini API key not configured');
+        }
+
+        console.log('[API] Generating detail with Gemini...');
+        const modelName = process.env.GEMINI_MODEL_2 || "gemini-2.5-flash";
+        console.log('[API] Using model:', modelName);
         const model = genAI.getGenerativeModel({
             model: modelName,
             generationConfig: { responseMimeType: "application/json" }
@@ -471,7 +496,12 @@ Write in Korean. Be practical and specific for ${level} ${job}.`;
             cached: false
         });
     } catch (error) {
-        console.error("Error generating briefing detail:", error);
-        return NextResponse.json({ error: "Failed to generate briefing detail" }, { status: 500 });
+        console.error("[API] Error generating briefing detail:", error);
+        console.error("[API] Error stack:", error instanceof Error ? error.stack : 'No stack');
+        console.error("[API] Error message:", error instanceof Error ? error.message : String(error));
+        return NextResponse.json({
+            error: "Failed to generate briefing detail",
+            details: error instanceof Error ? error.message : String(error)
+        }, { status: 500 });
     }
 }

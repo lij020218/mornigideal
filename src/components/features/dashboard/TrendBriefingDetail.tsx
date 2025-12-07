@@ -85,7 +85,15 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
 
         try {
             setLoading(true);
-            // Check if we have cached detail first (handled by API, but good to know)
+            console.log('[TrendBriefingDetail] Fetching detail for:', briefing.title);
+            console.log('[TrendBriefingDetail] Request payload:', {
+                title: briefing.title,
+                level: userLevel,
+                job: userJob,
+                originalUrl: briefing.originalUrl,
+                trendId: briefing.id
+            });
+
             const response = await fetch("/api/trend-briefing", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -99,12 +107,29 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                 })
             });
 
-            if (!response.ok) throw new Error("Failed to fetch detail");
+            console.log('[TrendBriefingDetail] Response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[TrendBriefingDetail] Response error:', errorText);
+                throw new Error("Failed to fetch detail");
+            }
 
             const data = await response.json();
+            console.log('[TrendBriefingDetail] Response data:', data);
+            console.log('[TrendBriefingDetail] Detail structure:', {
+                hasDetail: !!data.detail,
+                hasTitle: !!data.detail?.title,
+                hasContent: !!data.detail?.content,
+                hasKeyTakeaways: !!data.detail?.keyTakeaways,
+                hasActionItems: !!data.detail?.actionItems,
+                keyTakeawaysLength: data.detail?.keyTakeaways?.length,
+                actionItemsLength: data.detail?.actionItems?.length
+            });
+
             setDetail(data.detail);
         } catch (error) {
-            console.error("Error fetching detail:", error);
+            console.error("[TrendBriefingDetail] Error fetching detail:", error);
         } finally {
             setLoading(false);
         }

@@ -66,6 +66,40 @@ export async function GET(request: Request) {
     }
 }
 
+export async function PATCH(request: Request) {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { id, folder_id } = await request.json();
+        if (!id) {
+            return NextResponse.json({ error: "Material ID is required" }, { status: 400 });
+        }
+
+        console.log(`[Materials API] Moving material ${id} to folder ${folder_id || 'root'}`);
+
+        const { data: material, error } = await supabase
+            .from("materials")
+            .update({ folder_id: folder_id || null })
+            .eq("id", id)
+            .eq("user_id", session.user.email)
+            .select()
+            .single();
+
+        if (error) {
+            console.error("[Materials API] Error updating material:", error);
+            return NextResponse.json({ error: "Failed to update material" }, { status: 500 });
+        }
+
+        return NextResponse.json({ material });
+    } catch (error: any) {
+        console.error("[Materials API] Error:", error);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+}
+
 export async function DELETE(request: Request) {
     try {
         const session = await auth();
