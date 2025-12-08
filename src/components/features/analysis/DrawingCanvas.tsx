@@ -228,21 +228,36 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
     const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
         if (readOnly) return;
 
-        // Check if this is a pen/stylus input (not finger touch)
-        // Use pointerType or force property to detect stylus
-        if ('touches' in e) {
-            const touch = e.touches[0] as Touch & { touchType?: string };
-            // Check touchType if available (experimental), or use radiusX/radiusY to detect finger vs stylus
-            // Finger touches typically have larger touch radius than stylus
-            const isFinger = touch.touchType === 'direct' ||
-                           (touch.radiusX !== undefined && touch.radiusX > 10);
+        // For mouse events, always allow drawing
+        if (!('touches' in e)) {
+            e.preventDefault();
+            const coords = getCoordinates(e);
+            setIsDrawing(true);
+            setIsStraightened(false);
+            startPointRef.current = coords;
 
-            if (isFinger) {
-                // This is a finger touch, ignore it to allow scrolling
-                return;
-            }
+            setCurrentAction({
+                tool,
+                points: [coords],
+                color: penColor,
+                width: penWidth
+            });
+            return;
         }
 
+        // For touch events, check if it's a pen/stylus
+        const touch = e.touches[0] as Touch & { touchType?: string };
+        // Check touchType if available (experimental), or use radiusX/radiusY to detect finger vs stylus
+        // Finger touches typically have larger touch radius than stylus
+        const isFinger = touch.touchType === 'direct' ||
+                       (touch.radiusX !== undefined && touch.radiusX > 10);
+
+        if (isFinger) {
+            // This is a finger touch, ignore it to allow scrolling
+            return;
+        }
+
+        // It's a stylus/pen, proceed with drawing
         e.preventDefault();
         const coords = getCoordinates(e);
         setIsDrawing(true);
@@ -259,21 +274,52 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
 
     const draw = (e: React.MouseEvent | React.TouchEvent) => {
         if (readOnly) return;
+        if (!isDrawing || !currentAction || !startPointRef.current) return;
 
-        // Check if this is a pen/stylus input (not finger touch)
-        if ('touches' in e) {
-            const touch = e.touches[0] as Touch & { touchType?: string };
-            const isFinger = touch.touchType === 'direct' ||
-                           (touch.radiusX !== undefined && touch.radiusX > 10);
+        // For mouse events, always allow drawing
+        if (!('touches' in e)) {
+            e.preventDefault();
+            const coords = getCoordinates(e);
 
-            if (isFinger) {
-                // This is a finger touch, ignore it to allow scrolling
-                return;
+            // Clear existing hold timer
+            if (holdTimerRef.current) {
+                clearTimeout(holdTimerRef.current);
             }
+
+            // Determine if we should draw a straight line
+            const shouldBeStraight = isShiftPressed || isStraightened;
+
+            let newPoints = [...currentAction.points, coords];
+
+            if (shouldBeStraight) {
+                // Replace all points with just start and end
+                newPoints = [startPointRef.current, coords];
+            } else {
+                // Start hold timer for auto-straighten
+                holdTimerRef.current = setTimeout(() => {
+                    setIsStraightened(true);
+                }, 600);
+            }
+
+            setCurrentAction({
+                ...currentAction,
+                points: newPoints
+            });
+            return;
         }
 
+        // For touch events, check if it's a pen/stylus
+        const touch = e.touches[0] as Touch & { touchType?: string };
+        const isFinger = touch.touchType === 'direct' ||
+                       (touch.radiusX !== undefined && touch.radiusX > 10);
+
+        if (isFinger) {
+            // This is a finger touch, ignore it to allow scrolling
+            return;
+        }
+
+        // It's a stylus/pen, proceed with drawing
         e.preventDefault();
-        if (!isDrawing || !currentAction || !startPointRef.current) return;
 
         const coords = getCoordinates(e);
 
@@ -554,14 +600,18 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
                     onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
+                    onTouchStart={(e) => {
+                        startDrawing(e);
+                    }}
+                    onTouchMove={(e) => {
+                        draw(e);
+                    }}
                     onTouchEnd={stopDrawing}
                     className={readOnly ? "pointer-events-none" : "cursor-crosshair"}
                     style={{
                         width: '100%',
                         height: '100%',
-                        touchAction: readOnly ? 'auto' : 'none'
+                        touchAction: 'none' // Always disable default touch behaviors for canvas
                     }}
                 />
             </div>
