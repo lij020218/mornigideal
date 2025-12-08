@@ -85,7 +85,7 @@ export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }
                 onClick={previousPage}
                 disabled={pageNumber <= 1}
                 variant="ghost"
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm opacity-0 group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0"
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0 disabled:pointer-events-none"
             >
                 <ChevronLeft className="w-6 h-6" />
             </Button>
@@ -94,7 +94,7 @@ export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }
                 onClick={nextPage}
                 disabled={pageNumber >= numPages}
                 variant="ghost"
-                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm opacity-0 group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0"
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0 disabled:pointer-events-none"
             >
                 <ChevronRight className="w-6 h-6" />
             </Button>
@@ -124,7 +124,7 @@ export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }
                                 pageNumber={pageNumber}
                                 scale={scale}
                                 renderTextLayer={true}
-                                renderAnnotationLayer={true}
+                                renderAnnotationLayer={false}
                                 loading={
                                     <div className="w-[600px] h-[800px] bg-white/5 animate-pulse rounded-lg flex items-center justify-center">
                                         <p className="text-sm text-muted-foreground">페이지 로딩 중...</p>
