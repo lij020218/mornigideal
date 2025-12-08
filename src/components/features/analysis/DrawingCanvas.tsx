@@ -229,11 +229,16 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
         if (readOnly) return;
 
         // Check if this is a pen/stylus input (not finger touch)
+        // Use pointerType or force property to detect stylus
         if ('touches' in e) {
-            const touch = e.touches[0];
-            // Only allow stylus/pen input, block finger touches
-            if (touch.touchType === 'direct') {
-                // This is a finger touch, ignore it
+            const touch = e.touches[0] as Touch & { touchType?: string };
+            // Check touchType if available (experimental), or use radiusX/radiusY to detect finger vs stylus
+            // Finger touches typically have larger touch radius than stylus
+            const isFinger = touch.touchType === 'direct' ||
+                           (touch.radiusX !== undefined && touch.radiusX > 10);
+
+            if (isFinger) {
+                // This is a finger touch, ignore it to allow scrolling
                 return;
             }
         }
@@ -257,10 +262,12 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
 
         // Check if this is a pen/stylus input (not finger touch)
         if ('touches' in e) {
-            const touch = e.touches[0];
-            // Only allow stylus/pen input, block finger touches
-            if (touch.touchType === 'direct') {
-                // This is a finger touch, ignore it
+            const touch = e.touches[0] as Touch & { touchType?: string };
+            const isFinger = touch.touchType === 'direct' ||
+                           (touch.radiusX !== undefined && touch.radiusX > 10);
+
+            if (isFinger) {
+                // This is a finger touch, ignore it to allow scrolling
                 return;
             }
         }
