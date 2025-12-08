@@ -301,7 +301,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 // When deleting from weekly view, remove the entire recurring goal (all days)
                 // This ensures it's deleted from both weekly view AND calendar view
                 return !(g.startTime === selectedTimeSlot && g.daysOfWeek?.length && g.daysOfWeek.includes(selectedDayOfWeek));
-            } else if ((viewMode === 'calendar' || viewMode === 'daily-detail') && selectedDate) {
+            } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
                 // When deleting from calendar view or daily detail view
                 const isSpecificDateMatch = g.specificDate === formatDate(selectedDate);
                 const isRecurringMatch = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
