@@ -21,6 +21,10 @@ const supabase = createClient(
 const MINI_MODEL = "gpt-5-mini-2025-08-07";
 const FINAL_MODEL = "gpt-5.1-2025-11-13";
 
+// Increase timeout for quiz generation
+export const maxDuration = 60; // 60 seconds
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();

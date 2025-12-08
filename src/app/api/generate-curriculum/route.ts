@@ -6,6 +6,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+// Increase timeout for curriculum generation
+export const maxDuration = 60; // 60 seconds
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         console.log('[generate-curriculum] Starting curriculum generation');

@@ -7,6 +7,10 @@ const model = genAI.getGenerativeModel({
     model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
 });
 
+// Increase timeout for lesson generation
+export const maxDuration = 60; // 60 seconds
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         console.log('[generate-lesson] Starting lesson generation');
