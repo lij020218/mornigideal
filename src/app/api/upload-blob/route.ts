@@ -29,12 +29,8 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error('Unauthorized');
         }
 
-        // Generate a unique filename with timestamp
-        const timestamp = Date.now();
-        const randomSuffix = Math.random().toString(36).substring(7);
-        const newPathname = `${timestamp}-${randomSuffix}-${pathname}`;
-
-        console.log('[upload-blob] Generating token for:', newPathname);
+        // Keep original filename to allow reuse of existing files (cost savings)
+        console.log('[upload-blob] Generating token for:', pathname);
 
         return {
           allowedContentTypes: [
@@ -46,6 +42,8 @@ export async function POST(request: Request): Promise<NextResponse> {
           tokenPayload: JSON.stringify({
             userEmail: session.user.email,
           }),
+          // Allow overwriting existing files to reuse them
+          allowOverwrite: true,
         };
       },
       onUploadCompleted: async ({ blob }) => {
