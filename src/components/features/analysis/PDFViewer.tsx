@@ -76,30 +76,58 @@ export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }
     }
 
     return (
-        <div className="flex flex-col h-full relative group/pdf">
+        <div className="flex flex-col h-full">
             {/* Custom Controls (rendered by parent) */}
             {renderControls && renderControls({ pageNumber, numPages, scale, zoomIn, zoomOut })}
 
-            {/* Side Navigation Buttons (Always Visible on Mobile, Hover on Desktop) */}
-            {pageNumber > 1 && (
+            {/* Top Navigation Bar */}
+            <div className="flex items-center justify-between px-4 py-3 bg-background/80 backdrop-blur-sm border-b border-border">
                 <Button
                     onClick={previousPage}
-                    variant="ghost"
-                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 active:bg-black/90 text-white backdrop-blur-sm shadow-lg md:opacity-0 md:group-hover/pdf:opacity-100 transition-opacity duration-300"
+                    disabled={pageNumber <= 1}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
                 >
-                    <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+                    <ChevronLeft className="w-4 h-4" />
+                    이전
                 </Button>
-            )}
 
-            {pageNumber < numPages && (
+                <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium">
+                        {pageNumber} / {numPages}
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            onClick={zoomOut}
+                            disabled={scale <= 0.5}
+                            variant="outline"
+                            size="sm"
+                        >
+                            <ZoomOut className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            onClick={zoomIn}
+                            disabled={scale >= 2.0}
+                            variant="outline"
+                            size="sm"
+                        >
+                            <ZoomIn className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
+
                 <Button
                     onClick={nextPage}
-                    variant="ghost"
-                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 active:bg-black/90 text-white backdrop-blur-sm shadow-lg md:opacity-0 md:group-hover/pdf:opacity-100 transition-opacity duration-300"
+                    disabled={pageNumber >= numPages}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
                 >
-                    <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+                    다음
+                    <ChevronRight className="w-4 h-4" />
                 </Button>
-            )}
+            </div>
 
             {/* PDF Display */}
             <div className="flex-1 overflow-auto bg-black/20 p-4 custom-scrollbar">
