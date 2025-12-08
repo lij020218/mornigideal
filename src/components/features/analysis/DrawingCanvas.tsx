@@ -25,6 +25,7 @@ const DEFAULT_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "
 
 export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = false }: DrawingCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [tool, setTool] = useState<Tool>("pen");
     const [penColor, setPenColor] = useState("#3b82f6"); // blue-500
@@ -33,6 +34,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
     const [historyIndex, setHistoryIndex] = useState(-1);
     const [currentAction, setCurrentAction] = useState<DrawingAction | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [canvasSize, setCanvasSize] = useState({ width, height });
 
     // Straight line features
     const [isShiftPressed, setIsShiftPressed] = useState(false);
@@ -45,6 +47,35 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [tempColor, setTempColor] = useState("#ff0000");
     const colorPickerRef = useRef<HTMLDivElement>(null);
+
+    // Measure actual content height for canvas sizing
+    useEffect(() => {
+        const updateCanvasSize = () => {
+            if (!containerRef.current) return;
+
+            // Get the parent element's scroll height (actual content height)
+            const parent = containerRef.current.parentElement;
+            if (!parent) return;
+
+            const actualHeight = Math.max(parent.scrollHeight, height);
+            const actualWidth = Math.max(parent.scrollWidth, width);
+
+            setCanvasSize({
+                width: actualWidth,
+                height: actualHeight
+            });
+        };
+
+        updateCanvasSize();
+
+        // Update on resize
+        const resizeObserver = new ResizeObserver(updateCanvasSize);
+        if (containerRef.current?.parentElement) {
+            resizeObserver.observe(containerRef.current.parentElement);
+        }
+
+        return () => resizeObserver.disconnect();
+    }, [width, height, storageKey]);
 
     // Load saved drawing when storageKey changes
     useEffect(() => {
@@ -60,7 +91,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
         if (ctx && canvas) {
-            ctx.clearRect(0, 0, width, height);
+            ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
         }
 
         try {
@@ -76,7 +107,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
 
         // Mark as loaded after a brief delay to ensure first save works
         setTimeout(() => setIsLoaded(true), 100);
-    }, [storageKey, width, height]);
+    }, [storageKey, canvasSize.width, canvasSize.height]);
 
     // Auto-save to localStorage whenever history changes
     useEffect(() => {
@@ -154,7 +185,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
         if (!ctx) return;
 
         // Clear canvas
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
 
         // Redraw all actions up to current index
         history.slice(0, historyIndex + 1).forEach(action => {
@@ -165,7 +196,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
         if (currentAction) {
             drawAction(ctx, currentAction);
         }
-    }, [history, historyIndex, width, height, currentAction]);
+    }, [history, historyIndex, canvasSize.width, canvasSize.height, currentAction]);
 
     const drawAction = (ctx: CanvasRenderingContext2D, action: DrawingAction) => {
         if (action.points.length < 2) return;
@@ -211,18 +242,28 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
 
+        let clientX: number;
+        let clientY: number;
+
         if ('touches' in e) {
             const touch = e.touches[0];
-            return {
-                x: (touch.clientX - rect.left) * scaleX,
-                y: (touch.clientY - rect.top) * scaleY
-            };
+            clientX = touch.clientX;
+            clientY = touch.clientY;
         } else {
-            return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY
-            };
+            clientX = e.clientX;
+            clientY = e.clientY;
         }
+
+        // Calculate coordinates relative to canvas
+        // getBoundingClientRect() already accounts for scroll position
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+
+        // Clamp coordinates to canvas bounds
+        return {
+            x: Math.max(0, Math.min(x, canvas.width)),
+            y: Math.max(0, Math.min(y, canvas.height))
+        };
     };
 
     const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
@@ -428,7 +469,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
     const allColors = [...DEFAULT_COLORS, ...customColors];
 
     return (
-        <div className="relative w-full h-full">
+        <div ref={containerRef} className="relative w-full h-full">
             {/* Toolbar - Absolute positioned to not affect layout */}
             {!readOnly && (
                 <div className="absolute top-2 md:top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col md:flex-row items-center gap-2 p-1.5 md:p-2 bg-black/90 backdrop-blur-sm border border-white/10 rounded-lg shadow-xl animate-in fade-in slide-in-from-top-2 max-w-[95vw] overflow-x-auto">
@@ -594,8 +635,8 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
             <div className="absolute inset-0 z-10">
                 <canvas
                     ref={canvasRef}
-                    width={width}
-                    height={height}
+                    width={canvasSize.width}
+                    height={canvasSize.height}
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
