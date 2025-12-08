@@ -76,7 +76,12 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
             // Step 1: Upload file directly to Blob Storage from client
             setProgress({ stage: "uploading", message: "파일 업로드 중..." });
 
-            const blob = await upload(file.name, file, {
+            // Generate unique filename to avoid conflicts
+            const timestamp = Date.now();
+            const randomSuffix = Math.random().toString(36).substring(7);
+            const uniqueFilename = `${timestamp}-${randomSuffix}-${file.name}`;
+
+            const blob = await upload(uniqueFilename, file, {
                 access: 'public',
                 handleUploadUrl: '/api/upload-blob',
             });
