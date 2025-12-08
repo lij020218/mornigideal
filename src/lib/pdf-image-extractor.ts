@@ -1,10 +1,18 @@
 import vision from '@google-cloud/vision';
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// PDF.js worker 설정
-if (typeof window === 'undefined') {
-  // Server-side에서는 worker 비활성화
-  pdfjs.GlobalWorkerOptions.workerSrc = '';
+// Dynamic import to avoid module loading errors in serverless environment
+let pdfjs: any = null;
+
+async function loadPdfJs() {
+  if (!pdfjs) {
+    pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    // PDF.js worker 설정
+    if (typeof window === 'undefined') {
+      // Server-side에서는 worker 비활성화
+      pdfjs.GlobalWorkerOptions.workerSrc = '';
+    }
+  }
+  return pdfjs;
 }
 
 interface ImageAnalysis {
@@ -26,13 +34,16 @@ export async function extractAndAnalyzeImages(
   try {
     console.log('[PDF Image Extractor] Starting image analysis...');
 
+    // Load PDF.js dynamically
+    const pdf = await loadPdfJs();
+
     // Google Cloud Vision 클라이언트 초기화
     const client = new vision.ImageAnnotatorClient({
       apiKey: apiKey,
     });
 
     // PDF.js로 문서 로드
-    const loadingTask = pdfjs.getDocument({ data: pdfBuffer });
+    const loadingTask = pdf.getDocument({ data: pdfBuffer });
     const pdfDoc = await loadingTask.promise;
     const numPages = pdfDoc.numPages;
 
