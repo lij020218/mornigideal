@@ -6,9 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 // Use Gemini 2.0 Flash with Google Search grounding for real-time web data
 const searchModel = genAI.getGenerativeModel({
     model: "gemini-2.0-flash-exp",
-    tools: [{
-        googleSearch: {}
-    }],
+    tools: [{ googleSearchRetrieval: {} }],
     generationConfig: {
         temperature: 1.0,
     }
