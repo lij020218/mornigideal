@@ -90,7 +90,7 @@ export function AccordionContent({ content }: AccordionContentProps) {
                             <div className="relative">
                                 <ReactMarkdown
                                     remarkPlugins={[remarkMath, remarkGfm]}
-                                    rehypePlugins={[rehypeRaw, [rehypeKatex, katexOptions]]}
+                                    rehypePlugins={[[rehypeKatex, katexOptions], rehypeRaw]}
                                     components={{
                                         ...getMarkdownComponents(),
                                         h3: ({ node, ...props }: any) => (
