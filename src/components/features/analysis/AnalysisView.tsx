@@ -700,7 +700,7 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                             <DrawingCanvas
                                 width={800}
                                 height={1000}
-                                storageKey={`drawing-right-${material.id}-page-${currentSlide}`}
+                                storageKey={`drawing-right-${material.id}-slide-${currentSlide}`}
                                 readOnly={!isDrawingModeRight}
                             />
                         </div>
