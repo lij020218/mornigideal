@@ -408,7 +408,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             }
 
             // Daily Detail view: show goals for selected date (both specific date and recurring)
-            if ((viewMode === 'calendar' || viewMode === 'daily-detail') && selectedDate) {
+            if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
                 const isSpecificDate = goal.specificDate === formatDate(selectedDate);
                 const isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay()) && !goal.specificDate;
 
