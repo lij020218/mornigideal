@@ -617,7 +617,7 @@ export function Dashboard({
                 });
 
                 // Update local state to reflect read status
-                setDailyBriefingData(prev => prev ? { ...prev, is_read: true } : null);
+                setDailyBriefingData((prev: any) => prev ? { ...prev, is_read: true } : null);
             } catch (e) {
                 console.error("Failed to mark briefing as read", e);
             }
