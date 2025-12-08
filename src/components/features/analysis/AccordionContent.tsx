@@ -9,6 +9,17 @@ import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 
+// KaTeX options for better math rendering
+const katexOptions = {
+    strict: false,
+    trust: true,
+    throwOnError: false,
+    errorColor: '#cc0000',
+    macros: {
+        "\\f": "#1f(#2)"
+    }
+};
+
 interface Section {
     title: string;
     emoji: string;
@@ -79,7 +90,7 @@ export function AccordionContent({ content }: AccordionContentProps) {
                             <div className="relative">
                                 <ReactMarkdown
                                     remarkPlugins={[remarkMath, remarkGfm]}
-                                    rehypePlugins={[rehypeRaw, rehypeKatex]}
+                                    rehypePlugins={[rehypeRaw, [rehypeKatex, katexOptions]]}
                                     components={{
                                         ...getMarkdownComponents(),
                                         h3: ({ node, ...props }: any) => (
@@ -102,7 +113,7 @@ export function AccordionContent({ content }: AccordionContentProps) {
                     <ReactMarkdown
                         key={index}
                         remarkPlugins={[remarkMath, remarkGfm]}
-                        rehypePlugins={[rehypeRaw, rehypeKatex]}
+                        rehypePlugins={[rehypeRaw, [rehypeKatex, katexOptions]]}
                         components={getMarkdownComponents()}
                     >
                         {part}
