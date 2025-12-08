@@ -80,24 +80,26 @@ export function PDFViewer({ fileUrl, onPageChange, initialPage, renderControls }
             {/* Custom Controls (rendered by parent) */}
             {renderControls && renderControls({ pageNumber, numPages, scale, zoomIn, zoomOut })}
 
-            {/* Side Navigation Buttons (Always Visible on Hover) */}
-            <Button
-                onClick={previousPage}
-                disabled={pageNumber <= 1}
-                variant="ghost"
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0 disabled:pointer-events-none"
-            >
-                <ChevronLeft className="w-6 h-6" />
-            </Button>
+            {/* Side Navigation Buttons (Always Visible on Mobile, Hover on Desktop) */}
+            {pageNumber > 1 && (
+                <Button
+                    onClick={previousPage}
+                    variant="ghost"
+                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 active:bg-black/90 text-white backdrop-blur-sm shadow-lg md:opacity-0 md:group-hover/pdf:opacity-100 transition-opacity duration-300"
+                >
+                    <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+                </Button>
+            )}
 
-            <Button
-                onClick={nextPage}
-                disabled={pageNumber >= numPages}
-                variant="ghost"
-                className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover/pdf:opacity-100 transition-all duration-300 disabled:opacity-0 disabled:pointer-events-none"
-            >
-                <ChevronRight className="w-6 h-6" />
-            </Button>
+            {pageNumber < numPages && (
+                <Button
+                    onClick={nextPage}
+                    variant="ghost"
+                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 active:bg-black/90 text-white backdrop-blur-sm shadow-lg md:opacity-0 md:group-hover/pdf:opacity-100 transition-opacity duration-300"
+                >
+                    <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+                </Button>
+            )}
 
             {/* PDF Display */}
             <div className="flex-1 overflow-auto bg-black/20 p-4 custom-scrollbar">
