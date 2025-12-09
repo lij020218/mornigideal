@@ -49,13 +49,28 @@ export async function GET(request: Request) {
             );
         }
 
+        // Get folder counts
+        const { data: allMaterials } = await supabase
+            .from("materials")
+            .select("folder_id")
+            .eq("user_id", session.user.email);
+
+        const folderCounts: Record<string, number> = {};
+        allMaterials?.forEach(m => {
+            const folderId = m.folder_id || 'all';
+            folderCounts[folderId] = (folderCounts[folderId] || 0) + 1;
+        });
+
         console.log(`[Materials API] Fetched ${materials?.length || 0} materials (Total: ${count}) for user ${session.user.email}`);
+        console.log(`[Materials API] Folder counts:`, folderCounts);
+
         return NextResponse.json({
             materials: materials || [],
             total: count || 0,
             page,
             limit,
-            totalPages: count ? Math.ceil(count / limit) : 0
+            totalPages: count ? Math.ceil(count / limit) : 0,
+            folderCounts
         });
     } catch (error: any) {
         console.error("[Materials API] Error:", error);

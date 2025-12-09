@@ -263,13 +263,59 @@ ${chunk.text}
 - **절대 금지**: 빈 슬라이드나 의미없는 슬라이드를 만들지 말 것
 - **중요**: 원본에 실제로 있는 내용만 슬라이드로 만들 것
 
-**수식 변환 (매우 중요)**:
-- 모든 수식은 LaTeX 문법으로 변환: $f(x) = x^2$, $$\\int_0^1 x dx$$
-- 분수: $\\frac{a}{b}$, 제곱: $x^2$, 아래첨자: $x_i$
-- 그리스 문자: $\\alpha, \\beta, \\mu, \\sigma$
-- 합: $\\sum_{i=1}^n$, 적분: $\\int_a^b$
-- 행렬: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
-- **절대 금지**: 수식을 일반 텍스트나 백틱으로 감싸기
+**제목 작성 규칙 (매우 매우 중요 - 반드시 지킬 것!)**:
+- **깔끔한 제목만 사용**: "Futures Markets (Introduction)" ✅
+- **절대 금지 - 다음은 모두 제거**:
+  - ❌ "Lecture 12: Futures Markets" → "Futures Markets" ✅
+  - ❌ "Chapter 3: Introduction" → "Introduction" ✅
+  - ❌ "Section 2.1: Basic Concepts" → "Basic Concepts" ✅
+  - ❌ "1. Derivatives Overview" → "Derivatives Overview" ✅
+  - ❌ "<mark>Futures</mark> Markets" → "Futures Markets" ✅
+  - ❌ **HTML 태그 절대 사용 금지** (<mark>, <strong>, <em> 등)
+  - ❌ "Lecture N:", "Chapter N:", "Section N:" 같은 접두어
+  - ❌ 숫자로 시작 (1., 2.1, 3-2 등)
+- **올바른 예시**:
+  - ✅ "Futures Markets"
+  - ✅ "Spot-Futures Parity"
+  - ✅ "Cost of Carry Model"
+  - ✅ "Hedging Strategies"
+
+**수식 변환 (매우 매우 중요 - 반드시 지킬 것!)**:
+
+**핵심 원칙**: 원문의 모든 수식, 공식, 수학적 표현은 **100% LaTeX 형식**으로 변환!
+
+**LaTeX 문법 예시**:
+1. **인라인 수식** (문장 안): $F_0 = S_0(1 + r_f - d)^T$
+2. **블록 수식** (독립 행): $$F_0 = S_0(1 + r_f - d)^T$$
+3. **분수**: $\\frac{a}{b}$, $\\frac{numerator}{denominator}$
+4. **거듭제곱**: $x^2$, $e^{-x}$, $(1+r)^T$
+5. **아래첨자**: $x_i$, $r_f$, $S_0$
+6. **그리스 문자**: $\\alpha$, $\\beta$, $\\mu$, $\\sigma$, $\\pi$
+7. **합/적분**: $\\sum_{i=1}^n x_i$, $\\int_a^b f(x)dx$
+8. **행렬**: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
+9. **제곱근**: $\\sqrt{x}$, $\\sqrt[n]{x}$
+10. **극한**: $\\lim_{x \\to \\infty}$
+
+**변환 예시**:
+
+**원문**: "The spot-futures parity formula is F0 = S0(1 + rf - d)^T"
+**올바른 변환**: "spot-futures parity 공식은 $F_0 = S_0(1 + r_f - d)^T$ 입니다"
+
+**원문**: "Calculate: x = (a+b)/c"
+**올바른 변환**: "계산: $x = \\frac{a+b}{c}$"
+
+**원문**: "E = mc^2"
+**올바른 변환**: "$E = mc^2$"
+
+**절대 금지**:
+- ❌ 백틱 사용: \`F0 = S0(1 + rf - d)^T\`
+- ❌ 일반 텍스트: "F0 = S0(1 + rf - d)^T"
+- ❌ 코드 블록: \`\`\`F0 = S0(1 + rf - d)^T\`\`\`
+- ❌ HTML: <code>F0 = S0(1 + rf - d)^T</code>
+
+**반드시 사용**:
+- ✅ 인라인: $F_0 = S_0(1 + r_f - d)^T$
+- ✅ 블록: $$F_0 = S_0(1 + r_f - d)^T$$
 
 **표 변환 규칙 (매우 매우 중요 - 반드시 지킬 것!)**:
 
@@ -316,7 +362,7 @@ ${chunk.text}
           messages: [
             {
               role: "system",
-              content: "당신은 정확한 변환 전문가입니다. 주어진 규칙을 정확히 따릅니다. 특히 표는 반드시 마크다운 표 형식으로 변환합니다."
+              content: "당신은 정확한 변환 전문가입니다. 주어진 규칙을 정확히 따릅니다. 특히:\n1. 모든 수식/공식은 100% LaTeX 형식으로 변환 ($...$, $$...$$)\n2. 표는 반드시 마크다운 표 형식으로 변환\n3. 백틱(`)이나 일반 텍스트로 수식을 절대 작성하지 않음"
             },
             {
               role: "user",
@@ -327,8 +373,45 @@ ${chunk.text}
           reasoning_effort: "low",
         });
 
-        const converted = conversionResponse.choices[0].message.content!.trim();
+        let converted = conversionResponse.choices[0].message.content!.trim();
         console.log(`[GPT-5.1] Chunk ${i + 1} converted: ${converted.length} chars`);
+
+        // 수식 검증 단계: 백틱이나 일반 텍스트로 된 수식 감지 및 수정
+        const hasInvalidMath = /`[^`]*(?:[=+\-*/^_]|\\frac|\\sum|\\int)[^`]*`/.test(converted) ||
+                              /(?:^|[^$])[A-Z]_?\d?\s*=\s*[^$\n]{3,}(?:[+\-*/^]|\\)/.test(converted);
+
+        if (hasInvalidMath) {
+          console.log(`[MATH-FIX] Chunk ${i + 1} has invalid math formatting, fixing...`);
+
+          const mathFixPrompt = `다음 텍스트에서 수식이 잘못 표현되어 있습니다. 모든 수식을 LaTeX 형식으로 수정하세요.
+
+**원본 텍스트**:
+${converted}
+
+**수정 규칙**:
+1. 백틱(\`)으로 감싼 수식 → LaTeX ($...$)로 변환
+2. 일반 텍스트 수식 → LaTeX로 변환
+3. 예: \`F0 = S0(1 + rf - d)^T\` → $F_0 = S_0(1 + r_f - d)^T$
+4. 예: E = mc^2 → $E = mc^2$
+5. 나머지 내용은 그대로 유지
+
+**출력**: 수식만 수정된 전체 텍스트`;
+
+          const mathFixResponse = await openai.chat.completions.create({
+            model: MINI_MODEL,
+            messages: [{
+              role: "system",
+              content: "당신은 수식 표기법 전문가입니다. 모든 수학 표현을 LaTeX 형식으로 변환합니다."
+            }, {
+              role: "user",
+              content: mathFixPrompt
+            }],
+            temperature: 0.3,
+          });
+
+          converted = mathFixResponse.choices[0].message.content!.trim();
+          console.log(`[MATH-FIX] Chunk ${i + 1} math fixed`);
+        }
 
         // Now enhance with Mini model
         const enhancementPrompt = `당신은 시험 준비를 돕는 학습 코치입니다.

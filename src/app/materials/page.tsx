@@ -40,6 +40,8 @@ export default function MaterialsPage() {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalMaterials, setTotalMaterials] = useState(0);
+  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -71,6 +73,8 @@ export default function MaterialsPage() {
         console.log('[Materials] Fetched from API:', data.materials?.length || 0, 'materials');
         setMaterials(data.materials || []);
         setTotalPages(data.totalPages || 1);
+        setTotalMaterials(data.total || 0);
+        setFolderCounts(data.folderCounts || {});
       } else {
         console.error('[Materials] API error:', await response.text());
         setMaterials([]);
@@ -261,7 +265,7 @@ export default function MaterialsPage() {
                 <FolderOpen className="w-4 h-4 shrink-0" />
                 <span className="flex-1 text-left truncate">모든 자료</span>
                 <Badge variant="secondary" className="bg-white/10 text-xs shrink-0">
-                  {materials.length}
+                  {totalMaterials}
                 </Badge>
               </button>
 
@@ -309,7 +313,7 @@ export default function MaterialsPage() {
                     <Folder className="w-4 h-4 shrink-0" style={{ color: folder.color }} />
                     <span className="flex-1 truncate">{folder.name}</span>
                     <Badge variant="secondary" className="bg-white/10 text-xs shrink-0">
-                      {materials.filter(m => m.folder_id === folder.id).length}
+                      {folderCounts[folder.id] || 0}
                     </Badge>
                   </div>
                   <Button

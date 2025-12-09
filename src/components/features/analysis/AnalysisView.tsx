@@ -39,6 +39,26 @@ interface AnalysisViewProps {
     onPageChange?: (page: number) => void;
 }
 
+// Helper to clean slide title
+function cleanSlideTitle(title: string): string {
+    // Remove HTML tags like <mark>, <strong>, etc.
+    let cleaned = title.replace(/<[^>]+>/g, '');
+
+    // Remove "Lecture N:", "Chapter N:", "Section N:" patterns
+    cleaned = cleaned.replace(/^(Lecture|Chapter|Section|Part|Module)\s+\d+\s*:\s*/i, '');
+
+    // Remove leading numbers like "1.", "2.1", etc.
+    cleaned = cleaned.replace(/^\d+\.?\d*\s+/, '');
+
+    // Remove emojis at the start
+    cleaned = cleaned.replace(/^[\p{Emoji}]\s+/u, '');
+
+    // Trim whitespace
+    cleaned = cleaned.trim();
+
+    return cleaned || title; // Fallback to original if empty
+}
+
 // Helper to parse markdown content into slides
 function parseContentToSlides(content: string): PageAnalysis[] {
     if (!content) return [];
@@ -58,10 +78,14 @@ function parseContentToSlides(content: string): PageAnalysis[] {
                 slides.push(currentSlide);
             }
 
+            // Clean the title
+            const rawTitle = headingMatch[1].trim();
+            const cleanedTitle = cleanSlideTitle(rawTitle);
+
             // Start new slide
             currentSlide = {
                 page: slideIndex + 1,
-                title: headingMatch[1].trim(),
+                title: cleanedTitle,
                 content: '',
                 keyPoints: [] // Key points are now embedded in content
             };
