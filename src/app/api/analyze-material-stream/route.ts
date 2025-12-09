@@ -465,7 +465,7 @@ ${converted}
               role: "user",
               content: mathFixPrompt
             }],
-            temperature: 0.3,
+            temperature: 1.0,
           });
 
           converted = mathFixResponse.choices[0].message.content!.trim();
@@ -648,7 +648,7 @@ ${fullContent.substring(0, 30000)}
           const conceptsResponse = await openai.chat.completions.create({
             model: MINI_MODEL,
             messages: [{ role: "user", content: conceptsPrompt }],
-            temperature: 0.7,
+            temperature: 1.0,
           });
 
           const conceptsContent = conceptsResponse.choices[0].message.content!.trim()
