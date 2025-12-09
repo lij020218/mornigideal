@@ -340,16 +340,17 @@ Select now.`;
         // Save to cache
         await saveTrendsCache(trends, true);
 
-        // Pre-generate details for all trends in background
+        // Pre-generate details for all trends - MUST await to ensure cache is ready
         console.log('[API] Pre-generating details for all trends...');
         const detailModel = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        Promise.all(trends.map(async (trend: any) => {
-            try {
-                const detailPrompt = `Create a briefing for senior ${job}.
+        try {
+            await Promise.all(trends.map(async (trend: any) => {
+                try {
+                    const detailPrompt = `Create a briefing for senior ${job}.
 
 ARTICLE:
 - Title: "${trend.title}"
@@ -373,23 +374,27 @@ OUTPUT JSON:
 
 Write in Korean. Be practical and specific for senior ${job}.`;
 
-                const detailResult = await detailModel.generateContent(detailPrompt);
-                const detailResponse = await detailResult.response;
-                const detailText = detailResponse.text();
+                    const detailResult = await detailModel.generateContent(detailPrompt);
+                    const detailResponse = await detailResult.response;
+                    const detailText = detailResponse.text();
 
-                const detail = JSON.parse(detailText);
+                    const detail = JSON.parse(detailText);
 
-                // Validate structure
-                if (detail.content && detail.keyTakeaways && detail.actionItems) {
-                    await saveDetailCache(trend.id, detail);
-                    console.log(`[API] Pre-generated detail for: ${trend.title}`);
-                } else {
-                    console.warn(`[API] Invalid detail structure for ${trend.title}:`, Object.keys(detail));
+                    // Validate structure
+                    if (detail.content && detail.keyTakeaways && detail.actionItems) {
+                        await saveDetailCache(trend.id, detail);
+                        console.log(`[API] Pre-generated detail for: ${trend.title}`);
+                    } else {
+                        console.warn(`[API] Invalid detail structure for ${trend.title}:`, Object.keys(detail));
+                    }
+                } catch (error) {
+                    console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
                 }
-            } catch (error) {
-                console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
-            }
-        })).catch(err => console.error('[API] Error in detail pre-generation:', err));
+            }));
+            console.log('[API] All details pre-generated successfully');
+        } catch (err) {
+            console.error('[API] Error in detail pre-generation:', err);
+        }
 
         return NextResponse.json({
             trends,
