@@ -326,11 +326,14 @@ ${normalizedText}
    - 숫자 아래첨자: $F_0$, $S_0$, $x_1$, $x_2$ (underscore 뒤에 숫자)
    - 문자 아래첨자: $r_f$, $r_d$, $x_i$, $x_n$ (underscore 뒤에 영문자)
    - **절대 금지**: $F_!$, $S_!$, $r_"#$ (특수문자 사용 금지!)
-6. **그리스 문자**: $\\alpha$, $\\beta$, $\\mu$, $\\sigma$, $\\pi$
-7. **합/적분**: $\\sum_{i=1}^n x_i$, $\\int_a^b f(x)dx$
-8. **행렬**: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
-9. **제곱근**: $\\sqrt{x}$, $\\sqrt[n]{x}$
-10. **극한**: $\\lim_{x \\to \\infty}$
+6. **숫자 표기 (매우 중요!)**:
+   - 천 단위 구분 쉼표는 그대로 유지: $1,894$, $3.00$
+   - **절대 금지**: $1{,}894$ (잘못된 LaTeX 문법)
+7. **그리스 문자**: $\\alpha$, $\\beta$, $\\mu$, $\\sigma$, $\\pi$
+8. **합/적분**: $\\sum_{i=1}^n x_i$, $\\int_a^b f(x)dx$
+9. **행렬**: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
+10. **제곱근**: $\\sqrt{x}$, $\\sqrt[n]{x}$
+11. **극한**: $\\lim_{x \\to \\infty}$
 
 **변환 예시**:
 
@@ -346,6 +349,10 @@ ${normalizedText}
 
 **원문**: "E = mc^2"
 **올바른 변환**: "$E = mc^2$"
+
+**원문**: "$1,894 - $1,891 = $3.00"
+**올바른 변환**: "$1,894 - $1,891 = $3.00$"
+**주의**: 쉼표를 {,}로 변환하지 말 것!
 
 **절대 금지**:
 - ❌ 백틱 사용: \`F0 = S0(1 + rf - d)^T\`
@@ -415,6 +422,9 @@ ${normalizedText}
 
         let converted = conversionResponse.choices[0].message.content!.trim();
         console.log(`[GPT-5.1] Chunk ${i + 1} converted: ${converted.length} chars`);
+
+        // 잘못된 LaTeX 쉼표 표기법 수정 (1{,}894 → 1,894)
+        converted = converted.replace(/(\d)\{,\}(\d)/g, '$1,$2');
 
         // 수식 검증 단계: 백틱이나 일반 텍스트로 된 수식 감지 및 수정
         const hasInvalidMath = /`[^`]*(?:[=+\-*/^_]|\\frac|\\sum|\\int)[^`]*`/.test(converted) ||
