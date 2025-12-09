@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
             'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h',
             'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p',
             'ₛ': 's', 'ₜ': 't', 'ᵢ': 'i', 'ᵣ': 'r', 'ᵤ': 'u',
-            'ᵥ': 'v', 'ⱼ': 'j', 'ₓ': 'x'
+            'ᵥ': 'v', 'ⱼ': 'j'
           };
 
           let normalized = text;
