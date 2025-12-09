@@ -18,6 +18,7 @@ import { MaterialUploadDialog } from "./MaterialUploadDialog";
 import { RecentMaterialsList } from "./RecentMaterialsList";
 import { EmailSummarySection } from "./EmailSummarySection";
 import { DailyBriefingPopup } from "./DailyBriefingPopup";
+import { AppUsageTracker } from "./AppUsageTracker";
 
 
 interface DashboardProps {
@@ -1556,11 +1557,20 @@ export function Dashboard({
                     />
                 )}
 
-                {/* 4. Email Summary Section */}
+                {/* 4. App Usage Tracker */}
                 <motion.section
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
+                >
+                    <AppUsageTracker />
+                </motion.section>
+
+                {/* 5. Email Summary Section */}
+                <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 }}
                 >
                     <EmailSummarySection />
                 </motion.section>
