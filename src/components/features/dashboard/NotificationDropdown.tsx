@@ -233,26 +233,26 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="absolute right-0 top-14 w-[calc(100vw-2rem)] sm:w-96 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden"
+                        className="absolute right-0 top-14 w-[min(calc(100vw-2rem),380px)] sm:w-96 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden max-h-[70vh] sm:max-h-[600px] flex flex-col"
                     >
                         {/* Header */}
-                        <div className="p-4 border-b border-white/10 bg-gradient-to-r from-primary/5 to-transparent">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Bell className="w-5 h-5 text-primary" />
-                                <h3 className="font-bold text-lg">오늘의 알림</h3>
+                        <div className="p-3 sm:p-4 border-b border-white/10 bg-gradient-to-r from-primary/5 to-transparent shrink-0">
+                            <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
+                                <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                                <h3 className="font-bold text-base sm:text-lg">오늘의 알림</h3>
                             </div>
-                            <div className="flex items-center gap-3 text-xs">
+                            <div className="flex items-center gap-2 sm:gap-3 text-xs flex-wrap">
                                 <div className="flex items-center gap-1">
                                     <Calendar className="w-3 h-3 text-muted-foreground" />
                                     <span className="text-muted-foreground">{getTodayDateString()}</span>
                                 </div>
                                 {pendingCount > 0 && (
-                                    <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">
+                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold text-[10px] sm:text-xs">
                                         {pendingCount}개 대기중
                                     </span>
                                 )}
                                 {missedCount > 0 && (
-                                    <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-semibold">
+                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-semibold text-[10px] sm:text-xs">
                                         {missedCount}개 놓침
                                     </span>
                                 )}
@@ -260,10 +260,10 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                         </div>
 
                         {/* Notification List */}
-                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
                             {notifications.length === 0 ? (
-                                <div className="p-8 text-center">
-                                    <Bell className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                                <div className="p-6 sm:p-8 text-center">
+                                    <Bell className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-muted-foreground opacity-50" />
                                     <p className="text-muted-foreground text-sm">읽지 않은 알림이 없습니다</p>
                                     <p className="text-muted-foreground text-xs mt-1">일정을 추가하고 알림을 받아보세요</p>
                                 </div>
@@ -277,36 +277,36 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                             exit={{ opacity: 0, x: 20 }}
                                             transition={{ delay: index * 0.05 }}
                                             className={cn(
-                                                "p-4 rounded-lg border transition-all group relative",
+                                                "p-3 sm:p-4 rounded-lg border transition-all group relative",
                                                 getStatusColor(notification.status)
                                             )}
                                         >
                                             <button
                                                 onClick={() => handleDismissNotification(notification.id)}
-                                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white"
+                                                className="absolute top-2 right-2 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                             </button>
 
-                                            <div className="flex items-start justify-between mb-3 pr-6">
-                                                <div className="flex items-center gap-3 flex-1">
+                                            <div className="flex items-start justify-between mb-2 sm:mb-3 pr-6">
+                                                <div className="flex items-center gap-2 sm:gap-3 flex-1">
                                                     <div className="flex flex-col">
                                                         <span className={cn(
-                                                            "font-semibold text-base",
+                                                            "font-semibold text-sm sm:text-base",
                                                             getGoalColor(notification.goal.color)
                                                         )}>
                                                             {notification.goal.text}
                                                         </span>
-                                                        <div className="flex items-center gap-2 mt-1">
+                                                        <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                                                             <Clock className="w-3 h-3 text-muted-foreground" />
-                                                            <span className="text-xs text-muted-foreground font-mono">
+                                                            <span className="text-[10px] sm:text-xs text-muted-foreground font-mono">
                                                                 {notification.goal.startTime} - {notification.goal.endTime}
                                                             </span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <span className={cn(
-                                                    "text-xs px-2 py-1 rounded-full font-semibold shrink-0",
+                                                    "text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full font-semibold shrink-0",
                                                     notification.status === 'completed' && "bg-green-500/20 text-green-400",
                                                     notification.status === 'notDone' && "bg-red-500/20 text-red-400",
                                                     notification.status === 'missed' && "bg-orange-500/20 text-orange-400",
@@ -318,11 +318,11 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                                             {/* Action buttons for pending/missed items */}
                                             {(notification.status === 'pending' || notification.status === 'missed') && (
-                                                <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
+                                                <div className="flex gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
                                                     <Button
                                                         size="sm"
                                                         onClick={() => handleMarkComplete(notification.id, true)}
-                                                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30"
+                                                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 h-8 sm:h-9 text-xs sm:text-sm"
                                                     >
                                                         <CheckCircle2 className="w-3 h-3 mr-1" />
                                                         완료
@@ -331,7 +331,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => handleMarkComplete(notification.id, false)}
-                                                        className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+                                                        className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30 h-8 sm:h-9 text-xs sm:text-sm"
                                                     >
                                                         <XCircle className="w-3 h-3 mr-1" />
                                                         {notification.status === 'missed' ? '놓침' : '못함'}
@@ -341,14 +341,14 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                                             {/* Show completion icon for completed/notDone items */}
                                             {notification.status === 'completed' && (
-                                                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
-                                                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
+                                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
                                                     <span className="text-xs text-green-400">잘하셨습니다!</span>
                                                 </div>
                                             )}
                                             {notification.status === 'notDone' && (
-                                                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
-                                                    <XCircle className="w-4 h-4 text-red-500" />
+                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
+                                                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
                                                     <span className="text-xs text-red-400">다음엔 꼭 해보세요</span>
                                                 </div>
                                             )}
@@ -360,25 +360,25 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                         {/* Footer Stats - Always visible */}
                         {allTodayGoals.length > 0 && (
-                            <div className="p-4 border-t border-white/10 bg-white/5">
+                            <div className="p-3 sm:p-4 border-t border-white/10 bg-white/5 shrink-0">
                                 <div className="grid grid-cols-3 gap-2 text-center">
                                     <div>
-                                        <div className="text-xl font-bold text-green-400">
+                                        <div className="text-lg sm:text-xl font-bold text-green-400">
                                             {allTodayGoals.filter(n => n.status === 'completed').length}
                                         </div>
-                                        <div className="text-xs text-muted-foreground">완료</div>
+                                        <div className="text-[10px] sm:text-xs text-muted-foreground">완료</div>
                                     </div>
                                     <div>
-                                        <div className="text-xl font-bold text-red-400">
+                                        <div className="text-lg sm:text-xl font-bold text-red-400">
                                             {allTodayGoals.filter(n => n.status === 'notDone').length}
                                         </div>
-                                        <div className="text-xs text-muted-foreground">미완료</div>
+                                        <div className="text-[10px] sm:text-xs text-muted-foreground">미완료</div>
                                     </div>
                                     <div>
-                                        <div className="text-xl font-bold text-blue-400">
+                                        <div className="text-lg sm:text-xl font-bold text-blue-400">
                                             {allTodayGoals.filter(n => n.status === 'pending').length}
                                         </div>
-                                        <div className="text-xs text-muted-foreground">남음</div>
+                                        <div className="text-[10px] sm:text-xs text-muted-foreground">남음</div>
                                     </div>
                                 </div>
                             </div>

@@ -13,10 +13,31 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "A.ideal - AI 기반 개인 성장 OS",
   description: "나의 하루, 학습, 성장을 운영해주는 AI 시스템",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'A.Ideal',
+  },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#000000',
 };
 
 import { Header } from "@/components/layout/Header";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import { AppUsageInitializer } from "@/components/AppUsageInitializer";
 
 export default function RootLayout({
   children,
@@ -32,6 +53,7 @@ export default function RootLayout({
         )}
       >
         <SessionProvider>
+          <AppUsageInitializer />
           <Header />
           {children}
         </SessionProvider>

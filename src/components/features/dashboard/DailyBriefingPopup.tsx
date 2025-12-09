@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sunrise, Calendar, CheckCircle, TrendingUp, Sparkles, ChevronRight, Moon } from "lucide-react";
+import { X, Sunrise, Calendar, CheckCircle, TrendingUp, Sparkles, ChevronRight, Moon, Smartphone, AlertTriangle, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
+import { analyzeYesterdayUsage, formatDuration, type YesterdayUsageAnalysis } from "@/lib/appUsageTracking";
 
 interface DailyBriefingContent {
     greeting: string;
@@ -25,18 +26,17 @@ interface DailyBriefingPopupProps {
 export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen: boolean; onClose: () => void; data: DailyBriefingContent | null; username: string }) {
     const [step, setStep] = useState(0);
     const [mounted, setMounted] = useState(false);
+    const [usageAnalysis, setUsageAnalysis] = useState<YesterdayUsageAnalysis | null>(null);
 
-    // Reset step when opened
+    // Reset step when opened and analyze yesterday's usage
     useEffect(() => {
         setMounted(true);
-        if (isOpen) setStep(0);
-        return () => setMounted(false);
-    }, [isOpen]);
-
-    // Reset step when opened
-    useEffect(() => {
-        setMounted(true);
-        if (isOpen) setStep(0);
+        if (isOpen) {
+            setStep(0);
+            // Analyze yesterday's app usage
+            const analysis = analyzeYesterdayUsage();
+            setUsageAnalysis(analysis);
+        }
         return () => setMounted(false);
     }, [isOpen]);
 
@@ -121,7 +121,104 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                 </div>
             )
         },
-        // Step 2: Today's Schedule & Trends
+        // Step 2: Yesterday's App Usage Analysis (only if data available)
+        ...(usageAnalysis?.hasData ? [{
+            title: "Digital Habits",
+            content: (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 mb-3">
+                            <Smartphone className="w-8 h-8 text-blue-400" />
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-1">어제의 디지털 사용 패턴</h4>
+                        <p className="text-xs text-muted-foreground">총 사용 시간: {formatDuration(usageAnalysis.totalTime)}</p>
+                    </div>
+
+                    {/* Top Apps */}
+                    {usageAnalysis.topApps.length > 0 && (
+                        <div className="bg-white/5 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+                            <h5 className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
+                                가장 많이 사용한 앱
+                            </h5>
+                            <div className="space-y-2">
+                                {usageAnalysis.topApps.map((app, index) => (
+                                    <div key={app.name} className="flex items-center gap-3">
+                                        <div className={cn(
+                                            "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
+                                            index === 0 ? "bg-yellow-500/20 text-yellow-400" :
+                                            index === 1 ? "bg-gray-400/20 text-gray-300" :
+                                            "bg-orange-500/20 text-orange-400"
+                                        )}>
+                                            {index + 1}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-sm font-medium text-white">{app.name}</span>
+                                                <span className="text-xs text-muted-foreground">{formatDuration(app.time)}</span>
+                                            </div>
+                                            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                                                    style={{ width: `${app.percentage}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SNS Warning (if applicable) */}
+                    {usageAnalysis.warning && (
+                        <div className={cn(
+                            "p-4 rounded-xl border",
+                            usageAnalysis.totalSnsTime > 7200000 // 2시간 이상
+                                ? "bg-red-500/10 border-red-500/30"
+                                : "bg-yellow-500/10 border-yellow-500/30"
+                        )}>
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className={cn(
+                                    "w-5 h-5 shrink-0 mt-0.5",
+                                    usageAnalysis.totalSnsTime > 7200000
+                                        ? "text-red-400"
+                                        : "text-yellow-400"
+                                )} />
+                                <div className="space-y-2">
+                                    <p className="text-sm font-medium text-white">
+                                        {usageAnalysis.warning}
+                                    </p>
+                                    {usageAnalysis.recommendation && (
+                                        <p className="text-xs text-muted-foreground leading-relaxed">
+                                            💡 {usageAnalysis.recommendation}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Positive Message (if no warning) */}
+                    {!usageAnalysis.warning && usageAnalysis.totalSnsTime > 0 && (
+                        <div className="p-4 rounded-xl border bg-green-500/10 border-green-500/30">
+                            <div className="flex items-start gap-3">
+                                <ThumbsUp className="w-5 h-5 shrink-0 mt-0.5 text-green-400" />
+                                <div>
+                                    <p className="text-sm font-medium text-white mb-1">
+                                        훌륭합니다! 균형 잡힌 디지털 습관을 유지하고 계시네요.
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        SNS 사용 시간: {formatDuration(usageAnalysis.totalSnsTime)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )
+        }] : []),
+        // Step 3: Today's Schedule & Trends
         {
             title: "Today's Focus",
             content: (
@@ -147,7 +244,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                 </div>
             )
         },
-        // Step 3: Closing / Cheering
+        // Step 4: Closing / Cheering
         {
             title: "Cheering For You",
             content: (
