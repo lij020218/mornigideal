@@ -289,7 +289,10 @@ ${chunk.text}
 2. **블록 수식** (독립 행): $$F_0 = S_0(1 + r_f - d)^T$$
 3. **분수**: $\\frac{a}{b}$, $\\frac{numerator}{denominator}$
 4. **거듭제곱**: $x^2$, $e^{-x}$, $(1+r)^T$
-5. **아래첨자**: $x_i$, $r_f$, $S_0$
+5. **아래첨자 (매우 중요!)**:
+   - 숫자 아래첨자: $F_0$, $S_0$, $x_1$, $x_2$ (underscore 뒤에 숫자)
+   - 문자 아래첨자: $r_f$, $r_d$, $x_i$, $x_n$ (underscore 뒤에 영문자)
+   - **절대 금지**: $F_!$, $S_!$, $r_"#$ (특수문자 사용 금지!)
 6. **그리스 문자**: $\\alpha$, $\\beta$, $\\mu$, $\\sigma$, $\\pi$
 7. **합/적분**: $\\sum_{i=1}^n x_i$, $\\int_a^b f(x)dx$
 8. **행렬**: $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$
@@ -300,6 +303,10 @@ ${chunk.text}
 
 **원문**: "The spot-futures parity formula is F0 = S0(1 + rf - d)^T"
 **올바른 변환**: "spot-futures parity 공식은 $F_0 = S_0(1 + r_f - d)^T$ 입니다"
+**주의**: F0 → F_0 (zero), S0 → S_0 (zero), rf → r_f (letter f)
+
+**원문**: "If d < rf, futures prices exceed spot prices"
+**올바른 변환**: "$d < r_f$인 경우, 선물 가격이 현물 가격을 초과합니다"
 
 **원문**: "Calculate: x = (a+b)/c"
 **올바른 변환**: "계산: $x = \\frac{a+b}{c}$"
@@ -378,7 +385,9 @@ ${chunk.text}
 
         // 수식 검증 단계: 백틱이나 일반 텍스트로 된 수식 감지 및 수정
         const hasInvalidMath = /`[^`]*(?:[=+\-*/^_]|\\frac|\\sum|\\int)[^`]*`/.test(converted) ||
-                              /(?:^|[^$])[A-Z]_?\d?\s*=\s*[^$\n]{3,}(?:[+\-*/^]|\\)/.test(converted);
+                              /(?:^|[^$])[A-Z]_?\d?\s*=\s*[^$\n]{3,}(?:[+\-*/^]|\\)/.test(converted) ||
+                              /_[!"#$%&'()]/.test(converted) || // 잘못된 아래첨자 감지 (예: F_!, S_!, r_"#)
+                              /\$[^$]*_[!"#$%&'()][^$]*\$/.test(converted); // LaTeX 내부의 잘못된 아래첨자
 
         if (hasInvalidMath) {
           console.log(`[MATH-FIX] Chunk ${i + 1} has invalid math formatting, fixing...`);
@@ -391,8 +400,15 @@ ${converted}
 **수정 규칙**:
 1. 백틱(\`)으로 감싼 수식 → LaTeX ($...$)로 변환
 2. 일반 텍스트 수식 → LaTeX로 변환
-3. 예: \`F0 = S0(1 + rf - d)^T\` → $F_0 = S_0(1 + r_f - d)^T$
-4. 예: E = mc^2 → $E = mc^2$
+3. **잘못된 아래첨자 수정 (매우 중요!)**:
+   - F_! → F_0 (숫자 0)
+   - S_! → S_0 (숫자 0)
+   - r_"# → r_f (문자 f)
+   - d < r_"# → $d < r_f$
+4. 예시:
+   - \`F0 = S0(1 + rf - d)^T\` → $F_0 = S_0(1 + r_f - d)^T$
+   - $F_! = S_!(1 + r_"#)$ → $F_0 = S_0(1 + r_f)$
+   - E = mc^2 → $E = mc^2$
 5. 나머지 내용은 그대로 유지
 
 **출력**: 수식만 수정된 전체 텍스트`;
