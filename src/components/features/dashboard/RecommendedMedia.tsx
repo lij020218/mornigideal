@@ -156,7 +156,7 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
                     recommendations.map((item, index) => (
                         <motion.a
                             key={item.id || index}
-                            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(item.title + " " + item.channel)}`}
+                            href={`https://www.youtube.com/watch?v=${item.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             initial={{ opacity: 0, y: 20 }}
@@ -165,15 +165,28 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
                             className="group block"
                         >
                             <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:bg-white/10 transition-all hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 h-full flex flex-col">
-                                {/* Thumbnail Placeholder with Gradient */}
-                                <div className="h-32 w-full relative flex items-center justify-center bg-gradient-to-br from-red-900/40 to-black">
-                                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors" />
+                                {/* YouTube Thumbnail */}
+                                <div className="h-32 w-full relative overflow-hidden bg-gradient-to-br from-red-900/40 to-black">
+                                    {/* Actual Thumbnail Image */}
+                                    <img
+                                        src={`https://img.youtube.com/vi/${item.id}/hqdefault.jpg`}
+                                        alt={item.title}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                        loading="lazy"
+                                    />
 
-                                    <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                        <Play className="w-5 h-5 text-white fill-current" />
+                                    {/* Dark overlay on hover */}
+                                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors" />
+
+                                    {/* Play button overlay */}
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-12 h-12 rounded-full bg-red-600/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                            <Play className="w-5 h-5 text-white fill-current ml-0.5" />
+                                        </div>
                                     </div>
 
-                                    <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 rounded text-[10px] font-mono text-white">
+                                    {/* Duration badge */}
+                                    <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/80 rounded text-[10px] font-mono text-white backdrop-blur-sm">
                                         {item.duration}
                                     </div>
                                 </div>
