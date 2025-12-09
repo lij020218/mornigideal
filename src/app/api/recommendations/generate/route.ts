@@ -77,8 +77,11 @@ export async function POST(request: Request) {
       queries = [`${job} ${goal} tips`, `${interests[0]} tutorial`, "self improvement for developers"];
     }
 
-    // 2. Search YouTube for each query with view count filtering
-    const videoPromises = queries.slice(0, 3).map(async (q) => {
+    // 2. Search YouTube for each query with view count filtering (sequential to avoid duplicates)
+    const videos = [];
+    const selectedVideoIds = new Set<string>(); // Track selected video IDs to prevent duplicates
+
+    for (const q of queries.slice(0, 3)) {
       try {
         // Calculate date 6 months ago for recency boost
         const sixMonthsAgo = new Date();
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
           order: "viewCount" // Sort by view count to get popular videos
         });
 
-        if (!searchRes.data.items || searchRes.data.items.length === 0) return null;
+        if (!searchRes.data.items || searchRes.data.items.length === 0) continue;
 
         // Get video details including statistics for all results
         const videoIds = searchRes.data.items
@@ -108,13 +111,14 @@ export async function POST(request: Request) {
           id: videoIds
         });
 
-        if (!videoRes.data.items || videoRes.data.items.length === 0) return null;
+        if (!videoRes.data.items || videoRes.data.items.length === 0) continue;
 
         // Filter videos with at least 100,000 views
         const MIN_VIEW_COUNT = 100000;
         const qualityVideos = videoRes.data.items.filter(video => {
           const viewCount = parseInt(video.statistics?.viewCount || "0");
           const title = video.snippet?.title || "";
+          const videoId = video.id!;
 
           // Filter out videos we've already shown (from exclude list)
           const alreadyShown = exclude.some((excludedTitle: string) =>
@@ -122,7 +126,10 @@ export async function POST(request: Request) {
             excludedTitle.toLowerCase().includes(title.toLowerCase())
           );
 
-          return viewCount >= MIN_VIEW_COUNT && !alreadyShown;
+          // Filter out already selected videos in this session
+          const alreadySelected = selectedVideoIds.has(videoId);
+
+          return viewCount >= MIN_VIEW_COUNT && !alreadyShown && !alreadySelected;
         });
 
         // Sort by recency-weighted popularity score
@@ -138,15 +145,18 @@ export async function POST(request: Request) {
           return { video, score };
         });
 
-        // Pick the highest scoring video
+        // Pick the highest scoring video that hasn't been selected yet
         const topVideo = scoredVideos.sort((a, b) => b.score - a.score)[0]?.video;
 
         if (!topVideo) {
           console.log(`No videos with ${MIN_VIEW_COUNT}+ views found for query: "${q}"`);
-          return null;
+          continue;
         }
 
-        return {
+        // Add to selected set to prevent duplicates
+        selectedVideoIds.add(topVideo.id!);
+
+        videos.push({
           id: topVideo.id!,
           title: topVideo.snippet?.title || "Unknown Title",
           channel: topVideo.snippet?.channelTitle || "Unknown Channel",
@@ -154,14 +164,11 @@ export async function POST(request: Request) {
           tags: topVideo.snippet?.tags?.slice(0, 3) || [interests[0] || "General"],
           duration: parseDuration(topVideo.contentDetails?.duration || "PT0M"),
           description: topVideo.snippet?.description?.slice(0, 100) + "..." || "No description available."
-        };
+        });
       } catch (err) {
         console.error(`YouTube search error for "${q}":`, err);
-        return null;
       }
-    });
-
-    const videos = (await Promise.all(videoPromises)).filter(v => v !== null);
+    }
 
     // If we failed to get enough videos (e.g. API quota or errors), return empty or error
     if (videos.length === 0) {
