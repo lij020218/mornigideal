@@ -225,11 +225,44 @@ export async function POST(request: NextRequest) {
 
       // Parallel conversion AND enhancement with Promise.all
       const conversionPromises = chunks.map(async (chunk, i) => {
+        // 유니코드 아래첨자를 일반 문자로 정규화
+        const normalizeSubscripts = (text: string): string => {
+          // 유니코드 아래첨자 숫자 → 일반 숫자
+          const subscriptDigits: Record<string, string> = {
+            '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+            '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9'
+          };
+
+          // 유니코드 아래첨자 문자 → 일반 문자
+          const subscriptLetters: Record<string, string> = {
+            'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h',
+            'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p',
+            'ₛ': 's', 'ₜ': 't', 'ᵢ': 'i', 'ᵣ': 'r', 'ᵤ': 'u',
+            'ᵥ': 'v', 'ⱼ': 'j', 'ₓ': 'x'
+          };
+
+          let normalized = text;
+
+          // 숫자 아래첨자 치환
+          Object.entries(subscriptDigits).forEach(([unicode, normal]) => {
+            normalized = normalized.replace(new RegExp(unicode, 'g'), normal);
+          });
+
+          // 문자 아래첨자 치환
+          Object.entries(subscriptLetters).forEach(([unicode, normal]) => {
+            normalized = normalized.replace(new RegExp(unicode, 'g'), normal);
+          });
+
+          return normalized;
+        };
+
+        const normalizedText = normalizeSubscripts(chunk.text);
+
         const conversionPrompt = `당신은 **변환기**입니다. 아래 원문을 A 모드로 압축 변환하세요.
 
 **현재 원문** (전체 중 ${i + 1}/${chunks.length} 부분):
 """
-${chunk.text}
+${normalizedText}
 """
 
 **변환 규칙 (A 모드)**:
