@@ -1,8 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# A.ideal 2.0
 
-## Getting Started
+AI 기반 개인 성장 OS - 나의 하루, 학습, 성장을 운영해주는 AI 시스템
 
-First, run the development server:
+## 🔐 Security First
+
+**⚠️ CRITICAL: Never commit API keys to Git!**
+
+Before starting development, please read [SECURITY.md](./SECURITY.md) for important security guidelines.
+
+## 🚀 Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/lij020218/mornigideal.git
+cd "a.ideal 2.0"
+```
+
+### 2. Set up environment variables
+
+```bash
+# Copy the example file
+cp .env.example .env.local
+
+# Edit .env.local and add your actual API keys
+# NEVER commit this file!
+```
+
+Required API keys:
+- OpenAI API Key (https://platform.openai.com/api-keys)
+- Google Gemini API Key (https://ai.google.dev/)
+- Supabase credentials (https://supabase.com/)
+- Google OAuth credentials (for Gmail integration)
+
+See `.env.example` for all required variables.
+
+### 3. Install dependencies
+
+```bash
+npm install
+```
+
+### 4. Run the development server
 
 ```bash
 npm run dev
