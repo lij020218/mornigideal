@@ -121,12 +121,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     const newGoal: CustomGoal = {
                         id: Date.now().toString(),
                         text: eventData.text,
+                        time: "morning",
                         startTime: eventData.startTime,
                         endTime: eventData.endTime || calculateEndTime(eventData.startTime, 1),
                         daysOfWeek: undefined,
                         specificDate: eventData.specificDate,
                         memo: eventData.location ? `장소: ${eventData.location}` : '',
-                        completed: false,
                         notificationEnabled: true
                     };
 
