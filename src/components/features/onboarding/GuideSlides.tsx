@@ -66,7 +66,7 @@ const itemVariants = {
     visible: {
         y: 0,
         opacity: 1,
-        transition: { type: "spring", stiffness: 300, damping: 24 }
+        transition: { type: "spring" as const, stiffness: 300, damping: 24 }
     },
     exit: { y: -20, opacity: 0 }
 };
@@ -77,7 +77,7 @@ const iconVariants = {
         scale: 1,
         opacity: 1,
         rotate: 0,
-        transition: { type: "spring", stiffness: 200, damping: 20, delay: 0.1 }
+        transition: { type: "spring" as const, stiffness: 200, damping: 20, delay: 0.1 }
     },
     exit: { scale: 0.8, opacity: 0 }
 };
