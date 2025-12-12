@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Check, Brain, Loader2, Briefcase, GraduationCap, Sparkles, Target, Zap } from "lucide-react";
+import { ArrowRight, Check, Brain, Loader2, Briefcase, GraduationCap, Sparkles, Target, Zap, FileText, TrendingUp, Mail, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { GuideSlides } from "./GuideSlides";
 
-type Step = "userType" | "major" | "field" | "goal" | "schedule" | "customGoals" | "quiz" | "analysis";
+type Step = "userType" | "major" | "field" | "goal" | "quiz" | "analysis" | "guide";
 type UserType = "worker" | "student" | null;
 
 interface QuizQuestion {
@@ -18,11 +19,6 @@ interface QuizQuestion {
     answer: number;
 }
 
-interface CustomGoal {
-    id: string;
-    text: string;
-    time: "morning" | "afternoon" | "evening";
-}
 
 export function OnboardingWizard() {
     const router = useRouter();
@@ -33,14 +29,7 @@ export function OnboardingWizard() {
         major: "",
         field: "",
         goal: "",
-        level: "",
-        schedule: {
-            wakeUp: "07:00",
-            workStart: "09:00",
-            workEnd: "18:00",
-            sleep: "23:00"
-        },
-        customGoals: [] as CustomGoal[]
+        level: ""
     });
     const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -69,10 +58,6 @@ export function OnboardingWizard() {
         } else if (step === "field") {
             setStep("goal");
         } else if (step === "goal") {
-            setStep("schedule");
-        } else if (step === "schedule") {
-            setStep("customGoals");
-        } else if (step === "customGoals") {
             setLoadingQuiz(true);
             try {
                 const response = await fetch("/api/generate-quiz", {
@@ -206,7 +191,7 @@ export function OnboardingWizard() {
         } catch (error) {
             console.error("Failed to analyze and generate curriculum", error);
         } finally {
-            setTimeout(() => router.push("/dashboard"), 2000);
+            setTimeout(() => setStep("guide"), 2000);
         }
     };
 
@@ -214,16 +199,14 @@ export function OnboardingWizard() {
         if (step === "major") return selection.major.length > 0;
         if (step === "field") return selection.field.length > 0;
         if (step === "goal") return selection.goal.length > 0;
-        if (step === "schedule") return true; // Always valid as it has defaults
-        if (step === "customGoals") return true; // Optional
         return false;
     };
 
     const getProgressSteps = () => {
         if (userType === "student") {
-            return ["userType", "major", "field", "goal", "schedule", "customGoals", "quiz"];
+            return ["userType", "major", "field", "goal", "quiz", "guide"];
         }
-        return ["userType", "field", "goal", "schedule", "customGoals", "quiz"];
+        return ["userType", "field", "goal", "quiz", "guide"];
     };
 
     const progressSteps = getProgressSteps();
@@ -425,184 +408,6 @@ export function OnboardingWizard() {
                     </motion.div>
                 )}
 
-                {step === "schedule" && (
-                    <motion.div
-                        key="schedule"
-                        custom={direction}
-                        variants={variants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    >
-                        <Card className="glass-card border-none">
-                            <CardHeader>
-                                <CardTitle className="text-3xl">하루 일과를 알려주세요</CardTitle>
-                                <CardDescription>당신의 라이프사이클에 맞춰 최적의 학습 시간을 추천해드립니다.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="grid grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-sm text-muted-foreground">기상 시간</label>
-                                    <Input
-                                        type="time"
-                                        value={selection.schedule.wakeUp}
-                                        onChange={(e) => setSelection({
-                                            ...selection,
-                                            schedule: { ...selection.schedule, wakeUp: e.target.value }
-                                        })}
-                                        className="text-lg p-4 h-14 bg-white/5 border-white/10"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-muted-foreground">취침 시간</label>
-                                    <Input
-                                        type="time"
-                                        value={selection.schedule.sleep}
-                                        onChange={(e) => setSelection({
-                                            ...selection,
-                                            schedule: { ...selection.schedule, sleep: e.target.value }
-                                        })}
-                                        className="text-lg p-4 h-14 bg-white/5 border-white/10"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-muted-foreground">업무/학업 시작</label>
-                                    <Input
-                                        type="time"
-                                        value={selection.schedule.workStart}
-                                        onChange={(e) => setSelection({
-                                            ...selection,
-                                            schedule: { ...selection.schedule, workStart: e.target.value }
-                                        })}
-                                        className="text-lg p-4 h-14 bg-white/5 border-white/10"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-muted-foreground">업무/학업 종료</label>
-                                    <Input
-                                        type="time"
-                                        value={selection.schedule.workEnd}
-                                        onChange={(e) => setSelection({
-                                            ...selection,
-                                            schedule: { ...selection.schedule, workEnd: e.target.value }
-                                        })}
-                                        className="text-lg p-4 h-14 bg-white/5 border-white/10"
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
-
-                {step === "customGoals" && (
-                    <motion.div
-                        key="customGoals"
-                        custom={direction}
-                        variants={variants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    >
-                        <Card className="glass-card border-none">
-                            <CardHeader>
-                                <CardTitle className="text-3xl">나만의 데일리 목표</CardTitle>
-                                <CardDescription>매일 지키고 싶은 습관이나 목표를 추가해보세요. (선택사항)</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="new-goal-input"
-                                        placeholder="예: 하루 1시간 운동하기, 물 2L 마시기"
-                                        className="text-lg p-4 h-14 bg-white/5 border-white/10 flex-1"
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                const input = e.currentTarget as HTMLInputElement;
-                                                if (input.value.trim()) {
-                                                    setSelection({
-                                                        ...selection,
-                                                        customGoals: [
-                                                            ...selection.customGoals,
-                                                            {
-                                                                id: Date.now().toString(),
-                                                                text: input.value.trim(),
-                                                                time: "morning" // Default
-                                                            }
-                                                        ]
-                                                    });
-                                                    input.value = "";
-                                                }
-                                            }
-                                        }}
-                                    />
-                                    <Button
-                                        className="h-14 px-6"
-                                        onClick={() => {
-                                            const input = document.getElementById("new-goal-input") as HTMLInputElement;
-                                            if (input.value.trim()) {
-                                                setSelection({
-                                                    ...selection,
-                                                    customGoals: [
-                                                        ...selection.customGoals,
-                                                        {
-                                                            id: Date.now().toString(),
-                                                            text: input.value.trim(),
-                                                            time: "morning" // Default
-                                                        }
-                                                    ]
-                                                });
-                                                input.value = "";
-                                            }
-                                        }}
-                                    >
-                                        추가
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {selection.customGoals.map((goal) => (
-                                        <motion.div
-                                            key={goal.id}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10"
-                                        >
-                                            <div className="flex-1 font-medium">{goal.text}</div>
-                                            <select
-                                                value={goal.time}
-                                                onChange={(e) => {
-                                                    const newGoals = selection.customGoals.map(g =>
-                                                        g.id === goal.id ? { ...g, time: e.target.value as any } : g
-                                                    );
-                                                    setSelection({ ...selection, customGoals: newGoals });
-                                                }}
-                                                className="bg-black/20 border-none rounded px-2 py-1 text-sm text-muted-foreground"
-                                            >
-                                                <option value="morning">아침</option>
-                                                <option value="afternoon">오후</option>
-                                                <option value="evening">저녁</option>
-                                            </select>
-                                            <button
-                                                onClick={() => {
-                                                    const newGoals = selection.customGoals.filter(g => g.id !== goal.id);
-                                                    setSelection({ ...selection, customGoals: newGoals });
-                                                }}
-                                                className="text-muted-foreground hover:text-red-400"
-                                            >
-                                                ×
-                                            </button>
-                                        </motion.div>
-                                    ))}
-                                    {selection.customGoals.length === 0 && (
-                                        <p className="text-center text-muted-foreground py-4">
-                                            아직 추가된 목표가 없습니다.
-                                        </p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
 
                 {step === "quiz" && quiz.length > 0 && (
                     <motion.div
@@ -728,9 +533,13 @@ export function OnboardingWizard() {
                         </motion.p>
                     </motion.div>
                 )}
+
+                {step === "guide" && (
+                    <GuideSlides onComplete={() => router.push("/dashboard")} />
+                )}
             </AnimatePresence>
 
-            {step !== "analysis" && step !== "quiz" && step !== "userType" && (
+            {step !== "analysis" && step !== "quiz" && step !== "userType" && step !== "guide" && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}

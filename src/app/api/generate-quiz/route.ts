@@ -25,6 +25,67 @@ const FINAL_MODEL = "gpt-5.1-2025-11-13";
 export const maxDuration = 60; // 60 seconds
 export const dynamic = 'force-dynamic';
 
+// Generate onboarding quiz to assess user's level
+async function generateOnboardingQuiz(userType: string, major: string, field: string, goal: string) {
+  try {
+    const context = userType === "대학생"
+      ? `${major} 전공 대학생, ${field} 분야 관심, 목표: ${goal}`
+      : `${field} 분야 ${userType}, 목표: ${goal}`;
+
+    console.log(`[ONBOARDING QUIZ] Context: ${context}`);
+
+    const response = await openai.chat.completions.create({
+      model: MINI_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "당신은 온보딩 퀴즈 전문가입니다. 사용자의 수준을 파악하기 위한 10문제의 객관식 퀴즈를 출제합니다."
+        },
+        {
+          role: "user",
+          content: `다음 정보를 기반으로 사용자의 수준(junior/mid/senior)을 파악하기 위한 10개의 객관식 문제를 출제하세요:
+
+${context}
+
+**요구사항**:
+- 10개의 문제 (각 4개 선택지)
+- 난이도: 3개는 기초, 4개는 중급, 3개는 고급
+- ${field} 분야의 핵심 개념 위주
+- 실무/학습 경험 파악 가능한 문제
+
+다음 JSON 형식으로 응답:
+{
+  "quiz": [
+    {
+      "question": "문제 내용",
+      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
+      "answer": 0
+    }
+  ]
+}
+
+**중요**: 정확히 10개의 문제를 포함해야 합니다.`
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 1.0,
+    });
+
+    const data = JSON.parse(response.choices[0].message.content || "{}");
+    const quiz = (data.quiz || []).slice(0, 10);
+
+    console.log(`[ONBOARDING QUIZ] Generated ${quiz.length} questions`);
+
+    return NextResponse.json({ quiz, success: true });
+  } catch (error: any) {
+    console.error("[ONBOARDING QUIZ ERROR]:", error);
+    return NextResponse.json(
+      { error: "Onboarding quiz generation failed", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -32,7 +93,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { pageAnalyses, type, materialId } = await request.json();
+    const body = await request.json();
+    const { pageAnalyses, type, materialId, userType, major, field, goal } = body;
+
+    // Check if this is an onboarding quiz request
+    if (userType || major || field || goal) {
+      console.log("[QUIZ] Generating onboarding quiz...");
+      return await generateOnboardingQuiz(userType, major, field, goal);
+    }
 
     if (!pageAnalyses || !Array.isArray(pageAnalyses)) {
       return NextResponse.json(

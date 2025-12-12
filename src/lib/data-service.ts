@@ -16,9 +16,10 @@ export const getCachedMaterials = cache(async (email: string) => {
 
     const { data: materials } = await supabase
         .from("materials")
-        .select("*")
+        .select("id, title, file_name, file_size, uploaded_at, created_at, type")
         .eq("user_id", email)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(20); // Limit to recent 20 materials for faster loading
 
     return materials || [];
 });
@@ -29,30 +30,50 @@ export const getCachedCurriculum = cache(async (userId: string) => {
 
     const { data: curriculums } = await supabase
         .from("user_curriculums")
-        .select("*")
+        .select("curriculum_data, created_at")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(1) // Only get the most recent curriculum
+        .single();
 
-    return curriculums || [];
+    return curriculums ? [curriculums] : [];
 });
 
 // Cache trend briefing fetching
 export const getCachedTrendBriefing = cache(async (email: string) => {
+    if (!email) return [];
+
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+    const { data, error } = await supabase
+        .from('trends_cache')
+        .select('trends')
+        .eq('email', email)
+        .eq('date', today)
+        .maybeSingle();
+
+    if (error || !data) return [];
+
+    return data.trends || [];
+});
+
+// Cache recommendations fetching
+export const getCachedRecommendations = cache(async (email: string) => {
     if (!email) return null;
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-    const { data } = await supabase
-        .from('trends_cache')
-        .select('trends, last_updated')
+    const { data, error } = await supabase
+        .from('recommendations_cache')
+        .select('recommendations, created_at')
         .eq('email', email)
         .eq('date', today)
-        .single();
+        .maybeSingle();
 
-    if (!data) return null;
+    if (error || !data) return null;
 
     return {
-        trends: data.trends || [],
-        generated_at: data.last_updated
+        recommendations: data.recommendations || [],
+        generated_at: data.created_at
     };
 });

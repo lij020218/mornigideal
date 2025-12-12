@@ -46,15 +46,16 @@ Write in Korean. Be practical and specific for Intermediate ${job}.`;
     return JSON.parse(text);
 }
 
-async function saveDetailCache(trendId: string, detail: any) {
+async function saveDetailCache(trendId: string, detail: any, userEmail: string) {
     const { error } = await supabase
-        .from('trend_details_cache')
+        .from('trend_details')
         .upsert({
+            email: userEmail,
             trend_id: trendId,
             detail_data: detail,
-            created_at: new Date().toISOString()
+            updated_at: new Date().toISOString()
         }, {
-            onConflict: 'trend_id'
+            onConflict: 'email,trend_id'
         });
 
     if (error) {
@@ -106,7 +107,7 @@ async function main() {
                     console.log(`[${index + 1}/${trends.length}] Generating detail for: ${trend.title}`);
 
                     const detail = await generateDetailedBriefing(trend, job);
-                    await saveDetailCache(trend.id, detail);
+                    await saveDetailCache(trend.id, detail, userEmail);
 
                     console.log(`[${index + 1}/${trends.length}] ✓ Cached detail for: ${trend.title}`);
 

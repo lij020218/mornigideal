@@ -28,10 +28,7 @@ export async function generateDailyBriefings() {
 
     console.log(`[DailyBriefing] Found ${users.length} users.`);
 
-    // 2. Fetch Trends (Shared for all users, but personalized filtering)
-    // We'll fetch the cached trends once
-    const trendCache = await getTrendsCache();
-    const allTrends = trendCache?.trends || [];
+    // 2. We'll fetch personalized trends for each user inside the loop
 
     // 3. Calculate Dates in KST
     const now = new Date();
@@ -84,19 +81,18 @@ export async function generateDailyBriefings() {
                 return false;
             });
 
-            // Format Trends for User
-            // Filter by interests or pick top 3
-            const relevantTrends = allTrends
-                .filter((t: any) => {
-                    if (interests.length === 0) return true; // No interest = all relevant
-                    return interests.some((i: string) =>
-                        t.title.includes(i) || t.category.includes(i) || t.summary.includes(i)
-                    );
-                })
-                .slice(0, 3);
+            // Fetch user-specific trends from trends_cache
+            const { data: userTrendCache } = await supabaseAdmin
+                .from('trends_cache')
+                .select('trends')
+                .eq('email', user.email)
+                .eq('date', dateStr)
+                .single();
 
-            // Fallback if no relevant trends
-            const finalTrends = relevantTrends.length > 0 ? relevantTrends : allTrends.slice(0, 3);
+            const userTrends = userTrendCache?.trends || [];
+
+            // Take top 3 trends (already personalized for this user)
+            const finalTrends = userTrends.slice(0, 3);
 
             // B. Generate Content with Gemini
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
@@ -110,18 +106,35 @@ export async function generateDailyBriefings() {
                - Note: If data is empty, it means they didn't record activity.
             
             2. TODAY'S SCHEDULE (${dateStr}):
-               - Events: ${JSON.stringify(todayEvents.map((e: any) => ({ time: e.startTime, text: e.text })))}
-               - WakeUp Time: ${userSchedule.wakeUp || "07:00"}
-            
-            3. TRENDS FOR YOU:
-               - Top Articles: ${JSON.stringify(finalTrends.map((t: any) => t.title))}
+               - Wake Up: ${userSchedule.wakeUp || "07:00"}
+               - Work Start: ${userSchedule.workStart || "09:00"}
+               - Work End: ${userSchedule.workEnd || "18:00"}
+               - Sleep: ${userSchedule.sleep || "23:00"}
+               - Custom Events: ${JSON.stringify(todayEvents.map((e: any) => ({ time: e.startTime, title: e.text })))}
+
+            3. TRENDS FOR YOU (${finalTrends.length} personalized articles):
+${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
+               - Title: ${t.title}
+               - Category: ${t.category || 'General'}
+               - Summary: ${t.summary || ''}
+               - Source: ${t.source || 'Unknown'}
+               - Why relevant: ${t.relevance || 'Curated for you'}`).join('\n\n')}
             
             TASK: Generate a JSON response with the following fields (in Korean):
             - greeting: Warm morning greeting emphasizing ${job} role.
             - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
             - yesterday_score: integer 0-100 (estimate based on activity).
-            - today_schedule_summary: 1 sentence summary of key events or "free day".
-            - trend_summary: Provide a DETAILED and COMPREHENSIVE summary of the top 3 trend articles. ***CRITICAL: Use line breaks (\n\n) to separate each article clearly.*** Start each article with a bullet point (•). For EACH article coverage: (1) Core topic, (2) Why it matters to ${job}, (3) Key insights.
+            - today_schedule_summary: Summarize today's full schedule including wake up, work hours, and any custom events. If no special events, mention it's a regular work day.
+            - trend_summary: Provide a DETAILED summary of ALL ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
+              1. Use double line breaks (\\n\\n) to separate each article clearly
+              2. Start EACH article with a bullet point (•)
+              3. For EACH article, include:
+                 - Article title and category
+                 - Core topic and key facts (2-3 sentences)
+                 - Why it matters specifically to a ${job}
+                 - Actionable insights or takeaways
+              4. Make it comprehensive - each article should be 3-4 sentences minimum
+              5. Use the Summary and Relevance information provided above
             - cheering_message: A short energetic quote or message.
 
             OUTPUT JSON:

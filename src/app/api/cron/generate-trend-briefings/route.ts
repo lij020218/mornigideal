@@ -273,7 +273,7 @@ Select now.`;
                 const detailPromises = trends.map(async (trend: any) => {
                     try {
                         const detail = await generateDetailedBriefing(trend, job);
-                        await saveDetailCache(trend.id, detail);
+                        await saveDetailCache(trend.id, detail, userEmail);
                         console.log(`[CRON] Cached detail for: ${trend.title}`);
                         return { success: true };
                     } catch (error) {

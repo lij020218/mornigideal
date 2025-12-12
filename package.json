@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "generate:trend-details": "npx tsx scripts/generate-current-trend-details.ts"
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.4",

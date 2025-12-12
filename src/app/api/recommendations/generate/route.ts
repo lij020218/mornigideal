@@ -2,10 +2,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const youtube = google.youtube({
   version: "v3",
-  auth: process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
+  auth: process.env.GEMINI_API_KEY // YouTube Data API v3 can use Gemini API key
 });
 
 export async function POST(request: Request) {

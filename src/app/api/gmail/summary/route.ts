@@ -129,6 +129,12 @@ For each important email, provide:
 - Why it's important for a ${userJob}
 - Suggested action (if any)
 - Priority level (high/medium/low)
+- **CALENDAR EVENT DETECTION**: If the email contains meeting/event information, extract:
+  - Event title
+  - Date (YYYY-MM-DD format)
+  - Start time (HH:MM format)
+  - End time (HH:MM format, optional)
+  - Location (optional)
 
 OUTPUT JSON:
 {
@@ -139,7 +145,14 @@ OUTPUT JSON:
       "importance": "왜 중요한지 (한국어, 1문장)",
       "action": "제안 조치 (한국어)",
       "priority": "high|medium|low",
-      "category": "업무|회의|요청|정보|기타"
+      "category": "업무|회의|요청|정보|기타",
+      "calendarEvent": {
+        "title": "event title in Korean",
+        "date": "YYYY-MM-DD",
+        "startTime": "HH:MM",
+        "endTime": "HH:MM",
+        "location": "location if mentioned"
+      } // Only include if email contains meeting/event info, otherwise null
     }
   ],
   "skippedCount": <number of unimportant emails>

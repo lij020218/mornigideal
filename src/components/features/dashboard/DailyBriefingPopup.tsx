@@ -218,33 +218,67 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                 </div>
             )
         }] : []),
-        // Step 3: Today's Schedule & Trends
+        // Step 3: Today's Schedule
         {
-            title: "Today's Focus",
+            title: "Today's Schedule",
             content: (
-                <div className="space-y-4">
-                    <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/5 backdrop-blur-md p-5 rounded-2xl border border-blue-500/20 relative overflow-hidden group hover:border-blue-500/40 transition-colors">
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full blur-2xl -mr-10 -mt-10" />
-                        <h4 className="flex items-center gap-2 font-bold mb-3 text-sm text-blue-400 uppercase tracking-wider relative z-10">
-                            <Calendar className="w-4 h-4" /> 오늘 주요 일정
-                        </h4>
-                        <p className="text-sm text-gray-200 leading-relaxed font-light relative z-10">
-                            {data.today_schedule_summary}
-                        </p>
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 mb-4">
+                            <Calendar className="w-10 h-10 text-blue-400" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-2">오늘의 일정</h3>
+                        <p className="text-sm text-muted-foreground">Today's Schedule</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/5 backdrop-blur-md p-5 rounded-2xl border border-purple-500/20 max-h-[220px] overflow-y-auto custom-scrollbar relative group hover:border-purple-500/40 transition-colors">
-                        <h4 className="flex items-center gap-2 font-bold mb-3 text-sm text-purple-400 sticky top-0 bg-transparent uppercase tracking-wider z-10">
-                            <TrendingUp className="w-4 h-4" /> 트렌드 브리핑
-                        </h4>
-                        <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-line font-light">
-                            {data.trend_summary}
-                        </p>
+                    <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/5 backdrop-blur-md p-6 rounded-2xl border border-blue-500/20 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
+                        <div className="relative z-10">
+                            <p className="text-base text-gray-100 leading-relaxed font-light whitespace-pre-line">
+                                {data.today_schedule_summary}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="w-3 h-3" />
+                        <span>효율적인 하루를 위한 계획</span>
                     </div>
                 </div>
             )
         },
-        // Step 4: Closing / Cheering
+        // Step 4: Trend Briefing
+        {
+            title: "Trend Briefing",
+            content: (
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 mb-4">
+                            <TrendingUp className="w-10 h-10 text-purple-400" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-2">트렌드 브리핑</h3>
+                        <p className="text-sm text-muted-foreground">Personalized Trend Analysis</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/5 backdrop-blur-md p-6 rounded-2xl border border-purple-500/20 max-h-[300px] overflow-y-auto custom-scrollbar relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
+                        <div className="relative z-10">
+                            <p className="text-sm text-gray-100 leading-relaxed whitespace-pre-line font-light">
+                                {data.trend_summary}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <TrendingUp className="w-3 h-3" />
+                        <span>당신을 위한 맞춤 인사이트</span>
+                    </div>
+                </div>
+            )
+        },
+        // Step 5: Closing / Cheering
         {
             title: "Cheering For You",
             content: (

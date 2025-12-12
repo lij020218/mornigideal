@@ -109,6 +109,44 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         if (isOpen) {
             if (initialSchedule) setSchedule(initialSchedule);
             if (initialCustomGoals) setCustomGoals(initialCustomGoals);
+
+            // Check for pending calendar event from email
+            const pendingEvent = localStorage.getItem('pendingCalendarEvent');
+            if (pendingEvent) {
+                try {
+                    const eventData = JSON.parse(pendingEvent);
+                    console.log('[SchedulePopup] Adding pending calendar event:', eventData);
+
+                    // Add to customGoals
+                    const newGoal: CustomGoal = {
+                        id: Date.now().toString(),
+                        text: eventData.text,
+                        startTime: eventData.startTime,
+                        endTime: eventData.endTime || calculateEndTime(eventData.startTime, 1),
+                        daysOfWeek: undefined,
+                        specificDate: eventData.specificDate,
+                        memo: eventData.location ? `장소: ${eventData.location}` : '',
+                        completed: false,
+                        notificationEnabled: true
+                    };
+
+                    setCustomGoals(prev => [...prev, newGoal]);
+
+                    // Switch to daily view for that date
+                    if (eventData.specificDate) {
+                        const date = new Date(eventData.specificDate);
+                        setSelectedDate(date);
+                        setCurrentMonth(date);
+                        setViewMode('daily-detail');
+                    }
+
+                    // Clear pending event
+                    localStorage.removeItem('pendingCalendarEvent');
+                } catch (error) {
+                    console.error('[SchedulePopup] Error parsing pending calendar event:', error);
+                    localStorage.removeItem('pendingCalendarEvent');
+                }
+            }
         }
     }, [isOpen, initialSchedule, initialCustomGoals]);
 

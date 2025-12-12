@@ -166,10 +166,13 @@ export async function getDetailCache(trendId: string): Promise<any | null> {
 
 /**
  * Save detail analysis to cache
+ * @param trendId - Unique ID of the trend
+ * @param detail - Detail data to cache
+ * @param emailOverride - Optional email for CRON jobs where session is unavailable
  */
-export async function saveDetailCache(trendId: string, detail: any): Promise<void> {
+export async function saveDetailCache(trendId: string, detail: any, emailOverride?: string): Promise<void> {
     try {
-        const userEmail = await getUserEmail();
+        const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
             console.warn('[NewsCache] No user email, skipping detail cache save');
             return;

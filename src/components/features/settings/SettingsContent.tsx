@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Bell, Trash2, Save, RefreshCw, Sun, Dumbbell, Target, Mail, Check, X } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, Save, RefreshCw, Sun, Dumbbell, Target, Mail, Check, X, User, AlertTriangle, Eye, EyeOff, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession, signIn } from "next-auth/react";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 interface SettingsContentProps {
     username: string;
@@ -25,7 +25,27 @@ interface UserProfile {
 interface UserSettings {
     wakeUpTime: string;
     exerciseEnabled: boolean;
+    location: string;
 }
+
+const locationOptions = [
+    { id: 'Seoul,KR', label: '서울' },
+    { id: 'Busan,KR', label: '부산' },
+    { id: 'Incheon,KR', label: '인천' },
+    { id: 'Daegu,KR', label: '대구' },
+    { id: 'Daejeon,KR', label: '대전' },
+    { id: 'Gwangju,KR', label: '광주' },
+    { id: 'Ulsan,KR', label: '울산' },
+    { id: 'Sejong,KR', label: '세종' },
+    { id: 'Suwon,KR', label: '수원' },
+    { id: 'Yongin,KR', label: '용인' },
+    { id: 'Goyang,KR', label: '고양' },
+    { id: 'Seongnam,KR', label: '성남' },
+    { id: 'Jeonju,KR', label: '전주' },
+    { id: 'Cheongju,KR', label: '청주' },
+    { id: 'Changwon,KR', label: '창원' },
+    { id: 'Jeju,KR', label: '제주' },
+];
 
 const goalOptions = [
     { id: "expert", label: "업계 최고의 전문가 되기" },
@@ -49,11 +69,19 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
     const [userSettings, setUserSettings] = useState<UserSettings>({
         wakeUpTime: "07:00",
         exerciseEnabled: false,
+        location: "Seoul,KR",
     });
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [gmailLinking, setGmailLinking] = useState(false);
     const [gmailLinked, setGmailLinked] = useState<string | null>(null);
+
+    // Account deletion states
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deletePassword, setDeletePassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteStep, setDeleteStep] = useState<"password" | "confirm">("password");
 
     // Check if Google account is connected (for Google login users)
     const isGoogleConnected = session?.user?.email?.includes('@gmail.com') || false;
@@ -194,6 +222,37 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
         alert("캐시가 삭제되었습니다.");
     };
 
+    const handleDeleteAccount = async () => {
+        if (!deletePassword) {
+            alert("비밀번호를 입력해주세요.");
+            return;
+        }
+
+        setDeleting(true);
+        try {
+            const response = await fetch("/api/user/account", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password: deletePassword }),
+            });
+
+            if (response.ok) {
+                // Clear all local storage
+                localStorage.clear();
+                // Sign out and redirect to home
+                await signOut({ callbackUrl: "/landing" });
+            } else {
+                const data = await response.json();
+                alert(data.error || "계정 삭제에 실패했습니다.");
+            }
+        } catch (error) {
+            console.error("Account deletion error:", error);
+            alert("계정 삭제 중 오류가 발생했습니다.");
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     return (
         <div className="p-6 max-w-2xl mx-auto space-y-8">
             {/* Header */}
@@ -233,11 +292,10 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                 <button
                                     key={goal.id}
                                     onClick={() => setProfile({ ...profile, goal: goal.id })}
-                                    className={`w-full p-3 rounded-lg text-left transition-colors ${
-                                        profile.goal === goal.id
-                                            ? "bg-primary/20 border border-primary"
-                                            : "bg-white/5 border border-transparent hover:bg-white/10"
-                                    }`}
+                                    className={`w-full p-3 rounded-lg text-left transition-colors ${profile.goal === goal.id
+                                        ? "bg-primary/20 border border-primary"
+                                        : "bg-white/5 border border-transparent hover:bg-white/10"
+                                        }`}
                                 >
                                     {goal.label}
                                 </button>
@@ -256,11 +314,10 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                 <button
                                     key={level.id}
                                     onClick={() => setProfile({ ...profile, level: level.id })}
-                                    className={`flex-1 p-3 rounded-lg text-center transition-colors ${
-                                        profile.level === level.id
-                                            ? "bg-primary/20 border border-primary"
-                                            : "bg-white/5 border border-transparent hover:bg-white/10"
-                                    }`}
+                                    className={`flex-1 p-3 rounded-lg text-center transition-colors ${profile.level === level.id
+                                        ? "bg-primary/20 border border-primary"
+                                        : "bg-white/5 border border-transparent hover:bg-white/10"
+                                        }`}
                                 >
                                     {level.label}
                                 </button>
@@ -455,6 +512,28 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                             }
                         />
                     </div>
+
+                    {/* Location Selection */}
+                    <div className="space-y-2 pt-4 border-t border-white/10">
+                        <Label className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-blue-500" />
+                            날씨 지역 설정
+                        </Label>
+                        <select
+                            value={userSettings.location}
+                            onChange={(e) => setUserSettings({ ...userSettings, location: e.target.value })}
+                            className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                            {locationOptions.map((loc) => (
+                                <option key={loc.id} value={loc.id} className="bg-gray-900">
+                                    {loc.label}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-sm text-muted-foreground">
+                            선택한 지역의 날씨 정보가 대시보드에 표시됩니다
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -481,6 +560,149 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                         <RefreshCw className="w-4 h-4 mr-2" />
                         온보딩 다시 시작
                     </Button>
+                </CardContent>
+            </Card>
+
+            {/* Account Settings */}
+            <Card className="glass-card border-none">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                        <User className="w-5 h-5 text-primary" />
+                        계정 설정
+                    </CardTitle>
+                    <CardDescription>계정 정보 및 탈퇴를 관리합니다</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {/* Account Info */}
+                    <div className="p-4 bg-white/5 rounded-lg space-y-2">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">이메일</span>
+                            <span className="text-sm font-medium">{email}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">이름</span>
+                            <span className="text-sm font-medium">{username}</span>
+                        </div>
+                    </div>
+
+                    {/* Delete Account Section */}
+                    {!showDeleteConfirm ? (
+                        <Button
+                            variant="outline"
+                            className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/30"
+                            onClick={() => setShowDeleteConfirm(true)}
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            계정 삭제
+                        </Button>
+                    ) : (
+                        <div className="space-y-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                            {deleteStep === "password" ? (
+                                <>
+                                    <div className="flex items-start gap-3">
+                                        <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-medium text-red-300">계정 삭제 확인</p>
+                                            <p className="text-sm text-red-200/70 mt-1">
+                                                본인 확인을 위해 비밀번호를 입력해주세요.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="deletePassword" className="text-red-200">비밀번호</Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="deletePassword"
+                                                type={showPassword ? "text" : "password"}
+                                                value={deletePassword}
+                                                onChange={(e) => setDeletePassword(e.target.value)}
+                                                placeholder="비밀번호를 입력하세요"
+                                                className="pr-10 bg-red-500/10 border-red-500/30"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setShowDeleteConfirm(false);
+                                                setDeletePassword("");
+                                                setDeleteStep("password");
+                                            }}
+                                        >
+                                            취소
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            className="flex-1 bg-red-600 hover:bg-red-700"
+                                            onClick={() => setDeleteStep("confirm")}
+                                            disabled={!deletePassword}
+                                        >
+                                            다음
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-start gap-3">
+                                        <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-medium text-red-300">⚠️ 최종 경고</p>
+                                            <p className="text-sm text-red-200/70 mt-1">
+                                                계정을 삭제하면 <strong className="text-red-300">모든 데이터</strong>가 영구적으로 삭제됩니다.
+                                            </p>
+                                            <ul className="text-sm text-red-200/70 mt-2 space-y-1 list-disc list-inside">
+                                                <li>업로드한 자료 및 분석 결과</li>
+                                                <li>학습 커리큘럼 및 진행 상황</li>
+                                                <li>일정 및 목표 달성 기록</li>
+                                                <li>Gmail 연동 정보</li>
+                                            </ul>
+                                            <p className="text-sm text-red-200 mt-3 font-medium">
+                                                정말 계정을 삭제하시겠습니까?
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setShowDeleteConfirm(false);
+                                                setDeletePassword("");
+                                                setDeleteStep("password");
+                                            }}
+                                            disabled={deleting}
+                                        >
+                                            아니오
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            className="flex-1 bg-red-600 hover:bg-red-700"
+                                            onClick={handleDeleteAccount}
+                                            disabled={deleting}
+                                        >
+                                            {deleting ? (
+                                                <>
+                                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                                    삭제 중...
+                                                </>
+                                            ) : (
+                                                "예, 삭제합니다"
+                                            )}
+                                        </Button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

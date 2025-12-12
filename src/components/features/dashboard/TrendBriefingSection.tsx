@@ -215,34 +215,41 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             {/* Context Cards Section */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Goal Card */}
-                <div className="md:col-span-1 bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-xl p-4 flex flex-col justify-between group hover:border-white/20 transition-all">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                        <Target className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium uppercase tracking-wider">My Goal</span>
+                <div className="md:col-span-1 glass-card border-none p-5 flex flex-col justify-between group transition-all duration-300 hover:bg-white/10 hover:shadow-lg hover:shadow-primary/10">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-3">
+                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                            <Target className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-wider">My Goal</span>
                     </div>
                     <div>
-                        <p className="font-semibold text-white group-hover:text-primary transition-colors line-clamp-2">
+                        <p className="font-semibold text-lg text-white group-hover:text-primary transition-colors line-clamp-2">
                             {goal || "목표를 설정해주세요"}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">{job}</p>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+                            {job}
+                        </div>
                     </div>
                 </div>
 
                 {/* Interests Card */}
-                <div className="md:col-span-2 bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-3">
+                <div className="md:col-span-2 glass-card border-none p-5 flex flex-col justify-between relative overflow-hidden group hover:bg-white/10 transition-colors">
+                    <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2 text-muted-foreground">
-                            <Sparkles className="w-4 h-4 text-purple-400" />
-                            <span className="text-xs font-medium uppercase tracking-wider">Interest Areas</span>
+                            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
+                                <Sparkles className="w-4 h-4" />
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-wider">Interest Areas</span>
                         </div>
                         <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs hover:bg-white/10">
-                                    <Plus className="w-3 h-3 mr-1" />
+                                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs bg-white/5 hover:bg-white/20 border border-white/5 rounded-full">
+                                    <Plus className="w-3.5 h-3.5 mr-1.5" />
                                     추가
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-60 p-3 bg-[#1a1a1a] border-white/10 text-white">
+                            <PopoverContent className="w-60 p-3 bg-[#1a1a1a] border-white/10 text-white shadow-xl">
                                 <form onSubmit={handleAddInterestSubmit} className="space-y-2">
                                     <h4 className="font-medium text-sm">관심 분야 추가</h4>
                                     <div className="flex gap-2">
@@ -267,13 +274,13 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             interests.map((interest, idx) => (
                                 <span
                                     key={idx}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 transition-all group"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/15 hover:border-white/20 hover:text-white transition-all group/tag cursor-default"
                                 >
                                     {interest}
                                     {onRemoveInterest && (
                                         <button
                                             onClick={() => onRemoveInterest(interest)}
-                                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+                                            className="opacity-0 group-hover/tag:opacity-100 text-muted-foreground hover:text-red-400 transition-all -mr-0.5"
                                         >
                                             <X className="w-3 h-3" />
                                         </button>
@@ -281,7 +288,12 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                 </span>
                             ))
                         ) : (
-                            <span className="text-sm text-muted-foreground italic">관심 분야를 추가하여 맞춤형 뉴스를 받아보세요</span>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground opacity-60">
+                                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-dashed border-white/20">
+                                    <Plus className="w-4 h-4" />
+                                </div>
+                                <span className="italic">관심 분야를 추가하여 맞춤형 뉴스를 받아보세요</span>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -300,14 +312,15 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             key={briefing.id}
                             layoutId={briefing.id}
                             onClick={() => onSelectBriefing(briefing)}
-                            className="group cursor-pointer relative flex flex-col justify-between h-full bg-gradient-to-br from-white/5 to-white/0 border border-white/10 hover:border-white/20 rounded-xl p-5 transition-all hover:shadow-lg hover:shadow-purple-500/5 hover:-translate-y-1"
+                            whileHover={{ y: -4 }}
+                            className="group cursor-pointer relative flex flex-col justify-between h-full glass-card border-none p-5 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 hover:bg-white/10"
                         >
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 <div className="flex justify-between items-start">
-                                    <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider", getCategoryColor(briefing.category))}>
+                                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm", getCategoryColor(briefing.category))}>
                                         {getPrimaryCategory(briefing.category)}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground font-mono">{briefing.time}</span>
+                                    <span className="text-[10px] text-muted-foreground font-mono bg-black/20 px-2 py-0.5 rounded-full">{briefing.time}</span>
                                 </div>
                                 <h3 className="font-bold text-base md:text-lg leading-snug group-hover:text-primary transition-colors line-clamp-2">
                                     {briefing.title}
@@ -317,12 +330,15 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                 </p>
                             </div>
 
-                            <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                            <div className="mt-5 pt-4 border-t border-white/5 flex justify-between items-center">
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400/80 shadow-[0_0_5px_rgba(96,165,250,0.5)]" />
                                     {briefing.source}
                                 </div>
-                                <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors opacity-0 group-hover:opacity-100" />
+                                <div className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
+                                    <span>Read More</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </div>
                             </div>
                         </motion.div>
                     ))}
