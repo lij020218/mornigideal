@@ -29,6 +29,7 @@ interface InsightCard {
 interface SmartInsightsWidgetProps {
     customGoals?: any[];
     currentTime: Date | null;
+    initialHabitInsights?: any;
 }
 
 const locationLabels: Record<string, string> = {
@@ -50,7 +51,7 @@ const locationLabels: Record<string, string> = {
     'Jeju,KR': '제주',
 };
 
-export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsightsWidgetProps) {
+export function SmartInsightsWidget({ customGoals = [], currentTime, initialHabitInsights }: SmartInsightsWidgetProps) {
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [location, setLocation] = useState<string>('Seoul,KR');
     const [habitAnalysis, setHabitAnalysis] = useState<{
@@ -58,7 +59,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
         suggestion: string;
         emoji: string;
         category: string;
-    } | null>(null);
+    } | null>(initialHabitInsights || null);
     const [insights, setInsights] = useState<InsightCard[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -93,8 +94,11 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
         fetchWeather();
     }, [location]);
 
-    // Fetch AI habit analysis
+    // Fetch AI habit analysis (only if not provided via props)
     useEffect(() => {
+        // Skip fetching if we already have initial data
+        if (initialHabitInsights) return;
+
         const fetchHabitAnalysis = async () => {
             try {
                 const res = await fetch('/api/habit-analysis');
@@ -107,7 +111,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
             }
         };
         fetchHabitAnalysis();
-    }, []);
+    }, [initialHabitInsights]);
 
     // Generate insights
     useEffect(() => {
@@ -148,9 +152,9 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: getWeatherIcon(),
                 title: weatherTitle,
                 message: weatherMessage,
-                color: weather.condition === 'rain' ? 'from-blue-500/20 to-cyan-500/20' :
-                    weather.condition === 'snow' ? 'from-slate-400/20 to-blue-300/20' :
-                        'from-amber-500/20 to-orange-500/20',
+                color: weather.condition === 'rain' ? 'bg-blue-50 border-blue-200' :
+                    weather.condition === 'snow' ? 'bg-slate-50 border-slate-200' :
+                        'bg-orange-50 border-orange-200',
             });
         }
 
@@ -160,10 +164,10 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
 
         if (habitAnalysis) {
             const categoryColors: Record<string, string> = {
-                exercise: 'from-green-500/20 to-emerald-500/20',
-                productivity: 'from-blue-500/20 to-indigo-500/20',
-                balance: 'from-purple-500/20 to-pink-500/20',
-                consistency: 'from-orange-500/20 to-amber-500/20',
+                exercise: 'bg-green-50 border-green-200',
+                productivity: 'bg-blue-50 border-blue-200',
+                balance: 'bg-purple-50 border-purple-200',
+                consistency: 'bg-orange-50 border-orange-200',
             };
 
             cards.push({
@@ -172,7 +176,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <TrendingUp className="w-5 h-5" />,
                 title: `${habitAnalysis.emoji} ${habitAnalysis.insight}`,
                 message: habitAnalysis.suggestion,
-                color: categoryColors[habitAnalysis.category] || 'from-green-500/20 to-emerald-500/20',
+                color: categoryColors[habitAnalysis.category] || 'bg-green-50 border-green-200',
             });
         }
 
@@ -186,7 +190,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <Sun className="w-5 h-5" />,
                 title: '☀️ 좋은 아침!',
                 message: `오늘 예정된 일정 ${todayGoals.length}개. 힘찬 하루 되세요!`,
-                color: 'from-yellow-500/20 to-orange-500/20',
+                color: 'bg-yellow-50 border-yellow-200',
             };
         } else if (hour >= 9 && hour < 11) {
             proactiveCard = {
@@ -195,7 +199,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <TrendingUp className="w-5 h-5" />,
                 title: '📋 오전 업무 시간',
                 message: `오늘 일정 ${todayGoals.length}개. 집중해서 진행해보세요!`,
-                color: 'from-blue-500/20 to-cyan-500/20',
+                color: 'bg-blue-50 border-blue-200',
             };
         } else if (hour >= 11 && hour < 13) {
             proactiveCard = {
@@ -204,7 +208,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <Calendar className="w-5 h-5" />,
                 title: '🍽️ 점심 시간',
                 message: '에너지 충전하고 오후도 화이팅!',
-                color: 'from-green-500/20 to-teal-500/20',
+                color: 'bg-green-50 border-green-200',
             };
         } else if (hour >= 13 && hour < 17) {
             proactiveCard = {
@@ -213,7 +217,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <TrendingUp className="w-5 h-5" />,
                 title: '⚡ 오후 집중 시간',
                 message: '오후도 순조롭게 진행 중이시네요!',
-                color: 'from-orange-500/20 to-amber-500/20',
+                color: 'bg-orange-50 border-orange-200',
             };
         } else if (hour >= 17 && hour < 19) {
             const completions = getTodayCompletions();
@@ -224,7 +228,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <Flame className="w-5 h-5" />,
                 title: '🌆 하루 마무리',
                 message: `오늘 ${completedCount}개 완료! 수고하셨어요 👏`,
-                color: 'from-purple-500/20 to-pink-500/20',
+                color: 'bg-purple-50 border-purple-200',
             };
         } else if (hour >= 19 && hour < 21) {
             proactiveCard = {
@@ -233,7 +237,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <Calendar className="w-5 h-5" />,
                 title: '🌃 저녁 시간',
                 message: '오늘 하루도 수고 많으셨습니다!',
-                color: 'from-indigo-500/20 to-blue-500/20',
+                color: 'bg-indigo-50 border-indigo-200',
             };
         } else if (hour >= 21 || hour < 6) {
             proactiveCard = {
@@ -242,7 +246,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                 icon: <Wind className="w-5 h-5" />,
                 title: '🌙 편안한 밤',
                 message: '내일을 위해 푹 쉬세요. 좋은 꿈 꾸세요!',
-                color: 'from-indigo-500/20 to-purple-500/20',
+                color: 'bg-indigo-50 border-indigo-200',
             };
         }
 
@@ -279,7 +283,7 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                             onClick={() => setCurrentIndex(idx)}
                             className={cn(
                                 "w-3 h-3 rounded-full transition-all",
-                                idx === currentIndex ? "bg-primary h-6" : "bg-white/30 hover:bg-white/50"
+                                idx === currentIndex ? "bg-primary h-6" : "bg-black/10 hover:bg-black/20"
                             )}
                         />
                     ))}
@@ -295,17 +299,17 @@ export function SmartInsightsWidget({ customGoals = [], currentTime }: SmartInsi
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.3 }}
                     className={cn(
-                        "flex items-center gap-5 px-8 py-6 rounded-2xl border border-white/10 min-w-[420px]",
-                        "bg-gradient-to-r shadow-xl",
+                        "flex items-center gap-5 px-8 py-6 rounded-2xl border min-w-[420px]",
+                        "shadow-sm bg-white",
                         currentCard.color
                     )}
                 >
-                    <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center text-white shrink-0">
+                    <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-foreground shrink-0 shadow-sm border border-black/5">
                         <span className="scale-150">{currentCard.icon}</span>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <span className="text-lg font-bold text-white">{currentCard.title}</span>
-                        <span className="text-xl text-white/90 font-medium">{currentCard.message}</span>
+                        <span className="text-lg font-bold text-foreground">{currentCard.title}</span>
+                        <span className="text-xl text-muted-foreground font-medium">{currentCard.message}</span>
                     </div>
                 </motion.div>
             </AnimatePresence>

@@ -91,8 +91,8 @@ export function Header() {
 
     return (
         <>
-            <header className="fixed top-0 left-0 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 bg-background/80 backdrop-blur-md border-b border-white/5">
-                <Link href="/dashboard" className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-500">
+            <header className="fixed top-0 left-0 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 glass rounded-none border-t-0 border-x-0">
+                <Link href="/dashboard" className="text-lg font-bold text-foreground">
                     A.ideal
                 </Link>
 
@@ -102,7 +102,7 @@ export function Header() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="rounded-full hover:bg-white/10 transition-colors relative"
+                            className="rounded-full hover:bg-black/5 transition-colors relative text-foreground"
                             onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
                         >
                             <Bell className="w-5 h-5" />
@@ -125,7 +125,7 @@ export function Header() {
                     <div className="relative">
                         <button
                             onClick={() => setShowProfileMenu(!showProfileMenu)}
-                            className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-purple-600 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all shadow-lg shadow-primary/20"
+                            className="w-9 h-9 rounded-full bg-foreground cursor-pointer hover:ring-2 hover:ring-foreground/30 transition-all shadow-md"
                         />
                         <AnimatePresence>
                             {showProfileMenu && (
@@ -138,16 +138,16 @@ export function Header() {
                                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                        className="absolute right-0 top-12 w-56 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 py-2 backdrop-blur-xl"
+                                        className="absolute right-0 top-12 w-56 bg-white border border-border rounded-xl shadow-lg z-50 py-2"
                                     >
-                                        <div className="px-4 py-3 border-b border-white/5 mb-2">
-                                            <p className="text-sm font-medium text-white">{username}</p>
+                                        <div className="px-4 py-3 border-b border-border mb-2">
+                                            <p className="text-sm font-medium text-foreground">{username}</p>
                                             <p className="text-xs text-muted-foreground truncate">{userProfile?.job || "User"}</p>
                                         </div>
 
                                         <button
                                             onClick={handleBriefingClick}
-                                            className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-yellow-400 hover:text-yellow-300 flex items-center gap-3"
+                                            className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground flex items-center gap-3"
                                         >
                                             <Sparkles className="w-4 h-4" />
                                             일일 브리핑
@@ -155,7 +155,7 @@ export function Header() {
 
                                         <Link
                                             href="/mypage"
-                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
+                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground"
                                             onClick={() => setShowProfileMenu(false)}
                                         >
                                             <User className="w-4 h-4" />
@@ -163,14 +163,14 @@ export function Header() {
                                         </Link>
                                         <Link
                                             href="/settings"
-                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors text-gray-300 hover:text-white"
+                                            className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground"
                                             onClick={() => setShowProfileMenu(false)}
                                         >
                                             <Settings className="w-4 h-4" />
                                             설정
                                         </Link>
 
-                                        <div className="border-t border-white/5 my-2" />
+                                        <div className="border-t border-border my-2" />
 
                                         <button
                                             onClick={async () => {
@@ -179,7 +179,7 @@ export function Header() {
                                                 // Sign out using NextAuth client-side signOut
                                                 await signOut({ callbackUrl: '/login' });
                                             }}
-                                            className="w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition-colors text-red-400 hover:text-red-300 flex items-center gap-3"
+                                            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors text-red-600 flex items-center gap-3"
                                         >
                                             <LogOut className="w-4 h-4" />
                                             로그아웃

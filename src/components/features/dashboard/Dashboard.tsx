@@ -28,6 +28,7 @@ interface DashboardProps {
     initialMaterials: any[];
     initialCurriculum: CurriculumItem[];
     initialTrendBriefing: any;
+    initialHabitInsights?: any;
 }
 
 interface UserProfile {
@@ -68,7 +69,8 @@ export function Dashboard({
     initialProfile,
     initialMaterials,
     initialCurriculum,
-    initialTrendBriefing
+    initialTrendBriefing,
+    initialHabitInsights
 }: DashboardProps) {
 
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -664,7 +666,7 @@ export function Dashboard({
             {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-4">
                 <div>
-                    <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 pb-1">
+                    <h1 className="text-4xl font-bold text-foreground pb-1">
                         {currentTime ? (
                             <>Good {currentTime.getHours() < 12 ? "Morning" : currentTime.getHours() < 18 ? "Afternoon" : "Evening"}, {username}</>
                         ) : (
@@ -674,10 +676,12 @@ export function Dashboard({
                     <p className="text-muted-foreground mt-1 min-h-[1.5em]">
                         {currentTime ? (() => {
                             const hour = currentTime.getHours();
-                            if (hour >= 5 && hour < 12) return "상쾌한 아침입니다. 오늘 하루도 힘차게 시작해보세요! ☀️";
-                            if (hour >= 12 && hour < 18) return "나른한 오후, 잠시 휴식을 취하며 재충전해보세요. ☕";
-                            if (hour >= 18 && hour < 22) return "오늘 하루도 수고 많으셨습니다. 편안한 저녁 보내세요. 🌙";
-                            return "늦은 밤입니다. 내일을 위해 푹 쉬세요. 😴";
+                            if (hour >= 5 && hour < 12) return "상쾌한 아침입니다. 오늘의 목표를 향해 힘차게 시작해보세요! ☀️";
+                            if (hour >= 12 && hour < 15) return "오후의 집중력이 최고조입니다. 중요한 작업을 완료해보세요! 🚀";
+                            if (hour >= 15 && hour < 18) return "오늘의 목표 달성까지 조금 남았어요. 마무리 스퍼트! 💪";
+                            if (hour >= 18 && hour < 20) return "저녁 시간, 오늘의 마지막 성장 시간입니다. 끝까지 파이팅! 🔥";
+                            if (hour >= 20 && hour < 22) return "오늘 하루도 수고 많으셨습니다. 성과를 정리하며 마무리하세요. 🌙";
+                            return "늦은 밤입니다. 충분한 수면이 내일의 성장을 만듭니다. 😴";
                         })() : ""}
                     </p>
                 </div>
@@ -686,6 +690,7 @@ export function Dashboard({
                     <SmartInsightsWidget
                         customGoals={userProfile?.customGoals}
                         currentTime={currentTime}
+                        initialHabitInsights={initialHabitInsights}
                     />
                 </div>
             </header>
@@ -698,7 +703,7 @@ export function Dashboard({
                         "px-6 py-3 font-medium text-sm transition-all relative",
                         activeTab === 'today'
                             ? "text-primary"
-                            : "text-muted-foreground hover:text-white"
+                            : "text-muted-foreground hover:text-foreground"
                     )}
                 >
                     <div className="flex items-center gap-2">
@@ -719,7 +724,7 @@ export function Dashboard({
                         "px-6 py-3 font-medium text-sm transition-all relative",
                         activeTab === 'growth'
                             ? "text-primary"
-                            : "text-muted-foreground hover:text-white"
+                            : "text-muted-foreground hover:text-foreground"
                     )}
                 >
                     <div className="flex items-center gap-2">

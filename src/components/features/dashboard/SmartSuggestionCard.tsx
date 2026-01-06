@@ -35,11 +35,11 @@ const iconMap: Record<string, any> = {
 };
 
 const typeColors = {
-    activity: "from-blue-500/20 to-cyan-500/20 border-blue-500/30",
-    health: "from-green-500/20 to-emerald-500/20 border-green-500/30",
-    event: "from-purple-500/20 to-pink-500/30 border-purple-500/30",
-    learning: "from-orange-500/20 to-yellow-500/20 border-orange-500/30",
-    productivity: "from-red-500/20 to-rose-500/20 border-red-500/30",
+    activity: "bg-blue-50 border-blue-200",
+    health: "bg-green-50 border-green-200",
+    event: "bg-purple-50 border-purple-200",
+    learning: "bg-orange-50 border-orange-200",
+    productivity: "bg-red-50 border-red-200",
 };
 
 const typeGradients = {
@@ -109,14 +109,14 @@ export function SmartSuggestionCard() {
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-yellow-500" />
-                    <h2 className="text-lg font-bold text-white">AI 어시스턴트의 제안</h2>
+                    <h2 className="text-lg font-bold text-foreground">AI 어시스턴트의 제안</h2>
                 </div>
                 <Button
                     variant="ghost"
                     size="icon"
                     onClick={fetchSuggestions}
                     disabled={loading}
-                    className="h-8 w-8 rounded-full hover:bg-white/10"
+                    className="h-8 w-8 rounded-full hover:bg-black/5"
                 >
                     <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
                 </Button>
@@ -141,7 +141,6 @@ export function SmartSuggestionCard() {
                         >
                             <Card className={cn(
                                 "relative overflow-hidden border backdrop-blur-sm",
-                                "bg-gradient-to-br",
                                 typeColors[suggestion.type]
                             )}>
                                 {/* Animated gradient blob */}
@@ -155,28 +154,33 @@ export function SmartSuggestionCard() {
                                     <div className="flex items-start gap-4">
                                         {/* Icon */}
                                         <div className={cn(
-                                            "shrink-0 w-12 h-12 rounded-xl flex items-center justify-center",
-                                            "bg-gradient-to-br shadow-lg",
-                                            typeGradients[suggestion.type]
+                                            "shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-sm",
+                                            "bg-white"
                                         )}>
-                                            <Icon className="w-6 h-6 text-white" />
+                                            <Icon className={cn("w-6 h-6",
+                                                suggestion.type === 'activity' && "text-blue-500",
+                                                suggestion.type === 'health' && "text-green-500",
+                                                suggestion.type === 'event' && "text-purple-500",
+                                                suggestion.type === 'learning' && "text-orange-500",
+                                                suggestion.type === 'productivity' && "text-red-500"
+                                            )} />
                                         </div>
 
                                         {/* Content */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-start justify-between gap-2 mb-2">
-                                                <h3 className="font-semibold text-white leading-tight">
+                                                <h3 className="font-semibold text-foreground leading-tight">
                                                     {suggestion.title}
                                                 </h3>
                                                 <button
                                                     onClick={() => handleDismiss(suggestion.id)}
-                                                    className="shrink-0 w-6 h-6 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
+                                                    className="shrink-0 w-6 h-6 rounded-full hover:bg-black/5 flex items-center justify-center transition-colors"
                                                 >
-                                                    <X className="w-4 h-4 text-white/60 hover:text-white" />
+                                                    <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                                                 </button>
                                             </div>
 
-                                            <p className="text-sm text-gray-300 leading-relaxed mb-3">
+                                            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
                                                 {suggestion.message}
                                             </p>
 
@@ -199,7 +203,7 @@ export function SmartSuggestionCard() {
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className="h-8 text-xs bg-white/5 border-white/20 hover:bg-white/10"
+                                                        className="h-8 text-xs bg-white border-black/10 hover:bg-black/5"
                                                     >
                                                         {suggestion.actionText}
                                                     </Button>

@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { supabase } from '@/lib/supabase';
 import OpenAI from 'openai';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 21600; // Cache for 6 hours
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -24,6 +24,24 @@ export async function GET() {
         }
 
         const email = session.user.email;
+
+        // Check cache first (6 hour cache)
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const { data: cachedData, error: cacheError } = await supabase
+            .from('habit_insights_cache')
+            .select('insights, created_at')
+            .eq('email', email)
+            .eq('date', today)
+            .maybeSingle();
+
+        // If cached data exists and is less than 6 hours old, return it
+        if (cachedData && !cacheError) {
+            const cacheAge = Date.now() - new Date(cachedData.created_at).getTime();
+            const SIX_HOURS = 6 * 60 * 60 * 1000;
+            if (cacheAge < SIX_HOURS) {
+                return NextResponse.json(cachedData.insights);
+            }
+        }
 
         // Get user profile for context
         const { data: user } = await supabase
@@ -46,7 +64,7 @@ export async function GET() {
 
         // Analyze schedule patterns
         const now = new Date();
-        const today = now.toISOString().split('T')[0];
+        const todayISO = now.toISOString().split('T')[0];
         const dayOfWeek = now.getDay();
 
         // Get schedules for today and past 7 days
@@ -132,6 +150,19 @@ export async function GET() {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const result: SchedulePattern = JSON.parse(jsonMatch[0]);
+
+                // Save to cache
+                await supabase
+                    .from('habit_insights_cache')
+                    .upsert({
+                        email,
+                        date: today,
+                        insights: result,
+                        created_at: new Date().toISOString()
+                    }, {
+                        onConflict: 'email,date'
+                    });
+
                 return NextResponse.json(result);
             }
         } catch (e) {
@@ -170,6 +201,18 @@ export async function GET() {
                 category: 'productivity'
             };
         }
+
+        // Save fallback result to cache
+        await supabase
+            .from('habit_insights_cache')
+            .upsert({
+                email,
+                date: today,
+                insights: fallbackResult,
+                created_at: new Date().toISOString()
+            }, {
+                onConflict: 'email,date'
+            });
 
         return NextResponse.json(fallbackResult);
 

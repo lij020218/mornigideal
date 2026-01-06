@@ -1,12 +1,12 @@
 import { Dashboard } from "@/components/features/dashboard/Dashboard";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { getCachedUser, getCachedMaterials, getCachedCurriculum, getCachedTrendBriefing, getCachedRecommendations } from "@/lib/data-service";
+import { getCachedUser, getCachedMaterials, getCachedCurriculum, getCachedTrendBriefing, getCachedRecommendations, getCachedHabitInsights } from "@/lib/data-service";
 import { Suspense } from "react";
 import { FloatingAIAssistant } from "@/components/ui/FloatingAIAssistant";
 
-// Mark page as dynamic to enable streaming
-export const dynamic = 'force-dynamic';
+// Enable static optimization with revalidation
+export const revalidate = 60; // Revalidate every 60 seconds
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -17,24 +17,24 @@ export default async function DashboardPage() {
     const username = session?.user?.username || session?.user?.name || "사용자";
     const email = session.user.email;
 
-    // Fetch critical data first (user profile is needed for everything)
+    // Fetch only critical user data immediately
     const user = await getCachedUser();
 
-    // Start all other fetches in parallel without awaiting
+    // All other data fetches - don't await, let them load in parallel
     const materialsPromise = getCachedMaterials(email);
     const curriculumPromise = user ? getCachedCurriculum(user.id) : Promise.resolve([]);
     const trendBriefingPromise = getCachedTrendBriefing(email);
     const recommendationsPromise = getCachedRecommendations(email);
+    const habitInsightsPromise = getCachedHabitInsights(email);
 
-    // Await only the essential data needed for initial render
-    const [materials, curriculum, recommendations] = await Promise.all([
+    // Resolve all data in parallel
+    const [materials, curriculum, trendBriefing, recommendations, habitInsights] = await Promise.all([
         materialsPromise,
         curriculumPromise,
-        recommendationsPromise
+        trendBriefingPromise,
+        recommendationsPromise,
+        habitInsightsPromise
     ]);
-
-    // Trend briefing can load later without blocking
-    const trendBriefing = await trendBriefingPromise;
 
     return (
         <div className="min-h-screen bg-background relative">
@@ -46,6 +46,7 @@ export default async function DashboardPage() {
                 initialMaterials={materials}
                 initialCurriculum={curriculum as any}
                 initialTrendBriefing={trendBriefing}
+                initialHabitInsights={habitInsights}
             />
             {/* Floating AI Assistant with suggestions on dashboard */}
             <FloatingAIAssistant

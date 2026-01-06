@@ -179,13 +179,13 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
     const getStatusColor = (status: NotificationItem['status']) => {
         switch (status) {
             case 'completed':
-                return 'bg-green-500/10 border-green-500/30 text-green-400';
+                return 'bg-green-50 border-green-200 text-green-600';
             case 'notDone':
-                return 'bg-red-500/10 border-red-500/30 text-red-400';
+                return 'bg-red-50 border-red-200 text-red-600';
             case 'missed':
-                return 'bg-orange-500/10 border-orange-500/30 text-orange-400';
+                return 'bg-orange-50 border-orange-200 text-orange-600';
             default:
-                return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
+                return 'bg-blue-50 border-blue-200 text-blue-600';
         }
     };
 
@@ -204,16 +204,16 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
     const getGoalColor = (color?: string) => {
         const colors: Record<string, string> = {
-            yellow: 'text-yellow-400',
-            blue: 'text-blue-400',
-            purple: 'text-purple-400',
-            green: 'text-green-400',
-            red: 'text-red-400',
-            orange: 'text-orange-400',
-            pink: 'text-pink-400',
-            amber: 'text-amber-400',
-            cyan: 'text-cyan-400',
-            indigo: 'text-indigo-400',
+            yellow: 'text-yellow-600',
+            blue: 'text-blue-600',
+            purple: 'text-purple-600',
+            green: 'text-green-600',
+            red: 'text-red-600',
+            orange: 'text-orange-600',
+            pink: 'text-pink-600',
+            amber: 'text-amber-600',
+            cyan: 'text-cyan-600',
+            indigo: 'text-indigo-600',
         };
         return colors[color || 'primary'] || 'text-primary';
     };
@@ -233,10 +233,10 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="absolute right-0 top-14 w-[min(calc(100vw-2rem),380px)] sm:w-96 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden max-h-[70vh] sm:max-h-[600px] flex flex-col"
+                        className="absolute right-0 top-14 w-[min(calc(100vw-2rem),380px)] sm:w-96 bg-background/95 border border-border rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden max-h-[70vh] sm:max-h-[600px] flex flex-col"
                     >
                         {/* Header */}
-                        <div className="p-3 sm:p-4 border-b border-white/10 bg-gradient-to-r from-primary/5 to-transparent shrink-0">
+                        <div className="p-3 sm:p-4 border-b border-border bg-muted/30 shrink-0">
                             <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
                                 <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                                 <h3 className="font-bold text-base sm:text-lg">오늘의 알림</h3>
@@ -247,12 +247,12 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                     <span className="text-muted-foreground">{getTodayDateString()}</span>
                                 </div>
                                 {pendingCount > 0 && (
-                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold text-[10px] sm:text-xs">
+                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-semibold text-[10px] sm:text-xs">
                                         {pendingCount}개 대기중
                                     </span>
                                 )}
                                 {missedCount > 0 && (
-                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-semibold text-[10px] sm:text-xs">
+                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 font-semibold text-[10px] sm:text-xs">
                                         {missedCount}개 놓침
                                     </span>
                                 )}
@@ -283,7 +283,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                         >
                                             <button
                                                 onClick={() => handleDismissNotification(notification.id)}
-                                                className="absolute top-2 right-2 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-white"
+                                                className="absolute top-2 right-2 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                             </button>
@@ -307,10 +307,10 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                                 </div>
                                                 <span className={cn(
                                                     "text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full font-semibold shrink-0",
-                                                    notification.status === 'completed' && "bg-green-500/20 text-green-400",
-                                                    notification.status === 'notDone' && "bg-red-500/20 text-red-400",
-                                                    notification.status === 'missed' && "bg-orange-500/20 text-orange-400",
-                                                    notification.status === 'pending' && "bg-blue-500/20 text-blue-400"
+                                                    notification.status === 'completed' && "bg-green-100 text-green-600",
+                                                    notification.status === 'notDone' && "bg-red-100 text-red-600",
+                                                    notification.status === 'missed' && "bg-orange-100 text-orange-600",
+                                                    notification.status === 'pending' && "bg-blue-100 text-blue-600"
                                                 )}>
                                                     {getStatusLabel(notification.status)}
                                                 </span>
@@ -318,11 +318,11 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                                             {/* Action buttons for pending/missed items */}
                                             {(notification.status === 'pending' || notification.status === 'missed') && (
-                                                <div className="flex gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
+                                                <div className="flex gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50">
                                                     <Button
                                                         size="sm"
                                                         onClick={() => handleMarkComplete(notification.id, true)}
-                                                        className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 h-8 sm:h-9 text-xs sm:text-sm"
+                                                        className="flex-1 bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 h-8 sm:h-9 text-xs sm:text-sm"
                                                     >
                                                         <CheckCircle2 className="w-3 h-3 mr-1" />
                                                         완료
@@ -331,7 +331,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => handleMarkComplete(notification.id, false)}
-                                                        className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30 h-8 sm:h-9 text-xs sm:text-sm"
+                                                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border-red-200 h-8 sm:h-9 text-xs sm:text-sm"
                                                     >
                                                         <XCircle className="w-3 h-3 mr-1" />
                                                         {notification.status === 'missed' ? '놓침' : '못함'}
@@ -341,15 +341,15 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                                             {/* Show completion icon for completed/notDone items */}
                                             {notification.status === 'completed' && (
-                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
-                                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
-                                                    <span className="text-xs text-green-400">잘하셨습니다!</span>
+                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50">
+                                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                                                    <span className="text-xs text-green-600">잘하셨습니다!</span>
                                                 </div>
                                             )}
                                             {notification.status === 'notDone' && (
-                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10">
-                                                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
-                                                    <span className="text-xs text-red-400">다음엔 꼭 해보세요</span>
+                                                <div className="flex items-center gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-border/50">
+                                                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
+                                                    <span className="text-xs text-red-600">다음엔 꼭 해보세요</span>
                                                 </div>
                                             )}
                                         </motion.div>
@@ -360,22 +360,22 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
 
                         {/* Footer Stats - Always visible */}
                         {allTodayGoals.length > 0 && (
-                            <div className="p-3 sm:p-4 border-t border-white/10 bg-white/5 shrink-0">
+                            <div className="p-3 sm:p-4 border-t border-border bg-muted/30 shrink-0">
                                 <div className="grid grid-cols-3 gap-2 text-center">
                                     <div>
-                                        <div className="text-lg sm:text-xl font-bold text-green-400">
+                                        <div className="text-lg sm:text-xl font-bold text-green-600">
                                             {allTodayGoals.filter(n => n.status === 'completed').length}
                                         </div>
                                         <div className="text-[10px] sm:text-xs text-muted-foreground">완료</div>
                                     </div>
                                     <div>
-                                        <div className="text-lg sm:text-xl font-bold text-red-400">
+                                        <div className="text-lg sm:text-xl font-bold text-red-600">
                                             {allTodayGoals.filter(n => n.status === 'notDone').length}
                                         </div>
                                         <div className="text-[10px] sm:text-xs text-muted-foreground">미완료</div>
                                     </div>
                                     <div>
-                                        <div className="text-lg sm:text-xl font-bold text-blue-400">
+                                        <div className="text-lg sm:text-xl font-bold text-blue-600">
                                             {allTodayGoals.filter(n => n.status === 'pending').length}
                                         </div>
                                         <div className="text-[10px] sm:text-xs text-muted-foreground">남음</div>
@@ -389,15 +389,15 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                                 width: 6px;
                             }
                             .custom-scrollbar::-webkit-scrollbar-track {
-                                background: rgba(255, 255, 255, 0.05);
+                                background: rgba(0, 0, 0, 0.05);
                                 border-radius: 3px;
                             }
                             .custom-scrollbar::-webkit-scrollbar-thumb {
-                                background: rgba(255, 255, 255, 0.2);
+                                background: rgba(0, 0, 0, 0.1);
                                 border-radius: 3px;
                             }
                             .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                                background: rgba(255, 255, 255, 0.3);
+                                background: rgba(0, 0, 0, 0.2);
                             }
                         `}</style>
                     </motion.div>

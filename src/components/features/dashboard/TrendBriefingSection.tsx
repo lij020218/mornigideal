@@ -171,14 +171,14 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const getCategoryColor = (category: string) => {
         const primaryCat = getPrimaryCategory(category);
         const colors: Record<string, string> = {
-            "AI": "bg-purple-500/20 text-purple-300 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.2)]",
-            "Business": "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
-            "Tech": "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]",
-            "Finance": "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]",
-            "Strategy": "bg-rose-500/20 text-rose-300 border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.2)]",
-            "Innovation": "bg-cyan-500/20 text-cyan-300 border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]",
+            "AI": "bg-purple-100 text-purple-700 border-purple-200",
+            "Business": "bg-blue-100 text-blue-700 border-blue-200",
+            "Tech": "bg-emerald-100 text-emerald-700 border-emerald-200",
+            "Finance": "bg-amber-100 text-amber-700 border-amber-200",
+            "Strategy": "bg-rose-100 text-rose-700 border-rose-200",
+            "Innovation": "bg-cyan-100 text-cyan-700 border-cyan-200",
         };
-        return colors[primaryCat] || "bg-gray-500/20 text-gray-300 border-gray-500/30";
+        return colors[primaryCat] || "bg-gray-100 text-gray-700 border-gray-200";
     };
 
     return (
@@ -202,7 +202,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                     <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs md:text-sm px-3 border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all"
+                        className="text-xs md:text-sm px-3 border-border hover:bg-muted transition-all"
                         onClick={handleRefresh}
                         disabled={refreshing}
                     >
@@ -215,7 +215,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             {/* Context Cards Section */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Goal Card */}
-                <div className="md:col-span-1 glass-card border-none p-5 flex flex-col justify-between group transition-all duration-300 hover:bg-white/10 hover:shadow-lg hover:shadow-primary/10">
+                <div className="md:col-span-1 bg-card border border-border rounded-xl p-5 flex flex-col justify-between group transition-all duration-300 hover:shadow-md">
                     <div className="flex items-center gap-2 text-muted-foreground mb-3">
                         <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
                             <Target className="w-4 h-4" />
@@ -223,7 +223,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                         <span className="text-xs font-bold uppercase tracking-wider">My Goal</span>
                     </div>
                     <div>
-                        <p className="font-semibold text-lg text-white group-hover:text-primary transition-colors line-clamp-2">
+                        <p className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-2">
                             {goal || "목표를 설정해주세요"}
                         </p>
                         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -234,30 +234,30 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                 </div>
 
                 {/* Interests Card */}
-                <div className="md:col-span-2 glass-card border-none p-5 flex flex-col justify-between relative overflow-hidden group hover:bg-white/10 transition-colors">
+                <div className="md:col-span-2 bg-card border border-border rounded-xl p-5 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2 text-muted-foreground">
-                            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
+                            <div className="p-1.5 rounded-lg bg-purple-100 text-purple-600">
                                 <Sparkles className="w-4 h-4" />
                             </div>
                             <span className="text-xs font-bold uppercase tracking-wider">Interest Areas</span>
                         </div>
                         <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs bg-white/5 hover:bg-white/20 border border-white/5 rounded-full">
+                                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs bg-muted hover:bg-muted/80 border border-border rounded-full">
                                     <Plus className="w-3.5 h-3.5 mr-1.5" />
                                     추가
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-60 p-3 bg-[#1a1a1a] border-white/10 text-white shadow-xl">
+                            <PopoverContent className="w-60 p-3 bg-white border-border shadow-lg">
                                 <form onSubmit={handleAddInterestSubmit} className="space-y-2">
-                                    <h4 className="font-medium text-sm">관심 분야 추가</h4>
+                                    <h4 className="font-medium text-sm text-foreground">관심 분야 추가</h4>
                                     <div className="flex gap-2">
                                         <Input
                                             value={newInterest}
                                             onChange={(e) => setNewInterest(e.target.value)}
                                             placeholder="예: 화장품, AI, 마케팅"
-                                            className="h-8 text-sm bg-white/5 border-white/10"
+                                            className="h-8 text-sm bg-muted border-border"
                                             autoFocus
                                         />
                                         <Button type="submit" size="sm" className="h-8 px-3">
@@ -274,13 +274,13 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             interests.map((interest, idx) => (
                                 <span
                                     key={idx}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/15 hover:border-white/20 hover:text-white transition-all group/tag cursor-default"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted border border-border text-foreground hover:bg-muted/80 transition-all group/tag cursor-default"
                                 >
                                     {interest}
                                     {onRemoveInterest && (
                                         <button
                                             onClick={() => onRemoveInterest(interest)}
-                                            className="opacity-0 group-hover/tag:opacity-100 text-muted-foreground hover:text-red-400 transition-all -mr-0.5"
+                                            className="opacity-0 group-hover/tag:opacity-100 text-muted-foreground hover:text-red-500 transition-all -mr-0.5"
                                         >
                                             <X className="w-3 h-3" />
                                         </button>
@@ -289,7 +289,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             ))
                         ) : (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground opacity-60">
-                                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-dashed border-white/20">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center border border-dashed border-border">
                                     <Plus className="w-4 h-4" />
                                 </div>
                                 <span className="italic">관심 분야를 추가하여 맞춤형 뉴스를 받아보세요</span>
@@ -302,7 +302,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-48 rounded-xl bg-white/5 animate-pulse border border-white/5" />
+                        <div key={i} className="h-48 rounded-xl bg-muted animate-pulse border border-border" />
                     ))}
                 </div>
             ) : (
@@ -313,16 +313,16 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             layoutId={briefing.id}
                             onClick={() => onSelectBriefing(briefing)}
                             whileHover={{ y: -4 }}
-                            className="group cursor-pointer relative flex flex-col justify-between h-full glass-card border-none p-5 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 hover:bg-white/10"
+                            className="group cursor-pointer relative flex flex-col justify-between h-full bg-card border border-border rounded-xl p-5 transition-all duration-300 hover:shadow-lg"
                         >
                             <div className="space-y-4">
                                 <div className="flex justify-between items-start">
-                                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm", getCategoryColor(briefing.category))}>
+                                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border", getCategoryColor(briefing.category))}>
                                         {getPrimaryCategory(briefing.category)}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground font-mono bg-black/20 px-2 py-0.5 rounded-full">{briefing.time}</span>
+                                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-full">{briefing.time}</span>
                                 </div>
-                                <h3 className="font-bold text-base md:text-lg leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                                <h3 className="font-bold text-base md:text-lg leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
                                     {briefing.title}
                                 </h3>
                                 <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
@@ -330,9 +330,9 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                 </p>
                             </div>
 
-                            <div className="mt-5 pt-4 border-t border-white/5 flex justify-between items-center">
+                            <div className="mt-5 pt-4 border-t border-border flex justify-between items-center">
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400/80 shadow-[0_0_5px_rgba(96,165,250,0.5)]" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                     {briefing.source}
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">

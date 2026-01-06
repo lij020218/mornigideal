@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2 } from "lucide-react";
+import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -36,18 +36,33 @@ interface SchedulePopupProps {
 }
 
 const PRESET_ACTIVITIES = [
+    // 🌅 생활 리듬 - 노란색/남색 계열
     { id: 'wake', label: '기상', icon: Sun, color: 'yellow', needsDuration: false, isCore: true },
-    { id: 'sleep', label: '취침', icon: Moon, color: 'blue', needsDuration: false, isCore: true },
+    { id: 'sleep', label: '취침', icon: Moon, color: 'indigo', needsDuration: false, isCore: true },
+
+    // 💼 업무/학업 - 보라색 계열
     { id: 'work-start', label: '업무/수업 시작', icon: Briefcase, color: 'purple', needsDuration: false, isCore: true },
-    { id: 'work-end', label: '업무/수업 종료', icon: Briefcase, color: 'green', needsDuration: false, isCore: true },
+    { id: 'work-end', label: '업무/수업 종료', icon: Briefcase, color: 'violet', needsDuration: false, isCore: true },
+
+    // 🍽️ 식사 - 주황색 계열
     { id: 'breakfast', label: '아침 식사', icon: Coffee, color: 'orange', needsDuration: true, isCore: false },
-    { id: 'lunch', label: '점심 식사', icon: Coffee, color: 'amber', needsDuration: true, isCore: false },
-    { id: 'dinner', label: '저녁 식사', icon: Coffee, color: 'red', needsDuration: true, isCore: false },
+    { id: 'lunch', label: '점심 식사', icon: Coffee, color: 'orange', needsDuration: true, isCore: false },
+    { id: 'dinner', label: '저녁 식사', icon: Coffee, color: 'amber', needsDuration: true, isCore: false },
+
+    // 💪 운동/건강 - 분홍색/빨간색 계열
     { id: 'exercise', label: '운동', icon: Dumbbell, color: 'pink', needsDuration: true, isCore: false },
+    { id: 'hospital', label: '병원', icon: Plus, color: 'rose', needsDuration: true, isCore: false },
+
+    // 📚 자기계발 - 청록색 계열
     { id: 'reading', label: '독서', icon: BookOpen, color: 'cyan', needsDuration: true, isCore: false },
-    { id: 'study', label: '자기계발', icon: Target, color: 'indigo', needsDuration: true, isCore: false },
-    { id: 'hospital', label: '병원', icon: Heart, color: 'red', needsDuration: true, isCore: false },
-    { id: 'leisure', label: '휴식/여가', icon: Gamepad2, color: 'green', needsDuration: true, isCore: false },
+    { id: 'study', label: '자기계발', icon: Target, color: 'teal', needsDuration: true, isCore: false },
+
+    // 🎮 휴식/여가 - 녹색 계열
+    { id: 'leisure', label: '휴식/여가', icon: Gamepad2, color: 'emerald', needsDuration: true, isCore: false },
+
+    // 👥 사회활동 - 하늘색/빨간색 계열
+    { id: 'meeting', label: '미팅', icon: Users, color: 'sky', needsDuration: true, isCore: false },
+    { id: 'date', label: '데이트', icon: Heart, color: 'red', needsDuration: true, isCore: false },
 ];
 
 const DAYS_OF_WEEK = [
@@ -508,17 +523,22 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
     const getColorClasses = (color: string, isStart: boolean = true) => {
         const colors: Record<string, string> = {
-            yellow: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-            blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-            purple: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-            green: 'bg-green-500/20 text-green-400 border-green-500/30',
-            red: 'bg-red-500/20 text-red-400 border-red-500/30',
-            orange: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-            pink: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-            amber: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-            cyan: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-            indigo: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-            primary: 'bg-primary/20 text-primary border-primary/30',
+            yellow: 'bg-yellow-50 text-yellow-900 border-yellow-200',
+            blue: 'bg-blue-50 text-blue-900 border-blue-200',
+            purple: 'bg-purple-50 text-purple-900 border-purple-200',
+            violet: 'bg-violet-50 text-violet-900 border-violet-200',
+            green: 'bg-green-50 text-green-900 border-green-200',
+            emerald: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+            red: 'bg-red-50 text-red-900 border-red-200',
+            rose: 'bg-rose-50 text-rose-900 border-rose-200',
+            orange: 'bg-orange-50 text-orange-900 border-orange-200',
+            pink: 'bg-pink-50 text-pink-900 border-pink-200',
+            amber: 'bg-amber-50 text-amber-900 border-amber-200',
+            cyan: 'bg-cyan-50 text-cyan-900 border-cyan-200',
+            sky: 'bg-sky-50 text-sky-900 border-sky-200',
+            teal: 'bg-teal-50 text-teal-900 border-teal-200',
+            indigo: 'bg-indigo-50 text-indigo-900 border-indigo-200',
+            primary: 'bg-primary/10 text-foreground border-primary/20',
         };
 
         const baseClass = colors[color] || colors.primary;
@@ -557,15 +577,15 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                     <div className="w-full space-y-3">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-300">메모</label>
+                            <label className="text-sm font-medium text-foreground">메모</label>
                             <textarea
                                 value={activityMemo}
                                 onChange={(e) => setActivityMemo(e.target.value)}
                                 onBlur={handleMemoUpdate}
                                 placeholder="이 일정에 대한 메모를 입력하세요..."
-                                className="w-full min-h-[80px] px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                                className="w-full min-h-[80px] px-3 py-2 bg-white border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
                             />
-                            <p className="text-xs text-gray-500">메모는 자동으로 저장됩니다</p>
+                            <p className="text-xs text-muted-foreground">메모는 자동으로 저장됩니다</p>
                         </div>
                     </div>
 
@@ -647,7 +667,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 placeholder="일정 이름 입력..."
                                 value={customActivityText}
                                 onChange={(e) => setCustomActivityText(e.target.value)}
-                                className="bg-white/5 border-white/10"
+                                className="bg-white border-border"
                                 autoFocus
                             />
 
@@ -827,24 +847,24 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-1/2 top-[5%] -translate-x-1/2 w-full max-w-5xl bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 h-[85vh] overflow-hidden flex flex-col"
+                        className="fixed left-1/2 top-[5%] -translate-x-1/2 w-full max-w-5xl bg-white border border-border rounded-2xl shadow-2xl z-50 h-[85vh] overflow-hidden flex flex-col"
                     >
                         {/* Header */}
-                        <div className="flex justify-between items-center p-6 border-b border-white/10 shrink-0 bg-[#1a1a1a]">
+                        <div className="flex justify-between items-center p-6 border-b border-border shrink-0 bg-white">
                             <div className="flex items-center gap-4">
                                 <h2 className="text-xl font-bold flex items-center gap-2">
                                     <Clock className="w-5 h-5 text-primary" /> 일정 관리
                                 </h2>
 
                                 {/* View Switcher */}
-                                <div className="flex bg-white/5 rounded-lg p-1 border border-white/10">
+                                <div className="flex bg-muted rounded-lg p-1 border border-border">
                                     <button
                                         onClick={() => setViewMode('calendar-full')}
                                         className={cn(
                                             "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
                                             (viewMode === 'calendar-full' || viewMode === 'daily-detail')
                                                 ? "bg-primary text-white shadow-lg"
-                                                : "text-muted-foreground hover:text-white"
+                                                : "text-muted-foreground hover:text-foreground"
                                         )}
                                     >
                                         캘린더
@@ -860,14 +880,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
                                             viewMode === 'weekly'
                                                 ? "bg-primary text-white shadow-lg"
-                                                : "text-muted-foreground hover:text-white"
+                                                : "text-muted-foreground hover:text-foreground"
                                         )}
                                     >
                                         주간 시간표
                                     </button>
                                 </div>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-white/10">
+                            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-muted">
                                 <X className="w-5 h-5" />
                             </Button>
                         </div>
@@ -899,7 +919,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     {/* Days Header */}
                                     <div className="grid grid-cols-7 gap-4 mb-2 text-center">
                                         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                                            <div key={d} className={cn("text-sm font-medium text-muted-foreground py-2", i === 0 && "text-red-400", i === 6 && "text-blue-400")}>
+                                            <div key={d} className={cn("text-sm font-medium text-muted-foreground py-2", i === 0 && "text-red-500", i === 6 && "text-blue-500")}>
                                                 {d}
                                             </div>
                                         ))}
@@ -930,14 +950,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                     <motion.button
                                                         key={day}
                                                         style={{ aspectRatio: '1/1' }}
-                                                        whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.08)" }}
+                                                        whileHover={{ scale: 1.02 }}
                                                         whileTap={{ scale: 0.98 }}
                                                         onClick={() => handleDateSelect(day)}
                                                         className={cn(
-                                                            "relative rounded-2xl border p-3 flex flex-col items-start justify-between transition-all group backdrop-blur-sm",
+                                                            "relative rounded-2xl border p-3 flex flex-col items-start justify-between transition-all group",
                                                             isToday
-                                                                ? "bg-primary/20 border-primary text-white shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)]"
-                                                                : "bg-white/5 border-white/5 hover:border-primary/30 text-gray-300"
+                                                                ? "bg-primary/10 border-primary text-foreground shadow-sm"
+                                                                : "bg-white border-border hover:border-primary/50 hover:shadow-sm text-foreground"
                                                         )}
                                                     >
                                                         <div className="flex justify-between items-start w-full">
@@ -955,11 +975,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                                         {hasGoals && (
                                                             <div className="flex gap-1.5 mt-auto">
-                                                                <div className="w-2 h-2 rounded-full bg-gradient-to-br from-orange-400 to-red-500 shadow-sm" />
+                                                                <div className="w-2 h-2 rounded-full bg-primary shadow-sm" />
                                                             </div>
                                                         )}
 
-                                                        <div className="absolute inset-0 rounded-2xl ring-1 ring-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                                                        <div className="absolute inset-0 rounded-2xl ring-1 ring-primary/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                                                     </motion.button>
                                                 );
                                             })}
@@ -972,7 +992,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                             {viewMode === 'daily-detail' && (
                                 <div className="flex h-full">
                                     {/* Sidebar: Mini Calendar & Back Button */}
-                                    <div className="w-64 border-r border-white/10 p-4 bg-[#1f1f1f] flex flex-col">
+                                    <div className="w-64 border-r border-border p-4 bg-muted flex flex-col">
                                         <Button
                                             variant="outline"
                                             onClick={handleBackToCalendar}
@@ -982,7 +1002,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                         </Button>
 
                                         <div className="mb-4">
-                                            <h3 className="text-lg font-bold text-white">
+                                            <h3 className="text-lg font-bold text-foreground">
                                                 {selectedDate?.getMonth()! + 1}월 {selectedDate?.getDate()}일
                                             </h3>
                                             <p className="text-sm text-muted-foreground">
@@ -991,7 +1011,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                         </div>
 
                                         {/* Mini Calendar for context (optional, or just reuse prev/next day nav) */}
-                                        <div className="mt-auto pt-4 border-t border-white/10">
+                                        <div className="mt-auto pt-4 border-t border-border">
                                             <p className="text-xs text-muted-foreground text-center">
                                                 시간대를 클릭하여<br />일정을 추가하거나 수정하세요.
                                             </p>
@@ -999,7 +1019,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     </div>
 
                                     {/* Main Timeline */}
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#1a1a1a]">
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white">
                                         <div className="space-y-1">
                                             {timeSlots.map((time) => {
                                                 const activity = getScheduledActivityAtTime(time);
@@ -1014,13 +1034,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border",
                                                             activity
                                                                 ? getColorClasses(activity.color, activity.isStart !== false) + " border"
-                                                                : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20",
+                                                                : "bg-white border-border hover:bg-muted hover:border-primary/30",
                                                             isHourMark && "border-l-2 border-l-primary/50"
                                                         )}
                                                     >
                                                         <span className={cn(
                                                             "font-mono text-sm shrink-0 w-14",
-                                                            isHourMark ? "font-bold text-white" : "text-muted-foreground"
+                                                            isHourMark ? "font-bold text-foreground" : "text-muted-foreground"
                                                         )}>
                                                             {time}
                                                         </span>
@@ -1033,7 +1053,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                                 </span>
                                                             </div>
                                                         ) : (
-                                                            <div className="flex-1 h-6 border border-dashed border-white/10 rounded flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                            <div className="flex-1 h-6 border border-dashed border-border rounded flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                                                                 <Plus className="w-3 h-3 text-muted-foreground" />
                                                             </div>
                                                         )}
@@ -1044,7 +1064,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     </div>
 
                                     {/* Right Sidebar: Tools (Reused) */}
-                                    <div className="w-80 border-l border-white/10 p-4 bg-[#1f1f1f] overflow-y-auto custom-scrollbar">
+                                    <div className="w-80 border-l border-border p-4 bg-muted overflow-y-auto custom-scrollbar">
                                         {renderActivityTools()}
                                     </div>
                                 </div>
@@ -1054,7 +1074,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                             {viewMode === 'weekly' && (
                                 <div className="flex h-full">
                                     {/* Sidebar: Days */}
-                                    <div className="w-64 border-r border-white/10 p-4 overflow-y-auto custom-scrollbar bg-[#1f1f1f]">
+                                    <div className="w-64 border-r border-border p-4 overflow-y-auto custom-scrollbar bg-muted">
                                         <div className="space-y-2">
                                             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">요일 선택</h3>
                                             {DAYS_OF_WEEK.map((day) => (
@@ -1069,8 +1089,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                     className={cn(
                                                         "w-full p-3 rounded-lg border-2 text-left transition-all",
                                                         selectedDayOfWeek === day.id
-                                                            ? "bg-primary/20 border-primary text-white font-semibold"
-                                                            : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/50"
+                                                            ? "bg-primary/10 border-primary text-foreground font-semibold"
+                                                            : "bg-white border-border text-muted-foreground hover:border-primary/50"
                                                     )}
                                                 >
                                                     {day.fullLabel}
@@ -1080,7 +1100,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     </div>
 
                                     {/* Main Timeline (Reused logic) */}
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#1a1a1a]">
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white">
                                         <div className="mb-4">
                                             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                                                 {DAYS_OF_WEEK.find(d => d.id === selectedDayOfWeek)?.fullLabel} 일정
@@ -1103,13 +1123,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border",
                                                             activity
                                                                 ? getColorClasses(activity.color, activity.isStart !== false) + " border"
-                                                                : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20",
+                                                                : "bg-white border-border hover:bg-muted hover:border-primary/30",
                                                             isHourMark && "border-l-2 border-l-primary/50"
                                                         )}
                                                     >
                                                         <span className={cn(
                                                             "font-mono text-sm shrink-0 w-14",
-                                                            isHourMark ? "font-bold text-white" : "text-muted-foreground"
+                                                            isHourMark ? "font-bold text-foreground" : "text-muted-foreground"
                                                         )}>
                                                             {time}
                                                         </span>
@@ -1121,7 +1141,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                                 </span>
                                                             </div>
                                                         ) : (
-                                                            <div className="flex-1 h-6 border border-dashed border-white/10 rounded flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                            <div className="flex-1 h-6 border border-dashed border-border rounded flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                                                                 <Plus className="w-3 h-3 text-muted-foreground" />
                                                             </div>
                                                         )}
@@ -1132,7 +1152,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     </div>
 
                                     {/* Right Sidebar: Tools */}
-                                    <div className="w-80 border-l border-white/10 p-4 bg-[#1f1f1f] overflow-y-auto custom-scrollbar">
+                                    <div className="w-80 border-l border-border p-4 bg-muted overflow-y-auto custom-scrollbar">
                                         {renderActivityTools()}
                                     </div>
                                 </div>
@@ -1141,7 +1161,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         </div>
 
                         {/* Footer (Simplified) */}
-                        <div className="flex justify-end gap-3 p-6 border-t border-white/10 shrink-0 bg-[#1a1a1a]">
+                        <div className="flex justify-end gap-3 p-6 border-t border-border shrink-0 bg-white">
                             <Button variant="ghost" onClick={onClose}>닫기</Button>
                             <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
                                 <Check className="w-4 h-4 mr-2" />

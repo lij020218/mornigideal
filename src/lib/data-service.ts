@@ -77,3 +77,21 @@ export const getCachedRecommendations = cache(async (email: string) => {
         generated_at: data.created_at
     };
 });
+
+// Cache habit insights fetching
+export const getCachedHabitInsights = cache(async (email: string) => {
+    if (!email) return null;
+
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+    const { data, error } = await supabase
+        .from('habit_insights_cache')
+        .select('insights, created_at')
+        .eq('email', email)
+        .eq('date', today)
+        .maybeSingle();
+
+    if (error || !data) return null;
+
+    return data.insights || null;
+});

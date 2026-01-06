@@ -175,7 +175,7 @@ export function FloatingAIAssistant({
                 message: '충분한 수면은 내일의 성과를 좌우합니다. 편안한 밤 되세요!',
                 actionText: '수면 모드',
                 actionType: 'open_link',
-                color: 'from-indigo-500/20 to-purple-500/20 border-indigo-500/30',
+                color: 'bg-indigo-50 border-indigo-200',
                 icon: 'Moon',
             });
         } else if (isWithin30Min && upcomingGoal) {
@@ -187,7 +187,7 @@ export function FloatingAIAssistant({
                 message: `"${upcomingGoal.text}" 일정을 잊지 마세요!`,
                 actionText: '확인',
                 actionType: 'open_link',
-                color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30',
+                color: 'bg-blue-50 border-blue-200',
                 icon: 'Calendar',
             });
         } else if (upcomingGoal) {
@@ -198,49 +198,63 @@ export function FloatingAIAssistant({
             // Morning/Afternoon self-development suggestions (personalized by job)
             const getSelfDevelopmentSuggestions = () => {
                 const baseSuggestions = [
-                    { text: '📚 「부의 추월차선」을 30분간 읽어보세요', action: '책 읽기', icon: 'BookOpen' },
-                    { text: '🎧 TED 강연으로 영감을 얻어보세요', action: '강연 듣기', icon: 'Headphones' },
-                    { text: '💪 20분 홈트레이닝으로 컨디션 UP!', action: '운동하기', icon: 'Dumbbell' },
-                    { text: '🧘 10분 명상으로 집중력을 높여보세요', action: '명상하기', icon: 'Brain' },
+                    { text: '📚 「부의 추월차선」 30분 독서로 성장하세요!', action: '책 읽기', icon: 'Sparkles' },
+                    { text: '🎯 오늘의 목표를 향해 한 걸음 더 나아가세요', action: '목표 실행', icon: 'Sparkles' },
+                    { text: '💪 20분 운동으로 에너지를 충전하세요!', action: '운동하기', icon: 'Sparkles' },
+                    { text: '🚀 새로운 스킬을 배우는 시간을 가져보세요', action: '학습하기', icon: 'Sparkles' },
+                    { text: '✍️ 오늘 배운 것을 정리하며 내것으로 만드세요', action: '정리하기', icon: 'Sparkles' },
                 ];
 
                 // Job-specific suggestions
                 if (job.includes('마케터') || job.includes('마케팅')) {
                     baseSuggestions.push(
-                        { text: '📊 경쟁사 SNS 트렌드를 분석해보세요', action: '트렌드 분석', icon: 'TrendingUp' },
-                        { text: '✍️ 블로그 콘텐츠 아이디어를 정리해보세요', action: '아이디어 정리', icon: 'Lightbulb' }
+                        { text: '📊 트렌드 리포트를 작성하며 인사이트를 쌓으세요', action: '트렌드 분석', icon: 'Sparkles' },
+                        { text: '💡 혁신적인 캠페인 아이디어를 구상해보세요', action: '아이디어 구상', icon: 'Sparkles' },
+                        { text: '📈 경쟁사 전략을 분석하고 차별화 포인트를 찾으세요', action: '전략 분석', icon: 'Sparkles' }
                     );
                 } else if (job.includes('개발') || job.includes('엔지니어')) {
                     baseSuggestions.push(
-                        { text: '💻 간단한 사이드 프로젝트를 진행해보세요', action: '코딩하기', icon: 'Code' },
-                        { text: '📖 새로운 기술 문서를 읽어보세요', action: '공부하기', icon: 'BookOpen' }
+                        { text: '💻 사이드 프로젝트로 실력을 키워보세요!', action: '코딩하기', icon: 'Sparkles' },
+                        { text: '🔧 새로운 기술 스택을 배우고 적용해보세요', action: '기술 학습', icon: 'Sparkles' },
+                        { text: '🐛 코드 리팩토링으로 더 나은 개발자가 되세요', action: '코드 개선', icon: 'Sparkles' }
                     );
                 } else if (job.includes('디자인')) {
                     baseSuggestions.push(
-                        { text: '🎨 Dribbble에서 영감을 얻어보세요', action: '탐색하기', icon: 'Palette' },
-                        { text: '✏️ 스케치 연습을 해보세요', action: '스케치하기', icon: 'Pencil' }
+                        { text: '🎨 새로운 디자인 트렌드를 연구하고 실험해보세요', action: '디자인 연구', icon: 'Sparkles' },
+                        { text: '✨ 포트폴리오 프로젝트를 시작해보세요!', action: '포트폴리오 작업', icon: 'Sparkles' },
+                        { text: '🖌️ 매일 스케치로 감각을 유지하세요', action: '스케치 연습', icon: 'Sparkles' }
+                    );
+                } else if (job.includes('학생') || job.includes('취준생')) {
+                    baseSuggestions.push(
+                        { text: '📝 자기소개서 한 문단 더 다듬어보세요', action: '자소서 작성', icon: 'Sparkles' },
+                        { text: '🎯 면접 예상 질문에 답변을 준비해보세요', action: '면접 준비', icon: 'Sparkles' },
+                        { text: '💼 관심 기업 리서치로 경쟁력을 높이세요', action: '기업 분석', icon: 'Sparkles' }
                     );
                 }
 
                 return baseSuggestions;
             };
 
-            // Evening relaxation suggestions with specific places
-            const relaxationSuggestions = [
-                { text: '🚶 한강 반포지구에서 야경 산책 어떠세요?', action: '산책하기', icon: 'MapPin' },
-                { text: '☕ 가까운 북카페에서 여유로운 시간을 보내세요', action: '휴식하기', icon: 'Coffee' },
-                { text: '🎬 넷플릭스에서 다큐멘터리를 감상해보세요', action: '영상 보기', icon: 'Play' },
-                { text: '🍜 경리단길에서 맛집 투어는 어떨까요?', action: '맛집 가기', icon: 'Utensils' },
-                { text: '🧘 10분 스트레칭으로 하루 피로를 풀어보세요', action: '스트레칭', icon: 'Heart' },
-                { text: '🎵 플레이리스트를 만들며 음악 여행을 떠나보세요', action: '음악 듣기', icon: 'Music' },
+            // Evening productive relaxation suggestions
+            const eveningProductiveSuggestions = [
+                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기', icon: 'Sparkles' },
+                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기', icon: 'Sparkles' },
+                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기', icon: 'Sparkles' },
+                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기', icon: 'Sparkles' },
+                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기', icon: 'Sparkles' },
+                { text: '🌟 성공한 사람들의 인터뷰를 보며 영감을 얻으세요', action: '영감 얻기', icon: 'Sparkles' },
+                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행', icon: 'Sparkles' },
+                { text: '🧠 명상으로 마음을 정리하고 집중력을 회복하세요', action: '명상하기', icon: 'Sparkles' },
             ];
 
-            // Weekend special suggestions
+            // Weekend productive suggestions
             const weekendSuggestions = [
-                { text: '🏔️ 북한산 둘레길에서 힐링 트래킹 어떠세요?', action: '등산하기', icon: 'Mountain' },
-                { text: '🚗 강릉 당일치기 여행을 계획해보세요!', action: '여행 계획', icon: 'Car' },
-                { text: '🎭 대학로에서 연극 한 편 관람하세요', action: '문화생활', icon: 'Theater' },
-                { text: '📸 서촌 골목 사진 산책을 떠나보세요', action: '사진 찍기', icon: 'Camera' },
+                { text: '📚 주말 프로젝트로 새로운 것에 도전해보세요!', action: '프로젝트 시작', icon: 'Sparkles' },
+                { text: '🎯 이번 주 목표를 리뷰하고 다음 주를 준비하세요', action: '주간 리뷰', icon: 'Sparkles' },
+                { text: '💡 평소 관심있던 분야를 깊이 탐구해보세요', action: '심화 학습', icon: 'Sparkles' },
+                { text: '🤝 네트워킹 이벤트나 스터디 모임에 참여해보세요', action: '네트워킹', icon: 'Sparkles' },
+                { text: '✨ 포트폴리오나 이력서를 업데이트하세요', action: '커리어 관리', icon: 'Sparkles' },
+                { text: '🎨 취미 활동으로 창의력을 발휘해보세요', action: '취미 개발', icon: 'Sparkles' },
             ];
 
             let suggestions;
@@ -251,7 +265,7 @@ export function FloatingAIAssistant({
             } else if (currentHour < 19) {
                 suggestions = getSelfDevelopmentSuggestions();
             } else {
-                suggestions = relaxationSuggestions;
+                suggestions = eveningProductiveSuggestions;
             }
 
             const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
@@ -259,35 +273,36 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-suggest',
                 type: 'schedule',
-                title: `⏰ ${upcomingGoal.startTime} 전까지 여유 시간`,
+                title: `💪 ${upcomingGoal.startTime}까지 성장할 시간!`,
                 message: randomSuggestion.text,
                 actionText: randomSuggestion.action,
                 actionType: 'open_link',
                 actionUrl: '#', // Could link to relevant app/website
-                color: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30',
+                color: 'bg-blue-50 border-blue-200',
                 icon: 'Sparkles',
             });
         } else {
-            // No more schedules today - suggest activities for the evening
-            const eveningSuggestions = [
-                { text: '🌙 내일을 위해 Tomorrow\'s Plan을 세워보세요', action: '계획 세우기' },
-                { text: '📖 잠들기 전 20분 독서로 하루를 마무리하세요', action: '책 읽기' },
-                { text: '🧘 수면 명상으로 편안한 밤 되세요', action: '명상하기' },
-                { text: '✍️ 오늘 하루를 일기로 기록해보세요', action: '일기 쓰기' },
-                { text: '🎵 잔잔한 음악과 함께 휴식을 취하세요', action: '음악 듣기' },
+            // No more schedules today - continue productive evening activities
+            const eveningGrowthSuggestions = [
+                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기' },
+                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기' },
+                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기' },
+                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기' },
+                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기' },
+                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행' },
             ];
 
-            const randomSuggestion = eveningSuggestions[Math.floor(Math.random() * eveningSuggestions.length)];
+            const randomSuggestion = eveningGrowthSuggestions[Math.floor(Math.random() * eveningGrowthSuggestions.length)];
 
             generatedCards.push({
                 id: 'schedule-evening',
                 type: 'schedule',
-                title: '🌟 남은 하루도 의미있게!',
+                title: '🚀 지금도 성장할 수 있습니다!',
                 message: randomSuggestion.text,
                 actionText: randomSuggestion.action,
                 actionType: 'open_link',
-                color: 'from-indigo-500/20 to-purple-500/20 border-indigo-500/30',
-                icon: 'Moon',
+                color: 'bg-indigo-50 border-indigo-200',
+                icon: 'Sparkles',
             });
         }
 
@@ -302,7 +317,7 @@ export function FloatingAIAssistant({
                 actionText: '브리핑 보기',
                 actionType: 'open_briefing',
                 briefingData: randomBriefing,
-                color: 'from-orange-500/20 to-amber-500/20 border-orange-500/30',
+                color: 'bg-orange-50 border-orange-200',
                 icon: 'Newspaper',
             });
         }
@@ -333,7 +348,7 @@ export function FloatingAIAssistant({
                 actionText: '보러가기',
                 actionType: 'open_link',
                 actionUrl: `https://www.youtube.com/watch?v=${randomRec.id}`,
-                color: 'from-red-500/20 to-rose-500/20 border-red-500/30',
+                color: 'bg-red-50 border-red-200',
                 icon: 'Youtube',
             });
         }
@@ -402,7 +417,7 @@ export function FloatingAIAssistant({
             actionText: industryInfo.action,
             actionType: 'open_link',
             actionUrl: industryInfo.url,
-            color: 'from-purple-500/20 to-violet-500/20 border-purple-500/30',
+            color: 'bg-purple-50 border-purple-200',
             icon: 'Search',
         });
 
@@ -596,17 +611,17 @@ export function FloatingAIAssistant({
                             }
                         }}
                         className={cn(
-                            "relative w-96 backdrop-blur-xl rounded-2xl p-6 shadow-2xl cursor-grab active:cursor-grabbing",
-                            "bg-gradient-to-br border",
+                            "relative w-96 backdrop-blur-xl rounded-2xl p-6 shadow-xl cursor-grab active:cursor-grabbing",
+                            "border bg-white",
                             currentCard.color
                         )}
                     >
                         {/* Dismiss button */}
                         <button
                             onClick={() => setIsDismissed(true)}
-                            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
                         >
-                            <X className="w-4 h-4 text-white/70" />
+                            <X className="w-4 h-4 text-foreground/70" />
                         </button>
 
                         {/* Card indicator dots - clickable */}
@@ -617,7 +632,7 @@ export function FloatingAIAssistant({
                                     onClick={() => setCurrentCardIndex(idx)}
                                     className={cn(
                                         "w-2.5 h-2.5 rounded-full transition-all hover:scale-125",
-                                        idx === currentCardIndex ? "bg-white" : "bg-white/30 hover:bg-white/50"
+                                        idx === currentCardIndex ? "bg-black" : "bg-black/20 hover:bg-black/40"
                                     )}
                                 />
                             ))}
@@ -625,19 +640,19 @@ export function FloatingAIAssistant({
 
                         <div className="pt-5 pr-8">
                             <div className="flex items-center gap-3 mb-3">
-                                <CardIcon className="w-6 h-6 text-white" />
-                                <p className="font-bold text-lg text-white">
+                                <CardIcon className="w-6 h-6 text-foreground" />
+                                <p className="font-bold text-lg text-foreground">
                                     {currentCard.title}
                                 </p>
                             </div>
-                            <p className="text-base text-gray-200 mb-5 line-clamp-2 leading-relaxed">
+                            <p className="text-base text-muted-foreground mb-5 line-clamp-2 leading-relaxed">
                                 {currentCard.message}
                             </p>
                             <Button
                                 size="default"
                                 variant="ghost"
                                 onClick={() => handleCardAction(currentCard)}
-                                className="h-10 px-5 text-base font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-full"
+                                className="h-10 px-5 text-base font-semibold bg-white hover:bg-black/5 text-foreground border border-black/10 rounded-full shadow-sm"
                             >
                                 {currentCard.actionText}
                             </Button>
@@ -645,7 +660,7 @@ export function FloatingAIAssistant({
 
                         {/* Progress bar for 20s timer */}
                         <motion.div
-                            className="absolute bottom-0 left-0 h-1 bg-white/50 rounded-full"
+                            className="absolute bottom-0 left-0 h-1 bg-black/10 rounded-full"
                             initial={{ width: "0%" }}
                             animate={{ width: "100%" }}
                             transition={{ duration: 20, ease: "linear" }}
@@ -663,12 +678,12 @@ export function FloatingAIAssistant({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        className="w-[380px] h-[500px] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 flex flex-col overflow-hidden"
+                        className="w-[380px] h-[500px] bg-white border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden"
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-primary/10 to-purple-500/10">
+                        <div className="flex items-center justify-between p-4 border-b border-border bg-muted">
                             <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
+                                <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
                                     <Sparkles className="w-4 h-4 text-white" />
                                 </div>
                                 <div>
@@ -680,7 +695,7 @@ export function FloatingAIAssistant({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setIsOpen(false)}
-                                className="h-8 w-8 rounded-lg hover:bg-white/10"
+                                className="h-8 w-8 rounded-lg hover:bg-black/5"
                             >
                                 <Minimize2 className="w-4 h-4" />
                             </Button>
@@ -690,8 +705,8 @@ export function FloatingAIAssistant({
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                             {messages.length === 0 && (
                                 <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
-                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center mb-4">
-                                        <Bot className="w-8 h-8 text-primary" />
+                                    <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                                        <Bot className="w-8 h-8 text-foreground" />
                                     </div>
                                     <p className="text-sm font-medium mb-1">안녕하세요!</p>
                                     <p className="text-xs max-w-[200px]">
@@ -712,7 +727,7 @@ export function FloatingAIAssistant({
                                             "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm",
                                             message.role === "user"
                                                 ? "bg-primary text-white rounded-br-md"
-                                                : "bg-white/5 border border-white/10 rounded-bl-md"
+                                                : "bg-muted border border-border rounded-bl-md"
                                         )}
                                     >
                                         <p className="whitespace-pre-wrap">{message.content}</p>
@@ -736,7 +751,7 @@ export function FloatingAIAssistant({
                             ))}
                             {isLoading && (
                                 <div className="flex justify-start">
-                                    <div className="bg-white/5 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3">
+                                    <div className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3">
                                         <div className="flex items-center gap-2">
                                             <Loader2 className="w-4 h-4 animate-spin text-primary" />
                                             <span className="text-sm text-muted-foreground">생각 중...</span>
@@ -748,8 +763,8 @@ export function FloatingAIAssistant({
                         </div>
 
                         {/* Input */}
-                        <div className="p-4 border-t border-white/10">
-                            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2">
+                        <div className="p-4 border-t border-border">
+                            <div className="flex items-center gap-2 bg-muted border border-border rounded-xl px-4 py-2">
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -784,12 +799,12 @@ export function FloatingAIAssistant({
                 className={cn(
                     "w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all",
                     isOpen
-                        ? "bg-white/10 border border-white/20"
-                        : "bg-gradient-to-br from-primary to-purple-600 shadow-primary/30"
+                        ? "bg-muted border border-border"
+                        : "bg-foreground"
                 )}
             >
                 {isOpen ? (
-                    <X className="w-6 h-6 text-white" />
+                    <X className="w-6 h-6 text-foreground" />
                 ) : (
                     <Bot className="w-6 h-6 text-white" />
                 )}
