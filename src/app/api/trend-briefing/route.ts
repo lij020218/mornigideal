@@ -455,7 +455,21 @@ export async function POST(request: Request) {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const prompt = `Create a briefing for ${level} ${job}.
+        // Generate professional title instead of "${level} ${job}"
+        const getUserTitle = (level: string, job: string) => {
+            if (level.toLowerCase().includes('senior') || level.toLowerCase().includes('전문')) {
+                return `${job} 전문가`;
+            } else if (level.toLowerCase().includes('intermediate') || level.toLowerCase().includes('중급')) {
+                return `${job} 실무자`;
+            } else if (level.toLowerCase().includes('junior') || level.toLowerCase().includes('초급')) {
+                return `${job} 입문자`;
+            }
+            return `${job} 종사자`;
+        };
+
+        const userTitle = getUserTitle(level, job);
+
+        const prompt = `Create a briefing for ${userTitle}.
 
 ARTICLE:
 - Title: "${title}"
@@ -463,21 +477,26 @@ ARTICLE:
 - URL: ${originalUrl}
 
 SECTIONS NEEDED:
-1. 핵심 내용: What happened and why it matters
-2. ${level} ${job}인 당신에게: Impact on ${job} professionals
-3. 주요 인사이트: 3-4 key takeaways
-4. 실행 아이템: 3 actionable steps for ${level} ${job}
+1. 핵심 3줄 요약: 3문장으로 핵심만 요약 (각 문장은 15-20자 이내)
+2. 왜 중요한가: ${userTitle}에게 이 뉴스가 중요한 이유와 영향 분석
+3. 실행 아이템: ${userTitle}가 취할 수 있는 3가지 구체적 행동
 
 OUTPUT JSON:
 {
   "title": "Korean title",
-  "content": "### 핵심 내용\\n\\n[content]\\n\\n### ${level} ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
-  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
-  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "content": "### 왜 중요한가\\n\\n${userTitle}에게 이 뉴스가 중요한 이유를 설명합니다. **핵심 키워드**를 <mark>태그로 강조하세요.\\n\\n### 심층 분석\\n\\n[detailed analysis with context]",
+  "keyTakeaways": ["3줄 요약 1 (15-20자)", "3줄 요약 2 (15-20자)", "3줄 요약 3 (15-20자)"],
+  "actionItems": ["구체적 행동 1 (30자 이내)", "구체적 행동 2 (30자 이내)", "구체적 행동 3 (30자 이내)"],
   "originalUrl": "${originalUrl}"
 }
 
-Write in Korean. Be practical and specific for ${level} ${job}.`;
+IMPORTANT RULES:
+- keyTakeaways는 정말 짧게 핵심만 (15-20자)
+- actionItems는 구체적이고 실행 가능한 행동 (30자 이내)
+- content에서 중요한 용어는 <mark>태그로 강조
+- 톤: 정중하고 전문적인 비서 말투 사용
+
+Write in Korean.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;

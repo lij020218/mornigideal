@@ -191,60 +191,124 @@ export function FloatingAIAssistant({
                 icon: 'Calendar',
             });
         } else if (upcomingGoal) {
-            // Free time until next schedule - suggest personalized activity
+            // Free time until next schedule - PROACTIVE SUGGESTIONS based on time & context
             const job = userProfile?.job || '';
             const goal = userProfile?.goal || '';
+            const timeUntilNext = upcomingGoal.startTime ? (() => {
+                const [goalHour, goalMin] = upcomingGoal.startTime.split(':').map(Number);
+                const goalTime = goalHour * 60 + goalMin;
+                const currentTime = currentHour * 60 + now.getMinutes();
+                return goalTime - currentTime;
+            })() : 999;
 
-            // Morning/Afternoon self-development suggestions (personalized by job)
-            const getSelfDevelopmentSuggestions = () => {
-                const baseSuggestions = [
-                    { text: '📚 「부의 추월차선」 30분 독서로 성장하세요!', action: '책 읽기', icon: 'Sparkles' },
-                    { text: '🎯 오늘의 목표를 향해 한 걸음 더 나아가세요', action: '목표 실행', icon: 'Sparkles' },
-                    { text: '💪 20분 운동으로 에너지를 충전하세요!', action: '운동하기', icon: 'Sparkles' },
-                    { text: '🚀 새로운 스킬을 배우는 시간을 가져보세요', action: '학습하기', icon: 'Sparkles' },
-                    { text: '✍️ 오늘 배운 것을 정리하며 내것으로 만드세요', action: '정리하기', icon: 'Sparkles' },
-                ];
-
-                // Job-specific suggestions
-                if (job.includes('마케터') || job.includes('마케팅')) {
-                    baseSuggestions.push(
-                        { text: '📊 트렌드 리포트를 작성하며 인사이트를 쌓으세요', action: '트렌드 분석', icon: 'Sparkles' },
-                        { text: '💡 혁신적인 캠페인 아이디어를 구상해보세요', action: '아이디어 구상', icon: 'Sparkles' },
-                        { text: '📈 경쟁사 전략을 분석하고 차별화 포인트를 찾으세요', action: '전략 분석', icon: 'Sparkles' }
-                    );
-                } else if (job.includes('개발') || job.includes('엔지니어')) {
-                    baseSuggestions.push(
-                        { text: '💻 사이드 프로젝트로 실력을 키워보세요!', action: '코딩하기', icon: 'Sparkles' },
-                        { text: '🔧 새로운 기술 스택을 배우고 적용해보세요', action: '기술 학습', icon: 'Sparkles' },
-                        { text: '🐛 코드 리팩토링으로 더 나은 개발자가 되세요', action: '코드 개선', icon: 'Sparkles' }
-                    );
-                } else if (job.includes('디자인')) {
-                    baseSuggestions.push(
-                        { text: '🎨 새로운 디자인 트렌드를 연구하고 실험해보세요', action: '디자인 연구', icon: 'Sparkles' },
-                        { text: '✨ 포트폴리오 프로젝트를 시작해보세요!', action: '포트폴리오 작업', icon: 'Sparkles' },
-                        { text: '🖌️ 매일 스케치로 감각을 유지하세요', action: '스케치 연습', icon: 'Sparkles' }
-                    );
-                } else if (job.includes('학생') || job.includes('취준생')) {
-                    baseSuggestions.push(
-                        { text: '📝 자기소개서 한 문단 더 다듬어보세요', action: '자소서 작성', icon: 'Sparkles' },
-                        { text: '🎯 면접 예상 질문에 답변을 준비해보세요', action: '면접 준비', icon: 'Sparkles' },
-                        { text: '💼 관심 기업 리서치로 경쟁력을 높이세요', action: '기업 분석', icon: 'Sparkles' }
-                    );
+            // 🍽️ MEAL TIME SUGGESTIONS (7-9 AM, 11-1 PM, 6-8 PM)
+            const getMealSuggestion = () => {
+                if (currentHour >= 7 && currentHour < 9) {
+                    const breakfastOptions = [
+                        { text: '🥗 오트밀과 과일로 건강한 아침 시작하는 건 어떠세요?', action: '아침 먹기', schedule: '아침 식사', time: '30분' },
+                        { text: '🍳 단백질 스크램블과 아보카도 토스트는 어떠신가요?', action: '식사하기', schedule: '아침 식사', time: '30분' },
+                        { text: '🥤 그린 스무디로 영양을 간편하게 채워보세요', action: '식사하기', schedule: '아침 식사', time: '20분' },
+                    ];
+                    return breakfastOptions[Math.floor(Math.random() * breakfastOptions.length)];
+                } else if (currentHour >= 11 && currentHour < 13) {
+                    const lunchOptions = [
+                        { text: '🍱 샐러드 볼로 가볍게 점심을 드시는 건 어떨까요?', action: '점심 먹기', schedule: '점심 식사', time: '40분' },
+                        { text: '🥙 닭가슴살 샌드위치로 에너지 충전하세요', action: '식사하기', schedule: '점심 식사', time: '40분' },
+                        { text: '🍲 된장찌개와 잡곡밥으로 든든한 점심 어떠세요?', action: '식사하기', schedule: '점심 식사', time: '50분' },
+                    ];
+                    return lunchOptions[Math.floor(Math.random() * lunchOptions.length)];
+                } else if (currentHour >= 18 && currentHour < 20) {
+                    const dinnerOptions = [
+                        { text: '🥗 연어 구이와 채소로 영양 균형 잡힌 저녁 드세요', action: '저녁 먹기', schedule: '저녁 식사', time: '50분' },
+                        { text: '🍗 닭가슴살 스테이크와 고구마 어떠세요?', action: '식사하기', schedule: '저녁 식사', time: '45분' },
+                        { text: '🥘 두부 샐러드로 가볍게 저녁을 마무리하세요', action: '식사하기', schedule: '저녁 식사', time: '30분' },
+                    ];
+                    return dinnerOptions[Math.floor(Math.random() * dinnerOptions.length)];
                 }
-
-                return baseSuggestions;
+                return null;
             };
 
-            // Evening productive relaxation suggestions
+            // 📚 READING TIME SUGGESTIONS (8-10 PM or weekends)
+            const getReadingSuggestion = () => {
+                const books = job.includes('마케터') || job.includes('마케팅') ? [
+                    { text: '📖 「그로스 해킹」 읽으며 성장 전략을 배워보세요', action: '독서하기', schedule: '독서 - 그로스 해킹', time: '30분' },
+                    { text: '📕 「마케터의 일」로 실무 인사이트를 얻어보세요', action: '책 읽기', schedule: '독서 - 마케터의 일', time: '40분' },
+                ] : job.includes('개발') || job.includes('엔지니어') ? [
+                    { text: '📗 「클린 코드」 한 챕터로 코딩 철학을 배워보세요', action: '독서하기', schedule: '독서 - 클린 코드', time: '30분' },
+                    { text: '📘 「리팩토링」 읽으며 설계 감각을 키워보세요', action: '책 읽기', schedule: '독서 - 리팩토링', time: '40분' },
+                ] : [
+                    { text: '📚 「부의 추월차선」으로 부의 원리를 배워보세요', action: '독서하기', schedule: '독서 - 부의 추월차선', time: '40분' },
+                    { text: '📕 「아주 작은 습관의 힘」으로 성장 시스템을 만드세요', action: '책 읽기', schedule: '독서 - 습관의 힘', time: '30분' },
+                ];
+                return books[Math.floor(Math.random() * books.length)];
+            };
+
+            // 💪 EXERCISE SUGGESTIONS (6-8 AM, 6-8 PM)
+            const getExerciseSuggestion = () => {
+                if (currentHour >= 6 && currentHour < 8) {
+                    const morningExercise = [
+                        { text: '🏃‍♂️ 아침 조깅 30분으로 하루를 활기차게 시작하세요!', action: '운동하기', schedule: '조깅', time: '30분' },
+                        { text: '🧘 요가로 몸과 마음을 깨워보는 건 어떠세요?', action: '운동하기', schedule: '요가', time: '20분' },
+                        { text: '💪 간단한 홈트레이닝으로 에너지를 충전하세요', action: '운동하기', schedule: '홈트레이닝', time: '25분' },
+                    ];
+                    return morningExercise[Math.floor(Math.random() * morningExercise.length)];
+                } else if (currentHour >= 18 && currentHour < 21) {
+                    const eveningExercise = [
+                        { text: '🏋️ 헬스장에서 근력 운동 어떠세요? 스트레스도 날려보세요', action: '운동하기', schedule: '헬스', time: '60분' },
+                        { text: '🏊 수영으로 하루의 피로를 풀어보세요', action: '운동하기', schedule: '수영', time: '45분' },
+                        { text: '🚴 자전거 타며 저녁 바람 쐬는 건 어떨까요?', action: '운동하기', schedule: '자전거', time: '40분' },
+                    ];
+                    return eveningExercise[Math.floor(Math.random() * eveningExercise.length)];
+                }
+                return null;
+            };
+
+            // 🎯 SKILL DEVELOPMENT (personalized by job)
+            const getSkillSuggestion = () => {
+                if (job.includes('마케터') || job.includes('마케팅')) {
+                    return [
+                        { text: '📊 경쟁사 SNS 분석하며 인사이트를 쌓아보세요', action: '분석하기', schedule: '경쟁사 분석', time: '30분' },
+                        { text: '✍️ 블로그 글 하나 작성하며 콘텐츠 역량을 키워보세요', action: '글쓰기', schedule: '블로그 작성', time: '40분' },
+                    ][Math.floor(Math.random() * 2)];
+                } else if (job.includes('개발') || job.includes('엔지니어')) {
+                    return [
+                        { text: '💻 알고리즘 문제 하나 풀며 두뇌를 깨워보세요', action: '코딩하기', schedule: '알고리즘 풀이', time: '30분' },
+                        { text: '🔧 새로운 라이브러리 문서 읽으며 기술을 배워보세요', action: '학습하기', schedule: '기술 학습', time: '40분' },
+                    ][Math.floor(Math.random() * 2)];
+                } else {
+                    return [
+                        { text: '🚀 온라인 강의 한 챕터 들으며 성장해보세요', action: '학습하기', schedule: '온라인 강의', time: '30분' },
+                        { text: '✍️ 오늘 배운 것을 정리하며 내것으로 만드세요', action: '정리하기', schedule: '학습 정리', time: '20분' },
+                    ][Math.floor(Math.random() * 2)];
+                }
+            };
+
+            // PRIORITY: Meal > Exercise > Reading > Skills
+            let selectedSuggestion;
+            const mealSuggestion = getMealSuggestion();
+            const exerciseSuggestion = getExerciseSuggestion();
+            const readingSuggestion = (currentHour >= 20 && currentHour < 22) || dayOfWeek === 0 || dayOfWeek === 6 ? getReadingSuggestion() : null;
+
+            if (mealSuggestion) {
+                selectedSuggestion = mealSuggestion;
+            } else if (exerciseSuggestion && timeUntilNext >= 40) {
+                selectedSuggestion = exerciseSuggestion;
+            } else if (readingSuggestion && timeUntilNext >= 30) {
+                selectedSuggestion = readingSuggestion;
+            } else {
+                selectedSuggestion = getSkillSuggestion();
+            }
+
+            // Evening productive relaxation suggestions (fallback)
             const eveningProductiveSuggestions = [
-                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기', icon: 'Sparkles' },
-                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기', icon: 'Sparkles' },
-                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기', icon: 'Sparkles' },
-                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기', icon: 'Sparkles' },
-                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기', icon: 'Sparkles' },
-                { text: '🌟 성공한 사람들의 인터뷰를 보며 영감을 얻으세요', action: '영감 얻기', icon: 'Sparkles' },
-                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행', icon: 'Sparkles' },
-                { text: '🧠 명상으로 마음을 정리하고 집중력을 회복하세요', action: '명상하기', icon: 'Sparkles' },
+                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기', icon: 'Sparkles', schedule: '독서', time: '30분' },
+                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기', icon: 'Sparkles', schedule: '일기 작성', time: '15분' },
+                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기', icon: 'Sparkles', schedule: '내일 계획', time: '20분' },
+                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기', icon: 'Sparkles', schedule: '학습 복습', time: '25분' },
+                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기', icon: 'Sparkles', schedule: '온라인 강의', time: '30분' },
+                { text: '🌟 성공한 사람들의 인터뷰를 보며 영감을 얻으세요', action: '영감 얻기', icon: 'Sparkles', schedule: '인터뷰 시청', time: '20분' },
+                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행', icon: 'Sparkles', schedule: '프로젝트', time: '40분' },
+                { text: '🧠 명상으로 마음을 정리하고 집중력을 회복하세요', action: '명상하기', icon: 'Sparkles', schedule: '명상', time: '15분' },
             ];
 
             // Weekend productive suggestions
@@ -257,27 +321,37 @@ export function FloatingAIAssistant({
                 { text: '🎨 취미 활동으로 창의력을 발휘해보세요', action: '취미 개발', icon: 'Sparkles' },
             ];
 
-            let suggestions;
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-            if (isWeekend && currentHour >= 10 && currentHour <= 18) {
-                suggestions = weekendSuggestions;
-            } else if (currentHour < 19) {
-                suggestions = getSelfDevelopmentSuggestions();
-            } else {
-                suggestions = eveningProductiveSuggestions;
+            // Use selected proactive suggestion
+            if (!selectedSuggestion) {
+                selectedSuggestion = eveningProductiveSuggestions[Math.floor(Math.random() * eveningProductiveSuggestions.length)];
             }
 
-            const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+            // Calculate duration in minutes from time string
+            const durationMinutes = selectedSuggestion.time ? parseInt(selectedSuggestion.time) : 30;
+
+            // Calculate start and end time
+            const startHour = currentHour;
+            const startMin = Math.ceil(now.getMinutes() / 10) * 10; // Round up to nearest 10min
+            const startTime = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+
+            const endTotalMin = startHour * 60 + startMin + durationMinutes;
+            const endHour = Math.floor(endTotalMin / 60);
+            const endMin = endTotalMin % 60;
+            const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
 
             generatedCards.push({
                 id: 'schedule-suggest',
                 type: 'schedule',
-                title: `💪 ${upcomingGoal.startTime}까지 성장할 시간!`,
-                message: randomSuggestion.text,
-                actionText: randomSuggestion.action,
-                actionType: 'open_link',
-                actionUrl: '#', // Could link to relevant app/website
+                title: `💪 ${upcomingGoal.startTime}까지 ${selectedSuggestion.time || '시간'} 있어요`,
+                message: selectedSuggestion.text,
+                actionText: '일정에 추가',
+                actionType: 'add_schedule',
+                scheduleData: {
+                    text: selectedSuggestion.schedule || selectedSuggestion.action,
+                    startTime: startTime,
+                    endTime: endTime,
+                    specificDate: today,
+                },
                 color: 'bg-blue-50 border-blue-200',
                 icon: 'Sparkles',
             });

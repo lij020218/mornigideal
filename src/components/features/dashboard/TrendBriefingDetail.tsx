@@ -246,56 +246,83 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                             </div>
                                         </div>
 
-                                        {/* Key Takeaways & Action Items Grid */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            {/* Key Takeaways */}
-                                            {detail.keyTakeaways && detail.keyTakeaways.length > 0 && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, x: -20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: 0.2 }}
-                                                    className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20 rounded-xl p-6 hover:border-purple-500/40 transition-colors"
-                                                >
-                                                    <h3 className="font-semibold flex items-center gap-2 mb-4 text-purple-300">
-                                                        <Lightbulb className="w-5 h-5" />
-                                                        핵심 인사이트
-                                                    </h3>
-                                                    <ul className="space-y-3">
-                                                        {detail.keyTakeaways.map((takeaway, index) => (
-                                                            <li key={index} className="flex items-start gap-3 text-sm text-gray-300">
-                                                                <CheckCircle className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                                                                <span className="leading-relaxed">{takeaway}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </motion.div>
-                                            )}
+                                        {/* 3-Line Summary Box (Top Priority) */}
+                                        {detail.keyTakeaways && detail.keyTakeaways.length > 0 && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: -10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.1 }}
+                                                className="bg-gradient-to-r from-purple-500/15 to-blue-500/15 border-2 border-purple-500/30 rounded-xl p-6 shadow-lg"
+                                            >
+                                                <h3 className="font-bold flex items-center gap-2 mb-4 text-purple-300 text-lg">
+                                                    <Lightbulb className="w-5 h-5" />
+                                                    핵심 3줄 요약
+                                                </h3>
+                                                <div className="space-y-2">
+                                                    {detail.keyTakeaways.map((takeaway, index) => (
+                                                        <div key={index} className="flex items-center gap-3 text-base text-white font-medium">
+                                                            <span className="text-purple-400 font-bold">{index + 1}.</span>
+                                                            <span>{takeaway}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
 
-                                            {/* Action Items */}
-                                            {detail.actionItems && detail.actionItems.length > 0 && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, x: 20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: 0.3 }}
-                                                    className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-xl p-6 hover:border-blue-500/40 transition-colors"
-                                                >
-                                                    <h3 className="font-semibold flex items-center gap-2 mb-4 text-blue-300">
-                                                        <Target className="w-5 h-5" />
-                                                        실행 가능한 액션
-                                                    </h3>
-                                                    <ul className="space-y-3">
-                                                        {detail.actionItems.map((action, index) => (
-                                                            <li key={index} className="flex items-start gap-3 text-sm text-gray-300">
-                                                                <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-blue-400">
-                                                                    {index + 1}
-                                                                </div>
-                                                                <span className="leading-relaxed">{action}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </motion.div>
-                                            )}
-                                        </div>
+                                        {/* Action Items with + Button */}
+                                        {detail.actionItems && detail.actionItems.length > 0 && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.2 }}
+                                                className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-xl p-6 hover:border-blue-500/40 transition-colors"
+                                            >
+                                                <h3 className="font-semibold flex items-center gap-2 mb-4 text-blue-300">
+                                                    <Target className="w-5 h-5" />
+                                                    무엇을 할 것인가
+                                                </h3>
+                                                <ul className="space-y-3">
+                                                    {detail.actionItems.map((action, index) => (
+                                                        <li key={index} className="group flex items-start gap-3 text-sm text-gray-300 hover:bg-blue-500/5 p-2 rounded-lg transition-all">
+                                                            <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-blue-400">
+                                                                {index + 1}
+                                                            </div>
+                                                            <span className="leading-relaxed flex-1">{action}</span>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        const now = new Date();
+                                                                        const today = now.toISOString().split('T')[0];
+                                                                        const startTime = `${(now.getHours() + 1).toString().padStart(2, '0')}:00`;
+                                                                        const endTime = `${(now.getHours() + 2).toString().padStart(2, '0')}:00`;
+
+                                                                        await fetch("/api/user/schedule/add", {
+                                                                            method: "POST",
+                                                                            headers: { "Content-Type": "application/json" },
+                                                                            body: JSON.stringify({
+                                                                                text: action,
+                                                                                startTime,
+                                                                                endTime,
+                                                                                specificDate: today,
+                                                                            }),
+                                                                        });
+
+                                                                        alert(`✅ "${action}" 일정이 추가되었습니다!`);
+                                                                    } catch (e) {
+                                                                        console.error("Failed to add schedule:", e);
+                                                                    }
+                                                                }}
+                                                                className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 rounded-full bg-blue-500/30 hover:bg-blue-500/50 flex items-center justify-center transition-all transform hover:scale-110"
+                                                                title="일정에 추가"
+                                                            >
+                                                                <span className="text-blue-200 text-sm font-bold">+</span>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                <p className="text-xs text-gray-500 mt-4 italic">💡 항목 위에 마우스를 올리면 일정에 추가할 수 있습니다</p>
+                                            </motion.div>
+                                        )}
                                     </motion.div>
                                 ) : (
                                     <div className="text-center py-20 text-muted-foreground">
