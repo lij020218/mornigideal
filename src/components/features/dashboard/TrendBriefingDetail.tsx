@@ -256,7 +256,7 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                             >
                                                 <h3 className="font-bold flex items-center gap-2 mb-4 text-purple-300 text-lg">
                                                     <Lightbulb className="w-5 h-5" />
-                                                    핵심 3줄 요약
+                                                    핵심 요약
                                                 </h3>
                                                 <div className="space-y-2">
                                                     {detail.keyTakeaways.map((takeaway, index) => (

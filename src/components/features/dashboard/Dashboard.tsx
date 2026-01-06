@@ -20,6 +20,8 @@ import { EmailSummarySection } from "./EmailSummarySection";
 import { DailyBriefingPopup } from "./DailyBriefingPopup";
 import { AppUsageTracker } from "./AppUsageTracker";
 import { SmartInsightsWidget } from "./SmartInsightsWidget";
+import { AIGreeting } from "./AIGreeting";
+import { TodaySuggestions } from "./TodaySuggestions";
 
 
 interface DashboardProps {
@@ -77,7 +79,6 @@ export function Dashboard({
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
-    const [activeTab, setActiveTab] = useState<'today' | 'growth'>('today');
 
     // Process curriculum data - handle both direct array and nested curriculum property
     const processedCurriculum = useMemo(() => {
@@ -663,93 +664,37 @@ export function Dashboard({
                 />
             )}
 
-            {/* Header */}
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-4">
-                <div>
-                    <h1 className="text-4xl font-bold text-foreground pb-1">
-                        {currentTime ? (
-                            <>Good {currentTime.getHours() < 12 ? "Morning" : currentTime.getHours() < 18 ? "Afternoon" : "Evening"}, {username}</>
-                        ) : (
-                            <span className="opacity-0">Good Morning, {username}</span>
-                        )}
-                    </h1>
-                    <p className="text-muted-foreground mt-1 min-h-[1.5em]">
-                        {currentTime ? (() => {
-                            const hour = currentTime.getHours();
-                            if (hour >= 5 && hour < 12) return "상쾌한 아침입니다. 오늘의 목표를 향해 힘차게 시작해보세요! ☀️";
-                            if (hour >= 12 && hour < 15) return "오후의 집중력이 최고조입니다. 중요한 작업을 완료해보세요! 🚀";
-                            if (hour >= 15 && hour < 18) return "오늘의 목표 달성까지 조금 남았어요. 마무리 스퍼트! 💪";
-                            if (hour >= 18 && hour < 20) return "저녁 시간, 오늘의 마지막 성장 시간입니다. 끝까지 파이팅! 🔥";
-                            if (hour >= 20 && hour < 22) return "오늘 하루도 수고 많으셨습니다. 성과를 정리하며 마무리하세요. 🌙";
-                            return "늦은 밤입니다. 충분한 수면이 내일의 성장을 만듭니다. 😴";
-                        })() : ""}
-                    </p>
-                </div>
-                {/* Smart Insights Widget */}
-                <div className="hidden md:block">
-                    <SmartInsightsWidget
-                        customGoals={userProfile?.customGoals}
-                        currentTime={currentTime}
-                        initialHabitInsights={initialHabitInsights}
-                    />
-                </div>
-            </header>
+            {/* AI Greeting Header */}
+            <AIGreeting
+                username={username}
+                currentTime={currentTime || new Date()}
+                userProfile={userProfile ? {
+                    job: userProfile.job,
+                    goal: userProfile.goal,
+                    level: userProfile.level
+                } : null}
+                habitInsights={initialHabitInsights}
+            />
 
-            {/* Tab Navigation */}
-            <div className="flex gap-2 border-b border-white/10">
-                <button
-                    onClick={() => setActiveTab('today')}
-                    className={cn(
-                        "px-6 py-3 font-medium text-sm transition-all relative",
-                        activeTab === 'today'
-                            ? "text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        오늘의 활동
-                    </div>
-                    {activeTab === 'today' && (
-                        <motion.div
-                            layoutId="activeTab"
-                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        />
-                    )}
-                </button>
-                <button
-                    onClick={() => setActiveTab('growth')}
-                    className={cn(
-                        "px-6 py-3 font-medium text-sm transition-all relative",
-                        activeTab === 'growth'
-                            ? "text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        성장 & 학습
-                    </div>
-                    {activeTab === 'growth' && (
-                        <motion.div
-                            layoutId="activeTab"
-                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        />
-                    )}
-                </button>
-            </div>
+            {/* AI Suggestions Section */}
+            {userProfile && currentTime && (
+                <TodaySuggestions
+                    userProfile={{
+                        job: userProfile.job,
+                        goal: userProfile.goal,
+                        level: userProfile.level
+                    }}
+                    currentTime={currentTime}
+                />
+            )}
 
-            {/* Today Tab Content */}
-            {activeTab === 'today' && (
-                <motion.div
-                    key="today-tab"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-10"
-                >
+            {/* Main Content */}
+            <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-10"
+            >
                     {/* 1. Daily Flow Section */}
                     <motion.section variants={itemVariants} className="space-y-4">
                         <div className="flex justify-between items-center">
@@ -1250,7 +1195,7 @@ export function Dashboard({
                         </Card>
                     </motion.section>
 
-                    {/* Trend Briefing Section */}
+                    {/* Trend Briefing Section - Moved Up for Growth Focus */}
                     {userProfile && (
                         <TrendBriefingSection
                             job={userProfile.job}
@@ -1281,18 +1226,6 @@ export function Dashboard({
                         <EmailSummarySection />
                     </motion.section>
 
-                </motion.div>
-            )}
-
-            {/* Growth Tab Content */}
-            {activeTab === 'growth' && (
-                <motion.div
-                    key="growth-tab"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-10"
-                >
                     {/* 2. Today's Growth (Curriculum) */}
                     <motion.section variants={itemVariants} className="space-y-4">
                         <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -1641,8 +1574,7 @@ export function Dashboard({
                         </div>
                     </motion.section>
 
-                </motion.div>
-            )}
+            </motion.div>
 
             <SchedulePopup
                 isOpen={showSchedulePopup}

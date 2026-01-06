@@ -10,11 +10,11 @@ export async function POST(request: Request) {
         }
 
         const scheduleData = await request.json();
-        const { text, startTime, endTime, color, specificDate, daysOfWeek } = scheduleData;
+        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration } = scheduleData;
 
-        if (!text || !startTime) {
+        if (!text) {
             return NextResponse.json(
-                { error: "text and startTime are required" },
+                { error: "text is required" },
                 { status: 400 }
             );
         }
@@ -33,6 +33,54 @@ export async function POST(request: Request) {
 
         const profile = userData.profile || {};
         const customGoals = profile.customGoals || [];
+
+        // Find available time slot if requested
+        let calculatedStartTime = startTime;
+        let calculatedEndTime = endTime;
+
+        if (findAvailableSlot && specificDate) {
+            const today = specificDate;
+            const todaySchedules = customGoals.filter((g: any) => g.specificDate === today);
+
+            // Parse estimated duration (e.g., "30분" -> 30, "1시간" -> 60)
+            const durationMinutes = estimatedDuration?.includes("시간")
+                ? parseInt(estimatedDuration) * 60
+                : parseInt(estimatedDuration) || 30;
+
+            // Find next available slot starting from current hour or 9 AM (whichever is later)
+            const now = new Date();
+            const currentHour = now.getHours();
+            const startHour = Math.max(currentHour + 1, 9); // Start from next hour or 9 AM
+            const endHour = 22; // Don't schedule past 10 PM
+
+            let foundSlot = false;
+            for (let hour = startHour; hour < endHour; hour++) {
+                const slotStart = `${hour.toString().padStart(2, '0')}:00`;
+                const slotEndHour = hour + Math.ceil(durationMinutes / 60);
+                const slotEnd = `${slotEndHour.toString().padStart(2, '0')}:00`;
+
+                // Check if this slot conflicts with existing schedules
+                const hasConflict = todaySchedules.some((schedule: any) => {
+                    const scheduleStart = parseInt(schedule.startTime.split(':')[0]);
+                    const scheduleEnd = parseInt(schedule.endTime.split(':')[0]);
+                    return (hour >= scheduleStart && hour < scheduleEnd) ||
+                           (slotEndHour > scheduleStart && slotEndHour <= scheduleEnd);
+                });
+
+                if (!hasConflict && slotEndHour <= endHour) {
+                    calculatedStartTime = slotStart;
+                    calculatedEndTime = slotEnd;
+                    foundSlot = true;
+                    break;
+                }
+            }
+
+            // If no slot found, default to end of day
+            if (!foundSlot) {
+                calculatedStartTime = "20:00";
+                calculatedEndTime = "21:00";
+            }
+        }
 
         // Determine time of day
         const getTimeOfDay = (time: string): "morning" | "afternoon" | "evening" => {
@@ -91,9 +139,9 @@ export async function POST(request: Request) {
         const newGoal = {
             id: `ai-${Date.now()}`,
             text,
-            time: getTimeOfDay(startTime),
-            startTime,
-            endTime: endTime || startTime,
+            time: getTimeOfDay(calculatedStartTime || startTime),
+            startTime: calculatedStartTime || startTime,
+            endTime: calculatedEndTime || endTime || calculatedStartTime || startTime,
             color: getActivityColor(text, color),
             specificDate: specificDate || undefined,
             daysOfWeek: daysOfWeek || undefined,
@@ -115,12 +163,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Failed to add schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Add] Added: ${text} at ${startTime} for ${session.user.email}`);
+        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime} for ${session.user.email}`);
 
         return NextResponse.json({
             success: true,
             goal: newGoal,
-            message: `"${text}" 일정이 ${specificDate || "오늘"}에 추가되었습니다.`,
+            message: `"${text}" 일정이 ${calculatedStartTime || startTime}에 추가되었습니다.`,
         });
     } catch (error: any) {
         console.error("[Schedule Add] Error:", error);
