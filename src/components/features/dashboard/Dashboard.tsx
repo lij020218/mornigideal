@@ -703,7 +703,7 @@ export function Dashboard({
 
 
     return (
-        <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm">
+        <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm overflow-visible">
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
             {showDailyBriefing && dailyBriefingData && (
                 <DailyBriefingPopup
