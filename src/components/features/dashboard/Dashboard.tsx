@@ -27,10 +27,10 @@ import { TodaySuggestions } from "./TodaySuggestions";
 interface DashboardProps {
     username: string;
     initialProfile: UserProfile | null;
-    initialMaterials: any[];
-    initialCurriculum: CurriculumItem[];
-    initialTrendBriefing: any;
-    initialHabitInsights?: any;
+    initialMaterials: any[] | null;
+    initialCurriculum: CurriculumItem[] | null;
+    initialTrendBriefing: any | null;
+    initialHabitInsights?: any | null;
 }
 
 interface UserProfile {
@@ -79,6 +79,7 @@ export function Dashboard({
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
+    const [activeTab, setActiveTab] = useState<'home' | 'insights' | 'growth'>('home');
 
     // Process curriculum data - handle both direct array and nested curriculum property
     const processedCurriculum = useMemo(() => {
@@ -295,6 +296,36 @@ export function Dashboard({
         }
     };
 
+    // Refresh user profile from server
+    const refreshUserProfile = async () => {
+        try {
+            const response = await fetch("/api/user/profile");
+            if (response.ok) {
+                const data = await response.json();
+                if (data.profile) {
+                    setUserProfile(data.profile);
+                    console.log("[Dashboard] 프로필 새로고침 완료");
+                }
+            }
+        } catch (error) {
+            console.error("Error refreshing profile:", error);
+        }
+    };
+
+    // Listen for schedule updates from TodaySuggestions
+    useEffect(() => {
+        const handleScheduleUpdate = () => {
+            console.log("[Dashboard] 일정 업데이트 이벤트 수신, 프로필 새로고침");
+            refreshUserProfile();
+        };
+
+        window.addEventListener('schedule-updated', handleScheduleUpdate);
+
+        return () => {
+            window.removeEventListener('schedule-updated', handleScheduleUpdate);
+        };
+    }, []);
+
     const migrateGoalsToCalendar = (profile: UserProfile): UserProfile => {
         if (!profile.customGoals || profile.customGoals.length === 0) {
             console.log('[Migration] No customGoals to migrate');
@@ -476,6 +507,10 @@ export function Dashboard({
         setUserProfile(updatedProfile);
         localStorage.setItem("user_profile", JSON.stringify(updatedProfile));
         saveProfileToSupabase(updatedProfile);
+
+        // Notify Dashboard to refresh schedule
+        console.log('[Dashboard] 일정 업데이트 이벤트 발송 (SchedulePopup)');
+        window.dispatchEvent(new CustomEvent('schedule-updated'));
 
         // Notify Header to reload profile
         window.dispatchEvent(new Event('profile-updated'));
@@ -676,406 +711,445 @@ export function Dashboard({
                 habitInsights={initialHabitInsights}
             />
 
-            {/* AI Suggestions Section */}
-            {userProfile && currentTime && (
-                <TodaySuggestions
-                    userProfile={{
-                        job: userProfile.job,
-                        goal: userProfile.goal,
-                        level: userProfile.level
-                    }}
-                    currentTime={currentTime}
-                />
-            )}
+            {/* Tab Navigation */}
+            <div className="flex gap-2 border-b border-border/50 pb-2">
+                <button
+                    onClick={() => setActiveTab('home')}
+                    className={cn(
+                        "px-6 py-2.5 rounded-t-xl font-semibold text-sm transition-all",
+                        activeTab === 'home'
+                            ? "bg-white shadow-sm text-foreground border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                >
+                    🏠 홈
+                </button>
+                <button
+                    onClick={() => setActiveTab('insights')}
+                    className={cn(
+                        "px-6 py-2.5 rounded-t-xl font-semibold text-sm transition-all",
+                        activeTab === 'insights'
+                            ? "bg-white shadow-sm text-foreground border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                >
+                    📊 인사이트
+                </button>
+                <button
+                    onClick={() => setActiveTab('growth')}
+                    className={cn(
+                        "px-6 py-2.5 rounded-t-xl font-semibold text-sm transition-all",
+                        activeTab === 'growth'
+                            ? "bg-white shadow-sm text-foreground border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                >
+                    🌱 성장
+                </button>
+            </div>
 
-            {/* Main Content */}
+            {/* Tab Content */}
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-visible"
+                >
+                    {/* Home Tab */}
+                    {activeTab === 'home' && (
+                        <>
+                            {/* AI Suggestions Section */}
+                            {userProfile && currentTime && (
+                                <TodaySuggestions
+                                    userProfile={{
+                                        job: userProfile.job,
+                                        goal: userProfile.goal,
+                                        level: userProfile.level
+                                    }}
+                                    currentTime={currentTime}
+                                />
+                            )}
+
+                            {/* Daily Flow Section */}
             <motion.div
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="space-y-10"
+                className="space-y-10 overflow-visible"
             >
-                    {/* 1. Daily Flow Section */}
-                    <motion.section variants={itemVariants} className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                                <Clock className="w-6 h-6 text-primary" /> Daily Flow
-                            </h2>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-muted-foreground hover:text-white gap-2"
-                                onClick={() => setShowSchedulePopup(true)}
-                            >
-                                <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
-                            </Button>
-                        </div>
+                <motion.section variants={itemVariants} className="space-y-4 overflow-visible">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+                            <Clock className="w-6 h-6 text-primary" /> Daily Flow
+                        </h2>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-white gap-2"
+                            onClick={() => setShowSchedulePopup(true)}
+                        >
+                            <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
+                        </Button>
+                    </div>
 
-                        {/* Mobile Layout: Goals -> Timeline -> Insights */}
-                        <div className="flex flex-col gap-4 md:hidden">
-                            {/* 1. Goals (Mobile) */}
-                            <div className="grid grid-cols-2 gap-3">
-                                {(() => {
-                                    // Dynamic Goal Card Logic (Same as Desktop)
-                                    if (!currentTime) return null;
-                                    const now = currentTime;
-                                    const currentDay = now.getDay();
-                                    const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+                    {/* Mobile Layout: Goals -> Timeline -> Insights */}
+                    <div className="flex flex-col gap-4 md:hidden">
+                        {/* 1. Goals (Mobile) */}
+                        <div className="grid grid-cols-2 gap-3">
+                            {(() => {
+                                // Dynamic Goal Card Logic (Same as Desktop)
+                                if (!currentTime) return null;
+                                const now = currentTime;
+                                const currentDay = now.getDay();
+                                const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
-                                    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
-                                    // Only show events with specificDate matching today (calendar events only)
-                                    const customItems = userProfile?.customGoals?.filter(g => {
-                                        return g.specificDate === todayStr;
-                                    }).map(g => ({
-                                        id: g.id,
-                                        text: g.text,
-                                        startTime: g.startTime!,
-                                        endTime: g.endTime!,
-                                        icon: Target,
-                                        color: g.color || 'primary',
-                                        type: 'custom'
-                                    })) || [];
+                                // Only show events with specificDate matching today (calendar events only)
+                                const customItems = userProfile?.customGoals?.filter(g => {
+                                    return g.specificDate === todayStr;
+                                }).map(g => ({
+                                    id: g.id,
+                                    text: g.text,
+                                    startTime: g.startTime!,
+                                    endTime: g.endTime!,
+                                    icon: Target,
+                                    color: g.color || 'primary',
+                                    type: 'custom'
+                                })) || [];
 
-                                    // Only use calendar events (customItems)
-                                    const allSchedules = [...customItems];
+                                // Only use calendar events (customItems)
+                                const allSchedules = [...customItems];
 
-                                    allSchedules.sort((a, b) => {
-                                        const [aH, aM] = a.startTime.split(':').map(Number);
-                                        const [bH, bM] = b.startTime.split(':').map(Number);
-                                        return (aH * 60 + aM) - (bH * 60 + bM);
-                                    });
+                                allSchedules.sort((a, b) => {
+                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                    const [bH, bM] = b.startTime.split(':').map(Number);
+                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                });
 
-                                    let targetSchedule = allSchedules.find(s => {
+                                let targetSchedule = allSchedules.find(s => {
+                                    const [sH, sM] = s.startTime.split(':').map(Number);
+                                    const [eH, eM] = s.endTime.split(':').map(Number);
+                                    let start = sH * 60 + sM;
+                                    let end = eH * 60 + eM;
+                                    if (end < start) end += 24 * 60;
+                                    return currentTimeValue >= start && currentTimeValue < end;
+                                });
+
+                                if (!targetSchedule) {
+                                    targetSchedule = allSchedules.find(s => {
                                         const [sH, sM] = s.startTime.split(':').map(Number);
-                                        const [eH, eM] = s.endTime.split(':').map(Number);
-                                        let start = sH * 60 + sM;
-                                        let end = eH * 60 + eM;
-                                        if (end < start) end += 24 * 60;
-                                        return currentTimeValue >= start && currentTimeValue < end;
+                                        const start = sH * 60 + sM;
+                                        return start > currentTimeValue;
                                     });
+                                }
 
-                                    if (!targetSchedule) {
-                                        targetSchedule = allSchedules.find(s => {
-                                            const [sH, sM] = s.startTime.split(':').map(Number);
-                                            const start = sH * 60 + sM;
-                                            return start > currentTimeValue;
-                                        });
-                                    }
+                                if (!targetSchedule && allSchedules.length > 0) {
+                                    targetSchedule = allSchedules[0];
+                                }
 
-                                    if (!targetSchedule && allSchedules.length > 0) {
-                                        targetSchedule = allSchedules[0];
-                                    }
+                                if (targetSchedule) {
+                                    const completionStatus = getTodayCompletions()[targetSchedule.id];
+                                    const isCompleted = completionStatus?.completed === true;
+                                    const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
+                                    const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
+                                    let start = sH * 60 + sM;
+                                    let end = eH * 60 + eM;
+                                    if (end < start) end += 24 * 60;
+                                    const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
+                                    const Icon = targetSchedule.icon;
 
-                                    if (targetSchedule) {
-                                        const completionStatus = getTodayCompletions()[targetSchedule.id];
-                                        const isCompleted = completionStatus?.completed === true;
-                                        const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
-                                        const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
-                                        let start = sH * 60 + sM;
-                                        let end = eH * 60 + eM;
-                                        if (end < start) end += 24 * 60;
-                                        const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
-                                        const Icon = targetSchedule.icon;
+                                    const colorMap: Record<string, string> = {
+                                        yellow: "bg-yellow-500",
+                                        purple: "bg-purple-500",
+                                        green: "bg-green-500",
+                                        blue: "bg-blue-500",
+                                        red: "bg-red-500",
+                                        orange: "bg-orange-500",
+                                        pink: "bg-pink-500",
+                                        primary: "bg-primary"
+                                    };
+                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
 
-                                        const colorMap: Record<string, string> = {
-                                            yellow: "bg-yellow-500",
-                                            purple: "bg-purple-500",
-                                            green: "bg-green-500",
-                                            blue: "bg-blue-500",
-                                            red: "bg-red-500",
-                                            orange: "bg-orange-500",
-                                            pink: "bg-pink-500",
-                                            primary: "bg-primary"
-                                        };
-                                        const bgClass = colorMap[targetSchedule.color] || "bg-primary";
-
-                                        return (
-                                            <motion.button
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => {
-                                                    if (targetSchedule.id === 'wake-up') updateDailyGoal("wakeUp", !dailyGoals.wakeUp);
-                                                }}
-                                                className={cn(
-                                                    "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
-                                                    isCompleted ? "bg-green-500/10 border-green-500/30" :
-                                                        isActive ? "bg-primary/10 border-primary/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
-                                                            "bg-white/5 border-white/10"
-                                                )}
-                                            >
-                                                <div className={cn(
-                                                    "w-8 h-8 rounded-full flex items-center justify-center",
-                                                    isCompleted ? "bg-green-500 text-black" :
-                                                        isActive ? `${bgClass} text-white` :
-                                                            "bg-white/10 text-muted-foreground"
-                                                )}>
-                                                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Icon className={cn("w-4 h-4", isActive && "animate-pulse")} />}
-                                                </div>
-                                                <div>
-                                                    <p className={cn("font-semibold text-sm", isActive && "text-primary")}>{targetSchedule.text}</p>
-                                                    <p className="text-xs text-muted-foreground">{targetSchedule.startTime}</p>
-                                                </div>
-                                            </motion.button>
-                                        );
-                                    } else {
-                                        return (
-                                            <div className="p-3 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                                                <p className="text-xs">일정이 없습니다</p>
+                                    return (
+                                        <motion.button
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => {
+                                                if (targetSchedule.id === 'wake-up') updateDailyGoal("wakeUp", !dailyGoals.wakeUp);
+                                            }}
+                                            className={cn(
+                                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
+                                                isCompleted ? "bg-green-500/10 border-green-500/30" :
+                                                    isActive ? "bg-primary/10 border-primary/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
+                                                        "bg-white/5 border-white/10"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center",
+                                                isCompleted ? "bg-green-500 text-black" :
+                                                    isActive ? `${bgClass} text-white` :
+                                                        "bg-white/10 text-muted-foreground"
+                                            )}>
+                                                {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Icon className={cn("w-4 h-4", isActive && "animate-pulse")} />}
                                             </div>
-                                        );
-                                    }
-                                })()}
-
-                                {/* Learning Goal */}
-                                <div className={cn(
-                                    "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
-                                    dailyGoals.learning >= 2
-                                        ? "bg-purple-500/10 border-purple-500/30"
-                                        : "bg-white/5 border-white/10"
-                                )}>
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center",
-                                        dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
-                                    )}>
-                                        <BookOpen className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-sm">학습 ({dailyGoals.learning}/2)</p>
-                                        <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
-                                            <motion.div
-                                                className="h-full bg-purple-500"
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
-                                            />
+                                            <div>
+                                                <p className={cn("font-semibold text-sm", isActive && "text-primary")}>{targetSchedule.text}</p>
+                                                <p className="text-xs text-muted-foreground">{targetSchedule.startTime}</p>
+                                            </div>
+                                        </motion.button>
+                                    );
+                                } else {
+                                    return (
+                                        <div className="p-3 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                                            <p className="text-xs">일정이 없습니다</p>
                                         </div>
+                                    );
+                                }
+                            })()}
+
+                            {/* Learning Goal */}
+                            <div className={cn(
+                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
+                                dailyGoals.learning >= 2
+                                    ? "bg-purple-500/10 border-purple-500/30"
+                                    : "bg-white/5 border-white/10"
+                            )}>
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                    dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
+                                )}>
+                                    <BookOpen className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-sm">학습 ({dailyGoals.learning}/2)</p>
+                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
+                                        <motion.div
+                                            className="h-full bg-purple-500"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
+                                        />
                                     </div>
                                 </div>
-
-                                {/* Trend Briefing Goal */}
-                                <div className={cn(
-                                    "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
-                                    dailyGoals.trendBriefing >= 6
-                                        ? "bg-blue-500/10 border-blue-500/30"
-                                        : "bg-white/5 border-white/10"
-                                )}>
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center",
-                                        dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
-                                    )}>
-                                        <TrendingUp className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-sm">브리핑 ({dailyGoals.trendBriefing}/6)</p>
-                                        <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
-                                            <motion.div
-                                                className="h-full bg-blue-500"
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Schedule Change Button (Mobile) */}
-                                <motion.button
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => setShowSchedulePopup(true)}
-                                    className="p-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex flex-col items-center justify-center gap-2"
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                        <Edit3 className="w-4 h-4 text-primary" />
-                                    </div>
-                                    <p className="font-semibold text-sm text-primary">일정 변경</p>
-                                </motion.button>
                             </div>
 
-                            {/* 2. Timeline (Mobile - Horizontal) */}
-                            <Card className="glass-card border-none">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-semibold flex items-center gap-2 text-sm">
-                                            <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
-                                        </h3>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 text-xs text-muted-foreground hover:text-white gap-1.5 px-2"
-                                            onClick={() => setShowSchedulePopup(true)}
-                                        >
-                                            <Edit3 className="w-3.5 h-3.5" /> 일정 관리
-                                        </Button>
+                            {/* Trend Briefing Goal */}
+                            <div className={cn(
+                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
+                                dailyGoals.trendBriefing >= 6
+                                    ? "bg-blue-500/10 border-blue-500/30"
+                                    : "bg-white/5 border-white/10"
+                            )}>
+                                <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                    dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
+                                )}>
+                                    <TrendingUp className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-sm">브리핑 ({dailyGoals.trendBriefing}/6)</p>
+                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
+                                        <motion.div
+                                            className="h-full bg-blue-500"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
+                                        />
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Schedule Change Button (Mobile) */}
+                            <motion.button
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setShowSchedulePopup(true)}
+                                className="p-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex flex-col items-center justify-center gap-2"
+                            >
+                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <Edit3 className="w-4 h-4 text-primary" />
+                                </div>
+                                <p className="font-semibold text-sm text-primary">일정 변경</p>
+                            </motion.button>
+                        </div>
+
+                        {/* 2. Timeline (Mobile - Horizontal) */}
+                        <Card className="glass-card border-none">
+                            <CardContent className="p-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-semibold flex items-center gap-2 text-sm">
+                                        <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
+                                    </h3>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-xs text-muted-foreground hover:text-white gap-1.5 px-2"
+                                        onClick={() => setShowSchedulePopup(true)}
+                                    >
+                                        <Edit3 className="w-3.5 h-3.5" /> 일정 관리
+                                    </Button>
+                                </div>
+                                <DailyRhythmTimeline
+                                    schedule={userProfile?.schedule}
+                                    customGoals={userProfile?.customGoals}
+                                    dailyGoals={dailyGoals}
+                                    toggleCustomGoal={toggleCustomGoal}
+                                    isMobile={true}
+                                    currentTime={currentTime}
+                                />
+                            </CardContent>
+                        </Card>
+
+                        {/* 3. Insights (Mobile) */}
+                        <div className="h-40">
+                            <PeerInsightsCard
+                                job={userProfile?.job || "마케터"}
+                                level={userProfile?.level || "중급"}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Desktop Layout: Original Grid */}
+                    <Card className="glass-card border-none overflow-hidden relative hidden md:block">
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 opacity-50" />
+                        <CardContent className="p-6 relative">
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                                {/* Left: Timeline (5 cols) */}
+                                <div className="lg:col-span-5 border-r border-white/10 pr-8">
+                                    <h3 className="text-base font-semibold mb-6 flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
+                                    </h3>
                                     <DailyRhythmTimeline
                                         schedule={userProfile?.schedule}
                                         customGoals={userProfile?.customGoals}
                                         dailyGoals={dailyGoals}
                                         toggleCustomGoal={toggleCustomGoal}
-                                        isMobile={true}
                                         currentTime={currentTime}
                                     />
-                                </CardContent>
-                            </Card>
+                                </div>
 
-                            {/* 3. Insights (Mobile) */}
-                            <div className="h-40">
-                                <PeerInsightsCard
-                                    job={userProfile?.job || "마케터"}
-                                    level={userProfile?.level || "중급"}
-                                />
-                            </div>
-                        </div>
+                                {/* Right: Goals & Insights (7 cols) */}
+                                <div className="lg:col-span-7 flex flex-col gap-3">
+                                    {/* Top: Daily Goals - Takes up half */}
+                                    <div className="flex-1 flex flex-col">
+                                        <div className="flex justify-between items-center mb-5">
+                                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                                <Target className="w-5 h-5 text-red-500" /> 오늘의 핵심 목표
+                                            </h3>
+                                            <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                                                {[dailyGoals.wakeUp, dailyGoals.learning >= 2, dailyGoals.trendBriefing >= 6].filter(v => v === true).length}/3
+                                            </span>
+                                        </div>
 
-                        {/* Desktop Layout: Original Grid */}
-                        <Card className="glass-card border-none overflow-hidden relative hidden md:block">
-                            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 opacity-50" />
-                            <CardContent className="p-6 relative">
-                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                    {/* Left: Timeline (5 cols) */}
-                                    <div className="lg:col-span-5 border-r border-white/10 pr-8">
-                                        <h3 className="text-base font-semibold mb-6 flex items-center gap-2">
-                                            <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
-                                        </h3>
-                                        <DailyRhythmTimeline
-                                            schedule={userProfile?.schedule}
-                                            customGoals={userProfile?.customGoals}
-                                            dailyGoals={dailyGoals}
-                                            toggleCustomGoal={toggleCustomGoal}
-                                            currentTime={currentTime}
-                                        />
-                                    </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                                            {/* Dynamic Schedule Goal */}
+                                            {(() => {
+                                                // Find current or next schedule
+                                                if (!currentTime) return null;
+                                                const now = currentTime;
+                                                const currentDay = now.getDay();
+                                                // --- Daily Flow Logic ---
+                                                const currentTimeValue = now.getHours() * 60 + now.getMinutes();
 
-                                    {/* Right: Goals & Insights (7 cols) */}
-                                    <div className="lg:col-span-7 flex flex-col gap-3">
-                                        {/* Top: Daily Goals - Takes up half */}
-                                        <div className="flex-1 flex flex-col">
-                                            <div className="flex justify-between items-center mb-5">
-                                                <h3 className="text-lg font-bold flex items-center gap-2">
-                                                    <Target className="w-5 h-5 text-red-500" /> 오늘의 핵심 목표
-                                                </h3>
-                                                <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                                                    {[dailyGoals.wakeUp, dailyGoals.learning >= 2, dailyGoals.trendBriefing >= 6].filter(v => v === true).length}/3
-                                                </span>
-                                            </div>
+                                                // 1. Prepare Custom Goals (both recurring and specific date)
+                                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-                                                {/* Dynamic Schedule Goal */}
-                                                {(() => {
-                                                    // Find current or next schedule
-                                                    if (!currentTime) return null;
-                                                    const now = currentTime;
-                                                    const currentDay = now.getDay();
-                                                    // --- Daily Flow Logic ---
-                                                    const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+                                                // Show events that either match today's date OR recurring events for today's day of week
+                                                const customItems = userProfile?.customGoals?.filter(g => {
+                                                    const isSpecificDate = g.specificDate === todayStr;
+                                                    const isRecurringToday = g.daysOfWeek?.includes(currentDay);
+                                                    return isSpecificDate || isRecurringToday;
+                                                }).map(g => ({
+                                                    id: g.id,
+                                                    text: g.text,
+                                                    startTime: g.startTime!,
+                                                    endTime: g.endTime!,
+                                                    icon: Target, // Default icon, could be mapped
+                                                    color: g.color || 'primary',
+                                                    type: 'custom'
+                                                })) || [];
 
-                                                    // 1. Prepare Custom Goals (both recurring and specific date)
-                                                    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                                                // 2. Use filtered calendar and recurring events
+                                                const allSchedules = [...customItems];
 
-                                                    // Show events that either match today's date OR recurring events for today's day of week
-                                                    const customItems = userProfile?.customGoals?.filter(g => {
-                                                        const isSpecificDate = g.specificDate === todayStr;
-                                                        const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                                                        return isSpecificDate || isRecurringToday;
-                                                    }).map(g => ({
-                                                        id: g.id,
-                                                        text: g.text,
-                                                        startTime: g.startTime!,
-                                                        endTime: g.endTime!,
-                                                        icon: Target, // Default icon, could be mapped
-                                                        color: g.color || 'primary',
-                                                        type: 'custom'
-                                                    })) || [];
+                                                // 4. Find Active or Next Schedule
+                                                // Sort by start time
+                                                allSchedules.sort((a, b) => {
+                                                    const [aH, aM] = a.startTime.split(':').map(Number);
+                                                    const [bH, bM] = b.startTime.split(':').map(Number);
+                                                    return (aH * 60 + aM) - (bH * 60 + bM);
+                                                });
 
-                                                    // 2. Use filtered calendar and recurring events
-                                                    const allSchedules = [...customItems];
+                                                let targetSchedule = allSchedules.find(s => {
+                                                    const [sH, sM] = s.startTime.split(':').map(Number);
+                                                    const [eH, eM] = s.endTime.split(':').map(Number);
+                                                    let start = sH * 60 + sM;
+                                                    let end = eH * 60 + eM;
 
-                                                    // 4. Find Active or Next Schedule
-                                                    // Sort by start time
-                                                    allSchedules.sort((a, b) => {
-                                                        const [aH, aM] = a.startTime.split(':').map(Number);
-                                                        const [bH, bM] = b.startTime.split(':').map(Number);
-                                                        return (aH * 60 + aM) - (bH * 60 + bM);
-                                                    });
+                                                    // Handle overnight (e.g. sleep)
+                                                    if (end < start) end += 24 * 60;
 
-                                                    let targetSchedule = allSchedules.find(s => {
+                                                    // Adjust current time for overnight check if needed
+                                                    // (Simple check: if current < start and start is late, maybe we are in previous day's overnight?)
+                                                    // For now, simple range check.
+                                                    return currentTimeValue >= start && currentTimeValue < end;
+                                                });
+
+                                                // If no active schedule, find next upcoming
+                                                if (!targetSchedule) {
+                                                    targetSchedule = allSchedules.find(s => {
                                                         const [sH, sM] = s.startTime.split(':').map(Number);
-                                                        const [eH, eM] = s.endTime.split(':').map(Number);
-                                                        let start = sH * 60 + sM;
-                                                        let end = eH * 60 + eM;
-
-                                                        // Handle overnight (e.g. sleep)
-                                                        if (end < start) end += 24 * 60;
-
-                                                        // Adjust current time for overnight check if needed
-                                                        // (Simple check: if current < start and start is late, maybe we are in previous day's overnight?)
-                                                        // For now, simple range check.
-                                                        return currentTimeValue >= start && currentTimeValue < end;
+                                                        const start = sH * 60 + sM;
+                                                        return start > currentTimeValue;
                                                     });
+                                                }
 
-                                                    // If no active schedule, find next upcoming
-                                                    if (!targetSchedule) {
-                                                        targetSchedule = allSchedules.find(s => {
-                                                            const [sH, sM] = s.startTime.split(':').map(Number);
-                                                            const start = sH * 60 + sM;
-                                                            return start > currentTimeValue;
-                                                        });
-                                                    }
+                                                // If still null (end of day), show first item of tomorrow (Wake Up)
+                                                if (!targetSchedule && allSchedules.length > 0) {
+                                                    targetSchedule = allSchedules[0];
+                                                }
 
-                                                    // If still null (end of day), show first item of tomorrow (Wake Up)
-                                                    if (!targetSchedule && allSchedules.length > 0) {
-                                                        targetSchedule = allSchedules[0];
-                                                    }
+                                                // 5. Render Card
+                                                if (targetSchedule) {
+                                                    const completionStatus = getTodayCompletions()[targetSchedule.id];
+                                                    const isCompleted = completionStatus?.completed === true;
 
-                                                    // 5. Render Card
-                                                    if (targetSchedule) {
-                                                        const completionStatus = getTodayCompletions()[targetSchedule.id];
-                                                        const isCompleted = completionStatus?.completed === true;
+                                                    // Recalculate active state for visual
+                                                    const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
+                                                    const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
+                                                    let start = sH * 60 + sM;
+                                                    let end = eH * 60 + eM;
+                                                    if (end < start) end += 24 * 60;
+                                                    const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
 
-                                                        // Recalculate active state for visual
-                                                        const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
-                                                        const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
-                                                        let start = sH * 60 + sM;
-                                                        let end = eH * 60 + eM;
-                                                        if (end < start) end += 24 * 60;
-                                                        const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
+                                                    const Icon = targetSchedule.icon;
 
-                                                        const Icon = targetSchedule.icon;
+                                                    // Color mapping for safe Tailwind classes
+                                                    const colorMap: Record<string, string> = {
+                                                        yellow: "bg-yellow-500",
+                                                        purple: "bg-purple-500",
+                                                        green: "bg-green-500",
+                                                        blue: "bg-blue-500",
+                                                        red: "bg-red-500",
+                                                        orange: "bg-orange-500",
+                                                        pink: "bg-pink-500",
+                                                        primary: "bg-primary"
+                                                    };
+                                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
 
-                                                        // Color mapping for safe Tailwind classes
-                                                        const colorMap: Record<string, string> = {
-                                                            yellow: "bg-yellow-500",
-                                                            purple: "bg-purple-500",
-                                                            green: "bg-green-500",
-                                                            blue: "bg-blue-500",
-                                                            red: "bg-red-500",
-                                                            orange: "bg-orange-500",
-                                                            pink: "bg-pink-500",
-                                                            primary: "bg-primary"
-                                                        };
-                                                        const bgClass = colorMap[targetSchedule.color] || "bg-primary";
-
-                                                        return (
-                                                            <motion.div
-                                                                whileHover={{ scale: 1.01 }}
-                                                                className={cn(
-                                                                    "p-5 rounded-lg text-left transition-all border flex items-center gap-4 relative overflow-hidden",
-                                                                    isCompleted
-                                                                        ? "bg-green-500/10 border-green-500/30"
-                                                                        : isActive
-                                                                            ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                                                                            : "bg-white/5 border-white/5"
-                                                                )}
-                                                            >
-                                                                {isCompleted && (
-                                                                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30 text-[10px] text-green-400 font-bold">
-                                                                        완료
-                                                                    </div>
-                                                                )}
-                                                                {isActive && !isCompleted && (
-                                                                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] text-primary font-bold animate-pulse">
-                                                                        NOW
-                                                                    </div>
-                                                                )}
-
+                                                    return (
+                                                        <motion.div
+                                                            whileHover={{ scale: 1.01 }}
+                                                            className={cn(
+                                                                "p-5 rounded-lg text-left transition-all border",
+                                                                isCompleted
+                                                                    ? "bg-green-500/10 border-green-500/30"
+                                                                    : isActive
+                                                                        ? "bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                                                        : "bg-white/5 border-white/5"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center gap-3">
                                                                 <div className={cn(
                                                                     "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
                                                                     isCompleted
@@ -1095,486 +1169,524 @@ export function Dashboard({
                                                                         "font-semibold text-base",
                                                                         isCompleted ? "text-green-400" : isActive && "text-primary"
                                                                     )}>
-                                                                        {targetSchedule.text}
+                                                                        {targetSchedule.text.length > 12
+                                                                            ? `${targetSchedule.text.substring(0, 12)}...`
+                                                                            : targetSchedule.text}
                                                                     </p>
                                                                     <p className="text-sm text-muted-foreground mt-0.5 font-mono">
                                                                         {targetSchedule.startTime} - {targetSchedule.endTime}
                                                                     </p>
                                                                 </div>
-                                                                {isCompleted && <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />}
-                                                            </motion.div>
-                                                        );
-                                                    } else {
-                                                        // Fallback if no schedule at all
-                                                        return <div className="p-5 rounded-lg border border-dashed border-white/10 text-center text-muted-foreground">일정이 없습니다.</div>;
-                                                    }
-                                                })()}
+                                                                {isCompleted ? (
+                                                                    <div className="shrink-0 px-2.5 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-[11px] text-green-400 font-bold">
+                                                                        완료
+                                                                    </div>
+                                                                ) : isActive ? (
+                                                                    <div className="shrink-0 px-2.5 py-1 rounded-full bg-primary/20 border border-primary/30 text-[11px] text-primary font-bold animate-pulse">
+                                                                        NOW
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
+                                                        </motion.div>
+                                                    );
+                                                } else {
+                                                    // Fallback if no schedule at all
+                                                    return <div className="p-5 rounded-lg border border-dashed border-white/10 text-center text-muted-foreground">일정이 없습니다.</div>;
+                                                }
+                                            })()}
 
-                                                {/* Learning Goal */}
+                                            {/* Learning Goal */}
+                                            <div className={cn(
+                                                "p-5 rounded-lg border flex items-center gap-4",
+                                                dailyGoals.learning >= 2
+                                                    ? "bg-purple-500/10 border-purple-500/30"
+                                                    : "bg-white/5 border-white/5"
+                                            )}>
                                                 <div className={cn(
-                                                    "p-5 rounded-lg border flex items-center gap-4",
-                                                    dailyGoals.learning >= 2
-                                                        ? "bg-purple-500/10 border-purple-500/30"
-                                                        : "bg-white/5 border-white/5"
+                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                    dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
                                                 )}>
-                                                    <div className={cn(
-                                                        "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                        dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
-                                                    )}>
-                                                        <BookOpen className="w-6 h-6" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-base">학습 완료</p>
-                                                        <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
-                                                            <motion.div
-                                                                className="h-full bg-purple-500"
-                                                                initial={{ width: 0 }}
-                                                                animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <span className="font-mono text-sm font-bold">{dailyGoals.learning}/2</span>
+                                                    <BookOpen className="w-6 h-6" />
                                                 </div>
-
-                                                {/* Trend Briefing Goal */}
-                                                <div className={cn(
-                                                    "p-5 rounded-lg border flex items-center gap-4",
-                                                    dailyGoals.trendBriefing >= 6
-                                                        ? "bg-blue-500/10 border-blue-500/30"
-                                                        : "bg-white/5 border-white/5"
-                                                )}>
-                                                    <div className={cn(
-                                                        "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                        dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
-                                                    )}>
-                                                        <TrendingUp className="w-6 h-6" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-base">학습 완료</p>
+                                                    <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            className="h-full bg-purple-500"
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
+                                                        />
                                                     </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-base">트렌드 브리핑</p>
-                                                        <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
-                                                            <motion.div
-                                                                className="h-full bg-blue-500"
-                                                                initial={{ width: 0 }}
-                                                                animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <span className="font-mono text-sm font-bold">{dailyGoals.trendBriefing}/6</span>
                                                 </div>
-
-                                                {/* Add Schedule Button */}
-                                                <motion.button
-                                                    whileHover={{ scale: 1.01 }}
-                                                    whileTap={{ scale: 0.99 }}
-                                                    onClick={() => setShowSchedulePopup(true)}
-                                                    className="p-5 rounded-lg border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex items-center justify-center gap-4"
-                                                >
-                                                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                                                        <Target className="w-6 h-6 text-primary" />
-                                                    </div>
-                                                    <p className="text-base font-semibold text-primary">일정 추가/변경</p>
-                                                </motion.button>
+                                                <span className="font-mono text-sm font-bold">{dailyGoals.learning}/2</span>
                                             </div>
+
+                                            {/* Trend Briefing Goal */}
+                                            <div className={cn(
+                                                "p-5 rounded-lg border flex items-center gap-4",
+                                                dailyGoals.trendBriefing >= 6
+                                                    ? "bg-blue-500/10 border-blue-500/30"
+                                                    : "bg-white/5 border-white/5"
+                                            )}>
+                                                <div className={cn(
+                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                    dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
+                                                )}>
+                                                    <TrendingUp className="w-6 h-6" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-base">트렌드 브리핑</p>
+                                                    <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            className="h-full bg-blue-500"
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <span className="font-mono text-sm font-bold">{dailyGoals.trendBriefing}/6</span>
+                                            </div>
+
+                                            {/* Add Schedule Button */}
+                                            <motion.button
+                                                whileHover={{ scale: 1.01 }}
+                                                whileTap={{ scale: 0.99 }}
+                                                onClick={() => setShowSchedulePopup(true)}
+                                                className="p-5 rounded-lg border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex items-center justify-center gap-4"
+                                            >
+                                                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                                                    <Target className="w-6 h-6 text-primary" />
+                                                </div>
+                                                <p className="text-base font-semibold text-primary">일정 추가/변경</p>
+                                            </motion.button>
                                         </div>
+                                    </div>
 
-                                        {/* Bottom: Growth Insights - Takes up half */}
-                                        <div className="flex-1 flex flex-col">
-                                            <h3 className="text-lg font-bold mb-5 flex items-center gap-2">
-                                                <Users className="w-5 h-5 text-purple-400" /> 성장 인사이트
-                                            </h3>
-                                            <div className="flex-1">
-                                                <PeerInsightsCard
-                                                    job={userProfile?.job || "마케터"}
-                                                    level={userProfile?.level || "중급"}
-                                                />
-                                            </div>
+                                    {/* Bottom: Growth Insights - Takes up half */}
+                                    <div className="flex-1 flex flex-col">
+                                        <h3 className="text-lg font-bold mb-5 flex items-center gap-2">
+                                            <Users className="w-5 h-5 text-purple-400" /> 성장 인사이트
+                                        </h3>
+                                        <div className="flex-1">
+                                            <PeerInsightsCard
+                                                job={userProfile?.job || "마케터"}
+                                                level={userProfile?.level || "중급"}
+                                            />
                                         </div>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </motion.section>
-
-                    {/* Trend Briefing Section - Moved Up for Growth Focus */}
-                    {userProfile && (
-                        <TrendBriefingSection
-                            job={userProfile.job}
-                            goal={userProfile.goal}
-                            interests={userProfile.interests}
-                            onAddInterest={handleAddInterest}
-                            onRemoveInterest={handleRemoveInterest}
-                            onSelectBriefing={(briefing) => {
-                                setSelectedBriefing(briefing);
-                                setShowBriefingDetail(true);
-
-                                // Increment trend briefing count if not already read
-                                if (!readBriefings.has(briefing.id)) {
-                                    setReadBriefings(prev => new Set([...prev, briefing.id]));
-                                    const newCount = Math.min(dailyGoals.trendBriefing + 1, 6);
-                                    updateDailyGoal("trendBriefing", newCount);
-                                }
-                            }}
-                        />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.section>
+            </motion.div>
+                        </>
                     )}
 
-                    {/* Email Summary Section */}
-                    <motion.section
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.5 }}
-                    >
-                        <EmailSummarySection />
-                    </motion.section>
+                    {/* Insights Tab */}
+                    {activeTab === 'insights' && (
+                        <>
+            <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-10"
+            >
+                {/* Trend Briefing Section */}
+                {userProfile && (
+                    <TrendBriefingSection
+                        job={userProfile.job}
+                        goal={userProfile.goal}
+                        interests={userProfile.interests}
+                        onAddInterest={handleAddInterest}
+                        onRemoveInterest={handleRemoveInterest}
+                        onSelectBriefing={(briefing) => {
+                            setSelectedBriefing(briefing);
+                            setShowBriefingDetail(true);
 
-                    {/* 2. Today's Growth (Curriculum) */}
-                    <motion.section variants={itemVariants} className="space-y-4">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
-                        </h2>
+                            // Increment trend briefing count if not already read
+                            if (!readBriefings.has(briefing.id)) {
+                                setReadBriefings(prev => new Set([...prev, briefing.id]));
+                                const newCount = Math.min(dailyGoals.trendBriefing + 1, 6);
+                                updateDailyGoal("trendBriefing", newCount);
+                            }
+                        }}
+                    />
+                )}
 
-                        {/* Progress Overview Card */}
-                        <Card className="glass-card border-none overflow-hidden">
-                            <CardContent className="p-4 md:p-6">
-                                <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                                    {/* Left: Circular Progress */}
-                                    <div className="relative w-24 h-24 md:w-32 md:h-32 shrink-0">
-                                        {/* Mobile SVG */}
-                                        <svg className="w-24 h-24 md:hidden transform -rotate-90">
-                                            <circle
-                                                cx="48"
-                                                cy="48"
-                                                r="42"
-                                                stroke="currentColor"
-                                                strokeWidth="6"
-                                                fill="none"
-                                                className="text-white/10"
-                                            />
-                                            <circle
-                                                cx="48"
-                                                cy="48"
-                                                r="42"
-                                                stroke="currentColor"
-                                                strokeWidth="6"
-                                                fill="none"
-                                                strokeDasharray={`${2 * Math.PI * 42}`}
-                                                strokeDashoffset={`${2 * Math.PI * 42 * (1 - (completedLearning.size / Math.max(curriculum.length, 1)))}`}
-                                                className="text-primary transition-all duration-1000 ease-out"
-                                                strokeLinecap="round"
-                                            />
-                                        </svg>
-                                        {/* Desktop SVG */}
-                                        <svg className="hidden md:block w-32 h-32 transform -rotate-90">
-                                            <circle
-                                                cx="64"
-                                                cy="64"
-                                                r="56"
-                                                stroke="currentColor"
-                                                strokeWidth="8"
-                                                fill="none"
-                                                className="text-white/10"
-                                            />
-                                            <circle
-                                                cx="64"
-                                                cy="64"
-                                                r="56"
-                                                stroke="currentColor"
-                                                strokeWidth="8"
-                                                fill="none"
-                                                strokeDasharray={`${2 * Math.PI * 56}`}
-                                                strokeDashoffset={`${2 * Math.PI * 56 * (1 - (completedLearning.size / Math.max(curriculum.length, 1)))}`}
-                                                className="text-primary transition-all duration-1000 ease-out"
-                                                strokeLinecap="round"
-                                            />
-                                        </svg>
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                            <span className="text-2xl md:text-3xl font-bold">{completedLearning.size}</span>
-                                            <span className="text-[10px] md:text-xs text-muted-foreground">/ {curriculum.length}</span>
-                                        </div>
-                                    </div>
+                {/* Email Summary Section */}
+                <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                >
+                    <EmailSummarySection />
+                </motion.section>
+            </motion.div>
+                        </>
+                    )}
 
-                                    {/* Right: Stats Grid */}
-                                    <div className="flex-1 w-full grid grid-cols-2 gap-2 md:gap-4">
-                                        {/* Completion Rate */}
-                                        <div className="bg-gradient-to-br from-green-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-green-500/20">
-                                            <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
-                                                <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 text-green-500" />
-                                                <span className="text-xs md:text-sm font-medium text-muted-foreground">완료율</span>
-                                            </div>
-                                            <div className="text-lg md:text-2xl font-bold text-green-500">
-                                                {curriculum.length > 0 ? Math.round((completedLearning.size / curriculum.length) * 100) : 0}%
-                                            </div>
-                                        </div>
+                    {/* Growth Tab */}
+                    {activeTab === 'growth' && (
+                        <>
+            <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-10"
+            >
+                {/* Today's Growth (Curriculum) */}
+                <motion.section variants={itemVariants} className="space-y-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-yellow-500" /> 오늘의 성장
+                    </h2>
 
-                                        {/* Total Learning */}
-                                        <div className="bg-gradient-to-br from-blue-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-blue-500/20">
-                                            <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
-                                                <BookOpen className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />
-                                                <span className="text-xs md:text-sm font-medium text-muted-foreground">전체 학습</span>
-                                            </div>
-                                            <div className="text-lg md:text-2xl font-bold text-blue-500">
-                                                {curriculum.length}개
-                                            </div>
-                                        </div>
-
-                                        {/* Remaining */}
-                                        <div className="bg-gradient-to-br from-orange-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-orange-500/20">
-                                            <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
-                                                <Target className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
-                                                <span className="text-xs md:text-sm font-medium text-muted-foreground">남은 학습</span>
-                                            </div>
-                                            <div className="text-lg md:text-2xl font-bold text-orange-500">
-                                                {curriculum.length - completedLearning.size}개
-                                            </div>
-                                        </div>
-
-                                        {/* Today's Goal */}
-                                        <div className="bg-gradient-to-br from-purple-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-purple-500/20">
-                                            <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
-                                                <TrendingUp className="w-3 h-3 md:w-4 md:h-4 text-purple-500" />
-                                                <span className="text-xs md:text-sm font-medium text-muted-foreground">오늘 목표</span>
-                                            </div>
-                                            <div className="text-lg md:text-2xl font-bold text-purple-500">
-                                                {dailyGoals.learning}/2
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Progress Bar */}
-                                <div className="mt-4 md:mt-6">
-                                    <div className="flex justify-between items-center mb-1.5 md:mb-2">
-                                        <span className="text-xs md:text-sm font-medium">학습 진행도</span>
-                                        <span className="text-xs md:text-sm text-muted-foreground">
-                                            {completedLearning.size} / {curriculum.length} 완료
-                                        </span>
-                                    </div>
-                                    <div className="h-2 md:h-3 bg-white/5 rounded-full overflow-hidden">
-                                        <motion.div
-                                            className="h-full bg-gradient-to-r from-primary to-purple-500"
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${curriculum.length > 0 ? (completedLearning.size / curriculum.length) * 100 : 0}%` }}
-                                            transition={{ duration: 1, ease: "easeOut" }}
+                    {/* Progress Overview Card */}
+                    <Card className="glass-card border-none overflow-hidden">
+                        <CardContent className="p-4 md:p-6">
+                            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+                                {/* Left: Circular Progress */}
+                                <div className="relative w-24 h-24 md:w-32 md:h-32 shrink-0">
+                                    {/* Mobile SVG */}
+                                    <svg className="w-24 h-24 md:hidden transform -rotate-90">
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r="42"
+                                            stroke="currentColor"
+                                            strokeWidth="6"
+                                            fill="none"
+                                            className="text-white/10"
                                         />
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r="42"
+                                            stroke="currentColor"
+                                            strokeWidth="6"
+                                            fill="none"
+                                            strokeDasharray={`${2 * Math.PI * 42}`}
+                                            strokeDashoffset={`${2 * Math.PI * 42 * (1 - (completedLearning.size / Math.max(curriculum.length, 1)))}`}
+                                            className="text-primary transition-all duration-1000 ease-out"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                    {/* Desktop SVG */}
+                                    <svg className="hidden md:block w-32 h-32 transform -rotate-90">
+                                        <circle
+                                            cx="64"
+                                            cy="64"
+                                            r="56"
+                                            stroke="currentColor"
+                                            strokeWidth="8"
+                                            fill="none"
+                                            className="text-white/10"
+                                        />
+                                        <circle
+                                            cx="64"
+                                            cy="64"
+                                            r="56"
+                                            stroke="currentColor"
+                                            strokeWidth="8"
+                                            fill="none"
+                                            strokeDasharray={`${2 * Math.PI * 56}`}
+                                            strokeDashoffset={`${2 * Math.PI * 56 * (1 - (completedLearning.size / Math.max(curriculum.length, 1)))}`}
+                                            className="text-primary transition-all duration-1000 ease-out"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-2xl md:text-3xl font-bold">{completedLearning.size}</span>
+                                        <span className="text-[10px] md:text-xs text-muted-foreground">/ {curriculum.length}</span>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
 
-                        {/* Curriculum List */}
-                        <Card className="glass-card border-none">
-                            <CardContent className="p-3 md:p-6">
-                                {!userProfile ? (
-                                    <div className="text-center py-8 md:py-12 flex flex-col items-center justify-center h-full">
-                                        <p className="text-sm md:text-base text-muted-foreground mb-3 md:mb-4">성장 여정을 시작하려면 온보딩을 완료해주세요.</p>
-                                        <Button onClick={() => window.location.href = "/onboarding"} size="sm" className="md:h-10">
-                                            <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
-                                            <span className="text-sm md:text-base">성장 여정 시작하기</span>
-                                        </Button>
-                                    </div>
-                                ) : curriculum.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                                        {curriculum.map((item, index) => {
-                                            // Fallback for missing data
-                                            const title = item.title || `학습 과정 ${index + 1}`;
-                                            const subtitle = item.subtitle || '학습 내용을 시작해보세요';
-
-                                            const learningId = `curriculum_${index}_${title}`;
-                                            const isCompleted = completedLearning.has(learningId);
-                                            const progress = curriculumProgress[index] || { completed: 0, total: 12 };
-                                            const completedLessons = progress.completed;
-                                            const totalLessons = progress.total;
-                                            const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-
-                                            return (
-                                                <motion.div
-                                                    key={index}
-                                                    whileHover={{ y: -5, scale: 1.02 }}
-                                                    className={cn(
-                                                        "p-3.5 md:p-5 rounded-xl border border-white/5 bg-white/5 cursor-pointer transition-all duration-300 hover:bg-white/10 hover:shadow-xl hover:shadow-primary/20 flex flex-col h-full group",
-                                                        isCompleted && "bg-green-500/5 border-green-500/20 hover:shadow-green-500/10"
-                                                    )}
-                                                    onClick={() => window.location.href = `/curriculum/${index}`}
-                                                >
-                                                    {/* Header with icon and title */}
-                                                    <div className="flex items-start gap-2.5 md:gap-3 mb-3 md:mb-4">
-                                                        <div className={cn(
-                                                            "w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center shrink-0 transition-all",
-                                                            isCompleted
-                                                                ? "bg-green-500/20 text-green-500"
-                                                                : "bg-gradient-to-br from-primary/20 to-purple-500/20 text-primary"
-                                                        )}>
-                                                            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className={cn("font-semibold text-sm md:text-base mb-0.5 md:mb-1", isCompleted ? "line-through text-muted-foreground" : "text-white")} style={!isCompleted ? { color: 'white' } : undefined}>
-                                                                {title}
-                                                            </p>
-                                                            <p className="text-[10px] md:text-xs text-gray-400 line-clamp-2" style={{ color: '#9ca3af' }}>{subtitle}</p>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Progress Section */}
-                                                    <div className="mt-auto space-y-2 md:space-y-3">
-                                                        {/* Stats Row */}
-                                                        <div className="flex items-center justify-between text-[10px] md:text-xs">
-                                                            <div className="flex items-center gap-1.5 md:gap-2">
-                                                                <div className={cn(
-                                                                    "px-1.5 md:px-2 py-0.5 md:py-1 rounded-full flex items-center gap-0.5 md:gap-1",
-                                                                    isCompleted
-                                                                        ? "bg-green-500/20 text-green-500"
-                                                                        : "bg-primary/20 text-primary"
-                                                                )}>
-                                                                    <Target className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                                                                    <span className="font-semibold">{progressPercent}%</span>
-                                                                </div>
-                                                            </div>
-                                                            <span className="text-muted-foreground">
-                                                                {completedLessons}/{totalLessons} 완료
-                                                            </span>
-                                                        </div>
-
-                                                        {/* Progress Bar */}
-                                                        <div className="relative">
-                                                            <div className="h-1.5 md:h-2 bg-white/5 rounded-full overflow-hidden">
-                                                                <motion.div
-                                                                    className={cn(
-                                                                        "h-full rounded-full",
-                                                                        isCompleted
-                                                                            ? "bg-gradient-to-r from-green-500 to-emerald-500"
-                                                                            : "bg-gradient-to-r from-primary to-purple-500"
-                                                                    )}
-                                                                    initial={{ width: 0 }}
-                                                                    animate={{ width: `${progressPercent}%` }}
-                                                                    transition={{ duration: 1, delay: index * 0.1, ease: "easeOut" }}
-                                                                />
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Footer */}
-                                                        <div className="pt-2 md:pt-3 border-t border-white/5 flex items-center justify-between">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleLearningComplete(learningId);
-                                                                }}
-                                                                className={cn(
-                                                                    "text-[10px] md:text-xs font-medium flex items-center gap-0.5 md:gap-1 transition-colors",
-                                                                    isCompleted
-                                                                        ? "text-green-500 hover:text-green-400"
-                                                                        : "text-muted-foreground hover:text-primary"
-                                                                )}
-                                                            >
-                                                                {isCompleted ? (
-                                                                    <>
-                                                                        <CheckCircle2 className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                                                                        완료됨
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Circle className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                                                                        진행중
-                                                                    </>
-                                                                )}
-                                                            </button>
-                                                            <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12 flex flex-col items-center justify-center h-full min-h-[300px]">
-                                        {generatingCurriculum ? (
-                                            <motion.div
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                className="flex flex-col items-center gap-6"
-                                            >
-                                                <div className="relative">
-                                                    <motion.div
-                                                        animate={{ rotate: 360 }}
-                                                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                                                        className="w-16 h-16 rounded-full border-2 border-primary/20 border-t-primary"
-                                                    />
-                                                    <motion.div
-                                                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                                                        transition={{ duration: 2, repeat: Infinity }}
-                                                        className="absolute inset-0 flex items-center justify-center"
-                                                    >
-                                                        <Sparkles className="w-6 h-6 text-primary" />
-                                                    </motion.div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <p className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-                                                        맞춤형 커리큘럼 설계 중...
-                                                    </p>
-                                                    <p className="text-sm text-muted-foreground animate-pulse">
-                                                        AI가 당신의 목표와 수준을 분석하고 있습니다
-                                                    </p>
-                                                </div>
-                                            </motion.div>
-                                        ) : (
-                                            <>
-                                                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-6 ring-1 ring-white/10">
-                                                    <BookOpen className="w-8 h-8 text-muted-foreground" />
-                                                </div>
-                                                <h3 className="text-lg font-medium mb-2">아직 생성된 커리큘럼이 없습니다</h3>
-                                                <p className="text-muted-foreground mb-6 max-w-xs mx-auto">
-                                                    목표 달성을 위한 최적의 학습 로드맵을 AI가 생성해드립니다.
-                                                </p>
-                                                <Button
-                                                    onClick={handleGenerateCurriculum}
-                                                    size="lg"
-                                                    className="gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
-                                                >
-                                                    <Sparkles className="w-4 h-4" />
-                                                    커리큘럼 생성하기
-                                                </Button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Material Analysis Card */}
-                        {/* Material Analysis Section */}
-                        <div className="space-y-4">
-                            <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent p-6 transition-all hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] group">
-                                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors" />
-
-                                <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
-                                            <FileText className="w-7 h-7 text-white" />
+                                {/* Right: Stats Grid */}
+                                <div className="flex-1 w-full grid grid-cols-2 gap-2 md:gap-4">
+                                    {/* Completion Rate */}
+                                    <div className="bg-gradient-to-br from-green-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-green-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 text-green-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">완료율</span>
                                         </div>
-                                        <div>
-                                            <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 group-hover:from-blue-300 group-hover:to-purple-300 transition-colors">
-                                                AI 자료 분석
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                시험 자료나 업무 문서를 업로드하고<br className="hidden md:block" />
-                                                AI와 함께 심층적으로 분석해보세요.
-                                            </p>
+                                        <div className="text-lg md:text-2xl font-bold text-green-500">
+                                            {curriculum.length > 0 ? Math.round((completedLearning.size / curriculum.length) * 100) : 0}%
                                         </div>
                                     </div>
 
-                                    <Link href="/materials">
-                                        <Button size="lg" className="relative bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white border-0 shadow-lg shadow-blue-500/20 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-[1.02]">
-                                            <span className="mr-2">분석 시작하기</span>
-                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        </Button>
-                                    </Link>
+                                    {/* Total Learning */}
+                                    <div className="bg-gradient-to-br from-blue-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-blue-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <BookOpen className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">전체 학습</span>
+                                        </div>
+                                        <div className="text-lg md:text-2xl font-bold text-blue-500">
+                                            {curriculum.length}개
+                                        </div>
+                                    </div>
+
+                                    {/* Remaining */}
+                                    <div className="bg-gradient-to-br from-orange-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-orange-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <Target className="w-3 h-3 md:w-4 md:h-4 text-orange-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">남은 학습</span>
+                                        </div>
+                                        <div className="text-lg md:text-2xl font-bold text-orange-500">
+                                            {curriculum.length - completedLearning.size}개
+                                        </div>
+                                    </div>
+
+                                    {/* Today's Goal */}
+                                    <div className="bg-gradient-to-br from-purple-500/10 to-transparent p-2.5 md:p-4 rounded-lg border border-purple-500/20">
+                                        <div className="flex items-center gap-1.5 md:gap-2 mb-1 md:mb-2">
+                                            <TrendingUp className="w-3 h-3 md:w-4 md:h-4 text-purple-500" />
+                                            <span className="text-xs md:text-sm font-medium text-muted-foreground">오늘 목표</span>
+                                        </div>
+                                        <div className="text-lg md:text-2xl font-bold text-purple-500">
+                                            {dailyGoals.learning}/2
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Recent Analysis Cards */}
-                            <RecentMaterialsList />
-                        </div>
-                    </motion.section>
+                            {/* Progress Bar */}
+                            <div className="mt-4 md:mt-6">
+                                <div className="flex justify-between items-center mb-1.5 md:mb-2">
+                                    <span className="text-xs md:text-sm font-medium">학습 진행도</span>
+                                    <span className="text-xs md:text-sm text-muted-foreground">
+                                        {completedLearning.size} / {curriculum.length} 완료
+                                    </span>
+                                </div>
+                                <div className="h-2 md:h-3 bg-white/5 rounded-full overflow-hidden">
+                                    <motion.div
+                                        className="h-full bg-gradient-to-r from-primary to-purple-500"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${curriculum.length > 0 ? (completedLearning.size / curriculum.length) * 100 : 0}%` }}
+                                        transition={{ duration: 1, ease: "easeOut" }}
+                                    />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
+                    {/* Curriculum List */}
+                    <Card className="glass-card border-none">
+                        <CardContent className="p-3 md:p-6">
+                            {!userProfile ? (
+                                <div className="text-center py-8 md:py-12 flex flex-col items-center justify-center h-full">
+                                    <p className="text-sm md:text-base text-muted-foreground mb-3 md:mb-4">성장 여정을 시작하려면 온보딩을 완료해주세요.</p>
+                                    <Button onClick={() => window.location.href = "/onboarding"} size="sm" className="md:h-10">
+                                        <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
+                                        <span className="text-sm md:text-base">성장 여정 시작하기</span>
+                                    </Button>
+                                </div>
+                            ) : curriculum.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                                    {curriculum.map((item, index) => {
+                                        // Fallback for missing data
+                                        const title = item.title || `학습 과정 ${index + 1}`;
+                                        const subtitle = item.subtitle || '학습 내용을 시작해보세요';
+
+                                        const learningId = `curriculum_${index}_${title}`;
+                                        const isCompleted = completedLearning.has(learningId);
+                                        const progress = curriculumProgress[index] || { completed: 0, total: 12 };
+                                        const completedLessons = progress.completed;
+                                        const totalLessons = progress.total;
+                                        const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+                                        return (
+                                            <motion.div
+                                                key={index}
+                                                whileHover={{ y: -5, scale: 1.02 }}
+                                                className={cn(
+                                                    "p-3.5 md:p-5 rounded-xl border border-white/5 bg-white/5 cursor-pointer transition-all duration-300 hover:bg-white/10 hover:shadow-xl hover:shadow-primary/20 flex flex-col h-full group",
+                                                    isCompleted && "bg-green-500/5 border-green-500/20 hover:shadow-green-500/10"
+                                                )}
+                                                onClick={() => window.location.href = `/curriculum/${index}`}
+                                            >
+                                                {/* Header with icon and title */}
+                                                <div className="flex items-start gap-2.5 md:gap-3 mb-3 md:mb-4">
+                                                    <div className={cn(
+                                                        "w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                                                        isCompleted
+                                                            ? "bg-green-500/20 text-green-500"
+                                                            : "bg-gradient-to-br from-primary/20 to-purple-500/20 text-primary"
+                                                    )}>
+                                                        <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className={cn("font-semibold text-sm md:text-base mb-0.5 md:mb-1", isCompleted ? "line-through text-muted-foreground" : "text-white")} style={!isCompleted ? { color: 'white' } : undefined}>
+                                                            {title}
+                                                        </p>
+                                                        <p className="text-[10px] md:text-xs text-gray-400 line-clamp-2" style={{ color: '#9ca3af' }}>{subtitle}</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Progress Section */}
+                                                <div className="mt-auto space-y-2 md:space-y-3">
+                                                    {/* Stats Row */}
+                                                    <div className="flex items-center justify-between text-[10px] md:text-xs">
+                                                        <div className="flex items-center gap-1.5 md:gap-2">
+                                                            <div className={cn(
+                                                                "px-1.5 md:px-2 py-0.5 md:py-1 rounded-full flex items-center gap-0.5 md:gap-1",
+                                                                isCompleted
+                                                                    ? "bg-green-500/20 text-green-500"
+                                                                    : "bg-primary/20 text-primary"
+                                                            )}>
+                                                                <Target className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                                <span className="font-semibold">{progressPercent}%</span>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-muted-foreground">
+                                                            {completedLessons}/{totalLessons} 완료
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Progress Bar */}
+                                                    <div className="relative">
+                                                        <div className="h-1.5 md:h-2 bg-white/5 rounded-full overflow-hidden">
+                                                            <motion.div
+                                                                className={cn(
+                                                                    "h-full rounded-full",
+                                                                    isCompleted
+                                                                        ? "bg-gradient-to-r from-green-500 to-emerald-500"
+                                                                        : "bg-gradient-to-r from-primary to-purple-500"
+                                                                )}
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${progressPercent}%` }}
+                                                                transition={{ duration: 1, delay: index * 0.1, ease: "easeOut" }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Footer */}
+                                                    <div className="pt-2 md:pt-3 border-t border-white/5 flex items-center justify-between">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleLearningComplete(learningId);
+                                                            }}
+                                                            className={cn(
+                                                                "text-[10px] md:text-xs font-medium flex items-center gap-0.5 md:gap-1 transition-colors",
+                                                                isCompleted
+                                                                    ? "text-green-500 hover:text-green-400"
+                                                                    : "text-muted-foreground hover:text-primary"
+                                                            )}
+                                                        >
+                                                            {isCompleted ? (
+                                                                <>
+                                                                    <CheckCircle2 className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                                    완료됨
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Circle className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                                    진행중
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                        <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 flex flex-col items-center justify-center h-full min-h-[300px]">
+                                    {generatingCurriculum ? (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="flex flex-col items-center gap-6"
+                                        >
+                                            <div className="relative">
+                                                <motion.div
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                                    className="w-16 h-16 rounded-full border-2 border-primary/20 border-t-primary"
+                                                />
+                                                <motion.div
+                                                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                                                    transition={{ duration: 2, repeat: Infinity }}
+                                                    className="absolute inset-0 flex items-center justify-center"
+                                                >
+                                                    <Sparkles className="w-6 h-6 text-primary" />
+                                                </motion.div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <p className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                                                    맞춤형 커리큘럼 설계 중...
+                                                </p>
+                                                <p className="text-sm text-muted-foreground animate-pulse">
+                                                    AI가 당신의 목표와 수준을 분석하고 있습니다
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    ) : (
+                                        <>
+                                            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-6 ring-1 ring-white/10">
+                                                <BookOpen className="w-8 h-8 text-muted-foreground" />
+                                            </div>
+                                            <h3 className="text-lg font-medium mb-2">아직 생성된 커리큘럼이 없습니다</h3>
+                                            <p className="text-muted-foreground mb-6 max-w-xs mx-auto">
+                                                목표 달성을 위한 최적의 학습 로드맵을 AI가 생성해드립니다.
+                                            </p>
+                                            <Button
+                                                onClick={handleGenerateCurriculum}
+                                                size="lg"
+                                                className="gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
+                                            >
+                                                <Sparkles className="w-4 h-4" />
+                                                커리큘럼 생성하기
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Material Analysis Card */}
+                    {/* Material Analysis Section */}
+                    <div className="space-y-4">
+                        <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent p-6 transition-all hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] group">
+                            <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors" />
+
+                            <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                                        <FileText className="w-7 h-7 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 group-hover:from-blue-300 group-hover:to-purple-300 transition-colors">
+                                            AI 자료 분석
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            시험 자료나 업무 문서를 업로드하고<br className="hidden md:block" />
+                                            AI와 함께 심층적으로 분석해보세요.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <Link href="/materials">
+                                    <Button size="lg" className="relative bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white border-0 shadow-lg shadow-blue-500/20 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-[1.02]">
+                                        <span className="mr-2">분석 시작하기</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                </Link>
+                            </div>
+                        </div>
+
+                        {/* Recent Analysis Cards */}
+                        <RecentMaterialsList />
+                    </div>
+                </motion.section>
             </motion.div>
+                        </>
+                    )}
+                </motion.div>
+            </AnimatePresence>
 
             <SchedulePopup
                 isOpen={showSchedulePopup}
@@ -1663,7 +1775,7 @@ export function Dashboard({
                     />
                 )
             }
-        </div >
+        </div>
     );
 }
 
@@ -2022,12 +2134,15 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     </div>
 
                                     {/* Content */}
-                                    <div className="text-center w-full">
-                                        <h4 className={cn(
-                                            "font-semibold text-sm mb-0.5 truncate w-full",
-                                            (isActive || isUpcoming) ? "text-white" : "text-gray-300"
-                                        )}>
-                                            {item.label}
+                                    <div className="text-center w-full px-1">
+                                        <h4
+                                            className={cn(
+                                                "font-semibold text-sm mb-0.5 line-clamp-2 break-words",
+                                                (isActive || isUpcoming) ? "text-white" : "text-gray-300"
+                                            )}
+                                            title={item.label}
+                                        >
+                                            {item.label.length > 30 ? item.label.substring(0, 30) + '...' : item.label}
                                         </h4>
                                         {isActive && (
                                             <p className={cn("text-[10px] font-medium animate-pulse", colors.text)}>
@@ -2074,7 +2189,16 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             )}
 
             {/* Desktop Vertical Layout */}
-            {!isMobile && timelineItems.map((item, index) => {
+            {!isMobile && (
+                <div
+                    className="overflow-y-auto space-y-3 scrollbar-hide"
+                    style={{
+                        maxHeight: 'calc(5 * 100px)', // Approx 5 items height
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none'
+                    }}
+                >
+                    {timelineItems.map((item, index) => {
                 const Icon = item.icon;
                 const completion = todayCompletions[item.goalId];
                 const isActive = index === activeIndex;
@@ -2124,12 +2248,15 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                         <Icon className={cn("w-5 h-5", (isActive || isUpcoming) ? "text-white" : colors.text)} />
                                     </div>
 
-                                    <div>
-                                        <h4 className={cn(
-                                            "font-semibold text-base",
-                                            (isActive || isUpcoming) && "text-white"
-                                        )}>
-                                            {item.label}
+                                    <div className="flex-1 min-w-0 max-w-[400px]">
+                                        <h4
+                                            className={cn(
+                                                "font-semibold text-base truncate",
+                                                (isActive || isUpcoming) && "text-white"
+                                            )}
+                                            title={item.label}
+                                        >
+                                            {item.label.length > 50 ? item.label.substring(0, 50) + '...' : item.label}
                                         </h4>
                                         <div className="flex items-center gap-2 mt-0.5">
                                             <p className={cn(
@@ -2183,6 +2310,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                     </motion.div>
                 );
             })}
+                </div>
+            )}
         </div>
     );
 }

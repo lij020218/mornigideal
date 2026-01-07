@@ -42,44 +42,76 @@ export async function POST(request: Request) {
             const today = specificDate;
             const todaySchedules = customGoals.filter((g: any) => g.specificDate === today);
 
-            // Parse estimated duration (e.g., "30분" -> 30, "1시간" -> 60)
-            const durationMinutes = estimatedDuration?.includes("시간")
-                ? parseInt(estimatedDuration) * 60
-                : parseInt(estimatedDuration) || 30;
+            // Parse estimated duration (e.g., "30분" -> 30, "1시간" -> 60, "1시간 30분" -> 90)
+            let durationMinutes = 60; // default
+            if (estimatedDuration) {
+                const hourMatch = estimatedDuration.match(/(\d+)\s*시간/);
+                const minuteMatch = estimatedDuration.match(/(\d+)\s*분/);
+
+                const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+                const minutes = minuteMatch ? parseInt(minuteMatch[1]) : 0;
+
+                durationMinutes = (hours * 60) + minutes;
+
+                // If no matches found, try just parsing the number
+                if (durationMinutes === 0) {
+                    durationMinutes = parseInt(estimatedDuration) || 60;
+                }
+            }
+
+            console.log(`[Schedule Add] Parsed duration: ${durationMinutes} minutes from "${estimatedDuration}"`);
 
             // Find next available slot starting from current hour or 9 AM (whichever is later)
             const now = new Date();
             const currentHour = now.getHours();
-            const startHour = Math.max(currentHour + 1, 9); // Start from next hour or 9 AM
-            const endHour = 22; // Don't schedule past 10 PM
+            const currentMinute = now.getMinutes();
+            const startHour = Math.max(currentHour + (currentMinute >= 30 ? 1 : 0), 9);
+            const endHour = 22;
 
             let foundSlot = false;
             for (let hour = startHour; hour < endHour; hour++) {
-                const slotStart = `${hour.toString().padStart(2, '0')}:00`;
-                const slotEndHour = hour + Math.ceil(durationMinutes / 60);
-                const slotEnd = `${slotEndHour.toString().padStart(2, '0')}:00`;
+                for (let minute = 0; minute < 60; minute += 30) { // Check every 30 minutes
+                    const slotStart = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 
-                // Check if this slot conflicts with existing schedules
-                const hasConflict = todaySchedules.some((schedule: any) => {
-                    const scheduleStart = parseInt(schedule.startTime.split(':')[0]);
-                    const scheduleEnd = parseInt(schedule.endTime.split(':')[0]);
-                    return (hour >= scheduleStart && hour < scheduleEnd) ||
-                           (slotEndHour > scheduleStart && slotEndHour <= scheduleEnd);
-                });
+                    // Calculate end time based on actual duration
+                    const endTotalMinutes = (hour * 60) + minute + durationMinutes;
+                    const slotEndHour = Math.floor(endTotalMinutes / 60);
+                    const slotEndMinute = endTotalMinutes % 60;
+                    const slotEnd = `${slotEndHour.toString().padStart(2, '0')}:${slotEndMinute.toString().padStart(2, '0')}`;
 
-                if (!hasConflict && slotEndHour <= endHour) {
-                    calculatedStartTime = slotStart;
-                    calculatedEndTime = slotEnd;
-                    foundSlot = true;
-                    break;
+                    if (slotEndHour >= endHour) continue;
+
+                    // Check if this slot conflicts with existing schedules
+                    const hasConflict = todaySchedules.some((schedule: any) => {
+                        const [schedStartH, schedStartM] = schedule.startTime.split(':').map(Number);
+                        const [schedEndH, schedEndM] = schedule.endTime.split(':').map(Number);
+                        const scheduleStartMinutes = schedStartH * 60 + schedStartM;
+                        const scheduleEndMinutes = schedEndH * 60 + schedEndM;
+                        const slotStartMinutes = hour * 60 + minute;
+
+                        return (slotStartMinutes < scheduleEndMinutes && endTotalMinutes > scheduleStartMinutes);
+                    });
+
+                    if (!hasConflict) {
+                        calculatedStartTime = slotStart;
+                        calculatedEndTime = slotEnd;
+                        foundSlot = true;
+                        break;
+                    }
                 }
+                if (foundSlot) break;
             }
 
             // If no slot found, default to end of day
             if (!foundSlot) {
                 calculatedStartTime = "20:00";
-                calculatedEndTime = "21:00";
+                const defaultEndMinutes = 20 * 60 + durationMinutes;
+                const defaultEndHour = Math.floor(defaultEndMinutes / 60);
+                const defaultEndMinute = defaultEndMinutes % 60;
+                calculatedEndTime = `${defaultEndHour.toString().padStart(2, '0')}:${defaultEndMinute.toString().padStart(2, '0')}`;
             }
+
+            console.log(`[Schedule Add] Slot found: ${calculatedStartTime} - ${calculatedEndTime} (${durationMinutes} min)`);
         }
 
         // Determine time of day
@@ -114,6 +146,23 @@ export async function POST(request: Request) {
             '휴식': 'green',
             '여가': 'green',
             '휴식/여가': 'green',
+            // Smart suggestions colors (bright colors)
+            '거북목': 'pink',
+            '산책': 'green',
+            '스타트업': 'purple',
+            '린 스타트업': 'purple',
+            '읽기': 'cyan',
+            '책': 'cyan',
+            'AI': 'indigo',
+            'MVP': 'purple',
+            '알고리즘': 'blue',
+            '프로젝트': 'purple',
+            '캠페인': 'orange',
+            '분석': 'blue',
+            '콘텐츠': 'amber',
+            '기획': 'amber',
+            '학습': 'indigo',
+            '실습': 'blue',
         };
 
         // Get color based on activity name or use provided/default

@@ -523,6 +523,38 @@ export function FloatingAIAssistant({
         }
     }, [isOpen]);
 
+    // Listen for custom events to add messages from external components
+    useEffect(() => {
+        const handleChatMessage = (event: CustomEvent) => {
+            console.log("[FloatingAIAssistant] 채팅 메시지 이벤트 수신:", event.detail);
+            const { role, content } = event.detail;
+            const newMessage: Message = {
+                id: `external-${Date.now()}`,
+                role: role,
+                content: content,
+            };
+            setMessages((prev) => {
+                console.log("[FloatingAIAssistant] 메시지 추가됨. 기존:", prev.length, "새:", prev.length + 1);
+                return [...prev, newMessage];
+            });
+        };
+
+        const handleChatOpen = () => {
+            console.log("[FloatingAIAssistant] 채팅 오픈 이벤트 수신");
+            setIsOpen(true);
+        };
+
+        console.log("[FloatingAIAssistant] 이벤트 리스너 등록됨");
+        window.addEventListener('ai-chat-message', handleChatMessage as EventListener);
+        window.addEventListener('ai-chat-open', handleChatOpen);
+
+        return () => {
+            console.log("[FloatingAIAssistant] 이벤트 리스너 제거됨");
+            window.removeEventListener('ai-chat-message', handleChatMessage as EventListener);
+            window.removeEventListener('ai-chat-open', handleChatOpen);
+        };
+    }, []);
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
@@ -633,11 +665,40 @@ export function FloatingAIAssistant({
                     body: JSON.stringify(card.scheduleData),
                 });
                 if (res.ok) {
-                    setIsOpen(true);
-                    setMessages((prev) => [
-                        ...prev,
-                        { id: `system-${Date.now()}`, role: "assistant", content: "✅ 일정이 추가되었습니다! 대시보드를 새로고침해주세요." },
-                    ]);
+                    // Notify Dashboard to refresh schedule
+                    console.log("[FloatingAI] 일정 업데이트 이벤트 발송");
+                    window.dispatchEvent(new CustomEvent('schedule-updated'));
+
+                    // Get AI resource recommendations
+                    console.log("[FloatingAI] AI 리소스 요청 시작:", card.scheduleData.text);
+                    const resourceResponse = await fetch("/api/ai-resource-recommend", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            activity: card.scheduleData.text,
+                            category: card.type === 'schedule' ? 'productivity' : card.type,
+                        }),
+                    });
+
+                    if (resourceResponse.ok) {
+                        const resourceData = await resourceResponse.json();
+                        console.log("[FloatingAI] AI 리소스 데이터:", resourceData);
+
+                        // Send message to AI chat
+                        const chatMessage = `✅ "${card.scheduleData.text}" 일정이 추가되었습니다!\n\n${resourceData.recommendation}`;
+
+                        setIsOpen(true);
+                        setMessages((prev) => [
+                            ...prev,
+                            { id: `system-${Date.now()}`, role: "assistant", content: chatMessage },
+                        ]);
+                    } else {
+                        setIsOpen(true);
+                        setMessages((prev) => [
+                            ...prev,
+                            { id: `system-${Date.now()}`, role: "assistant", content: `✅ "${card.scheduleData.text}" 일정이 추가되었습니다!` },
+                        ]);
+                    }
                 }
             } catch (e) {
                 console.error("Schedule add error:", e);

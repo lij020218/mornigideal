@@ -17,23 +17,13 @@ export default async function DashboardPage() {
     const username = session?.user?.username || session?.user?.name || "사용자";
     const email = session.user.email;
 
-    // Fetch only critical user data immediately
-    const user = await getCachedUser();
-
-    // All other data fetches - don't await, let them load in parallel
-    const materialsPromise = getCachedMaterials(email);
-    const curriculumPromise = user ? getCachedCurriculum(user.id) : Promise.resolve([]);
-    const trendBriefingPromise = getCachedTrendBriefing(email);
-    const recommendationsPromise = getCachedRecommendations(email);
-    const habitInsightsPromise = getCachedHabitInsights(email);
-
-    // Resolve all data in parallel
-    const [materials, curriculum, trendBriefing, recommendations, habitInsights] = await Promise.all([
-        materialsPromise,
-        curriculumPromise,
-        trendBriefingPromise,
-        recommendationsPromise,
-        habitInsightsPromise
+    // Fetch all data in parallel for fast loading
+    const [user, materials, curriculum, trendBriefing, habitInsights] = await Promise.all([
+        getCachedUser(),
+        getCachedMaterials(email),
+        getCachedCurriculum(email),
+        getCachedTrendBriefing(email),
+        getCachedHabitInsights(email)
     ]);
 
     return (
@@ -44,15 +34,15 @@ export default async function DashboardPage() {
                 username={username}
                 initialProfile={user?.profile || null}
                 initialMaterials={materials}
-                initialCurriculum={curriculum as any}
+                initialCurriculum={curriculum}
                 initialTrendBriefing={trendBriefing}
                 initialHabitInsights={habitInsights}
             />
-            {/* Floating AI Assistant with suggestions on dashboard */}
+            {/* Floating AI Assistant - will fetch data client-side */}
             <FloatingAIAssistant
                 showSuggestions={true}
-                briefings={trendBriefing || []}
-                recommendations={recommendations?.recommendations || []}
+                briefings={[]}
+                recommendations={[]}
                 userProfile={user?.profile ? {
                     job: user.profile.job,
                     goal: user.profile.goal,

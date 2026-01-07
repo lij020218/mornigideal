@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Lightbulb, Plus, Clock, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Lightbulb, Plus, Clock, CheckCircle2, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,10 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [loading, setLoading] = useState(false);
     const [addedSuggestions, setAddedSuggestions] = useState<Set<string>>(new Set());
-    const [selectedVariant, setSelectedVariant] = useState(0);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [showDurationInput, setShowDurationInput] = useState(false);
+    const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
+    const [durationInput, setDurationInput] = useState("");
 
     const hour = currentTime.getHours();
 
@@ -39,6 +42,7 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
     useEffect(() => {
         const today = new Date().toISOString().split('T')[0];
         const storedKey = `added_suggestions_${today}`;
+
         const stored = localStorage.getItem(storedKey);
 
         if (stored) {
@@ -49,486 +53,414 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                 console.error('Failed to parse stored suggestions:', e);
             }
         }
-
-        // Clean up old stored suggestions from previous days
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('added_suggestions_') && key !== storedKey) {
-                localStorage.removeItem(key);
-            }
-        });
     }, []);
 
-    // Generate time-based suggestions - only regenerate when hour changes or user profile changes
+    // Generate time-based suggestions
     useEffect(() => {
-        generateSuggestions();
-    }, [hour, userProfile]);
-
-    // Rotate variant every 30 minutes instead of every second
-    useEffect(() => {
-        const rotationInterval = setInterval(() => {
-            setSelectedVariant(prev => (prev + 1) % 3);
-        }, 30 * 60 * 1000); // 30 minutes
-
-        return () => clearInterval(rotationInterval);
-    }, []);
-
-    // Get specific actionable suggestions based on job and goal
-    const getSpecificSuggestion = (job: string, goal: string): Suggestion => {
-        // Parse goal to extract key information
-        const goalLower = goal.toLowerCase();
-
-        // AI/Tech Startup related
-        if (goalLower.includes("ai") || goalLower.includes("인공지능") || goalLower.includes("머신러닝")) {
-            if (goalLower.includes("창업") || goalLower.includes("스타트업")) {
-                const suggestions = [
-                    {
-                        id: "ai-startup-mvp",
-                        title: "AI 서비스 MVP 프로토타입 제작",
-                        description: "간단한 AI 기능을 가진 최소 기능 제품을 만들어 시장 검증",
-                        action: "AI MVP 프로토타입 제작",
-                        category: "productivity" as const,
-                        estimatedTime: "1시간",
-                        priority: "high" as const,
-                        icon: "🤖"
-                    },
-                    {
-                        id: "ai-startup-research",
-                        title: "AI 스타트업 시장 조사",
-                        description: "성공한 AI 스타트업 3개 분석 및 비즈니스 모델 연구",
-                        action: "AI 스타트업 사례 분석",
-                        category: "learning" as const,
-                        estimatedTime: "45분",
-                        priority: "high" as const,
-                        icon: "📊"
-                    },
-                    {
-                        id: "ai-startup-pitch",
-                        title: "투자 피칭 자료 작성",
-                        description: "AI 서비스의 핵심 가치 제안과 비즈니스 모델 정리",
-                        action: "피칭덱 작성",
-                        category: "productivity" as const,
-                        estimatedTime: "1시간",
-                        priority: "high" as const,
-                        icon: "💼"
-                    }
-                ];
-                return suggestions[selectedVariant % suggestions.length];
-            }
+        if (userProfile) {
+            fetchAISuggestions();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hour, userProfile?.job, userProfile?.goal]);
 
-        // Development related
-        if (job.includes("개발자") || job.includes("developer") || job.includes("엔지니어")) {
-            const suggestions = [
-                {
-                    id: "dev-coding-practice",
-                    title: "알고리즘 문제 풀이",
-                    description: "LeetCode/백준에서 중급 난이도 문제 1개 해결",
-                    action: "알고리즘 문제 풀이",
-                    category: "learning" as const,
-                    estimatedTime: "30분",
-                    priority: "high" as const,
-                    icon: "💻"
-                },
-                {
-                    id: "dev-side-project",
-                    title: "사이드 프로젝트 개발",
-                    description: "개인 프로젝트에 새로운 기능 1개 추가 및 커밋",
-                    action: "사이드 프로젝트 작업",
-                    category: "productivity" as const,
-                    estimatedTime: "1시간",
-                    priority: "high" as const,
-                    icon: "🚀"
-                },
-                {
-                    id: "dev-tech-study",
-                    title: "신기술 학습 및 실습",
-                    description: "관심있는 프레임워크/라이브러리 튜토리얼 따라하기",
-                    action: "신기술 실습",
-                    category: "learning" as const,
-                    estimatedTime: "45분",
-                    priority: "medium" as const,
-                    icon: "⚡"
-                }
-            ];
-            return suggestions[selectedVariant % suggestions.length];
-        }
 
-        // Marketing related
-        if (job.includes("마케터") || job.includes("marketer") || job.includes("마케팅")) {
-            const suggestions = [
-                {
-                    id: "marketing-campaign",
-                    title: "광고 캠페인 A/B 테스트 분석",
-                    description: "진행 중인 캠페인의 성과 데이터 분석 및 개선안 도출",
-                    action: "캠페인 성과 분석",
-                    category: "productivity" as const,
-                    estimatedTime: "30분",
-                    priority: "high" as const,
-                    icon: "📈"
-                },
-                {
-                    id: "marketing-content",
-                    title: "콘텐츠 마케팅 아이디어 기획",
-                    description: "타겟 고객을 위한 블로그/SNS 콘텐츠 3개 기획",
-                    action: "콘텐츠 기획",
-                    category: "productivity" as const,
-                    estimatedTime: "45분",
-                    priority: "high" as const,
-                    icon: "✍️"
-                },
-                {
-                    id: "marketing-competitor",
-                    title: "경쟁사 마케팅 전략 분석",
-                    description: "주요 경쟁사 2개의 최근 마케팅 활동 분석",
-                    action: "경쟁사 분석",
-                    category: "learning" as const,
-                    estimatedTime: "30분",
-                    priority: "medium" as const,
-                    icon: "🔍"
-                }
-            ];
-            return suggestions[selectedVariant % suggestions.length];
-        }
-
-        // Design related
-        if (job.includes("디자이너") || job.includes("designer")) {
-            const suggestions = [
-                {
-                    id: "design-practice",
-                    title: "UI 디자인 연습",
-                    description: "Dribbble/Behance 작품 1개 따라하며 스킬 향상",
-                    action: "UI 디자인 연습",
-                    category: "productivity" as const,
-                    estimatedTime: "1시간",
-                    priority: "high" as const,
-                    icon: "🎨"
-                },
-                {
-                    id: "design-portfolio",
-                    title: "포트폴리오 프로젝트 작업",
-                    description: "진행 중인 디자인 프로젝트 개선 및 완성도 향상",
-                    action: "포트폴리오 작업",
-                    category: "productivity" as const,
-                    estimatedTime: "45분",
-                    priority: "high" as const,
-                    icon: "📱"
-                }
-            ];
-            return suggestions[selectedVariant % suggestions.length];
-        }
-
-        // Business/Strategy related
-        if (job.includes("경영") || job.includes("전략") || job.includes("컨설턴트")) {
-            const suggestions = [
-                {
-                    id: "business-case-study",
-                    title: "비즈니스 케이스 스터디",
-                    description: "성공/실패 사례 1개 분석하고 인사이트 정리",
-                    action: "케이스 스터디 분석",
-                    category: "learning" as const,
-                    estimatedTime: "45분",
-                    priority: "high" as const,
-                    icon: "📚"
-                },
-                {
-                    id: "business-plan",
-                    title: "사업 계획서 작성",
-                    description: "아이디어를 구체화한 간단한 사업 계획 문서 작성",
-                    action: "사업 계획서 작성",
-                    category: "productivity" as const,
-                    estimatedTime: "1시간",
-                    priority: "high" as const,
-                    icon: "📋"
-                }
-            ];
-            return suggestions[selectedVariant % suggestions.length];
-        }
-
-        // Default fallback - goal-based suggestion
-        return {
-            id: "goal-specific",
-            title: `${goal} 실전 연습`,
-            description: "목표 달성을 위한 구체적인 실습 활동 30분",
-            action: `${goal} 실습`,
-            category: "productivity",
-            estimatedTime: "30분",
-            priority: "high",
-            icon: "🎯"
-        };
-    };
-
-    const generateSuggestions = () => {
+    const fetchAISuggestions = async () => {
         if (!userProfile) {
             setSuggestions([]);
             return;
         }
 
-        const { job, goal } = userProfile;
-        const newSuggestions: Suggestion[] = [];
-
-        // Morning suggestions (5-12)
-        if (hour >= 5 && hour < 12) {
-            newSuggestions.push({
-                id: "morning-exercise",
-                title: "아침 스트레칭으로 하루 시작",
-                description: "에너지를 충전하고 집중력을 높이는 10분 스트레칭",
-                action: "아침 스트레칭",
-                category: "exercise",
-                estimatedTime: "10분",
-                priority: "high",
-                icon: "🧘"
-            });
-
-            newSuggestions.push({
-                id: "morning-reading",
-                title: `${job} 관련 아티클 읽기`,
-                description: "최신 업계 트렌드를 파악하는 15분 독서",
-                action: `${job} 아티클 읽기`,
-                category: "learning",
-                estimatedTime: "15분",
-                priority: "medium",
-                icon: "📰"
-            });
-
-            newSuggestions.push({
-                id: "morning-planning",
-                title: "오늘의 우선순위 3가지 정하기",
-                description: "하루를 효율적으로 시작하기 위한 핵심 목표 설정",
-                action: "오늘의 우선순위 정하기",
-                category: "productivity",
-                estimatedTime: "10분",
-                priority: "high",
-                icon: "📋"
-            });
-        }
-
-        // Afternoon suggestions (12-18)
-        if (hour >= 12 && hour < 18) {
-            // Generate specific actionable suggestions based on job and goal
-            const specificSuggestion = getSpecificSuggestion(job, goal);
-            newSuggestions.push(specificSuggestion);
-
-            newSuggestions.push({
-                id: "afternoon-break",
-                title: "에너지 재충전 휴식",
-                description: "5분 명상 또는 가벼운 산책으로 집중력 회복",
-                action: "휴식 및 명상",
-                category: "wellness",
-                estimatedTime: "5분",
-                priority: "medium",
-                icon: "🌿"
-            });
-
-            newSuggestions.push({
-                id: "afternoon-networking",
-                title: "업계 네트워킹 시간",
-                description: "LinkedIn/커뮤니티에서 동료와 소통하고 인사이트 공유",
-                action: "네트워킹",
-                category: "productivity",
-                estimatedTime: "20분",
-                priority: "medium",
-                icon: "🤝"
-            });
-        }
-
-        // Evening suggestions (18-22)
-        if (hour >= 18 && hour < 22) {
-            newSuggestions.push({
-                id: "evening-review",
-                title: "오늘 하루 성장 복습",
-                description: "배운 내용을 정리하고 내일의 계획 세우기",
-                action: "하루 복습 및 정리",
-                category: "productivity",
-                estimatedTime: "15분",
-                priority: "high",
-                icon: "📝"
-            });
-
-            newSuggestions.push({
-                id: "evening-exercise",
-                title: "저녁 운동으로 마무리",
-                description: "30분 가벼운 운동으로 건강 관리",
-                action: "저녁 운동",
-                category: "exercise",
-                estimatedTime: "30분",
-                priority: "medium",
-                icon: "🏃"
-            });
-
-            newSuggestions.push({
-                id: "evening-reading",
-                title: "자기계발 독서",
-                description: job === "개발자"
-                    ? "기술 서적 또는 개발 블로그 읽기"
-                    : job === "마케터"
-                    ? "마케팅 트렌드 및 사례 연구"
-                    : "자기계발서 또는 업계 전문서 읽기",
-                action: "독서",
-                category: "learning",
-                estimatedTime: "30분",
-                priority: "medium",
-                icon: "📚"
-            });
-        }
-
-        setSuggestions(newSuggestions); // Always show exactly 3 suggestions
-    };
-
-    const handleAddToSchedule = async (suggestion: Suggestion) => {
         try {
             setLoading(true);
+            console.log('[TodaySuggestions] AI 추천 요청 시작');
 
-            const now = new Date();
-            const today = now.toISOString().split('T')[0];
+            // Get added schedules from state
+            const addedSchedulesList = Array.from(addedSuggestions);
 
-            // Find next available time slot instead of just current hour + 1
-            const response = await fetch("/api/user/schedule/add", {
+            const response = await fetch("/api/ai-suggest-schedules", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    text: suggestion.action,
-                    specificDate: today,
-                    // Let the backend API find the next available time slot
-                    findAvailableSlot: true,
-                    estimatedDuration: suggestion.estimatedTime,
+                    userProfile: {
+                        job: userProfile.job,
+                        goal: userProfile.goal,
+                    },
+                    addedSchedules: addedSchedulesList,
+                    timeOfDay: hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening",
                 }),
             });
 
             if (response.ok) {
-                const newAddedSet = new Set(addedSuggestions).add(suggestion.id);
-                setAddedSuggestions(newAddedSet);
+                const data = await response.json();
+                console.log('[TodaySuggestions] AI 추천 응답:', data);
 
-                // Save to localStorage so it persists across refreshes
-                const today = new Date().toISOString().split('T')[0];
-                const storedKey = `added_suggestions_${today}`;
-                localStorage.setItem(storedKey, JSON.stringify(Array.from(newAddedSet)));
-
-                if (onAddToSchedule) {
-                    onAddToSchedule(suggestion);
+                if (data.suggestions && data.suggestions.length > 0) {
+                    setSuggestions(data.suggestions);
+                } else {
+                    console.warn('[TodaySuggestions] AI 추천 결과가 비어있음');
+                    setSuggestions([]);
                 }
-
-                // Keep the suggestion visible longer before removing
-                setTimeout(() => {
-                    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
-                }, 5000); // 5 seconds - don't remove from addedSuggestions to keep "추가됨" state
+            } else {
+                console.error('[TodaySuggestions] AI 추천 요청 실패:', response.status);
+                setSuggestions([]);
             }
         } catch (error) {
-            console.error("Failed to add suggestion to schedule:", error);
+            console.error('[TodaySuggestions] AI 추천 에러:', error);
+            setSuggestions([]);
         } finally {
             setLoading(false);
         }
     };
 
-    const getCategoryColor = (category: string) => {
-        const colors = {
-            exercise: "from-pink-500/20 to-rose-500/20 border-pink-500/30",
-            learning: "from-blue-500/20 to-cyan-500/20 border-blue-500/30",
-            productivity: "from-purple-500/20 to-indigo-500/20 border-purple-500/30",
-            wellness: "from-green-500/20 to-emerald-500/20 border-green-500/30",
-        };
-        return colors[category as keyof typeof colors] || colors.productivity;
+    const handleAddClick = (suggestion: Suggestion) => {
+        setSelectedSuggestion(suggestion);
+        setDurationInput(suggestion.estimatedTime); // Pre-fill with AI's estimate
+        setShowDurationInput(true);
     };
 
-    const getPriorityBadge = (priority: string) => {
-        if (priority === "high") {
-            return <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 font-bold border border-red-500/30">HIGH</span>;
+    const handleConfirmAdd = async () => {
+        if (!selectedSuggestion || !durationInput.trim()) return;
+
+        try {
+            setLoading(true);
+            setShowDurationInput(false);
+
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+
+            // Map category to color
+            const categoryColorMap: Record<string, string> = {
+                exercise: 'pink',
+                learning: 'cyan',
+                productivity: 'purple',
+                wellness: 'green',
+            };
+
+            // Add to schedule with user-specified duration
+            const response = await fetch("/api/user/schedule/add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: selectedSuggestion.action,
+                    specificDate: today,
+                    findAvailableSlot: true,
+                    estimatedDuration: durationInput,
+                    color: categoryColorMap[selectedSuggestion.category] || 'blue',
+                }),
+            });
+
+            if (response.ok) {
+                const newAddedSet = new Set(addedSuggestions).add(selectedSuggestion.action);
+                setAddedSuggestions(newAddedSet);
+
+                const storedKey = `added_suggestions_${today}`;
+                localStorage.setItem(storedKey, JSON.stringify(Array.from(newAddedSet)));
+
+                console.log('[TodaySuggestions] 카드 추가됨:', selectedSuggestion.action);
+
+                // 이벤트 로깅 (사용자 행동 패턴 수집)
+                try {
+                    await fetch("/api/user/events/log", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            eventType: "schedule_added",
+                            startAt: new Date().toISOString(),
+                            metadata: {
+                                activity: selectedSuggestion.action,
+                                category: selectedSuggestion.category,
+                                estimatedTime: durationInput,
+                                source: "ai_suggestion",
+                            },
+                        }),
+                    });
+                    console.log('[TodaySuggestions] 이벤트 로깅 완료');
+                } catch (error) {
+                    console.error('[TodaySuggestions] 이벤트 로깅 실패:', error);
+                }
+
+                // Fetch ONE new suggestion to replace this one
+                console.log('[TodaySuggestions] 1개의 새로운 추천 요청');
+                const addedSchedulesList = Array.from(newAddedSet);
+
+                const newSuggestionResponse = await fetch("/api/ai-suggest-schedules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userProfile: {
+                            job: userProfile?.job,
+                            goal: userProfile?.goal,
+                        },
+                        addedSchedules: addedSchedulesList,
+                        timeOfDay: hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening",
+                        requestCount: 1, // Request only 1 new suggestion
+                    }),
+                });
+
+                if (newSuggestionResponse.ok) {
+                    const newData = await newSuggestionResponse.json();
+                    if (newData.suggestions && newData.suggestions.length > 0) {
+                        // Replace the added suggestion with the new one
+                        setSuggestions(prevSuggestions => {
+                            const index = prevSuggestions.findIndex(s => s.id === selectedSuggestion.id);
+                            if (index !== -1) {
+                                const newSuggestions = [...prevSuggestions];
+                                newSuggestions[index] = newData.suggestions[0];
+                                return newSuggestions;
+                            }
+                            return prevSuggestions;
+                        });
+                    }
+                }
+
+                // Notify Dashboard to refresh schedule
+                console.log("[TodaySuggestions] 일정 업데이트 이벤트 발송");
+                window.dispatchEvent(new CustomEvent('schedule-updated'));
+
+                // Get AI resource recommendations
+                console.log("[TodaySuggestions] 일정 추가 성공, AI 리소스 요청 시작:", selectedSuggestion.action);
+                const resourceResponse = await fetch("/api/ai-resource-recommend", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        activity: selectedSuggestion.action,
+                        category: selectedSuggestion.category,
+                    }),
+                });
+
+                console.log("[TodaySuggestions] AI 리소스 응답 상태:", resourceResponse.status);
+
+                if (resourceResponse.ok) {
+                    const resourceData = await resourceResponse.json();
+                    console.log("[TodaySuggestions] AI 리소스 데이터:", resourceData);
+
+                    // Send message to AI chat by dispatching custom event
+                    const chatMessage = `✅ "${selectedSuggestion.action}" 일정이 추가되었습니다!\n\n${resourceData.recommendation}`;
+                    console.log("[TodaySuggestions] AI 채팅 이벤트 발송:", chatMessage);
+
+                    window.dispatchEvent(new CustomEvent('ai-chat-message', {
+                        detail: {
+                            role: 'assistant',
+                            content: chatMessage,
+                        }
+                    }));
+
+                    // Auto-open AI chat after 500ms
+                    setTimeout(() => {
+                        console.log("[TodaySuggestions] AI 채팅 오픈 이벤트 발송");
+                        window.dispatchEvent(new CustomEvent('ai-chat-open'));
+                    }, 500);
+                } else {
+                    console.error("[TodaySuggestions] AI 리소스 요청 실패:", await resourceResponse.text());
+                }
+
+                if (onAddToSchedule) {
+                    onAddToSchedule(selectedSuggestion);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to add suggestion to schedule:", error);
+        } finally {
+            setLoading(false);
+            setDurationInput("");
+            setSelectedSuggestion(null);
         }
-        return null;
     };
 
-    if (suggestions.length === 0) {
-        return null;
-    }
+    const getCategoryStyle = (category: string) => {
+        const styles = {
+            exercise: "border-l-rose-400",
+            learning: "border-l-blue-400",
+            productivity: "border-l-purple-400",
+            wellness: "border-l-emerald-400",
+        };
+        return styles[category as keyof typeof styles] || styles.productivity;
+    };
+
+    const getIconBg = (category: string) => {
+        const styles = {
+            exercise: "bg-rose-100/80 text-rose-600",
+            learning: "bg-blue-100/80 text-blue-600",
+            productivity: "bg-purple-100/80 text-purple-600",
+            wellness: "bg-emerald-100/80 text-emerald-600",
+        };
+        return styles[category as keyof typeof styles] || styles.productivity;
+    };
+
+    const scroll = (direction: 'left' | 'right') => {
+        if (scrollContainerRef.current) {
+            const scrollAmount = 280;
+            scrollContainerRef.current.scrollBy({
+                left: direction === 'left' ? -scrollAmount : scrollAmount,
+                behavior: 'smooth'
+            });
+        }
+    };
+
+    if (suggestions.length === 0) return null;
 
     return (
         <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="space-y-4"
+            className="space-y-4 overflow-visible"
         >
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Lightbulb className="w-5 h-5 text-amber-400" />
-                    오늘의 AI 제안
+            {/* Header */}
+            <div className="flex items-center justify-between px-1">
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-800 tracking-tight">
+                    <Lightbulb className="w-5 h-5 text-amber-500" />
+                    <span className="bg-gradient-to-r from-amber-600 to-amber-500 bg-clip-text text-transparent opacity-90">
+                        Smart Suggestions
+                    </span>
                 </h2>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={generateSuggestions}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                    새로고침
-                </Button>
+
+                {/* Desktop Navigation */}
+                <div className="hidden md:flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-white/50 hover:bg-white" onClick={() => scroll('left')}>
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-white/50 hover:bg-white" onClick={() => scroll('right')}>
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                    </Button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Horizontal Scroll Carousel */}
+            <div
+                ref={scrollContainerRef}
+                className="flex gap-4 overflow-x-auto overflow-y-visible pb-24 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide pt-2"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
                 {suggestions.map((suggestion, index) => {
-                    const isAdded = addedSuggestions.has(suggestion.id);
+                    const isAdded = addedSuggestions.has(suggestion.action);
+                    const showPopup = showDurationInput && selectedSuggestion?.id === suggestion.id;
 
                     return (
                         <motion.div
                             key={suggestion.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.05 }}
                             className={cn(
-                                "relative overflow-hidden rounded-xl border p-5 bg-gradient-to-br backdrop-blur-sm group hover:shadow-lg transition-all",
-                                getCategoryColor(suggestion.category),
-                                isAdded && "opacity-50"
+                                "flex-shrink-0 w-[280px] snap-start",
+                                "relative overflow-visible rounded-2xl p-5 transition-all duration-300",
+                                "bg-white/40 backdrop-blur-xl border border-white/60",
+                                "shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
+                                "hover:bg-white/60 hover:-translate-y-1",
+                                "border-l-[6px]", // Focus color indicator
+                                getCategoryStyle(suggestion.category),
+                                isAdded && "opacity-60 grayscale-[0.5]"
                             )}
                         >
-                            {/* Priority Badge */}
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-2xl">{suggestion.icon}</span>
-                                {getPriorityBadge(suggestion.priority)}
-                            </div>
-
-                            {/* Content */}
-                            <div className="space-y-2 mb-4">
-                                <h3 className="font-bold text-base text-foreground leading-snug">
-                                    {suggestion.title}
-                                </h3>
-                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                    {suggestion.description}
-                                </p>
+                            {/* Icon + Title */}
+                            <div className="flex items-start gap-3 mb-3">
+                                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm border border-white/50", getIconBg(suggestion.category))}>
+                                    {suggestion.icon}
+                                </div>
+                                <div className="flex-1 min-w-0 pt-0.5">
+                                    <h3 className="font-bold text-gray-900 truncate tracking-tight text-[15px]">
+                                        {suggestion.title}
+                                    </h3>
+                                    <p className="text-xs text-gray-500 truncate mt-0.5 font-medium">
+                                        {suggestion.description}
+                                    </p>
+                                </div>
                             </div>
 
                             {/* Footer */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <div className="flex items-center justify-between mt-4">
+                                <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-white/50 px-2.5 py-1 rounded-full border border-white/20">
                                     <Clock className="w-3.5 h-3.5" />
                                     {suggestion.estimatedTime}
                                 </div>
 
                                 {isAdded ? (
-                                    <motion.div
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className="flex items-center gap-1.5 text-xs text-green-400 font-medium"
-                                    >
-                                        <CheckCircle2 className="w-4 h-4" />
-                                        추가됨
-                                    </motion.div>
+                                    <div className="flex items-center gap-1.5 text-xs text-green-600 font-bold bg-green-50/80 px-3 py-1.5 rounded-full">
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        Added
+                                    </div>
                                 ) : (
                                     <Button
                                         size="sm"
-                                        onClick={() => handleAddToSchedule(suggestion)}
+                                        onClick={() => handleAddClick(suggestion)}
                                         disabled={loading}
-                                        className="h-7 px-3 text-xs bg-primary/80 hover:bg-primary border-none opacity-0 group-hover:opacity-100 transition-all"
+                                        className="h-8 px-4 text-xs font-semibold bg-gray-900 hover:bg-black text-white rounded-full shadow-lg shadow-gray-200 transition-all hover:scale-105 active:scale-95"
                                     >
                                         {loading ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            <Loader2 className="w-3 h-3 animate-spin" />
                                         ) : (
                                             <>
-                                                <Plus className="w-3.5 h-3.5 mr-1" />
-                                                일정 추가
+                                                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                                                Add
                                             </>
                                         )}
                                     </Button>
                                 )}
                             </div>
+
+                            {/* Duration Input Popup - Shows below the card */}
+                            <AnimatePresence>
+                                {showPopup && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl p-4 shadow-2xl border border-gray-200 z-50"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <p className="text-xs text-gray-600 mb-2 font-medium">
+                                            소요 시간
+                                        </p>
+
+                                        <input
+                                            type="text"
+                                            value={durationInput}
+                                            onChange={(e) => setDurationInput(e.target.value)}
+                                            placeholder="예: 30분, 1시간"
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-3"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && durationInput.trim()) {
+                                                    handleConfirmAdd();
+                                                }
+                                                if (e.key === 'Escape') {
+                                                    setShowDurationInput(false);
+                                                    setDurationInput("");
+                                                    setSelectedSuggestion(null);
+                                                }
+                                            }}
+                                        />
+
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setShowDurationInput(false);
+                                                    setDurationInput("");
+                                                    setSelectedSuggestion(null);
+                                                }}
+                                                className="flex-1 h-8 text-xs"
+                                            >
+                                                취소
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                onClick={handleConfirmAdd}
+                                                disabled={!durationInput.trim() || loading}
+                                                className="flex-1 h-8 text-xs bg-gray-900 hover:bg-black text-white"
+                                            >
+                                                {loading ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                ) : (
+                                                    "추가"
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     );
                 })}

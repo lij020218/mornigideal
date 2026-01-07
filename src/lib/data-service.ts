@@ -28,15 +28,17 @@ export const getCachedMaterials = cache(async (email: string) => {
 export const getCachedCurriculum = cache(async (userId: string) => {
     if (!userId) return [];
 
-    const { data: curriculums } = await supabase
+    const { data: curriculums, error } = await supabase
         .from("user_curriculums")
         .select("curriculum_data, created_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(1) // Only get the most recent curriculum
-        .single();
+        .maybeSingle();
 
-    return curriculums ? [curriculums] : [];
+    if (error || !curriculums) return [];
+
+    return [curriculums];
 });
 
 // Cache trend briefing fetching
