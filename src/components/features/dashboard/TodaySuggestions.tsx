@@ -329,7 +329,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
             >
                 {suggestions.map((suggestion, index) => {
                     const isAdded = addedSuggestions.has(suggestion.action);
-                    const showPopup = showDurationInput && selectedSuggestion?.id === suggestion.id;
 
                     return (
                         <motion.div
@@ -393,73 +392,89 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                                     </Button>
                                 )}
                             </div>
-
-                            {/* Duration Input Popup - Shows below the card */}
-                            <AnimatePresence>
-                                {showPopup && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl p-4 shadow-2xl border border-gray-200 z-50"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                                            소요 시간
-                                        </p>
-
-                                        <input
-                                            type="text"
-                                            value={durationInput}
-                                            onChange={(e) => setDurationInput(e.target.value)}
-                                            placeholder="예: 30분, 1시간"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-3"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && durationInput.trim()) {
-                                                    handleConfirmAdd();
-                                                }
-                                                if (e.key === 'Escape') {
-                                                    setShowDurationInput(false);
-                                                    setDurationInput("");
-                                                    setSelectedSuggestion(null);
-                                                }
-                                            }}
-                                        />
-
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setShowDurationInput(false);
-                                                    setDurationInput("");
-                                                    setSelectedSuggestion(null);
-                                                }}
-                                                className="flex-1 h-8 text-xs"
-                                            >
-                                                취소
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={handleConfirmAdd}
-                                                disabled={!durationInput.trim() || loading}
-                                                className="flex-1 h-8 text-xs bg-gray-900 hover:bg-black text-white"
-                                            >
-                                                {loading ? (
-                                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                                ) : (
-                                                    "추가"
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
                         </motion.div>
                     );
                 })}
             </div>
+
+            {/* Center Modal with Backdrop */}
+            <AnimatePresence>
+                {showDurationInput && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/30 z-[9998]"
+                            onClick={() => {
+                                setShowDurationInput(false);
+                                setDurationInput("");
+                                setSelectedSuggestion(null);
+                            }}
+                        />
+
+                        {/* Centered Modal */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] bg-white rounded-xl p-5 shadow-2xl border border-gray-200 z-[9999]"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <p className="text-sm text-gray-700 mb-3 font-semibold">
+                                소요 시간
+                            </p>
+
+                            <input
+                                type="text"
+                                value={durationInput}
+                                onChange={(e) => setDurationInput(e.target.value)}
+                                placeholder="예: 30분, 1시간"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-4"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && durationInput.trim()) {
+                                        handleConfirmAdd();
+                                    }
+                                    if (e.key === 'Escape') {
+                                        setShowDurationInput(false);
+                                        setDurationInput("");
+                                        setSelectedSuggestion(null);
+                                    }
+                                }}
+                            />
+
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setShowDurationInput(false);
+                                        setDurationInput("");
+                                        setSelectedSuggestion(null);
+                                    }}
+                                    className="flex-1 h-9 text-sm"
+                                >
+                                    취소
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleConfirmAdd}
+                                    disabled={!durationInput.trim() || loading}
+                                    className="flex-1 h-9 text-sm bg-gray-900 hover:bg-black text-white"
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        "추가"
+                                    )}
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
