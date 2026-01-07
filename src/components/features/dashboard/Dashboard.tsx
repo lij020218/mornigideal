@@ -58,6 +58,16 @@ type CurriculumInput =
     | { curriculum_data: CurriculumItem[] }
     | { curriculum: CurriculumItem[] };
 
+const isCurriculumItem = (value: CurriculumInput): value is CurriculumItem => {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        "title" in value &&
+        "subtitle" in value &&
+        "icon" in value
+    );
+};
+
 interface DailyGoals {
     wakeUp: boolean;
     learning: number;
@@ -87,7 +97,7 @@ export function Dashboard({
     const [activeTab, setActiveTab] = useState<'home' | 'insights' | 'growth'>('home');
 
     // Process curriculum data - handle both direct array and nested curriculum property
-    const processedCurriculum = useMemo(() => {
+    const processedCurriculum = useMemo<CurriculumItem[]>(() => {
         if (!initialCurriculum || initialCurriculum.length === 0) return [];
 
         // Check if first item has 'curriculum_data' property (from user_curriculums table)
@@ -103,7 +113,7 @@ export function Dashboard({
         }
 
         // Direct array structure (already processed)
-        return initialCurriculum;
+        return initialCurriculum.filter(isCurriculumItem);
     }, [initialCurriculum]);
 
     const [curriculum, setCurriculum] = useState<CurriculumItem[]>(processedCurriculum);
