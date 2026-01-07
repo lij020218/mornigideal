@@ -289,35 +289,22 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                                             <button
                                                                 onClick={async () => {
                                                                     try {
-                                                                        // Ask user for duration
-                                                                        const duration = prompt('이 활동에 몇 분이 필요하신가요? (예: 30, 60)', '60');
+                                                                        // Ask user for duration in Korean format
+                                                                        const duration = prompt('소요 시간을 입력하세요 (예: 30분, 1시간, 1시간 30분)', '1시간');
                                                                         if (!duration) return; // User cancelled
-
-                                                                        const durationMinutes = parseInt(duration);
-                                                                        if (isNaN(durationMinutes) || durationMinutes <= 0) {
-                                                                            alert('올바른 시간(분)을 입력해주세요.');
-                                                                            return;
-                                                                        }
 
                                                                         const now = new Date();
                                                                         const today = now.toISOString().split('T')[0];
-                                                                        const startTime = `${(now.getHours() + 1).toString().padStart(2, '0')}:00`;
-
-                                                                        // Calculate end time based on duration
-                                                                        const startHour = now.getHours() + 1;
-                                                                        const endTotalMin = startHour * 60 + durationMinutes;
-                                                                        const endHour = Math.floor(endTotalMin / 60);
-                                                                        const endMin = endTotalMin % 60;
-                                                                        const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
 
                                                                         const response = await fetch("/api/user/schedule/add", {
                                                                             method: "POST",
                                                                             headers: { "Content-Type": "application/json" },
                                                                             body: JSON.stringify({
                                                                                 text: action,
-                                                                                startTime,
-                                                                                endTime,
                                                                                 specificDate: today,
+                                                                                findAvailableSlot: true,
+                                                                                estimatedDuration: duration,
+                                                                                color: 'purple',
                                                                             }),
                                                                         });
 
@@ -359,7 +346,7 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                                                                 }, 500);
                                                                             }
 
-                                                                            alert(`✅ "${action}" 일정이 추가되었습니다! (${durationMinutes}분)`);
+                                                                            alert(`✅ "${action}" 일정이 추가되었습니다!`);
                                                                         }
                                                                     } catch (e) {
                                                                         console.error("Failed to add schedule:", e);

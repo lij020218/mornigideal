@@ -289,7 +289,7 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
             {/* Minimal Header */}
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl md:text-5xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-gray-900 via-gray-800 to-gray-600 pb-1">
+                    <h1 className="text-3xl md:text-5xl font-bold tracking-tighter text-gray-900 pb-2">
                         Good {greeting.period}, <br className="md:hidden" />
                         <span className="font-light text-gray-500">{username}</span>
                     </h1>

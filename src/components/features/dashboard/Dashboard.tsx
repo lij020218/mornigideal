@@ -781,9 +781,9 @@ export function Dashboard({
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
-                className="space-y-10 overflow-visible"
+                className="space-y-2 overflow-visible"
             >
-                <motion.section variants={itemVariants} className="space-y-6 overflow-visible">
+                <motion.section variants={itemVariants} className="space-y-2 overflow-visible">
                             {/* AI Suggestions */}
                             {userProfile && currentTime && (
                                 <TodaySuggestions

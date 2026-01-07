@@ -324,7 +324,7 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
             {/* Horizontal Scroll Carousel */}
             <div
                 ref={scrollContainerRef}
-                className="flex gap-4 overflow-x-auto overflow-y-visible pb-32 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide pt-2"
+                className="flex gap-4 overflow-x-auto overflow-y-visible pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide pt-2"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
                 {suggestions.map((suggestion, index) => {
