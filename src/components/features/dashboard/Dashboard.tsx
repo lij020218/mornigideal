@@ -28,7 +28,7 @@ interface DashboardProps {
     username: string;
     initialProfile: UserProfile | null;
     initialMaterials: any[] | null;
-    initialCurriculum: CurriculumItem[] | null;
+    initialCurriculum: CurriculumInput[] | null;
     initialTrendBriefing: any | null;
     initialHabitInsights?: any | null;
 }
@@ -52,6 +52,11 @@ interface CurriculumItem {
     subtitle: string;
     icon: string;
 }
+
+type CurriculumInput =
+    | CurriculumItem
+    | { curriculum_data: CurriculumItem[] }
+    | { curriculum: CurriculumItem[] };
 
 interface DailyGoals {
     wakeUp: boolean;
