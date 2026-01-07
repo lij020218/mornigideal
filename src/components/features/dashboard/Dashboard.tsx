@@ -776,7 +776,15 @@ export function Dashboard({
                     {/* Home Tab */}
                     {activeTab === 'home' && (
                         <>
-                            {/* AI Suggestions Section */}
+                            {/* Combined AI Suggestions + Daily Flow Section */}
+            <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="space-y-10 overflow-visible"
+            >
+                <motion.section variants={itemVariants} className="space-y-6 overflow-visible">
+                            {/* AI Suggestions */}
                             {userProfile && currentTime && (
                                 <TodaySuggestions
                                     userProfile={{
@@ -788,14 +796,7 @@ export function Dashboard({
                                 />
                             )}
 
-                            {/* Daily Flow Section */}
-            <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="space-y-10 overflow-visible"
-            >
-                <motion.section variants={itemVariants} className="space-y-4 overflow-visible">
+                            {/* Daily Flow Header */}
                     <div className="flex justify-between items-center">
                         <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                             <Clock className="w-6 h-6 text-primary" /> Daily Flow

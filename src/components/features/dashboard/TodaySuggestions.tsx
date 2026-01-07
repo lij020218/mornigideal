@@ -300,12 +300,7 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
     if (suggestions.length === 0) return null;
 
     return (
-        <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-4 overflow-visible mb-8"
-        >
+        <div className="space-y-4 overflow-visible">
             {/* Header */}
             <div className="flex items-center justify-between px-1">
                 <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-800 tracking-tight">
@@ -329,7 +324,7 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
             {/* Horizontal Scroll Carousel */}
             <div
                 ref={scrollContainerRef}
-                className="flex gap-4 overflow-x-auto overflow-y-visible pb-40 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide pt-2"
+                className="flex gap-4 overflow-x-auto overflow-y-visible pb-32 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide pt-2"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
                 {suggestions.map((suggestion, index) => {
@@ -465,6 +460,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                     );
                 })}
             </div>
-        </motion.section>
+        </div>
     );
 }
