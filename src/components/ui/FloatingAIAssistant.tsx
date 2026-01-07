@@ -171,9 +171,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-sleep',
                 type: 'schedule',
-                title: '🌙 취침을 권해드립니다',
-                message: '충분한 수면은 내일의 성과를 좌우합니다. 편안한 밤 되세요!',
-                actionText: '수면 모드',
+                title: '?�� 취침??권해?�립?�다',
+                message: '충분???�면?� ?�일???�과�?좌우?�니?? ?�안??�??�세??',
+                actionText: '?�면 모드',
                 actionType: 'open_link',
                 color: 'bg-indigo-50 border-indigo-200',
                 icon: 'Moon',
@@ -183,9 +183,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-reminder',
                 type: 'schedule',
-                title: `📅 ${upcomingGoal.startTime}에 일정이 있어요`,
-                message: `"${upcomingGoal.text}" 일정을 잊지 마세요!`,
-                actionText: '확인',
+                title: `?�� ${upcomingGoal.startTime}???�정???�어??,
+                message: `"${upcomingGoal.text}" ?�정???��? 마세??`,
+                actionText: '?�인',
                 actionType: 'open_link',
                 color: 'bg-blue-50 border-blue-200',
                 icon: 'Calendar',
@@ -201,84 +201,84 @@ export function FloatingAIAssistant({
                 return goalTime - currentTime;
             })() : 999;
 
-            // 🍽️ MEAL TIME SUGGESTIONS (7-9 AM, 11-1 PM, 6-8 PM)
+            // ?���?MEAL TIME SUGGESTIONS (7-9 AM, 11-1 PM, 6-8 PM)
             const getMealSuggestion = () => {
                 if (currentHour >= 7 && currentHour < 9) {
                     const breakfastOptions = [
-                        { text: '🥗 오트밀과 과일로 건강한 아침 시작하는 건 어떠세요?', action: '아침 먹기', schedule: '아침 식사', time: '30분' },
-                        { text: '🍳 단백질 스크램블과 아보카도 토스트는 어떠신가요?', action: '식사하기', schedule: '아침 식사', time: '30분' },
-                        { text: '🥤 그린 스무디로 영양을 간편하게 채워보세요', action: '식사하기', schedule: '아침 식사', time: '20분' },
+                        { text: '?�� ?�트밀�?과일�?건강???�침 ?�작?�는 �??�떠?�요?', action: '?�침 먹기', schedule: '?�침 ?�사', time: '30�? },
+                        { text: '?�� ?�백�??�크?�블�??�보카도 ?�스?�는 ?�떠?��???', action: '?�사?�기', schedule: '?�침 ?�사', time: '30�? },
+                        { text: '?�� 그린 ?�무?�로 ?�양??간편?�게 채워보세??, action: '?�사?�기', schedule: '?�침 ?�사', time: '20�? },
                     ];
                     return breakfastOptions[Math.floor(Math.random() * breakfastOptions.length)];
                 } else if (currentHour >= 11 && currentHour < 13) {
                     const lunchOptions = [
-                        { text: '🍱 샐러드 볼로 가볍게 점심을 드시는 건 어떨까요?', action: '점심 먹기', schedule: '점심 식사', time: '40분' },
-                        { text: '🥙 닭가슴살 샌드위치로 에너지 충전하세요', action: '식사하기', schedule: '점심 식사', time: '40분' },
-                        { text: '🍲 된장찌개와 잡곡밥으로 든든한 점심 어떠세요?', action: '식사하기', schedule: '점심 식사', time: '50분' },
+                        { text: '?�� ?�러??볼로 가볍게 ?�심???�시??�??�떨까요?', action: '?�심 먹기', schedule: '?�심 ?�사', time: '40�? },
+                        { text: '?�� ????�살 ?�드?�치�??�너지 충전?�세??, action: '?�사?�기', schedule: '?�심 ?�사', time: '40�? },
+                        { text: '?�� ?�장찌개?� ?�곡밥으�??�든???�심 ?�떠?�요?', action: '?�사?�기', schedule: '?�심 ?�사', time: '50�? },
                     ];
                     return lunchOptions[Math.floor(Math.random() * lunchOptions.length)];
                 } else if (currentHour >= 18 && currentHour < 20) {
                     const dinnerOptions = [
-                        { text: '🥗 연어 구이와 채소로 영양 균형 잡힌 저녁 드세요', action: '저녁 먹기', schedule: '저녁 식사', time: '50분' },
-                        { text: '🍗 닭가슴살 스테이크와 고구마 어떠세요?', action: '식사하기', schedule: '저녁 식사', time: '45분' },
-                        { text: '🥘 두부 샐러드로 가볍게 저녁을 마무리하세요', action: '식사하기', schedule: '저녁 식사', time: '30분' },
+                        { text: '?�� ?�어 구이?� 채소�??�양 균형 ?�힌 ?�???�세??, action: '?�??먹기', schedule: '?�???�사', time: '50�? },
+                        { text: '?�� ????�살 ?�테?�크?� 고구�??�떠?�요?', action: '?�사?�기', schedule: '?�???�사', time: '45�? },
+                        { text: '?�� ?��? ?�러?�로 가볍게 ?�?�을 마무리하?�요', action: '?�사?�기', schedule: '?�???�사', time: '30�? },
                     ];
                     return dinnerOptions[Math.floor(Math.random() * dinnerOptions.length)];
                 }
                 return null;
             };
 
-            // 📚 READING TIME SUGGESTIONS (8-10 PM or weekends)
+            // ?�� READING TIME SUGGESTIONS (8-10 PM or weekends)
             const getReadingSuggestion = () => {
-                const books = job.includes('마케터') || job.includes('마케팅') ? [
-                    { text: '📖 「그로스 해킹」 읽으며 성장 전략을 배워보세요', action: '독서하기', schedule: '독서 - 그로스 해킹', time: '30분' },
-                    { text: '📕 「마케터의 일」로 실무 인사이트를 얻어보세요', action: '책 읽기', schedule: '독서 - 마케터의 일', time: '40분' },
-                ] : job.includes('개발') || job.includes('엔지니어') ? [
-                    { text: '📗 「클린 코드」 한 챕터로 코딩 철학을 배워보세요', action: '독서하기', schedule: '독서 - 클린 코드', time: '30분' },
-                    { text: '📘 「리팩토링」 읽으며 설계 감각을 키워보세요', action: '책 읽기', schedule: '독서 - 리팩토링', time: '40분' },
+                const books = job.includes('마�???) || job.includes('마�???) ? [
+                    { text: '?�� ?�그로스 ?�킹???�으�??�장 ?�략??배워보세??, action: '?�서?�기', schedule: '?�서 - 그로???�킹', time: '30�? },
+                    { text: '?�� ?�마케?�의 ?�」로 ?�무 ?�사?�트�??�어보세??, action: '�??�기', schedule: '?�서 - 마�??�의 ??, time: '40�? },
+                ] : job.includes('개발') || job.includes('?��??�어') ? [
+                    { text: '?�� ?�클�?코드????챕터�?코딩 철학??배워보세??, action: '?�서?�기', schedule: '?�서 - ?�린 코드', time: '30�? },
+                    { text: '?�� ?�리?�토링�??�으�??�계 감각???�워보세??, action: '�??�기', schedule: '?�서 - 리팩?�링', time: '40�? },
                 ] : [
-                    { text: '📚 「부의 추월차선」으로 부의 원리를 배워보세요', action: '독서하기', schedule: '독서 - 부의 추월차선', time: '40분' },
-                    { text: '📕 「아주 작은 습관의 힘」으로 성장 시스템을 만드세요', action: '책 읽기', schedule: '독서 - 습관의 힘', time: '30분' },
+                    { text: '?�� ?��???추월차선?�으�?부???�리�?배워보세??, action: '?�서?�기', schedule: '?�서 - 부??추월차선', time: '40�? },
+                    { text: '?�� ?�아�??��? ?��????�」으�??�장 ?�스?�을 만드?�요', action: '�??�기', schedule: '?�서 - ?��?????, time: '30�? },
                 ];
                 return books[Math.floor(Math.random() * books.length)];
             };
 
-            // 💪 EXERCISE SUGGESTIONS (6-8 AM, 6-8 PM)
+            // ?�� EXERCISE SUGGESTIONS (6-8 AM, 6-8 PM)
             const getExerciseSuggestion = () => {
                 if (currentHour >= 6 && currentHour < 8) {
                     const morningExercise = [
-                        { text: '🏃‍♂️ 아침 조깅 30분으로 하루를 활기차게 시작하세요!', action: '운동하기', schedule: '조깅', time: '30분' },
-                        { text: '🧘 요가로 몸과 마음을 깨워보는 건 어떠세요?', action: '운동하기', schedule: '요가', time: '20분' },
-                        { text: '💪 간단한 홈트레이닝으로 에너지를 충전하세요', action: '운동하기', schedule: '홈트레이닝', time: '25분' },
+                        { text: '?��?�♂�??�침 조깅 30분으�??�루�??�기차게 ?�작?�세??', action: '?�동?�기', schedule: '조깅', time: '30�? },
+                        { text: '?�� ?��?�?몸과 마음??깨워보는 �??�떠?�요?', action: '?�동?�기', schedule: '?��?', time: '20�? },
+                        { text: '?�� 간단???�트?�이?�으�??�너지�?충전?�세??, action: '?�동?�기', schedule: '?�트?�이??, time: '25�? },
                     ];
                     return morningExercise[Math.floor(Math.random() * morningExercise.length)];
                 } else if (currentHour >= 18 && currentHour < 21) {
                     const eveningExercise = [
-                        { text: '🏋️ 헬스장에서 근력 운동 어떠세요? 스트레스도 날려보세요', action: '운동하기', schedule: '헬스', time: '60분' },
-                        { text: '🏊 수영으로 하루의 피로를 풀어보세요', action: '운동하기', schedule: '수영', time: '45분' },
-                        { text: '🚴 자전거 타며 저녁 바람 쐬는 건 어떨까요?', action: '운동하기', schedule: '자전거', time: '40분' },
+                        { text: '?���??�스?�에??근력 ?�동 ?�떠?�요? ?�트?�스???�려보세??, action: '?�동?�기', schedule: '?�스', time: '60�? },
+                        { text: '?�� ?�영?�로 ?�루???�로�??�?�보?�요', action: '?�동?�기', schedule: '?�영', time: '45�? },
+                        { text: '?�� ?�전�??��??�??바람 ?�는 �??�떨까요?', action: '?�동?�기', schedule: '?�전�?, time: '40�? },
                     ];
                     return eveningExercise[Math.floor(Math.random() * eveningExercise.length)];
                 }
                 return null;
             };
 
-            // 🎯 SKILL DEVELOPMENT (personalized by job)
+            // ?�� SKILL DEVELOPMENT (personalized by job)
             const getSkillSuggestion = () => {
-                if (job.includes('마케터') || job.includes('마케팅')) {
+                if (job.includes('마�???) || job.includes('마�???)) {
                     return [
-                        { text: '📊 경쟁사 SNS 분석하며 인사이트를 쌓아보세요', action: '분석하기', schedule: '경쟁사 분석', time: '30분' },
-                        { text: '✍️ 블로그 글 하나 작성하며 콘텐츠 역량을 키워보세요', action: '글쓰기', schedule: '블로그 작성', time: '40분' },
+                        { text: '?�� 경쟁??SNS 분석?�며 ?�사?�트�??�아보세??, action: '분석?�기', schedule: '경쟁??분석', time: '30�? },
+                        { text: '?�️ 블로�?글 ?�나 ?�성?�며 콘텐�???��???�워보세??, action: '글?�기', schedule: '블로�??�성', time: '40�? },
                     ][Math.floor(Math.random() * 2)];
-                } else if (job.includes('개발') || job.includes('엔지니어')) {
+                } else if (job.includes('개발') || job.includes('?��??�어')) {
                     return [
-                        { text: '💻 알고리즘 문제 하나 풀며 두뇌를 깨워보세요', action: '코딩하기', schedule: '알고리즘 풀이', time: '30분' },
-                        { text: '🔧 새로운 라이브러리 문서 읽으며 기술을 배워보세요', action: '학습하기', schedule: '기술 학습', time: '40분' },
+                        { text: '?�� ?�고리즘 문제 ?�나 ?��??�뇌�?깨워보세??, action: '코딩?�기', schedule: '?�고리즘 ?�??, time: '30�? },
+                        { text: '?�� ?�로???�이브러�?문서 ?�으�?기술??배워보세??, action: '?�습?�기', schedule: '기술 ?�습', time: '40�? },
                     ][Math.floor(Math.random() * 2)];
                 } else {
                     return [
-                        { text: '🚀 온라인 강의 한 챕터 들으며 성장해보세요', action: '학습하기', schedule: '온라인 강의', time: '30분' },
-                        { text: '✍️ 오늘 배운 것을 정리하며 내것으로 만드세요', action: '정리하기', schedule: '학습 정리', time: '20분' },
+                        { text: '?? ?�라??강의 ??챕터 ?�으�??�장?�보?�요', action: '?�습?�기', schedule: '?�라??강의', time: '30�? },
+                        { text: '?�️ ?�늘 배운 것을 ?�리?�며 ?�것?�로 만드?�요', action: '?�리?�기', schedule: '?�습 ?�리', time: '20�? },
                     ][Math.floor(Math.random() * 2)];
                 }
             };
@@ -301,24 +301,24 @@ export function FloatingAIAssistant({
 
             // Evening productive relaxation suggestions (fallback)
             const eveningProductiveSuggestions = [
-                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기', icon: 'Sparkles', schedule: '독서', time: '30분' },
-                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기', icon: 'Sparkles', schedule: '일기 작성', time: '15분' },
-                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기', icon: 'Sparkles', schedule: '내일 계획', time: '20분' },
-                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기', icon: 'Sparkles', schedule: '학습 복습', time: '25분' },
-                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기', icon: 'Sparkles', schedule: '온라인 강의', time: '30분' },
-                { text: '🌟 성공한 사람들의 인터뷰를 보며 영감을 얻으세요', action: '영감 얻기', icon: 'Sparkles', schedule: '인터뷰 시청', time: '20분' },
-                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행', icon: 'Sparkles', schedule: '프로젝트', time: '40분' },
-                { text: '🧠 명상으로 마음을 정리하고 집중력을 회복하세요', action: '명상하기', icon: 'Sparkles', schedule: '명상', time: '15분' },
+                { text: '?�� ?�???�서�??�루�??��??�게 마무리하?�요', action: '?�서?�기', icon: 'Sparkles', schedule: '?�서', time: '30�? },
+                { text: '?�️ ?�루�??�아보며 ?�장 ?�기�??�성?�보?�요', action: '?�기 ?�기', icon: 'Sparkles', schedule: '?�기 ?�성', time: '15�? },
+                { text: '?�� ?�일??목표�?구체?�으�?계획?�보?�요', action: '계획 ?�우�?, icon: 'Sparkles', schedule: '?�일 계획', time: '20�? },
+                { text: '?�� ?�늘 배운 교훈???�리?�고 ?�재?�하?�요', action: '복습?�기', icon: 'Sparkles', schedule: '?�습 복습', time: '25�? },
+                { text: '?�� ?�라??강의�??�로??지?�을 ?�득?�세??, action: '강의 ?�기', icon: 'Sparkles', schedule: '?�라??강의', time: '30�? },
+                { text: '?�� ?�공???�람?�의 ?�터뷰�? 보며 ?�감???�으?�요', action: '?�감 ?�기', icon: 'Sparkles', schedule: '?�터�??�청', time: '20�? },
+                { text: '?�� 미뤄??과제???�로?�트�?진행?�보?�요', action: '과제 진행', icon: 'Sparkles', schedule: '?�로?�트', time: '40�? },
+                { text: '?�� 명상?�로 마음???�리?�고 집중?�을 ?�복?�세??, action: '명상?�기', icon: 'Sparkles', schedule: '명상', time: '15�? },
             ];
 
             // Weekend productive suggestions
             const weekendSuggestions = [
-                { text: '📚 주말 프로젝트로 새로운 것에 도전해보세요!', action: '프로젝트 시작', icon: 'Sparkles' },
-                { text: '🎯 이번 주 목표를 리뷰하고 다음 주를 준비하세요', action: '주간 리뷰', icon: 'Sparkles' },
-                { text: '💡 평소 관심있던 분야를 깊이 탐구해보세요', action: '심화 학습', icon: 'Sparkles' },
-                { text: '🤝 네트워킹 이벤트나 스터디 모임에 참여해보세요', action: '네트워킹', icon: 'Sparkles' },
-                { text: '✨ 포트폴리오나 이력서를 업데이트하세요', action: '커리어 관리', icon: 'Sparkles' },
-                { text: '🎨 취미 활동으로 창의력을 발휘해보세요', action: '취미 개발', icon: 'Sparkles' },
+                { text: '?�� 주말 ?�로?�트�??�로??것에 ?�전?�보?�요!', action: '?�로?�트 ?�작', icon: 'Sparkles' },
+                { text: '?�� ?�번 �?목표�?리뷰?�고 ?�음 주�? 준비하?�요', action: '주간 리뷰', icon: 'Sparkles' },
+                { text: '?�� ?�소 관?�있??분야�?깊이 ?�구?�보?�요', action: '?�화 ?�습', icon: 'Sparkles' },
+                { text: '?�� ?�트?�킹 ?�벤?�나 ?�터??모임??참여?�보?�요', action: '?�트?�킹', icon: 'Sparkles' },
+                { text: '???�트?�리?�나 ?�력?��? ?�데?�트?�세??, action: '커리??관�?, icon: 'Sparkles' },
+                { text: '?�� 취�? ?�동?�로 창의?�을 발휘?�보?�요', action: '취�? 개발', icon: 'Sparkles' },
             ];
 
             // Use selected proactive suggestion
@@ -342,9 +342,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-suggest',
                 type: 'schedule',
-                title: `💪 ${upcomingGoal.startTime}까지 ${selectedSuggestion.time || '시간'} 있어요`,
+                title: `?�� ${upcomingGoal.startTime}까�? ${selectedSuggestion.time || '?�간'} ?�어??,
                 message: selectedSuggestion.text,
-                actionText: '일정에 추가',
+                actionText: '?�정??추�?',
                 actionType: 'add_schedule',
                 scheduleData: {
                     text: selectedSuggestion.schedule || selectedSuggestion.action,
@@ -358,12 +358,12 @@ export function FloatingAIAssistant({
         } else {
             // No more schedules today - continue productive evening activities
             const eveningGrowthSuggestions = [
-                { text: '📖 저녁 독서로 하루를 의미있게 마무리하세요', action: '독서하기' },
-                { text: '✍️ 하루를 돌아보며 성장 일기를 작성해보세요', action: '일기 쓰기' },
-                { text: '🎯 내일의 목표를 구체적으로 계획해보세요', action: '계획 세우기' },
-                { text: '💭 오늘 배운 교훈을 정리하고 내재화하세요', action: '복습하기' },
-                { text: '🎓 온라인 강의로 새로운 지식을 습득하세요', action: '강의 듣기' },
-                { text: '📝 미뤄둔 과제나 프로젝트를 진행해보세요', action: '과제 진행' },
+                { text: '?�� ?�???�서�??�루�??��??�게 마무리하?�요', action: '?�서?�기' },
+                { text: '?�️ ?�루�??�아보며 ?�장 ?�기�??�성?�보?�요', action: '?�기 ?�기' },
+                { text: '?�� ?�일??목표�?구체?�으�?계획?�보?�요', action: '계획 ?�우�? },
+                { text: '?�� ?�늘 배운 교훈???�리?�고 ?�재?�하?�요', action: '복습?�기' },
+                { text: '?�� ?�라??강의�??�로??지?�을 ?�득?�세??, action: '강의 ?�기' },
+                { text: '?�� 미뤄??과제???�로?�트�?진행?�보?�요', action: '과제 진행' },
             ];
 
             const randomSuggestion = eveningGrowthSuggestions[Math.floor(Math.random() * eveningGrowthSuggestions.length)];
@@ -371,7 +371,7 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-evening',
                 type: 'schedule',
-                title: '🚀 지금도 성장할 수 있습니다!',
+                title: '?? 지금도 ?�장?????�습?�다!',
                 message: randomSuggestion.text,
                 actionText: randomSuggestion.action,
                 actionType: 'open_link',
@@ -386,9 +386,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'briefing-card',
                 type: 'briefing',
-                title: `📰 ${randomBriefing.title?.substring(0, 25)}...`,
-                message: '아직 이 트렌드 브리핑을 읽지 않으셨어요. 지금 확인해보세요!',
-                actionText: '브리핑 보기',
+                title: `?�� ${randomBriefing.title?.substring(0, 25)}...`,
+                message: '?�직 ???�렌??브리?�을 ?��? ?�으?�어?? 지�??�인?�보?�요!',
+                actionText: '브리??보기',
                 actionType: 'open_briefing',
                 briefingData: randomBriefing,
                 color: 'bg-orange-50 border-orange-200',
@@ -417,9 +417,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'youtube-card',
                 type: 'youtube',
-                title: `🎬 ${randomRec.title?.substring(0, 25)}...`,
-                message: `${randomRec.channel}의 추천 영상`,
-                actionText: '보러가기',
+                title: `?�� ${randomRec.title?.substring(0, 25)}...`,
+                message: `${randomRec.channel}??추천 ?�상`,
+                actionText: '보러가�?,
                 actionType: 'open_link',
                 actionUrl: `https://www.youtube.com/watch?v=${randomRec.id}`,
                 color: 'bg-red-50 border-red-200',
@@ -432,52 +432,52 @@ export function FloatingAIAssistant({
             const job = userProfile?.job || '';
 
             // Student-focused suggestions
-            if (job.includes('학생') || job.includes('대학생') || job.includes('취준생')) {
+            if (job.includes('?�생') || job.includes('?�?�생') || job.includes('취�???)) {
                 const studentInfo = [
-                    { title: '🏆 공모전 정보', message: '이번 주 마감되는 공모전을 확인하세요', url: 'https://www.thinkcontest.com', action: '공모전 보기' },
-                    { title: '💼 인턴십 채용', message: '대기업/스타트업 인턴 채용 공고', url: 'https://www.wanted.co.kr/wdlist/518', action: '채용공고 보기' },
-                    { title: '📚 장학금 정보', message: '신청 가능한 장학금을 확인하세요', url: 'https://www.kosaf.go.kr', action: '장학금 보기' },
-                    { title: '✍️ 자소서 팁', message: '합격 자소서 작성법을 알아보세요', url: 'https://www.jobplanet.co.kr', action: '취업 팁 보기' },
+                    { title: '?�� 공모???�보', message: '?�번 �?마감?�는 공모?�을 ?�인?�세??, url: 'https://www.thinkcontest.com', action: '공모??보기' },
+                    { title: '?�� ?�턴??채용', message: '?�기업/?��??�업 ?�턴 채용 공고', url: 'https://www.wanted.co.kr/wdlist/518', action: '채용공고 보기' },
+                    { title: '?�� ?�학�??�보', message: '?�청 가?�한 ?�학금을 ?�인?�세??, url: 'https://www.kosaf.go.kr', action: '?�학�?보기' },
+                    { title: '?�️ ?�소????, message: '?�격 ?�소???�성법을 ?�아보세??, url: 'https://www.jobplanet.co.kr', action: '취업 ??보기' },
                 ];
                 return studentInfo[Math.floor(Math.random() * studentInfo.length)];
             }
 
             // Marketer suggestions
-            if (job.includes('마케터') || job.includes('마케팅')) {
+            if (job.includes('마�???) || job.includes('마�???)) {
                 const marketerInfo = [
-                    { title: '📊 마케팅 트렌드', message: '2024 디지털 마케팅 트렌드 리포트', url: 'https://www.thinkwithgoogle.com', action: '리포트 보기' },
-                    { title: '🏅 광고 어워드', message: '수상작에서 영감을 얻어보세요', url: 'https://www.adic.or.kr', action: '수상작 보기' },
-                    { title: '📈 SNS 인사이트', message: '인스타그램/틱톡 알고리즘 분석', url: 'https://business.instagram.com/blog', action: '인사이트 보기' },
+                    { title: '?�� 마�????�렌??, message: '2024 ?��???마�????�렌??리포??, url: 'https://www.thinkwithgoogle.com', action: '리포??보기' },
+                    { title: '?�� 광고 ?�워??, message: '?�상?�에???�감???�어보세??, url: 'https://www.adic.or.kr', action: '?�상??보기' },
+                    { title: '?�� SNS ?�사?�트', message: '?�스?�그램/?�톡 ?�고리즘 분석', url: 'https://business.instagram.com/blog', action: '?�사?�트 보기' },
                 ];
                 return marketerInfo[Math.floor(Math.random() * marketerInfo.length)];
             }
 
             // Developer suggestions
-            if (job.includes('개발') || job.includes('엔지니어') || job.includes('프로그래머')) {
+            if (job.includes('개발') || job.includes('?��??�어') || job.includes('?�로그래�?)) {
                 const devInfo = [
-                    { title: '💻 기술 블로그', message: '이번 주 인기 기술 아티클', url: 'https://velog.io', action: '아티클 보기' },
-                    { title: '🚀 해커톤 정보', message: '참가 가능한 해커톤을 확인하세요', url: 'https://devpost.com/hackathons', action: '해커톤 보기' },
-                    { title: '📦 오픈소스', message: '주목받는 GitHub 프로젝트', url: 'https://github.com/trending', action: '트렌딩 보기' },
-                    { title: '💡 개발자 컨퍼런스', message: '놓치면 안 될 개발 컨퍼런스', url: 'https://festa.io/categories/28', action: '컨퍼런스 보기' },
+                    { title: '?�� 기술 블로�?, message: '?�번 �??�기 기술 ?�티??, url: 'https://velog.io', action: '?�티??보기' },
+                    { title: '?? ?�커???�보', message: '참�? 가?�한 ?�커?�을 ?�인?�세??, url: 'https://devpost.com/hackathons', action: '?�커??보기' },
+                    { title: '?�� ?�픈?�스', message: '주목받는 GitHub ?�로?�트', url: 'https://github.com/trending', action: '?�렌??보기' },
+                    { title: '?�� 개발??컨퍼?�스', message: '?�치�?????개발 컨퍼?�스', url: 'https://festa.io/categories/28', action: '컨퍼?�스 보기' },
                 ];
                 return devInfo[Math.floor(Math.random() * devInfo.length)];
             }
 
             // Designer suggestions
-            if (job.includes('디자인') || job.includes('디자이너')) {
+            if (job.includes('?�자??) || job.includes('?�자?�너')) {
                 const designerInfo = [
-                    { title: '🎨 디자인 트렌드', message: '2024 UI/UX 디자인 트렌드', url: 'https://www.awwwards.com', action: '트렌드 보기' },
-                    { title: '🏆 디자인 어워드', message: 'Red Dot/IF 수상작 살펴보기', url: 'https://www.red-dot.org', action: '수상작 보기' },
-                    { title: '✨ 영감 갤러리', message: 'Behance에서 영감 얻기', url: 'https://www.behance.net', action: '갤러리 보기' },
+                    { title: '?�� ?�자???�렌??, message: '2024 UI/UX ?�자???�렌??, url: 'https://www.awwwards.com', action: '?�렌??보기' },
+                    { title: '?�� ?�자???�워??, message: 'Red Dot/IF ?�상???�펴보기', url: 'https://www.red-dot.org', action: '?�상??보기' },
+                    { title: '???�감 갤러�?, message: 'Behance?�서 ?�감 ?�기', url: 'https://www.behance.net', action: '갤러�?보기' },
                 ];
                 return designerInfo[Math.floor(Math.random() * designerInfo.length)];
             }
 
             // General professional suggestions
             const generalInfo = [
-                { title: '📈 커리어 성장', message: `${job || '직장인'}을 위한 역량 향상 팁`, url: 'https://www.linkedin.com/learning', action: '학습하기' },
-                { title: '💡 업계 뉴스', message: `${job || '업계'} 최신 동향 확인`, url: `https://news.google.com/search?q=${encodeURIComponent((job || '') + ' 트렌드')}`, action: '뉴스 보기' },
-                { title: '🎯 자기계발', message: '성과를 높이는 업무 스킬', url: 'https://www.coursera.org', action: '코스 보기' },
+                { title: '?�� 커리???�장', message: `${job || '직장??}???�한 ??�� ?�상 ??, url: 'https://www.linkedin.com/learning', action: '?�습?�기' },
+                { title: '?�� ?�계 ?�스', message: `${job || '?�계'} 최신 ?�향 ?�인`, url: `https://news.google.com/search?q=${encodeURIComponent((job || '') + ' ?�렌??)}`, action: '?�스 보기' },
+                { title: '?�� ?�기계발', message: '?�과�??�이???�무 ?�킬', url: 'https://www.coursera.org', action: '코스 보기' },
             ];
             return generalInfo[Math.floor(Math.random() * generalInfo.length)];
         };
@@ -526,7 +526,7 @@ export function FloatingAIAssistant({
     // Listen for custom events to add messages from external components
     useEffect(() => {
         const handleChatMessage = (event: CustomEvent) => {
-            console.log("[FloatingAIAssistant] 채팅 메시지 이벤트 수신:", event.detail);
+            console.log("[FloatingAIAssistant] 채팅 메시지 ?�벤???�신:", event.detail);
             const { role, content } = event.detail;
             const newMessage: Message = {
                 id: `external-${Date.now()}`,
@@ -534,22 +534,22 @@ export function FloatingAIAssistant({
                 content: content,
             };
             setMessages((prev) => {
-                console.log("[FloatingAIAssistant] 메시지 추가됨. 기존:", prev.length, "새:", prev.length + 1);
+                console.log("[FloatingAIAssistant] 메시지 추�??? 기존:", prev.length, "??", prev.length + 1);
                 return [...prev, newMessage];
             });
         };
 
         const handleChatOpen = () => {
-            console.log("[FloatingAIAssistant] 채팅 오픈 이벤트 수신");
+            console.log("[FloatingAIAssistant] 채팅 ?�픈 ?�벤???�신");
             setIsOpen(true);
         };
 
-        console.log("[FloatingAIAssistant] 이벤트 리스너 등록됨");
+        console.log("[FloatingAIAssistant] ?�벤??리스???�록??);
         window.addEventListener('ai-chat-message', handleChatMessage as EventListener);
         window.addEventListener('ai-chat-open', handleChatOpen);
 
         return () => {
-            console.log("[FloatingAIAssistant] 이벤트 리스너 제거됨");
+            console.log("[FloatingAIAssistant] ?�벤??리스???�거??);
             window.removeEventListener('ai-chat-message', handleChatMessage as EventListener);
             window.removeEventListener('ai-chat-open', handleChatOpen);
         };
@@ -598,7 +598,7 @@ export function FloatingAIAssistant({
                 {
                     id: `error-${Date.now()}`,
                     role: "assistant",
-                    content: "죄송합니다. 응답을 가져오는데 실패했습니다.",
+                    content: "죄송?�니?? ?�답??가?�오?�데 ?�패?�습?�다.",
                 },
             ]);
         } finally {
@@ -631,7 +631,7 @@ export function FloatingAIAssistant({
                     {
                         id: `system-${Date.now()}`,
                         role: "assistant",
-                        content: `✅ ${result.message || "일정이 추가되었습니다!"}`,
+                        content: `??${result.message || "?�정??추�??�었?�니??"}`,
                     },
                 ]);
 
@@ -645,7 +645,7 @@ export function FloatingAIAssistant({
             } catch (error) {
                 setMessages((prev) => [
                     ...prev,
-                    { id: `error-${Date.now()}`, role: "assistant", content: "❌ 일정 추가에 실패했습니다." },
+                    { id: `error-${Date.now()}`, role: "assistant", content: "???�정 추�????�패?�습?�다." },
                 ]);
             }
         } else if (action.type === "open_link" && action.data.url) {
@@ -657,35 +657,39 @@ export function FloatingAIAssistant({
     const handleCardAction = async (card: RotatingCard) => {
         if (card.actionType === 'open_briefing' && card.briefingData) {
             setSelectedBriefing(card.briefingData);
-        } else if (card.actionType === 'add_schedule' && card.scheduleData) {
+        } else if (card.actionType === 'add_schedule') {
+            const scheduleData = card.scheduleData;
+            if (!scheduleData) {
+                return;
+            }
             try {
                 const res = await fetch("/api/user/schedule/add", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(card.scheduleData),
+                    body: JSON.stringify(scheduleData),
                 });
                 if (res.ok) {
                     // Notify Dashboard to refresh schedule
-                    console.log("[FloatingAI] 일정 업데이트 이벤트 발송");
+                    console.log("[FloatingAI] ?�정 ?�데?�트 ?�벤??발송");
                     window.dispatchEvent(new CustomEvent('schedule-updated'));
 
                     // Get AI resource recommendations
-                    console.log("[FloatingAI] AI 리소스 요청 시작:", card.scheduleData.text);
+                    console.log("[FloatingAI] AI 리소???�청 ?�작:", scheduleData.text);
                     const resourceResponse = await fetch("/api/ai-resource-recommend", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            activity: card.scheduleData.text,
+                            activity: scheduleData.text,
                             category: card.type === 'schedule' ? 'productivity' : card.type,
                         }),
                     });
 
                     if (resourceResponse.ok) {
                         const resourceData = await resourceResponse.json();
-                        console.log("[FloatingAI] AI 리소스 데이터:", resourceData);
+                        console.log("[FloatingAI] AI 리소???�이??", resourceData);
 
                         // Send message to AI chat
-                        const chatMessage = `✅ "${card.scheduleData.text}" 일정이 추가되었습니다!\n\n${resourceData.recommendation}`;
+                        const chatMessage = `??"${scheduleData.text}" ?�정??추�??�었?�니??\n\n${resourceData.recommendation}`;
 
                         setIsOpen(true);
                         setMessages((prev) => [
@@ -696,7 +700,7 @@ export function FloatingAIAssistant({
                         setIsOpen(true);
                         setMessages((prev) => [
                             ...prev,
-                            { id: `system-${Date.now()}`, role: "assistant", content: `✅ "${card.scheduleData.text}" 일정이 추가되었습니다!` },
+                            { id: `system-${Date.now()}`, role: "assistant", content: `??"${scheduleData.text}" ?�정??추�??�었?�니??` },
                         ]);
                     }
                 }
@@ -822,8 +826,8 @@ export function FloatingAIAssistant({
                                     <Sparkles className="w-4 h-4 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-sm">AI 어시스턴트</h3>
-                                    <p className="text-[10px] text-muted-foreground">무엇이든 물어보세요</p>
+                                    <h3 className="font-semibold text-sm">AI ?�시?�턴??/h3>
+                                    <p className="text-[10px] text-muted-foreground">무엇?�든 물어보세??/p>
                                 </div>
                             </div>
                             <Button
@@ -843,9 +847,9 @@ export function FloatingAIAssistant({
                                     <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                                         <Bot className="w-8 h-8 text-foreground" />
                                     </div>
-                                    <p className="text-sm font-medium mb-1">안녕하세요!</p>
+                                    <p className="text-sm font-medium mb-1">?�녕?�세??</p>
                                     <p className="text-xs max-w-[200px]">
-                                        학습, 일정, 목표에 대해 무엇이든 물어보세요.
+                                        ?�습, ?�정, 목표???�??무엇?�든 물어보세??
                                     </p>
                                 </div>
                             )}
@@ -889,7 +893,7 @@ export function FloatingAIAssistant({
                                     <div className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3">
                                         <div className="flex items-center gap-2">
                                             <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                            <span className="text-sm text-muted-foreground">생각 중...</span>
+                                            <span className="text-sm text-muted-foreground">?�각 �?..</span>
                                         </div>
                                     </div>
                                 </div>
@@ -906,7 +910,7 @@ export function FloatingAIAssistant({
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyPress={handleKeyPress}
-                                    placeholder="메시지를 입력하세요..."
+                                    placeholder="메시지�??�력?�세??.."
                                     className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
                                     disabled={isLoading}
                                 />
@@ -956,3 +960,4 @@ export function FloatingAIAssistant({
         </div>
     );
 }
+
