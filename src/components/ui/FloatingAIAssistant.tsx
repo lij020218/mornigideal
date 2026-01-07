@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -171,9 +171,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-sleep',
                 type: 'schedule',
-                title: '?뙔 痍⑥묠??沅뚰빐?쒕┰?덈떎',
-                message: '異⑸텇???섎㈃? ?댁씪???깃낵瑜?醫뚯슦?⑸땲?? ?몄븞??諛??섏꽭??',
-                actionText: '?섎㈃ 紐⑤뱶',
+                title: '?�� 취침??권해?�립?�다',
+                message: '충분???�면?� ?�일???�과�?좌우?�니?? ?�안??�??�세??',
+                actionText: '?�면 모드',
                 actionType: 'open_link',
                 color: 'bg-indigo-50 border-indigo-200',
                 icon: 'Moon',
@@ -183,9 +183,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-reminder',
                 type: 'schedule',
-                title: `?뱟 ${upcomingGoal.startTime}???쇱젙???덉뼱??,
-                message: `"${upcomingGoal.text}" ?쇱젙???딆? 留덉꽭??`,
-                actionText: '?뺤씤',
+                title: `Next: ${upcomingGoal.startTime} schedule`,
+                message: `"${upcomingGoal.text}" starts soon.`,
+                actionText: 'Open',
                 actionType: 'open_link',
                 color: 'bg-blue-50 border-blue-200',
                 icon: 'Calendar',
@@ -201,84 +201,84 @@ export function FloatingAIAssistant({
                 return goalTime - currentTime;
             })() : 999;
 
-            // ?띂截?MEAL TIME SUGGESTIONS (7-9 AM, 11-1 PM, 6-8 PM)
+            // ?���?MEAL TIME SUGGESTIONS (7-9 AM, 11-1 PM, 6-8 PM)
             const getMealSuggestion = () => {
                 if (currentHour >= 7 && currentHour < 9) {
                     const breakfastOptions = [
-                        { text: '?쪞 ?ㅽ듃諛怨?怨쇱씪濡?嫄닿컯???꾩묠 ?쒖옉?섎뒗 嫄??대뼚?몄슂?', action: '?꾩묠 癒밴린', schedule: '?꾩묠 ?앹궗', time: '30遺? },
-                        { text: '?뜵 ?⑤갚吏??ㅽ겕?⑤툝怨??꾨낫移대룄 ?좎뒪?몃뒗 ?대뼚?좉???', action: '?앹궗?섍린', schedule: '?꾩묠 ?앹궗', time: '30遺? },
-                        { text: '?ⅳ 洹몃┛ ?ㅻТ?붾줈 ?곸뼇??媛꾪렪?섍쾶 梨꾩썙蹂댁꽭??, action: '?앹궗?섍린', schedule: '?꾩묠 ?앹궗', time: '20遺? },
+                        { text: '?�� ?�트밀�?과일�?건강???�침 ?�작?�는 �??�떠?�요?', action: '?�침 먹기', schedule: '?�침 ?�사', time: '30�? },
+                        { text: '?�� ?�백�??�크?�블�??�보카도 ?�스?�는 ?�떠?��???', action: '?�사?�기', schedule: '?�침 ?�사', time: '30�? },
+                        { text: '?�� 그린 ?�무?�로 ?�양??간편?�게 채워보세??, action: '?�사?�기', schedule: '?�침 ?�사', time: '20�? },
                     ];
                     return breakfastOptions[Math.floor(Math.random() * breakfastOptions.length)];
                 } else if (currentHour >= 11 && currentHour < 13) {
                     const lunchOptions = [
-                        { text: '?뜳 ?먮윭??蹂쇰줈 媛蹂띻쾶 ?먯떖???쒖떆??嫄??대뼥源뚯슂?', action: '?먯떖 癒밴린', schedule: '?먯떖 ?앹궗', time: '40遺? },
-                        { text: '?쪠 ????댁궡 ?뚮뱶?꾩튂濡??먮꼫吏 異⑹쟾?섏꽭??, action: '?앹궗?섍린', schedule: '?먯떖 ?앹궗', time: '40遺? },
-                        { text: '?뜴 ?쒖옣李뚭컻? ?↔끝諛μ쑝濡??좊뱺???먯떖 ?대뼚?몄슂?', action: '?앹궗?섍린', schedule: '?먯떖 ?앹궗', time: '50遺? },
+                        { text: '?�� ?�러??볼로 가볍게 ?�심???�시??�??�떨까요?', action: '?�심 먹기', schedule: '?�심 ?�사', time: '40�? },
+                        { text: '?�� ????�살 ?�드?�치�??�너지 충전?�세??, action: '?�사?�기', schedule: '?�심 ?�사', time: '40�? },
+                        { text: '?�� ?�장찌개?� ?�곡밥으�??�든???�심 ?�떠?�요?', action: '?�사?�기', schedule: '?�심 ?�사', time: '50�? },
                     ];
                     return lunchOptions[Math.floor(Math.random() * lunchOptions.length)];
                 } else if (currentHour >= 18 && currentHour < 20) {
                     const dinnerOptions = [
-                        { text: '?쪞 ?곗뼱 援ъ씠? 梨꾩냼濡??곸뼇 洹좏삎 ?≫엺 ????쒖꽭??, action: '???癒밴린', schedule: '????앹궗', time: '50遺? },
-                        { text: '?뜔 ????댁궡 ?ㅽ뀒?댄겕? 怨좉뎄留??대뼚?몄슂?', action: '?앹궗?섍린', schedule: '????앹궗', time: '45遺? },
-                        { text: '?쪟 ?먮? ?먮윭?쒕줈 媛蹂띻쾶 ??곸쓣 留덈Т由ы븯?몄슂', action: '?앹궗?섍린', schedule: '????앹궗', time: '30遺? },
+                        { text: '?�� ?�어 구이?� 채소�??�양 균형 ?�힌 ?�???�세??, action: '?�??먹기', schedule: '?�???�사', time: '50�? },
+                        { text: '?�� ????�살 ?�테?�크?� 고구�??�떠?�요?', action: '?�사?�기', schedule: '?�???�사', time: '45�? },
+                        { text: '?�� ?��? ?�러?�로 가볍게 ?�?�을 마무리하?�요', action: '?�사?�기', schedule: '?�???�사', time: '30�? },
                     ];
                     return dinnerOptions[Math.floor(Math.random() * dinnerOptions.length)];
                 }
                 return null;
             };
 
-            // ?뱴 READING TIME SUGGESTIONS (8-10 PM or weekends)
+            // ?�� READING TIME SUGGESTIONS (8-10 PM or weekends)
             const getReadingSuggestion = () => {
-                const books = job.includes('留덉???) || job.includes('留덉???) ? [
-                    { text: '?뱰 ?뚭렇濡쒖뒪 ?댄궧???쎌쑝硫??깆옣 ?꾨왂??諛곗썙蹂댁꽭??, action: '?낆꽌?섍린', schedule: '?낆꽌 - 洹몃줈???댄궧', time: '30遺? },
-                    { text: '?뱯 ?뚮쭏耳?곗쓽 ?쇈띾줈 ?ㅻТ ?몄궗?댄듃瑜??살뼱蹂댁꽭??, action: '梨??쎄린', schedule: '?낆꽌 - 留덉??곗쓽 ??, time: '40遺? },
-                ] : job.includes('媛쒕컻') || job.includes('?붿??덉뼱') ? [
-                    { text: '?뱱 ?뚰겢由?肄붾뱶????梨뺥꽣濡?肄붾뵫 泥좏븰??諛곗썙蹂댁꽭??, action: '?낆꽌?섍린', schedule: '?낆꽌 - ?대┛ 肄붾뱶', time: '30遺? },
-                    { text: '?뱲 ?뚮━?⑺넗留곥??쎌쑝硫??ㅺ퀎 媛먭컖???ㅼ썙蹂댁꽭??, action: '梨??쎄린', schedule: '?낆꽌 - 由ы뙥?좊쭅', time: '40遺? },
+                const books = job.includes('마�???) || job.includes('마�???) ? [
+                    { text: '?�� ?�그로스 ?�킹???�으�??�장 ?�략??배워보세??, action: '?�서?�기', schedule: '?�서 - 그로???�킹', time: '30�? },
+                    { text: '?�� ?�마케?�의 ?�」로 ?�무 ?�사?�트�??�어보세??, action: '�??�기', schedule: '?�서 - 마�??�의 ??, time: '40�? },
+                ] : job.includes('개발') || job.includes('?��??�어') ? [
+                    { text: '?�� ?�클�?코드????챕터�?코딩 철학??배워보세??, action: '?�서?�기', schedule: '?�서 - ?�린 코드', time: '30�? },
+                    { text: '?�� ?�리?�토링�??�으�??�계 감각???�워보세??, action: '�??�기', schedule: '?�서 - 리팩?�링', time: '40�? },
                 ] : [
-                    { text: '?뱴 ?뚮???異붿썡李⑥꽑?띿쑝濡?遺???먮━瑜?諛곗썙蹂댁꽭??, action: '?낆꽌?섍린', schedule: '?낆꽌 - 遺??異붿썡李⑥꽑', time: '40遺? },
-                    { text: '?뱯 ?뚯븘二??묒? ?듦????섅띿쑝濡??깆옣 ?쒖뒪?쒖쓣 留뚮뱶?몄슂', action: '梨??쎄린', schedule: '?낆꽌 - ?듦?????, time: '30遺? },
+                    { text: '?�� ?��???추월차선?�으�?부???�리�?배워보세??, action: '?�서?�기', schedule: '?�서 - 부??추월차선', time: '40�? },
+                    { text: '?�� ?�아�??��? ?��????�」으�??�장 ?�스?�을 만드?�요', action: '�??�기', schedule: '?�서 - ?��?????, time: '30�? },
                 ];
                 return books[Math.floor(Math.random() * books.length)];
             };
 
-            // ?뮞 EXERCISE SUGGESTIONS (6-8 AM, 6-8 PM)
+            // ?�� EXERCISE SUGGESTIONS (6-8 AM, 6-8 PM)
             const getExerciseSuggestion = () => {
                 if (currentHour >= 6 && currentHour < 8) {
                     const morningExercise = [
-                        { text: '?룂?띯셽截??꾩묠 議곌퉭 30遺꾩쑝濡??섎（瑜??쒓린李④쾶 ?쒖옉?섏꽭??', action: '?대룞?섍린', schedule: '議곌퉭', time: '30遺? },
-                        { text: '?쭣 ?붽?濡?紐멸낵 留덉쓬??源⑥썙蹂대뒗 嫄??대뼚?몄슂?', action: '?대룞?섍린', schedule: '?붽?', time: '20遺? },
-                        { text: '?뮞 媛꾨떒???덊듃?덉씠?앹쑝濡??먮꼫吏瑜?異⑹쟾?섏꽭??, action: '?대룞?섍린', schedule: '?덊듃?덉씠??, time: '25遺? },
+                        { text: '?��?�♂�??�침 조깅 30분으�??�루�??�기차게 ?�작?�세??', action: '?�동?�기', schedule: '조깅', time: '30�? },
+                        { text: '?�� ?��?�?몸과 마음??깨워보는 �??�떠?�요?', action: '?�동?�기', schedule: '?��?', time: '20�? },
+                        { text: '?�� 간단???�트?�이?�으�??�너지�?충전?�세??, action: '?�동?�기', schedule: '?�트?�이??, time: '25�? },
                     ];
                     return morningExercise[Math.floor(Math.random() * morningExercise.length)];
                 } else if (currentHour >= 18 && currentHour < 21) {
                     const eveningExercise = [
-                        { text: '?룍截??ъ뒪?μ뿉??洹쇰젰 ?대룞 ?대뼚?몄슂? ?ㅽ듃?덉뒪???좊젮蹂댁꽭??, action: '?대룞?섍린', schedule: '?ъ뒪', time: '60遺? },
-                        { text: '?룋 ?섏쁺?쇰줈 ?섎（???쇰줈瑜???대낫?몄슂', action: '?대룞?섍린', schedule: '?섏쁺', time: '45遺? },
-                        { text: '?슫 ?먯쟾嫄??硫????諛붾엺 ?щ뒗 嫄??대뼥源뚯슂?', action: '?대룞?섍린', schedule: '?먯쟾嫄?, time: '40遺? },
+                        { text: '?���??�스?�에??근력 ?�동 ?�떠?�요? ?�트?�스???�려보세??, action: '?�동?�기', schedule: '?�스', time: '60�? },
+                        { text: '?�� ?�영?�로 ?�루???�로�??�?�보?�요', action: '?�동?�기', schedule: '?�영', time: '45�? },
+                        { text: '?�� ?�전�??��??�??바람 ?�는 �??�떨까요?', action: '?�동?�기', schedule: '?�전�?, time: '40�? },
                     ];
                     return eveningExercise[Math.floor(Math.random() * eveningExercise.length)];
                 }
                 return null;
             };
 
-            // ?렞 SKILL DEVELOPMENT (personalized by job)
+            // ?�� SKILL DEVELOPMENT (personalized by job)
             const getSkillSuggestion = () => {
-                if (job.includes('留덉???) || job.includes('留덉???)) {
+                if (job.includes('마�???) || job.includes('마�???)) {
                     return [
-                        { text: '?뱤 寃쎌웳??SNS 遺꾩꽍?섎ŉ ?몄궗?댄듃瑜??볦븘蹂댁꽭??, action: '遺꾩꽍?섍린', schedule: '寃쎌웳??遺꾩꽍', time: '30遺? },
-                        { text: '?랃툘 釉붾줈洹?湲 ?섎굹 ?묒꽦?섎ŉ 肄섑뀗痢???웾???ㅼ썙蹂댁꽭??, action: '湲?곌린', schedule: '釉붾줈洹??묒꽦', time: '40遺? },
+                        { text: '?�� 경쟁??SNS 분석?�며 ?�사?�트�??�아보세??, action: '분석?�기', schedule: '경쟁??분석', time: '30�? },
+                        { text: '?�️ 블로�?글 ?�나 ?�성?�며 콘텐�???��???�워보세??, action: '글?�기', schedule: '블로�??�성', time: '40�? },
                     ][Math.floor(Math.random() * 2)];
-                } else if (job.includes('媛쒕컻') || job.includes('?붿??덉뼱')) {
+                } else if (job.includes('개발') || job.includes('?��??�어')) {
                     return [
-                        { text: '?뮲 ?뚭퀬由ъ쬁 臾몄젣 ?섎굹 ?硫??먮뇤瑜?源⑥썙蹂댁꽭??, action: '肄붾뵫?섍린', schedule: '?뚭퀬由ъ쬁 ???, time: '30遺? },
-                        { text: '?뵩 ?덈줈???쇱씠釉뚮윭由?臾몄꽌 ?쎌쑝硫?湲곗닠??諛곗썙蹂댁꽭??, action: '?숈뒿?섍린', schedule: '湲곗닠 ?숈뒿', time: '40遺? },
+                        { text: '?�� ?�고리즘 문제 ?�나 ?��??�뇌�?깨워보세??, action: '코딩?�기', schedule: '?�고리즘 ?�??, time: '30�? },
+                        { text: '?�� ?�로???�이브러�?문서 ?�으�?기술??배워보세??, action: '?�습?�기', schedule: '기술 ?�습', time: '40�? },
                     ][Math.floor(Math.random() * 2)];
                 } else {
                     return [
-                        { text: '?? ?⑤씪??媛뺤쓽 ??梨뺥꽣 ?ㅼ쑝硫??깆옣?대낫?몄슂', action: '?숈뒿?섍린', schedule: '?⑤씪??媛뺤쓽', time: '30遺? },
-                        { text: '?랃툘 ?ㅻ뒛 諛곗슫 寃껋쓣 ?뺣━?섎ŉ ?닿쾬?쇰줈 留뚮뱶?몄슂', action: '?뺣━?섍린', schedule: '?숈뒿 ?뺣━', time: '20遺? },
+                        { text: '?? ?�라??강의 ??챕터 ?�으�??�장?�보?�요', action: '?�습?�기', schedule: '?�라??강의', time: '30�? },
+                        { text: '?�️ ?�늘 배운 것을 ?�리?�며 ?�것?�로 만드?�요', action: '?�리?�기', schedule: '?�습 ?�리', time: '20�? },
                     ][Math.floor(Math.random() * 2)];
                 }
             };
@@ -301,24 +301,24 @@ export function FloatingAIAssistant({
 
             // Evening productive relaxation suggestions (fallback)
             const eveningProductiveSuggestions = [
-                { text: '?뱰 ????낆꽌濡??섎（瑜??섎??덇쾶 留덈Т由ы븯?몄슂', action: '?낆꽌?섍린', icon: 'Sparkles', schedule: '?낆꽌', time: '30遺? },
-                { text: '?랃툘 ?섎（瑜??뚯븘蹂대ŉ ?깆옣 ?쇨린瑜??묒꽦?대낫?몄슂', action: '?쇨린 ?곌린', icon: 'Sparkles', schedule: '?쇨린 ?묒꽦', time: '15遺? },
-                { text: '?렞 ?댁씪??紐⑺몴瑜?援ъ껜?곸쑝濡?怨꾪쉷?대낫?몄슂', action: '怨꾪쉷 ?몄슦湲?, icon: 'Sparkles', schedule: '?댁씪 怨꾪쉷', time: '20遺? },
-                { text: '?뮡 ?ㅻ뒛 諛곗슫 援먰썕???뺣━?섍퀬 ?댁옱?뷀븯?몄슂', action: '蹂듭뒿?섍린', icon: 'Sparkles', schedule: '?숈뒿 蹂듭뒿', time: '25遺? },
-                { text: '?럳 ?⑤씪??媛뺤쓽濡??덈줈??吏?앹쓣 ?듬뱷?섏꽭??, action: '媛뺤쓽 ?ｊ린', icon: 'Sparkles', schedule: '?⑤씪??媛뺤쓽', time: '30遺? },
-                { text: '?뙚 ?깃났???щ엺?ㅼ쓽 ?명꽣酉곕? 蹂대ŉ ?곴컧???살쑝?몄슂', action: '?곴컧 ?산린', icon: 'Sparkles', schedule: '?명꽣酉??쒖껌', time: '20遺? },
-                { text: '?뱷 誘몃쨪??怨쇱젣???꾨줈?앺듃瑜?吏꾪뻾?대낫?몄슂', action: '怨쇱젣 吏꾪뻾', icon: 'Sparkles', schedule: '?꾨줈?앺듃', time: '40遺? },
-                { text: '?쭬 紐낆긽?쇰줈 留덉쓬???뺣━?섍퀬 吏묒쨷?μ쓣 ?뚮났?섏꽭??, action: '紐낆긽?섍린', icon: 'Sparkles', schedule: '紐낆긽', time: '15遺? },
+                { text: '?�� ?�???�서�??�루�??��??�게 마무리하?�요', action: '?�서?�기', icon: 'Sparkles', schedule: '?�서', time: '30�? },
+                { text: '?�️ ?�루�??�아보며 ?�장 ?�기�??�성?�보?�요', action: '?�기 ?�기', icon: 'Sparkles', schedule: '?�기 ?�성', time: '15�? },
+                { text: '?�� ?�일??목표�?구체?�으�?계획?�보?�요', action: '계획 ?�우�?, icon: 'Sparkles', schedule: '?�일 계획', time: '20�? },
+                { text: '?�� ?�늘 배운 교훈???�리?�고 ?�재?�하?�요', action: '복습?�기', icon: 'Sparkles', schedule: '?�습 복습', time: '25�? },
+                { text: '?�� ?�라??강의�??�로??지?�을 ?�득?�세??, action: '강의 ?�기', icon: 'Sparkles', schedule: '?�라??강의', time: '30�? },
+                { text: '?�� ?�공???�람?�의 ?�터뷰�? 보며 ?�감???�으?�요', action: '?�감 ?�기', icon: 'Sparkles', schedule: '?�터�??�청', time: '20�? },
+                { text: '?�� 미뤄??과제???�로?�트�?진행?�보?�요', action: '과제 진행', icon: 'Sparkles', schedule: '?�로?�트', time: '40�? },
+                { text: '?�� 명상?�로 마음???�리?�고 집중?�을 ?�복?�세??, action: '명상?�기', icon: 'Sparkles', schedule: '명상', time: '15�? },
             ];
 
             // Weekend productive suggestions
             const weekendSuggestions = [
-                { text: '?뱴 二쇰쭚 ?꾨줈?앺듃濡??덈줈??寃껋뿉 ?꾩쟾?대낫?몄슂!', action: '?꾨줈?앺듃 ?쒖옉', icon: 'Sparkles' },
-                { text: '?렞 ?대쾲 二?紐⑺몴瑜?由щ럭?섍퀬 ?ㅼ쓬 二쇰? 以鍮꾪븯?몄슂', action: '二쇨컙 由щ럭', icon: 'Sparkles' },
-                { text: '?뮕 ?됱냼 愿?ъ엳??遺꾩빞瑜?源딆씠 ?먭뎄?대낫?몄슂', action: '?ы솕 ?숈뒿', icon: 'Sparkles' },
-                { text: '?쩃 ?ㅽ듃?뚰궧 ?대깽?몃굹 ?ㅽ꽣??紐⑥엫??李몄뿬?대낫?몄슂', action: '?ㅽ듃?뚰궧', icon: 'Sparkles' },
-                { text: '???ы듃?대━?ㅻ굹 ?대젰?쒕? ?낅뜲?댄듃?섏꽭??, action: '而ㅻ━??愿由?, icon: 'Sparkles' },
-                { text: '?렓 痍⑤? ?쒕룞?쇰줈 李쎌쓽?μ쓣 諛쒗쐶?대낫?몄슂', action: '痍⑤? 媛쒕컻', icon: 'Sparkles' },
+                { text: '?�� 주말 ?�로?�트�??�로??것에 ?�전?�보?�요!', action: '?�로?�트 ?�작', icon: 'Sparkles' },
+                { text: '?�� ?�번 �?목표�?리뷰?�고 ?�음 주�? 준비하?�요', action: '주간 리뷰', icon: 'Sparkles' },
+                { text: '?�� ?�소 관?�있??분야�?깊이 ?�구?�보?�요', action: '?�화 ?�습', icon: 'Sparkles' },
+                { text: '?�� ?�트?�킹 ?�벤?�나 ?�터??모임??참여?�보?�요', action: '?�트?�킹', icon: 'Sparkles' },
+                { text: '???�트?�리?�나 ?�력?��? ?�데?�트?�세??, action: '커리??관�?, icon: 'Sparkles' },
+                { text: '?�� 취�? ?�동?�로 창의?�을 발휘?�보?�요', action: '취�? 개발', icon: 'Sparkles' },
             ];
 
             // Use selected proactive suggestion
@@ -342,9 +342,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-suggest',
                 type: 'schedule',
-                title: `?뮞 ${upcomingGoal.startTime}源뚯? ${selectedSuggestion.time || '?쒓컙'} ?덉뼱??,
+                title: `?�� ${upcomingGoal.startTime}까�? ${selectedSuggestion.time || '?�간'} ?�어??,
                 message: selectedSuggestion.text,
-                actionText: '?쇱젙??異붽?',
+                actionText: '?�정??추�?',
                 actionType: 'add_schedule',
                 scheduleData: {
                     text: selectedSuggestion.schedule || selectedSuggestion.action,
@@ -358,12 +358,12 @@ export function FloatingAIAssistant({
         } else {
             // No more schedules today - continue productive evening activities
             const eveningGrowthSuggestions = [
-                { text: '?뱰 ????낆꽌濡??섎（瑜??섎??덇쾶 留덈Т由ы븯?몄슂', action: '?낆꽌?섍린' },
-                { text: '?랃툘 ?섎（瑜??뚯븘蹂대ŉ ?깆옣 ?쇨린瑜??묒꽦?대낫?몄슂', action: '?쇨린 ?곌린' },
-                { text: '?렞 ?댁씪??紐⑺몴瑜?援ъ껜?곸쑝濡?怨꾪쉷?대낫?몄슂', action: '怨꾪쉷 ?몄슦湲? },
-                { text: '?뮡 ?ㅻ뒛 諛곗슫 援먰썕???뺣━?섍퀬 ?댁옱?뷀븯?몄슂', action: '蹂듭뒿?섍린' },
-                { text: '?럳 ?⑤씪??媛뺤쓽濡??덈줈??吏?앹쓣 ?듬뱷?섏꽭??, action: '媛뺤쓽 ?ｊ린' },
-                { text: '?뱷 誘몃쨪??怨쇱젣???꾨줈?앺듃瑜?吏꾪뻾?대낫?몄슂', action: '怨쇱젣 吏꾪뻾' },
+                { text: '?�� ?�???�서�??�루�??��??�게 마무리하?�요', action: '?�서?�기' },
+                { text: '?�️ ?�루�??�아보며 ?�장 ?�기�??�성?�보?�요', action: '?�기 ?�기' },
+                { text: '?�� ?�일??목표�?구체?�으�?계획?�보?�요', action: '계획 ?�우�? },
+                { text: '?�� ?�늘 배운 교훈???�리?�고 ?�재?�하?�요', action: '복습?�기' },
+                { text: '?�� ?�라??강의�??�로??지?�을 ?�득?�세??, action: '강의 ?�기' },
+                { text: '?�� 미뤄??과제???�로?�트�?진행?�보?�요', action: '과제 진행' },
             ];
 
             const randomSuggestion = eveningGrowthSuggestions[Math.floor(Math.random() * eveningGrowthSuggestions.length)];
@@ -371,7 +371,7 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'schedule-evening',
                 type: 'schedule',
-                title: '?? 吏湲덈룄 ?깆옣?????덉뒿?덈떎!',
+                title: '?? 지금도 ?�장?????�습?�다!',
                 message: randomSuggestion.text,
                 actionText: randomSuggestion.action,
                 actionType: 'open_link',
@@ -386,9 +386,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'briefing-card',
                 type: 'briefing',
-                title: `?벐 ${randomBriefing.title?.substring(0, 25)}...`,
-                message: '?꾩쭅 ???몃젋??釉뚮━?묒쓣 ?쎌? ?딆쑝?⑥뼱?? 吏湲??뺤씤?대낫?몄슂!',
-                actionText: '釉뚮━??蹂닿린',
+                title: `?�� ${randomBriefing.title?.substring(0, 25)}...`,
+                message: '?�직 ???�렌??브리?�을 ?��? ?�으?�어?? 지�??�인?�보?�요!',
+                actionText: '브리??보기',
                 actionType: 'open_briefing',
                 briefingData: randomBriefing,
                 color: 'bg-orange-50 border-orange-200',
@@ -417,9 +417,9 @@ export function FloatingAIAssistant({
             generatedCards.push({
                 id: 'youtube-card',
                 type: 'youtube',
-                title: `?렗 ${randomRec.title?.substring(0, 25)}...`,
-                message: `${randomRec.channel}??異붿쿇 ?곸긽`,
-                actionText: '蹂대윭媛湲?,
+                title: `?�� ${randomRec.title?.substring(0, 25)}...`,
+                message: `${randomRec.channel}??추천 ?�상`,
+                actionText: '보러가�?,
                 actionType: 'open_link',
                 actionUrl: `https://www.youtube.com/watch?v=${randomRec.id}`,
                 color: 'bg-red-50 border-red-200',
@@ -432,52 +432,52 @@ export function FloatingAIAssistant({
             const job = userProfile?.job || '';
 
             // Student-focused suggestions
-            if (job.includes('?숈깮') || job.includes('??숈깮') || job.includes('痍⑥???)) {
+            if (job.includes('?�생') || job.includes('?�?�생') || job.includes('취�???)) {
                 const studentInfo = [
-                    { title: '?룇 怨듬え???뺣낫', message: '?대쾲 二?留덇컧?섎뒗 怨듬え?꾩쓣 ?뺤씤?섏꽭??, url: 'https://www.thinkcontest.com', action: '怨듬え??蹂닿린' },
-                    { title: '?뮳 ?명꽩??梨꾩슜', message: '?湲곗뾽/?ㅽ??몄뾽 ?명꽩 梨꾩슜 怨듦퀬', url: 'https://www.wanted.co.kr/wdlist/518', action: '梨꾩슜怨듦퀬 蹂닿린' },
-                    { title: '?뱴 ?ν븰湲??뺣낫', message: '?좎껌 媛?ν븳 ?ν븰湲덉쓣 ?뺤씤?섏꽭??, url: 'https://www.kosaf.go.kr', action: '?ν븰湲?蹂닿린' },
-                    { title: '?랃툘 ?먯냼????, message: '?⑷꺽 ?먯냼???묒꽦踰뺤쓣 ?뚯븘蹂댁꽭??, url: 'https://www.jobplanet.co.kr', action: '痍⑥뾽 ??蹂닿린' },
+                    { title: '?�� 공모???�보', message: '?�번 �?마감?�는 공모?�을 ?�인?�세??, url: 'https://www.thinkcontest.com', action: '공모??보기' },
+                    { title: '?�� ?�턴??채용', message: '?�기업/?��??�업 ?�턴 채용 공고', url: 'https://www.wanted.co.kr/wdlist/518', action: '채용공고 보기' },
+                    { title: '?�� ?�학�??�보', message: '?�청 가?�한 ?�학금을 ?�인?�세??, url: 'https://www.kosaf.go.kr', action: '?�학�?보기' },
+                    { title: '?�️ ?�소????, message: '?�격 ?�소???�성법을 ?�아보세??, url: 'https://www.jobplanet.co.kr', action: '취업 ??보기' },
                 ];
                 return studentInfo[Math.floor(Math.random() * studentInfo.length)];
             }
 
             // Marketer suggestions
-            if (job.includes('留덉???) || job.includes('留덉???)) {
+            if (job.includes('마�???) || job.includes('마�???)) {
                 const marketerInfo = [
-                    { title: '?뱤 留덉????몃젋??, message: '2024 ?붿???留덉????몃젋??由ы룷??, url: 'https://www.thinkwithgoogle.com', action: '由ы룷??蹂닿린' },
-                    { title: '?룆 愿묎퀬 ?댁썙??, message: '?섏긽?묒뿉???곴컧???살뼱蹂댁꽭??, url: 'https://www.adic.or.kr', action: '?섏긽??蹂닿린' },
-                    { title: '?뱢 SNS ?몄궗?댄듃', message: '?몄뒪?洹몃옩/?깊넚 ?뚭퀬由ъ쬁 遺꾩꽍', url: 'https://business.instagram.com/blog', action: '?몄궗?댄듃 蹂닿린' },
+                    { title: '?�� 마�????�렌??, message: '2024 ?��???마�????�렌??리포??, url: 'https://www.thinkwithgoogle.com', action: '리포??보기' },
+                    { title: '?�� 광고 ?�워??, message: '?�상?�에???�감???�어보세??, url: 'https://www.adic.or.kr', action: '?�상??보기' },
+                    { title: '?�� SNS ?�사?�트', message: '?�스?�그램/?�톡 ?�고리즘 분석', url: 'https://business.instagram.com/blog', action: '?�사?�트 보기' },
                 ];
                 return marketerInfo[Math.floor(Math.random() * marketerInfo.length)];
             }
 
             // Developer suggestions
-            if (job.includes('媛쒕컻') || job.includes('?붿??덉뼱') || job.includes('?꾨줈洹몃옒癒?)) {
+            if (job.includes('개발') || job.includes('?��??�어') || job.includes('?�로그래�?)) {
                 const devInfo = [
-                    { title: '?뮲 湲곗닠 釉붾줈洹?, message: '?대쾲 二??멸린 湲곗닠 ?꾪떚??, url: 'https://velog.io', action: '?꾪떚??蹂닿린' },
-                    { title: '?? ?댁빱???뺣낫', message: '李멸? 媛?ν븳 ?댁빱?ㅼ쓣 ?뺤씤?섏꽭??, url: 'https://devpost.com/hackathons', action: '?댁빱??蹂닿린' },
-                    { title: '?벀 ?ㅽ뵂?뚯뒪', message: '二쇰ぉ諛쏅뒗 GitHub ?꾨줈?앺듃', url: 'https://github.com/trending', action: '?몃젋??蹂닿린' },
-                    { title: '?뮕 媛쒕컻??而⑦띁?곗뒪', message: '?볦튂硫?????媛쒕컻 而⑦띁?곗뒪', url: 'https://festa.io/categories/28', action: '而⑦띁?곗뒪 蹂닿린' },
+                    { title: '?�� 기술 블로�?, message: '?�번 �??�기 기술 ?�티??, url: 'https://velog.io', action: '?�티??보기' },
+                    { title: '?? ?�커???�보', message: '참�? 가?�한 ?�커?�을 ?�인?�세??, url: 'https://devpost.com/hackathons', action: '?�커??보기' },
+                    { title: '?�� ?�픈?�스', message: '주목받는 GitHub ?�로?�트', url: 'https://github.com/trending', action: '?�렌??보기' },
+                    { title: '?�� 개발??컨퍼?�스', message: '?�치�?????개발 컨퍼?�스', url: 'https://festa.io/categories/28', action: '컨퍼?�스 보기' },
                 ];
                 return devInfo[Math.floor(Math.random() * devInfo.length)];
             }
 
             // Designer suggestions
-            if (job.includes('?붿옄??) || job.includes('?붿옄?대꼫')) {
+            if (job.includes('?�자??) || job.includes('?�자?�너')) {
                 const designerInfo = [
-                    { title: '?렓 ?붿옄???몃젋??, message: '2024 UI/UX ?붿옄???몃젋??, url: 'https://www.awwwards.com', action: '?몃젋??蹂닿린' },
-                    { title: '?룇 ?붿옄???댁썙??, message: 'Red Dot/IF ?섏긽???댄렣蹂닿린', url: 'https://www.red-dot.org', action: '?섏긽??蹂닿린' },
-                    { title: '???곴컧 媛ㅻ윭由?, message: 'Behance?먯꽌 ?곴컧 ?산린', url: 'https://www.behance.net', action: '媛ㅻ윭由?蹂닿린' },
+                    { title: '?�� ?�자???�렌??, message: '2024 UI/UX ?�자???�렌??, url: 'https://www.awwwards.com', action: '?�렌??보기' },
+                    { title: '?�� ?�자???�워??, message: 'Red Dot/IF ?�상???�펴보기', url: 'https://www.red-dot.org', action: '?�상??보기' },
+                    { title: '???�감 갤러�?, message: 'Behance?�서 ?�감 ?�기', url: 'https://www.behance.net', action: '갤러�?보기' },
                 ];
                 return designerInfo[Math.floor(Math.random() * designerInfo.length)];
             }
 
             // General professional suggestions
             const generalInfo = [
-                { title: '?뱢 而ㅻ━???깆옣', message: `${job || '吏곸옣??}???꾪븳 ??웾 ?μ긽 ??, url: 'https://www.linkedin.com/learning', action: '?숈뒿?섍린' },
-                { title: '?뮕 ?낃퀎 ?댁뒪', message: `${job || '?낃퀎'} 理쒖떊 ?숉뼢 ?뺤씤`, url: `https://news.google.com/search?q=${encodeURIComponent((job || '') + ' ?몃젋??)}`, action: '?댁뒪 蹂닿린' },
-                { title: '?렞 ?먭린怨꾨컻', message: '?깃낵瑜??믪씠???낅Т ?ㅽ궗', url: 'https://www.coursera.org', action: '肄붿뒪 蹂닿린' },
+                { title: '?�� 커리???�장', message: `${job || '직장??}???�한 ??�� ?�상 ??, url: 'https://www.linkedin.com/learning', action: '?�습?�기' },
+                { title: '?�� ?�계 ?�스', message: `${job || '?�계'} 최신 ?�향 ?�인`, url: `https://news.google.com/search?q=${encodeURIComponent((job || '') + ' ?�렌??)}`, action: '?�스 보기' },
+                { title: '?�� ?�기계발', message: '?�과�??�이???�무 ?�킬', url: 'https://www.coursera.org', action: '코스 보기' },
             ];
             return generalInfo[Math.floor(Math.random() * generalInfo.length)];
         };
@@ -526,7 +526,7 @@ export function FloatingAIAssistant({
     // Listen for custom events to add messages from external components
     useEffect(() => {
         const handleChatMessage = (event: CustomEvent) => {
-            console.log("[FloatingAIAssistant] 梨꾪똿 硫붿떆吏 ?대깽???섏떊:", event.detail);
+            console.log("[FloatingAIAssistant] 채팅 메시지 ?�벤???�신:", event.detail);
             const { role, content } = event.detail;
             const newMessage: Message = {
                 id: `external-${Date.now()}`,
@@ -534,22 +534,22 @@ export function FloatingAIAssistant({
                 content: content,
             };
             setMessages((prev) => {
-                console.log("[FloatingAIAssistant] 硫붿떆吏 異붽??? 湲곗〈:", prev.length, "??", prev.length + 1);
+                console.log("[FloatingAIAssistant] 메시지 추�??? 기존:", prev.length, "??", prev.length + 1);
                 return [...prev, newMessage];
             });
         };
 
         const handleChatOpen = () => {
-            console.log("[FloatingAIAssistant] 梨꾪똿 ?ㅽ뵂 ?대깽???섏떊");
+            console.log("[FloatingAIAssistant] 채팅 ?�픈 ?�벤???�신");
             setIsOpen(true);
         };
 
-        console.log("[FloatingAIAssistant] ?대깽??由ъ뒪???깅줉??);
+        console.log("[FloatingAIAssistant] ?�벤??리스???�록??);
         window.addEventListener('ai-chat-message', handleChatMessage as EventListener);
         window.addEventListener('ai-chat-open', handleChatOpen);
 
         return () => {
-            console.log("[FloatingAIAssistant] ?대깽??由ъ뒪???쒓굅??);
+            console.log("[FloatingAIAssistant] ?�벤??리스???�거??);
             window.removeEventListener('ai-chat-message', handleChatMessage as EventListener);
             window.removeEventListener('ai-chat-open', handleChatOpen);
         };
@@ -598,7 +598,7 @@ export function FloatingAIAssistant({
                 {
                     id: `error-${Date.now()}`,
                     role: "assistant",
-                    content: "二꾩넚?⑸땲?? ?묐떟??媛?몄삤?붾뜲 ?ㅽ뙣?덉뒿?덈떎.",
+                    content: "죄송?�니?? ?�답??가?�오?�데 ?�패?�습?�다.",
                 },
             ]);
         } finally {
@@ -631,7 +631,7 @@ export function FloatingAIAssistant({
                     {
                         id: `system-${Date.now()}`,
                         role: "assistant",
-                        content: `??${result.message || "?쇱젙??異붽??섏뿀?듬땲??"}`,
+                        content: `??${result.message || "?�정??추�??�었?�니??"}`,
                     },
                 ]);
 
@@ -645,7 +645,7 @@ export function FloatingAIAssistant({
             } catch (error) {
                 setMessages((prev) => [
                     ...prev,
-                    { id: `error-${Date.now()}`, role: "assistant", content: "???쇱젙 異붽????ㅽ뙣?덉뒿?덈떎." },
+                    { id: `error-${Date.now()}`, role: "assistant", content: "???�정 추�????�패?�습?�다." },
                 ]);
             }
         } else if (action.type === "open_link" && action.data.url) {
@@ -670,11 +670,11 @@ export function FloatingAIAssistant({
                 });
                 if (res.ok) {
                     // Notify Dashboard to refresh schedule
-                    console.log("[FloatingAI] ?쇱젙 ?낅뜲?댄듃 ?대깽??諛쒖넚");
+                    console.log("[FloatingAI] ?�정 ?�데?�트 ?�벤??발송");
                     window.dispatchEvent(new CustomEvent('schedule-updated'));
 
                     // Get AI resource recommendations
-                    console.log("[FloatingAI] AI 由ъ냼???붿껌 ?쒖옉:", scheduleData.text);
+                    console.log("[FloatingAI] AI 리소???�청 ?�작:", scheduleData.text);
                     const resourceResponse = await fetch("/api/ai-resource-recommend", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -686,10 +686,10 @@ export function FloatingAIAssistant({
 
                     if (resourceResponse.ok) {
                         const resourceData = await resourceResponse.json();
-                        console.log("[FloatingAI] AI 由ъ냼???곗씠??", resourceData);
+                        console.log("[FloatingAI] AI 리소???�이??", resourceData);
 
                         // Send message to AI chat
-                        const chatMessage = `??"${scheduleData.text}" ?쇱젙??異붽??섏뿀?듬땲??\n\n${resourceData.recommendation}`;
+                        const chatMessage = `??"${scheduleData.text}" ?�정??추�??�었?�니??\n\n${resourceData.recommendation}`;
 
                         setIsOpen(true);
                         setMessages((prev) => [
@@ -700,7 +700,7 @@ export function FloatingAIAssistant({
                         setIsOpen(true);
                         setMessages((prev) => [
                             ...prev,
-                            { id: `system-${Date.now()}`, role: "assistant", content: `??"${scheduleData.text}" ?쇱젙??異붽??섏뿀?듬땲??` },
+                            { id: `system-${Date.now()}`, role: "assistant", content: `??"${scheduleData.text}" ?�정??추�??�었?�니??` },
                         ]);
                     }
                 }
@@ -826,8 +826,8 @@ export function FloatingAIAssistant({
                                     <Sparkles className="w-4 h-4 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-sm">AI ?댁떆?ㅽ꽩??/h3>
-                                    <p className="text-[10px] text-muted-foreground">臾댁뾿?대뱺 臾쇱뼱蹂댁꽭??/p>
+                                    <h3 className="font-semibold text-sm">AI ?�시?�턴??/h3>
+                                    <p className="text-[10px] text-muted-foreground">무엇?�든 물어보세??/p>
                                 </div>
                             </div>
                             <Button
@@ -847,9 +847,9 @@ export function FloatingAIAssistant({
                                     <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                                         <Bot className="w-8 h-8 text-foreground" />
                                     </div>
-                                    <p className="text-sm font-medium mb-1">?덈뀞?섏꽭??</p>
+                                    <p className="text-sm font-medium mb-1">?�녕?�세??</p>
                                     <p className="text-xs max-w-[200px]">
-                                        ?숈뒿, ?쇱젙, 紐⑺몴?????臾댁뾿?대뱺 臾쇱뼱蹂댁꽭??
+                                        ?�습, ?�정, 목표???�??무엇?�든 물어보세??
                                     </p>
                                 </div>
                             )}
@@ -893,7 +893,7 @@ export function FloatingAIAssistant({
                                     <div className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3">
                                         <div className="flex items-center gap-2">
                                             <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                            <span className="text-sm text-muted-foreground">?앷컖 以?..</span>
+                                            <span className="text-sm text-muted-foreground">?�각 �?..</span>
                                         </div>
                                     </div>
                                 </div>
@@ -910,7 +910,7 @@ export function FloatingAIAssistant({
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyPress={handleKeyPress}
-                                    placeholder="硫붿떆吏瑜??낅젰?섏꽭??.."
+                                    placeholder="메시지�??�력?�세??.."
                                     className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
                                     disabled={isLoading}
                                 />
@@ -960,5 +960,6 @@ export function FloatingAIAssistant({
         </div>
     );
 }
+
 
 
