@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedMaterials, getCachedCurriculum, getCachedTrendBriefing, getCachedRecommendations, getCachedHabitInsights } from "@/lib/data-service";
 import { Suspense } from "react";
-// import { FloatingAIAssistant } from "@/components/ui/FloatingAIAssistant"; // Temporarily disabled due to encoding issues
+import { FloatingAIAssistant } from "@/components/ui/FloatingAIAssistant";
 
 // Enable static optimization with revalidation
 export const revalidate = 60; // Revalidate every 60 seconds
@@ -38,8 +38,7 @@ export default async function DashboardPage() {
                 initialTrendBriefing={trendBriefing}
                 initialHabitInsights={habitInsights}
             />
-            {/* Floating AI Assistant - Temporarily disabled due to encoding issues */}
-            {/* <FloatingAIAssistant
+            <FloatingAIAssistant
                 showSuggestions={true}
                 briefings={[]}
                 recommendations={[]}
@@ -48,7 +47,7 @@ export default async function DashboardPage() {
                     goal: user.profile.goal,
                     customGoals: user.profile.customGoals
                 } : undefined}
-            /> */}
+            />
         </div>
     );
 }
