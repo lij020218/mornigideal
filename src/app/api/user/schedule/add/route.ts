@@ -65,12 +65,35 @@ export async function POST(request: Request) {
             const now = new Date();
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
-            const startHour = Math.max(currentHour + (currentMinute >= 30 ? 1 : 0), 9);
+
+            console.log(`[Schedule Add] Current time: ${currentHour}:${currentMinute}`);
+
+            // Start from next half-hour slot after current time, or 9 AM if earlier
+            let startHour = currentHour;
+            let startMinute = currentMinute < 30 ? 30 : 0;
+
+            // If we're past the half-hour mark, move to next hour
+            if (currentMinute >= 30) {
+                startHour = currentHour + 1;
+                startMinute = 0;
+            }
+
+            // But ensure we don't start before 9 AM
+            if (startHour < 9) {
+                startHour = 9;
+                startMinute = 0;
+            }
+
+            console.log(`[Schedule Add] Starting search from: ${startHour}:${startMinute}`);
+
             const endHour = 22;
 
             let foundSlot = false;
             for (let hour = startHour; hour < endHour; hour++) {
-                for (let minute = 0; minute < 60; minute += 30) { // Check every 30 minutes
+                // For the first hour, start from startMinute; for subsequent hours, start from 0
+                const initialMinute = (hour === startHour) ? startMinute : 0;
+
+                for (let minute = initialMinute; minute < 60; minute += 30) { // Check every 30 minutes
                     const slotStart = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 
                     // Calculate end time based on actual duration

@@ -124,7 +124,11 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
             - greeting: Warm morning greeting emphasizing ${job} role.
             - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
             - yesterday_score: integer 0-100 (estimate based on activity).
-            - today_schedule_summary: Summarize today's full schedule including wake up, work hours, and any custom events. If no special events, mention it's a regular work day.
+            - today_schedule_summary: **CRITICAL - ANALYZE THE ACTUAL SCHEDULE DATA PROVIDED ABOVE**
+              * Use the REAL wake up time (${userSchedule.wakeUp || "07:00"}), work hours (${userSchedule.workStart || "09:00"} - ${userSchedule.workEnd || "18:00"}), and sleep time (${userSchedule.sleep || "23:00"})
+              * ${todayEvents.length > 0 ? `Mention these specific custom events: ${todayEvents.map((e: any) => `"${e.text}" at ${e.startTime}`).join(', ')}` : 'Mention it\'s a regular work day without special events'}
+              * Be specific and accurate - do NOT use generic times like "8시 30분" or "10시 30분" if they don't match the data
+              * Example good format: "${userSchedule.wakeUp || '07:00'}에 기상하여 ${userSchedule.workStart || '09:00'}부터 ${userSchedule.workEnd || '18:00'}까지 근무하시는 날입니다. ${todayEvents.length > 0 ? todayEvents.map((e: any) => `${e.startTime}에 "${e.text}" 일정이 있습니다.`).join(' ') : '특별한 일정은 없으며, 평소와 같은 업무 루틴을 이어갈 예정입니다.'}"
             - trend_summary: Provide a DETAILED summary of ALL ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
               1. Use double line breaks (\\n\\n) to separate each article clearly
               2. Start EACH article with a bullet point (•)

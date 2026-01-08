@@ -69,12 +69,12 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                         </div>
                     </div>
                     <div>
-                        <h3 className="text-2xl md:text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white via-orange-100 to-white/70">
+                        <h3 className="text-2xl md:text-3xl font-bold mb-3 text-gray-900">
                             Good Morning,<br />{username}님!
                         </h3>
-                        <p className="text-lg text-muted-foreground leading-relaxed px-4 font-light">
+                        <p className="text-lg text-gray-600 leading-relaxed px-4 font-light">
                             오늘 하루를 시작하기 위한<br />
-                            <span className="text-orange-300 font-medium">나만의 인사이트</span>가 도착했습니다.
+                            <span className="text-orange-600 font-medium">나만의 인사이트</span>가 도착했습니다.
                         </p>
                     </div>
                 </div>
@@ -91,7 +91,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                             {/* Background Glow removed for cleaner look, relying on stroke drop-shadow */}
 
                             <svg className="w-full h-full transform -rotate-90 overflow-visible">
-                                <circle cx="80" cy="80" r="70" className="stroke-white/5 fill-none" strokeWidth="12" />
+                                <circle cx="80" cy="80" r="70" className="stroke-gray-200 fill-none" strokeWidth="12" />
                                 <motion.circle
                                     cx="80" cy="80" r="70"
                                     className="stroke-green-500 fill-none drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]"
@@ -103,18 +103,18 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                                 />
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-tr from-green-400 to-emerald-200">
+                                <span className="text-4xl font-bold text-green-600">
                                     {data.yesterday_score}%
                                 </span>
-                                <span className="text-xs text-green-400/80 font-medium uppercase tracking-wider mt-1">Completion</span>
+                                <span className="text-xs text-green-600/70 font-medium uppercase tracking-wider mt-1">Completion</span>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-transparent p-4 rounded-2xl text-center">
-                        <h4 className="flex items-center justify-center gap-2 font-bold mb-3 text-sm text-green-400 uppercase tracking-wider">
+                    <div className="bg-white/30 backdrop-blur-sm p-4 rounded-2xl text-center border border-white/40">
+                        <h4 className="flex items-center justify-center gap-2 font-bold mb-3 text-sm text-green-700 uppercase tracking-wider">
                             <CheckCircle className="w-4 h-4" /> 어제 활동 요약
                         </h4>
-                        <p className="text-sm text-gray-200 leading-relaxed font-light">
+                        <p className="text-sm text-gray-700 leading-relaxed font-light">
                             {data.yesterday_summary}
                         </p>
                     </div>
@@ -224,24 +224,24 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             content: (
                 <div className="space-y-6">
                     <div className="text-center">
-                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 mb-4">
-                            <Calendar className="w-10 h-10 text-blue-400" />
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/30 backdrop-blur-sm border border-white/40 mb-4">
+                            <Calendar className="w-10 h-10 text-blue-600" />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">오늘의 일정</h3>
-                        <p className="text-sm text-muted-foreground">Today's Schedule</p>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">오늘의 일정</h3>
+                        <p className="text-sm text-gray-600">Today's Schedule</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/5 backdrop-blur-md p-6 rounded-2xl border border-blue-500/20 relative overflow-hidden">
+                    <div className="bg-white/30 backdrop-blur-sm p-6 rounded-2xl border border-white/40 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
                         <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
                         <div className="relative z-10">
-                            <p className="text-base text-gray-100 leading-relaxed font-light whitespace-pre-line">
+                            <p className="text-base text-gray-700 leading-relaxed font-light whitespace-pre-line">
                                 {data.today_schedule_summary}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
                         <Calendar className="w-3 h-3" />
                         <span>효율적인 하루를 위한 계획</span>
                     </div>
@@ -254,24 +254,24 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             content: (
                 <div className="space-y-6">
                     <div className="text-center">
-                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 mb-4">
-                            <TrendingUp className="w-10 h-10 text-purple-400" />
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/30 backdrop-blur-sm border border-white/40 mb-4">
+                            <TrendingUp className="w-10 h-10 text-purple-600" />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">트렌드 브리핑</h3>
-                        <p className="text-sm text-muted-foreground">Personalized Trend Analysis</p>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">트렌드 브리핑</h3>
+                        <p className="text-sm text-gray-600">Personalized Trend Analysis</p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/5 backdrop-blur-md p-6 rounded-2xl border border-purple-500/20 max-h-[300px] overflow-y-auto custom-scrollbar relative">
+                    <div className="bg-white/30 backdrop-blur-sm p-6 rounded-2xl border border-white/40 max-h-[300px] overflow-y-auto custom-scrollbar relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
                         <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
                         <div className="relative z-10">
-                            <p className="text-sm text-gray-100 leading-relaxed whitespace-pre-line font-light">
+                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line font-light">
                                 {data.trend_summary}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
                         <TrendingUp className="w-3 h-3" />
                         <span>당신을 위한 맞춤 인사이트</span>
                     </div>
@@ -283,19 +283,19 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             title: "Cheering For You",
             content: (
                 <div className="text-center space-y-10 py-6">
-                    <div className="w-24 h-24 mx-auto bg-gradient-to-br from-yellow-400/20 to-amber-500/20 rounded-full flex items-center justify-center animate-pulse border border-yellow-500/30 relative">
+                    <div className="w-24 h-24 mx-auto bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center animate-pulse border border-white/40 relative">
                         <div className="absolute inset-0 bg-yellow-500/20 blur-2xl rounded-full" />
-                        <Sparkles className="w-12 h-12 text-yellow-400 relative z-10" />
+                        <Sparkles className="w-12 h-12 text-yellow-600 relative z-10" />
                     </div>
                     <div className="space-y-4">
-                        <h3 className="text-xl font-medium text-white/90">오늘의 응원 메시지</h3>
-                        <p className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-200 via-white to-yellow-200 italic px-4 leading-normal">
+                        <h3 className="text-xl font-medium text-gray-700">오늘의 응원 메시지</h3>
+                        <p className="text-xl md:text-2xl font-bold text-gray-900 italic px-4 leading-normal">
                             "{data.cheering_message}"
                         </p>
                     </div>
                     <Button
                         size="lg"
-                        className="w-full bg-gradient-to-r from-primary to-purple-600 hover:opacity-90 transition-all rounded-xl h-14 text-lg font-bold shadow-[0_0_30px_rgba(168,85,247,0.4)] hover:shadow-[0_0_40px_rgba(168,85,247,0.6)] hover:scale-[1.02]"
+                        className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white transition-all rounded-xl h-14 text-lg font-bold shadow-lg hover:shadow-xl hover:scale-[1.02]"
                         onClick={onClose}
                     >
                         멋진 하루 시작하기 ✨
@@ -315,7 +315,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-xl z-[99999] flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-black/30 backdrop-blur-md z-[99999] flex items-center justify-center p-4"
                         onClick={onClose}
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
                     >
@@ -324,17 +324,17 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 30 }}
                             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="w-full max-w-lg bg-[#121212]/90 border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden relative"
+                            className="w-full max-w-lg bg-white/40 backdrop-blur-xl border border-white/60 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden relative"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Decorative Gradients */}
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[100px] pointer-events-none" />
                             <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
 
                             {/* Progress Bar */}
-                            <div className="h-1 bg-white/5 w-full">
+                            <div className="h-1 bg-gray-200/30 w-full">
                                 <motion.div
-                                    className="h-full bg-gradient-to-r from-primary to-purple-500"
+                                    className="h-full bg-gradient-to-r from-orange-400 to-amber-500"
                                     initial={{ width: 0 }}
                                     animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
                                     transition={{ duration: 0.5 }}
@@ -345,12 +345,12 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                             <div className="p-8 md:p-10 min-h-[500px] flex flex-col relative z-10">
                                 {/* Header */}
                                 <div className="flex justify-between items-center mb-8">
-                                    <h2 className="text-xs font-bold text-muted-foreground tracking-[0.2em] uppercase flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                                    <h2 className="text-xs font-bold text-gray-600 tracking-[0.2em] uppercase flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                                         DAILY BRIEFING
                                     </h2>
-                                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-white/10 w-8 h-8">
-                                        <X className="w-4 h-4 text-muted-foreground" />
+                                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-gray-900/5 w-8 h-8">
+                                        <X className="w-4 h-4 text-gray-600" />
                                     </Button>
                                 </div>
 
@@ -372,7 +372,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                                     <Button
                                         variant="ghost"
                                         className={cn(
-                                            "rounded-full px-6 text-muted-foreground hover:text-white hover:bg-white/5 transition-all",
+                                            "rounded-full px-6 text-gray-600 hover:text-gray-900 hover:bg-gray-900/5 transition-all",
                                             step === 0 && "invisible"
                                         )}
                                         onClick={() => setStep(step - 1)}
@@ -382,7 +382,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
 
                                     {step < steps.length - 1 && (
                                         <Button
-                                            className="rounded-full px-8 bg-white text-black hover:bg-gray-200 transition-all font-semibold shadow-lg hover:shadow-xl hover:scale-105"
+                                            className="rounded-full px-8 bg-gray-900 text-white hover:bg-black transition-all font-semibold shadow-lg hover:shadow-xl hover:scale-105"
                                             onClick={() => setStep(step + 1)}
                                         >
                                             다음 <ChevronRight className="w-4 h-4 ml-1" />
