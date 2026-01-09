@@ -85,7 +85,11 @@ export default function GrowthPage() {
 
                     {/* Analytics Tab */}
                     <TabsContent value="analytics" className="space-y-6">
-                        <SmartInsightsWidget habitInsights={habitInsights} />
+                        <SmartInsightsWidget
+                            customGoals={[]}
+                            currentTime={new Date()}
+                            initialHabitInsights={habitInsights}
+                        />
                     </TabsContent>
                 </Tabs>
             </div>
