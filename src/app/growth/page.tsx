@@ -12,7 +12,6 @@ import { SmartInsightsWidget } from "@/components/features/dashboard/SmartInsigh
 export default function GrowthPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
-    const [materials, setMaterials] = useState<any[]>([]);
     const [habitInsights, setHabitInsights] = useState<any>(null);
 
     // Redirect if not authenticated
@@ -22,19 +21,12 @@ export default function GrowthPage() {
         }
     }, [status, router]);
 
-    // Fetch materials and insights
+    // Fetch insights
     useEffect(() => {
         if (!session?.user?.email) return;
 
         const fetchData = async () => {
             try {
-                // Fetch materials
-                const materialsRes = await fetch('/api/materials/list');
-                if (materialsRes.ok) {
-                    const materialsData = await materialsRes.json();
-                    setMaterials(materialsData.materials || []);
-                }
-
                 // Fetch habit insights
                 const insightsRes = await fetch('/api/habit-insights');
                 if (insightsRes.ok) {
@@ -86,7 +78,7 @@ export default function GrowthPage() {
                         <Card>
                             <CardContent className="p-6">
                                 <h2 className="text-xl font-bold mb-4">최근 학습 자료</h2>
-                                <RecentMaterialsList materials={materials} />
+                                <RecentMaterialsList />
                             </CardContent>
                         </Card>
                     </TabsContent>
