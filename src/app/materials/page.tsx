@@ -202,7 +202,7 @@ export default function MaterialsPage() {
     : materials.filter(m => m.folder_id === selectedFolder);
 
   return (
-    <div className="min-h-screen bg-gradient-mesh text-foreground relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-mesh text-foreground relative overflow-hidden ml-20">
       {/* Background Effects */}
       <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
 

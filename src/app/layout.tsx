@@ -11,12 +11,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "A.ideal - AI 기반 개인 성장 OS",
+  title: "Fi.eri - AI 기반 개인 성장 OS",
   description: "나의 하루, 학습, 성장을 운영해주는 AI 시스템",
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'A.Ideal',
+    title: 'Fi.eri',
   },
   icons: {
     icon: '/icon.svg',
@@ -36,6 +36,7 @@ export const viewport = {
 };
 
 import { Header } from "@/components/layout/Header";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { AppUsageInitializer } from "@/components/AppUsageInitializer";
 
@@ -54,6 +55,7 @@ export default function RootLayout({
       >
         <SessionProvider>
           <AppUsageInitializer />
+          <Sidebar />
           <Header />
           {children}
         </SessionProvider>

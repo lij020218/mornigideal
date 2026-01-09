@@ -348,6 +348,23 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     const handleDeleteActivity = () => {
         if (!selectedTimeSlot) return;
 
+        // Find the activity being deleted to notify TodaySuggestions
+        let deletedActivityText: string | null = null;
+        const activityToDelete = customGoals.find(g => {
+            if (viewMode === 'weekly') {
+                return g.startTime === selectedTimeSlot && g.daysOfWeek?.length && g.daysOfWeek.includes(selectedDayOfWeek);
+            } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
+                const isSpecificDateMatch = g.specificDate === formatDate(selectedDate);
+                const isRecurringMatch = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
+                return g.startTime === selectedTimeSlot && (isSpecificDateMatch || isRecurringMatch);
+            }
+            return false;
+        });
+
+        if (activityToDelete) {
+            deletedActivityText = activityToDelete.text;
+        }
+
         // Delete activity from customGoals (all activities are now stored there)
         setCustomGoals(customGoals.filter(g => {
             if (viewMode === 'weekly') {
@@ -363,6 +380,33 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             }
             return true;
         }));
+
+        // Clean up localStorage and notify TodaySuggestions if this was an AI-suggested schedule
+        if (deletedActivityText) {
+            const today = new Date().toISOString().split('T')[0];
+            const storedKey = `added_suggestions_${today}`;
+            const stored = localStorage.getItem(storedKey);
+
+            if (stored) {
+                try {
+                    const addedSchedules = JSON.parse(stored);
+                    if (Array.isArray(addedSchedules) && addedSchedules.includes(deletedActivityText)) {
+                        // Remove from localStorage
+                        const updatedSchedules = addedSchedules.filter((text: string) => text !== deletedActivityText);
+                        localStorage.setItem(storedKey, JSON.stringify(updatedSchedules));
+
+                        // Notify TodaySuggestions to update its state
+                        window.dispatchEvent(new CustomEvent('schedule-deleted', {
+                            detail: { scheduleText: deletedActivityText }
+                        }));
+
+                        console.log('[SchedulePopup] AI 추천 일정 삭제 및 localStorage 업데이트:', deletedActivityText);
+                    }
+                } catch (error) {
+                    console.error('[SchedulePopup] localStorage 업데이트 실패:', error);
+                }
+            }
+        }
 
         resetPickers();
     };

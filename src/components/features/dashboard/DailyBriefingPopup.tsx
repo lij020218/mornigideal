@@ -110,7 +110,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white/30 backdrop-blur-sm p-4 rounded-2xl text-center border border-white/40">
+                    <div className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl text-center border border-white/40">
                         <h4 className="flex items-center justify-center gap-2 font-bold mb-3 text-sm text-green-700 uppercase tracking-wider">
                             <CheckCircle className="w-4 h-4" /> 어제 활동 요약
                         </h4>
@@ -224,14 +224,14 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             content: (
                 <div className="space-y-6">
                     <div className="text-center">
-                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/30 backdrop-blur-sm border border-white/40 mb-4">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-4">
                             <Calendar className="w-10 h-10 text-blue-600" />
                         </div>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2">오늘의 일정</h3>
                         <p className="text-sm text-gray-600">Today's Schedule</p>
                     </div>
 
-                    <div className="bg-white/30 backdrop-blur-sm p-6 rounded-2xl border border-white/40 relative overflow-hidden">
+                    <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl border border-white/40 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
                         <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
                         <div className="relative z-10">
@@ -254,14 +254,14 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             content: (
                 <div className="space-y-6">
                     <div className="text-center">
-                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/30 backdrop-blur-sm border border-white/40 mb-4">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-4">
                             <TrendingUp className="w-10 h-10 text-purple-600" />
                         </div>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2">트렌드 브리핑</h3>
                         <p className="text-sm text-gray-600">Personalized Trend Analysis</p>
                     </div>
 
-                    <div className="bg-white/30 backdrop-blur-sm p-6 rounded-2xl border border-white/40 max-h-[300px] overflow-y-auto custom-scrollbar relative">
+                    <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl border border-white/40 max-h-[300px] overflow-y-auto custom-scrollbar relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
                         <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
                         <div className="relative z-10">
@@ -283,7 +283,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
             title: "Cheering For You",
             content: (
                 <div className="text-center space-y-10 py-6">
-                    <div className="w-24 h-24 mx-auto bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center animate-pulse border border-white/40 relative">
+                    <div className="w-24 h-24 mx-auto bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center animate-pulse border border-white/40 relative">
                         <div className="absolute inset-0 bg-yellow-500/20 blur-2xl rounded-full" />
                         <Sparkles className="w-12 h-12 text-yellow-600 relative z-10" />
                     </div>
@@ -315,7 +315,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/30 backdrop-blur-md z-[99999] flex items-center justify-center p-4"
+                        className="fixed inset-0 bg-black/50 backdrop-blur-md z-[99999] flex items-center justify-center p-4"
                         onClick={onClose}
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
                     >
@@ -324,7 +324,7 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 30 }}
                             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="w-full max-w-lg bg-white/40 backdrop-blur-xl border border-white/60 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden relative"
+                            className="w-full max-w-lg bg-white/95 backdrop-blur-xl border border-white/60 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden relative"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Decorative Gradients */}

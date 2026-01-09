@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -8,6 +9,14 @@ const openai = new OpenAI({
 export async function POST(request: NextRequest) {
     try {
         console.log("[AI Resource Recommend] API 호출 시작");
+
+        // Check authentication
+        const session = await auth();
+        if (!session?.user?.email) {
+            console.error("[AI Resource Recommend] Unauthorized access attempt");
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const { activity, category } = await request.json();
         console.log("[AI Resource Recommend] 요청 데이터:", { activity, category });
 

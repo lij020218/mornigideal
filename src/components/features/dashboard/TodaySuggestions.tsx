@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Lightbulb, Plus, Clock, CheckCircle2, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,47 +35,36 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
     const [showDurationInput, setShowDurationInput] = useState(false);
     const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
     const [durationInput, setDurationInput] = useState("");
+    const lastFetchTimeRef = useRef<number>(0);
+    const isFetchingRef = useRef<boolean>(false);
 
     const hour = currentTime.getHours();
 
-    // Load added suggestions from localStorage on mount
-    useEffect(() => {
-        const today = new Date().toISOString().split('T')[0];
-        const storedKey = `added_suggestions_${today}`;
-
-        const stored = localStorage.getItem(storedKey);
-
-        if (stored) {
-            try {
-                const addedIds = JSON.parse(stored);
-                setAddedSuggestions(new Set(addedIds));
-            } catch (e) {
-                console.error('Failed to parse stored suggestions:', e);
-            }
-        }
-    }, []);
-
-    // Generate time-based suggestions
-    useEffect(() => {
-        if (userProfile) {
-            fetchAISuggestions();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hour, userProfile?.job, userProfile?.goal]);
-
-
-    const fetchAISuggestions = async () => {
+    // Memoized fetch function to prevent infinite loops
+    const fetchAISuggestions = useCallback(async () => {
         if (!userProfile) {
             setSuggestions([]);
             return;
         }
 
+        // Rate limiting: 최소 10초 간격
+        const now = Date.now();
+        if (now - lastFetchTimeRef.current < 10000) {
+            console.log('[TodaySuggestions] Rate limit: 너무 빠른 요청 차단 (마지막 요청 후', Math.round((now - lastFetchTimeRef.current) / 1000), '초 경과)');
+            return;
+        }
+
+        // Prevent concurrent requests
+        if (isFetchingRef.current) {
+            console.log('[TodaySuggestions] 이미 요청 진행 중, 중복 요청 차단');
+            return;
+        }
+
         try {
+            isFetchingRef.current = true;
+            lastFetchTimeRef.current = now;
             setLoading(true);
             console.log('[TodaySuggestions] AI 추천 요청 시작');
-
-            // Get added schedules from state
-            const addedSchedulesList = Array.from(addedSuggestions);
 
             const response = await fetch("/api/ai-suggest-schedules", {
                 method: "POST",
@@ -85,7 +74,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                         job: userProfile.job,
                         goal: userProfile.goal,
                     },
-                    addedSchedules: addedSchedulesList,
                     timeOfDay: hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening",
                 }),
             });
@@ -109,8 +97,55 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
             setSuggestions([]);
         } finally {
             setLoading(false);
+            isFetchingRef.current = false;
         }
-    };
+    }, [userProfile, hour]);
+
+    // Load added suggestions from localStorage on mount and set up event listeners
+    useEffect(() => {
+        const today = new Date().toISOString().split('T')[0];
+        const storedKey = `added_suggestions_${today}`;
+
+        const stored = localStorage.getItem(storedKey);
+
+        if (stored) {
+            try {
+                const addedIds = JSON.parse(stored);
+                setAddedSuggestions(new Set(addedIds));
+            } catch (e) {
+                console.error('Failed to parse stored suggestions:', e);
+            }
+        }
+
+        // Listen for schedule deletions to update "Added" status
+        const handleScheduleDeleted = (event: CustomEvent) => {
+            const { scheduleText } = event.detail;
+            console.log('[TodaySuggestions] 일정 삭제 이벤트 수신:', scheduleText);
+
+            // Remove from state only - don't fetch new suggestions
+            setAddedSuggestions(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(scheduleText);
+                return newSet;
+            });
+        };
+
+        window.addEventListener('schedule-deleted', handleScheduleDeleted as EventListener);
+
+        return () => {
+            window.removeEventListener('schedule-deleted', handleScheduleDeleted as EventListener);
+        };
+    }, []); // Only run once on mount
+
+    // Generate suggestions only once when component mounts - NEVER re-fetch
+    const hasInitializedRef = useRef(false);
+    useEffect(() => {
+        if (userProfile && !hasInitializedRef.current) {
+            console.log('[TodaySuggestions] 초기 로드: AI 추천 가져오기 (한 번만)');
+            hasInitializedRef.current = true;
+            fetchAISuggestions();
+        }
+    }, [userProfile, fetchAISuggestions]); // Only run once per session
 
     const handleAddClick = (suggestion: Suggestion) => {
         setSelectedSuggestion(suggestion);
@@ -158,30 +193,32 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
                 console.log('[TodaySuggestions] 카드 추가됨:', selectedSuggestion.action);
 
-                // 이벤트 로깅 (사용자 행동 패턴 수집)
+                // 이벤트 로깅: AI 추천 수락 (피드백 수집)
                 try {
                     await fetch("/api/user/events/log", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            eventType: "schedule_added",
+                            eventType: "ai_suggestion_accepted",
                             startAt: new Date().toISOString(),
                             metadata: {
+                                suggestion_id: selectedSuggestion.id,
                                 activity: selectedSuggestion.action,
                                 category: selectedSuggestion.category,
-                                estimatedTime: durationInput,
+                                estimated_duration: durationInput,
+                                ai_estimated_time: selectedSuggestion.estimatedTime,
                                 source: "ai_suggestion",
+                                accepted_at: new Date().toISOString(),
                             },
                         }),
                     });
-                    console.log('[TodaySuggestions] 이벤트 로깅 완료');
+                    console.log('[TodaySuggestions] AI 추천 수락 로깅 완료');
                 } catch (error) {
                     console.error('[TodaySuggestions] 이벤트 로깅 실패:', error);
                 }
 
                 // Fetch ONE new suggestion to replace this one
                 console.log('[TodaySuggestions] 1개의 새로운 추천 요청');
-                const addedSchedulesList = Array.from(newAddedSet);
 
                 const newSuggestionResponse = await fetch("/api/ai-suggest-schedules", {
                     method: "POST",
@@ -191,7 +228,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                             job: userProfile?.job,
                             goal: userProfile?.goal,
                         },
-                        addedSchedules: addedSchedulesList,
                         timeOfDay: hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening",
                         requestCount: 1, // Request only 1 new suggestion
                     }),
@@ -199,18 +235,32 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
                 if (newSuggestionResponse.ok) {
                     const newData = await newSuggestionResponse.json();
+                    console.log('[TodaySuggestions] 새 추천 응답:', newData);
+
                     if (newData.suggestions && newData.suggestions.length > 0) {
                         // Replace the added suggestion with the new one
                         setSuggestions(prevSuggestions => {
                             const index = prevSuggestions.findIndex(s => s.id === selectedSuggestion.id);
+                            console.log('[TodaySuggestions] 대체할 카드 인덱스:', index);
+
                             if (index !== -1) {
                                 const newSuggestions = [...prevSuggestions];
                                 newSuggestions[index] = newData.suggestions[0];
+                                console.log('[TodaySuggestions] 카드 대체 완료:', newData.suggestions[0]);
                                 return newSuggestions;
                             }
+                            console.warn('[TodaySuggestions] 대체할 카드를 찾을 수 없음');
                             return prevSuggestions;
                         });
+                    } else {
+                        console.warn('[TodaySuggestions] 새 추천이 비어있음, 전체 목록 새로고침');
+                        // If no new suggestion, refresh all suggestions
+                        fetchAISuggestions();
                     }
+                } else {
+                    console.error('[TodaySuggestions] 새 추천 요청 실패:', newSuggestionResponse.status);
+                    // On error, refresh all suggestions
+                    fetchAISuggestions();
                 }
 
                 // Notify Dashboard to refresh schedule

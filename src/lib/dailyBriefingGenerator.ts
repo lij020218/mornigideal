@@ -129,16 +129,12 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
               * ${todayEvents.length > 0 ? `Mention these specific custom events: ${todayEvents.map((e: any) => `"${e.text}" at ${e.startTime}`).join(', ')}` : 'Mention it\'s a regular work day without special events'}
               * Be specific and accurate - do NOT use generic times like "8시 30분" or "10시 30분" if they don't match the data
               * Example good format: "${userSchedule.wakeUp || '07:00'}에 기상하여 ${userSchedule.workStart || '09:00'}부터 ${userSchedule.workEnd || '18:00'}까지 근무하시는 날입니다. ${todayEvents.length > 0 ? todayEvents.map((e: any) => `${e.startTime}에 "${e.text}" 일정이 있습니다.`).join(' ') : '특별한 일정은 없으며, 평소와 같은 업무 루틴을 이어갈 예정입니다.'}"
-            - trend_summary: Provide a DETAILED summary of ALL ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
-              1. Use double line breaks (\\n\\n) to separate each article clearly
+            - trend_summary: **ONLY list the article TITLES** from the ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
+              1. Use double line breaks (\\n\\n) to separate each article
               2. Start EACH article with a bullet point (•)
-              3. For EACH article, include:
-                 - Article title and category
-                 - Core topic and key facts (2-3 sentences)
-                 - Why it matters specifically to a ${job}
-                 - Actionable insights or takeaways
-              4. Make it comprehensive - each article should be 3-4 sentences minimum
-              5. Use the Summary and Relevance information provided above
+              3. For EACH article, ONLY include the title and category - NO descriptions, NO summaries, NO explanations
+              4. Keep it SHORT and simple - title only
+              5. Format: "• [Category] 제목"
             - cheering_message: A short energetic quote or message.
 
             OUTPUT JSON:
@@ -147,7 +143,7 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
                "yesterday_summary": "...",
                "yesterday_score": 80,
                "today_schedule_summary": "...",
-               "trend_summary": "• 첫 번째 트렌드: [주제]에 대한 내용입니다. [핵심 내용]... 이를 통해 [인사이트]를 얻을 수 있습니다.\\n\\n• 두 번째 트렌드: [주제] 관련 소식입니다. [내용]... ${job}에게 [시사점]이 있습니다.\\n\\n• 세 번째 트렌드: [주제]가 주목받고 있습니다. [상세 설명]...",
+               "trend_summary": "• [AI] 첫 번째 기사 제목\\n\\n• [Business] 두 번째 기사 제목\\n\\n• [Tech] 세 번째 기사 제목",
                "cheering_message": "..."
             }
             `;

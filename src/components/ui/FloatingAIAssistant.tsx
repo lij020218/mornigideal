@@ -550,6 +550,84 @@ export function FloatingAIAssistant({
         };
     }, []);
 
+    // Morning greeting: Send a message when user opens the app after 5:30 AM
+    useEffect(() => {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const today = now.toISOString().split('T')[0];
+
+        // Check if it's after 5:30 AM
+        const isAfterMorningTime = currentHour > 5 || (currentHour === 5 && currentMinute >= 30);
+
+        // Check if we already sent morning message today
+        const lastMorningMessageDate = localStorage.getItem('lastMorningMessageDate');
+        const alreadySentToday = lastMorningMessageDate === today;
+
+        if (isAfterMorningTime && !alreadySentToday && userProfile) {
+            console.log('[FloatingAI] Generating morning greeting with weather and schedule suggestions');
+
+            // Fetch morning briefing (weather + AI schedule suggestions)
+            const fetchMorningBriefing = async () => {
+                try {
+                    const response = await fetch('/api/morning-briefing', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userProfile: {
+                                job: userProfile.job,
+                                goal: userProfile.goal,
+                            },
+                        }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('[FloatingAI] Morning briefing received:', data);
+
+                        // Send morning message with weather and suggestions
+                        const morningMessage: Message = {
+                            id: `morning-${Date.now()}`,
+                            role: 'assistant',
+                            content: data.message,
+                        };
+
+                        setMessages([morningMessage]);
+
+                        // Auto-open chat after a short delay
+                        setTimeout(() => {
+                            setIsOpen(true);
+                        }, 1000);
+                    } else {
+                        // Fallback message if API fails
+                        const fallbackMessage: Message = {
+                            id: `morning-${Date.now()}`,
+                            role: 'assistant',
+                            content: '안녕하세요! 좋은 아침입니다 ☀️\n\n오늘 하루를 의미있게 시작해보세요. 오늘 꼭 해야 할 일 5가지를 정해서 일정에 추가해보시는 건 어떨까요?\n\n목표를 명확히 하면 하루가 더 생산적이고 보람차게 느껴질 거예요! 💪',
+                        };
+                        setMessages([fallbackMessage]);
+                        setTimeout(() => setIsOpen(true), 1000);
+                    }
+                } catch (error) {
+                    console.error('[FloatingAI] Failed to fetch morning briefing:', error);
+                    // Fallback message
+                    const fallbackMessage: Message = {
+                        id: `morning-${Date.now()}`,
+                        role: 'assistant',
+                        content: '안녕하세요! 좋은 아침입니다 ☀️\n\n오늘 하루를 의미있게 시작해보세요!',
+                    };
+                    setMessages([fallbackMessage]);
+                    setTimeout(() => setIsOpen(true), 1000);
+                }
+
+                // Save that we sent the message today
+                localStorage.setItem('lastMorningMessageDate', today);
+            };
+
+            fetchMorningBriefing();
+        }
+    }, [userProfile]);
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 

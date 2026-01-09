@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
-import { getCachedOrGenerateContext } from "@/lib/user-context-service";
+import { generateUserContext } from "@/lib/user-context-service";
+import { detectDailyState, getStressReliefSuggestions, getEnergyBoostSuggestions } from "@/lib/stress-detector";
+import { analyzeWorkRestBalance, getRecommendationsByType } from "@/lib/work-rest-analyzer";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -17,12 +19,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { addedSchedules, requestCount = 3 } = await request.json();
+        const { requestCount = 3 } = await request.json();
         console.log("[AI Suggest Schedules] 요청 개수:", requestCount);
 
-        // Context 생성 (캐시 사용)
+        // Context 생성 (캐시 사용하지 않고 항상 최신 데이터 가져오기)
         console.log("[AI Suggest Schedules] User context 생성 중...");
-        const context = await getCachedOrGenerateContext(session.user.email);
+        const context = await generateUserContext(session.user.email); // 캐시 대신 직접 생성
+
+        // 스트레스/에너지 레벨 자동 감지
+        console.log("[AI Suggest Schedules] 스트레스/에너지 레벨 감지 중...");
+        const dailyState = await detectDailyState(session.user.email);
+
+        // 업무-휴식 균형 분석
+        console.log("[AI Suggest Schedules] 업무-휴식 균형 분석 중...");
+        const workRestBalance = await analyzeWorkRestBalance(session.user.email);
+        const balanceRecommendations = getRecommendationsByType(workRestBalance.recommendationType);
 
         // Get current context
         const now = new Date();
@@ -32,21 +43,17 @@ export async function POST(request: NextRequest) {
                              now.getMonth() >= 5 && now.getMonth() <= 7 ? "여름" : "가을";
         const timeOfDayLabel = hour < 12 ? "오전" : hour < 18 ? "오후" : "저녁";
 
-        // 오늘 날짜의 실제 일정 가져오기
+        // 오늘 날짜의 실제 일정을 DB에서 실시간으로 가져오기
         const today = new Date().toISOString().split('T')[0];
         const existingSchedules = context.profile.customGoals
             ?.filter((goal: any) => goal.specificDate === today)
             .map((goal: any) => goal.text) || [];
 
-        console.log("[AI Suggest Schedules] 오늘 기존 일정:", existingSchedules);
+        console.log("[AI Suggest Schedules] 오늘 일정 (DB 실시간):", existingSchedules);
 
-        // 오늘 추가된 일정 + 이미 있는 일정 합치기
-        const allTodaySchedules = [...new Set([...existingSchedules, ...(addedSchedules || [])])];
-        const addedSchedulesText = allTodaySchedules.length > 0
-            ? allTodaySchedules.join(", ")
+        const addedSchedulesText = existingSchedules.length > 0
+            ? existingSchedules.join(", ")
             : "없음";
-
-        console.log("[AI Suggest Schedules] 오늘 전체 일정:", addedSchedulesText);
 
         // 최근 활동 텍스트 생성
         const recentActivitiesText = context.recentActivities.length > 0
@@ -110,6 +117,53 @@ ${context.constraints.workoutRestrictions.avoidTypes && context.constraints.work
 - 성공률 높은 시간블록: ${topTimeblocks || '데이터 부족'}
 - 일정 밀도: ${context.features.recentScheduleDensity}
 
+**[오늘의 상태 - 실시간 감지] ⚠️ 중요**
+- 에너지 레벨: ${dailyState.energy_level}/10 ${dailyState.energy_level <= 3 ? '(매우 낮음 - 가벼운 활동 권장)' : dailyState.energy_level <= 5 ? '(보통 이하)' : '(양호)'}
+- 스트레스 레벨: ${dailyState.stress_level}/10 ${dailyState.stress_level >= 8 ? '(매우 높음 - 휴식 필수!)' : dailyState.stress_level >= 6 ? '(높음 - 휴식 권장)' : '(정상)'}
+- 오늘 완료율: ${(dailyState.completion_rate * 100).toFixed(0)}%
+- 오늘 활동 수: ${dailyState.activity_count}개
+
+${dailyState.stress_level >= 7 ? `⚠️ **스트레스 높음 감지** - 다음 활동 우선 추천: ${getStressReliefSuggestions(dailyState.stress_level).join(', ')}` : ''}
+${dailyState.energy_level <= 4 ? `⚠️ **에너지 부족 감지** - 에너지 회복 활동 우선 추천: ${getEnergyBoostSuggestions(dailyState.energy_level).join(', ')}` : ''}
+
+**[업무-휴식 균형 분석] 🎯 최우선 고려사항**
+- 업무 강도: ${workRestBalance.workIntensity} (오늘 업무 ${workRestBalance.workEventsToday}건, 약 ${workRestBalance.workHoursToday}시간)
+  ${workRestBalance.workIntensity === 'overloaded' ? '⚠️ 과밀 상태 - 추가 업무 일정 추천 금지!' : ''}
+  ${workRestBalance.workIntensity === 'empty' ? '📝 일정이 비어있음 - 생산적 활동 추천' : ''}
+- 휴식 상태: ${workRestBalance.restStatus}
+  ${workRestBalance.restStatus === 'critical' ? '🚨 위험! 업무만 있고 휴식 없음 - 휴식 필수!' : ''}
+  ${workRestBalance.lastRestTime ? `마지막 휴식: ${workRestBalance.lastRestTime} (${workRestBalance.hoursSinceRest}시간 전)` : '오늘 아직 휴식 없음'}
+- 빈 시간: ${workRestBalance.hasEmptySlots ? `${workRestBalance.emptyHoursToday}시간 여유` : '일정이 빡빡함'}
+- 특수 상황: ${workRestBalance.isWeekend ? '주말' : '평일'}${workRestBalance.upcomingLongBreak ? ', 긴 연휴 앞둠' : ''}
+
+**🎯 추천 방향 (반드시 따를 것): ${workRestBalance.recommendationType.toUpperCase()}**
+- 이유: ${workRestBalance.reason}
+- 우선 추천 카테고리: ${balanceRecommendations.categories.join(', ')}
+- 구체적 예시: ${balanceRecommendations.examples.join(' | ')}
+- 우선순위: ${balanceRecommendations.priority}
+
+${workRestBalance.recommendationType === 'rest' ? `
+⚠️ **휴식 최우선 모드 활성화**
+- 업무/생산성 활동 추천 금지
+- 3개 카드 중 최소 2개는 휴식/웰니스 활동
+- 짧고 가벼운 활동 위주 (5-15분)
+- 예: 산책, 스트레칭, 명상, 눈 감고 쉬기
+` : ''}
+
+${workRestBalance.recommendationType === 'productivity' ? `
+📝 **생산성 모드 활성화**
+- 일정이 비어있으므로 자기계발/업무 추천
+- 하지만 과도하지 않게 (2-3시간 이내)
+- 운동/휴식도 1개 이상 포함
+` : ''}
+
+${workRestBalance.recommendationType === 'travel' || workRestBalance.recommendationType === 'leisure' ? `
+🌴 **여가/여행 모드 활성화**
+- 주말/연휴이므로 업무 추천 금지
+- 여가, 취미, 여행, 가족 활동 우선
+- 긴 시간 (2-4시간) 활동 가능
+` : ''}
+
 **[최근 활동 (중복 방지용)]**
 ${recentActivitiesText}
 
@@ -146,9 +200,16 @@ ${addedSchedulesText}
    - **절대 일반적이거나 계절성 추천(겨울 독서, 봄맞이 운동 등) 하지 말 것**
    - **사용자 정보를 무시하고 일반적인 추천을 하면 안됨**
 
-3. **카테고리 다양성**:
+3. **카테고리 다양성 & 필수 균형**:
    - 3개 추천은 **반드시 서로 다른 카테고리**
    - 카테고리: exercise(운동), learning(독서/학습), productivity(생산성/업무), wellness(휴식/웰니스), leisure(취미/여가), social(사회활동)
+   - **⚠️ 필수 규칙: 3개 카드 중 최소 1개는 반드시 다음 중 하나여야 함**:
+     * exercise(운동): 요가, 조깅, 스트레칭, 헬스, 산책, 필라테스, 수영 등
+     * wellness(휴식/웰니스): 명상, 휴식, 수면, 심호흡, 마사지 등
+     * learning(독서/학습): 책 읽기, 독서, 온라인 강의, 학습 등
+     * leisure(취미/여가): 취미 활동, 음악 감상, 영화 보기, 글쓰기 등
+   - **업무(productivity)만 3개 추천하는 것은 절대 금지**
+   - 일과 삶의 균형(work-life balance)을 반드시 고려
 
 4. **제약사항 절대 준수**: 금지 시간대, 운동 제한 등을 반드시 지킬 것
 

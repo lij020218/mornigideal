@@ -87,13 +87,15 @@ export function Header() {
         setShowProfileMenu(false);
     };
 
-    if (isLearningPage || isLandingPage || isOnboardingPage) return null;
+    // Hide on landing, onboarding, login, signup pages
+    const hideHeaderPages = ["/", "/onboarding", "/login", "/signup", "/reset"];
+    if (isLearningPage || hideHeaderPages.includes(pathname || "")) return null;
 
     return (
         <>
-            <header className="fixed top-0 left-0 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 glass rounded-none border-t-0 border-x-0">
+            <header className="fixed top-0 left-20 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 glass rounded-none border-t-0 border-x-0">
                 <Link href="/dashboard" className="text-lg font-bold text-foreground">
-                    A.ideal
+                    Fi.eri
                 </Link>
 
                 <div className="flex gap-3 md:gap-4 items-center">

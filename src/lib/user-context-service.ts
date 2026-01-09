@@ -216,6 +216,16 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         avgSleep: avgSleepHours,
         completionRate: workoutCompletionRate,
         recentActivitiesCount: recentActivities.length,
+        customGoalsCount: profile.customGoals?.length || 0,
+        constraintsLoaded: !!constraints,
+        preferencesLoaded: !!preferences,
+        successRateEntriesCount: Object.keys(successRateByTimeblock).length,
+    });
+
+    console.log(`[Context Service] Profile data:`, {
+        job: profile.job,
+        goal: profile.goal,
+        totalCustomGoals: profile.customGoals?.length || 0,
     });
 
     return context;

@@ -47,26 +47,42 @@ export async function analyzeSchedulePatterns(userEmail: string): Promise<Schedu
     const fourWeeksAgo = new Date();
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
 
-    // 사용자의 모든 일정 가져오기 (최근 4주)
-    const schedules = await db.query(
-        `SELECT
-            title,
-            specific_date::date as date,
-            TO_CHAR(specific_date, 'Dy') as day_of_week,
-            EXTRACT(HOUR FROM specific_date) as hour,
-            EXTRACT(MINUTE FROM specific_date) as minute,
-            duration,
-            color,
-            completed
-         FROM schedules
-         WHERE user_email = $1
-           AND specific_date >= $2
-           AND specific_date IS NOT NULL
-         ORDER BY specific_date ASC`,
-        [userEmail, fourWeeksAgo]
-    );
+    // 사용자의 프로필에서 customGoals 가져오기 (최근 4주)
+    const supabase = db.client;
+    const { data: userData, error } = await supabase
+        .from('users')
+        .select('profile')
+        .eq('email', userEmail)
+        .maybeSingle();
 
-    const scheduleData = schedules.rows;
+    if (error || !userData) {
+        console.log(`[Schedule Analyzer] No user data found:`, error?.message);
+        return getEmptyPattern();
+    }
+
+    const customGoals = userData.profile?.customGoals || [];
+
+    // customGoals를 스케줄 데이터 형식으로 변환
+    const scheduleData = customGoals
+        .filter((goal: any) => {
+            if (!goal.specificDate) return false;
+            const goalDate = new Date(goal.specificDate);
+            return goalDate >= fourWeeksAgo;
+        })
+        .map((goal: any) => {
+            const specificDate = new Date(goal.specificDate);
+            return {
+                title: goal.text || '',
+                date: goal.specificDate,
+                day_of_week: specificDate.toLocaleDateString('en-US', { weekday: 'short' }),
+                hour: specificDate.getHours(),
+                minute: specificDate.getMinutes(),
+                duration: goal.duration || 60,
+                color: goal.color || '',
+                completed: goal.completed || false,
+            };
+        })
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (scheduleData.length === 0) {
         console.log(`[Schedule Analyzer] No schedule data found`);

@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/daily-briefing",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/daily-cleanup",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-report",
+      "schedule": "0 20 * * 0"
     }
   ],
   "functions": {
