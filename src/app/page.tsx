@@ -576,14 +576,14 @@ export default function HomePage() {
 
     if (status === "loading") {
         return (
-            <div className="h-screen flex items-center justify-center ml-20">
+            <div className="h-screen flex items-center justify-center md:ml-20">
                 <Loader2 className="w-8 h-8 animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="h-screen bg-background flex flex-col relative ml-20">
+        <div className="h-screen bg-background flex flex-col relative md:ml-20">
             {/* 1️⃣ TOP: Current Schedule Card */}
             <motion.div
                 className="flex-shrink-0 px-6 pt-6"

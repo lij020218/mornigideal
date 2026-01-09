@@ -439,7 +439,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="h-screen bg-background flex flex-col relative">
+        <div className="h-screen bg-background flex flex-col relative md:pl-20">
             {/* Sidebar Toggle Button */}
             <button
                 onClick={() => setShowSidebar(!showSidebar)}
