@@ -60,14 +60,14 @@ export default function InsightsPage() {
 
     if (status === "loading") {
         return (
-            <div className="h-screen flex items-center justify-center">
+            <div className="h-screen flex items-center justify-center md:ml-20">
                 <Loader2 className="w-8 h-8 animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background md:ml-20">
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
                 {/* Header */}
                 <div>
