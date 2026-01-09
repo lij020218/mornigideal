@@ -9,6 +9,40 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Simple in-memory cache with 5-minute TTL
+interface CacheEntry {
+    data: any;
+    timestamp: number;
+}
+
+const suggestionCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCachedSuggestions(email: string, requestCount: number): any | null {
+    const cacheKey = `${email}-${requestCount}`;
+    const cached = suggestionCache.get(cacheKey);
+
+    if (!cached) return null;
+
+    const now = Date.now();
+    if (now - cached.timestamp > CACHE_TTL_MS) {
+        suggestionCache.delete(cacheKey);
+        return null;
+    }
+
+    console.log('[AI Suggest Schedules] Cache hit! Returning cached suggestions');
+    return cached.data;
+}
+
+function setCachedSuggestions(email: string, requestCount: number, data: any): void {
+    const cacheKey = `${email}-${requestCount}`;
+    suggestionCache.set(cacheKey, {
+        data,
+        timestamp: Date.now()
+    });
+    console.log('[AI Suggest Schedules] Cached suggestions for', cacheKey);
+}
+
 export async function POST(request: NextRequest) {
     try {
         console.log("[AI Suggest Schedules] API 호출 시작");
@@ -21,6 +55,12 @@ export async function POST(request: NextRequest) {
 
         const { requestCount = 3 } = await request.json();
         console.log("[AI Suggest Schedules] 요청 개수:", requestCount);
+
+        // Check cache first
+        const cachedResult = getCachedSuggestions(session.user.email, requestCount);
+        if (cachedResult) {
+            return NextResponse.json(cachedResult);
+        }
 
         // Context 생성 (캐시 사용하지 않고 항상 최신 데이터 가져오기)
         console.log("[AI Suggest Schedules] User context 생성 중...");
@@ -290,9 +330,14 @@ ${addedSchedulesText}
 
         console.log("[AI Suggest Schedules] 생성된 추천:", suggestionsWithIds);
 
-        return NextResponse.json({
+        const responseData = {
             suggestions: suggestionsWithIds,
-        });
+        };
+
+        // Cache the result
+        setCachedSuggestions(session.user.email, requestCount, responseData);
+
+        return NextResponse.json(responseData);
     } catch (error: any) {
         console.error("[AI Suggest Schedules] 에러 발생:", error);
         console.error("[AI Suggest Schedules] 에러 상세:", error.message);

@@ -528,7 +528,7 @@ export default function ChatPage() {
 
             {/* 1️⃣ TOP: Current Schedule Card */}
             <motion.div
-                className="flex-shrink-0"
+                className="flex-shrink-0 pt-16 md:pt-0"
                 initial={false}
                 animate={{ height: scheduleExpanded ? "auto" : "auto" }}
             >

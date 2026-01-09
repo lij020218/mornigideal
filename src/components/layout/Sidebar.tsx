@@ -81,16 +81,29 @@ export function Sidebar() {
 
     return (
         <>
-            {/* Mobile Hamburger Button - Only on mobile when closed */}
-            {isMobile && !isOpen && (
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="fixed top-4 left-4 z-[60] bg-card/90 backdrop-blur-sm border border-border hover:bg-muted"
-                    onClick={() => setIsOpen(true)}
-                >
-                    <Menu className="w-5 h-5" />
-                </Button>
+            {/* Mobile Top Bar - Only on mobile */}
+            {isMobile && (
+                <div className="fixed top-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-sm border-b border-border z-[60] flex items-center justify-between px-4">
+                    {/* Hamburger Menu */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="hover:bg-muted"
+                    >
+                        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                    </Button>
+
+                    {/* Fieri Logo */}
+                    <Link href="/" className="absolute left-1/2 transform -translate-x-1/2">
+                        <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">F</span>
+                        </div>
+                    </Link>
+
+                    {/* Empty space for balance */}
+                    <div className="w-10"></div>
+                </div>
             )}
 
             {/* Mobile Overlay - Only on mobile when open */}
@@ -118,21 +131,13 @@ export function Sidebar() {
                     damping: 30,
                 }}
                 className={cn(
-                    "fixed left-0 top-0 h-screen bg-card border-r border-border flex flex-col py-6 z-50",
-                    "w-56 md:w-20"
+                    "fixed left-0 h-screen bg-card border-r border-border flex flex-col z-50",
+                    "w-56 md:w-20",
+                    isMobile ? "top-16 py-4" : "top-0 py-6"
                 )}
             >
-                {/* Logo (Desktop) or Close Button (Mobile) */}
-                {isMobile ? (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="mb-8 mx-6 self-start"
-                        onClick={() => setIsOpen(false)}
-                    >
-                        <X className="w-5 h-5" />
-                    </Button>
-                ) : (
+                {/* Logo - Desktop only */}
+                {!isMobile && (
                     <Link href="/" className="mb-8 mx-auto">
                         <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
                             <span className="text-white font-bold text-lg">F</span>

@@ -35,15 +35,13 @@ export default function InsightsPage() {
                     setUserProfile(profileData.profile);
 
                     // Fetch trend briefings
-                    const trendRes = await fetch('/api/trend-briefing-list', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            level: profileData.profile?.level || 'intermediate',
-                            job: profileData.profile?.job || '',
-                            interests: profileData.profile?.interests || [],
-                        }),
+                    const params = new URLSearchParams({
+                        job: profileData.profile?.job || 'Professional',
+                        goal: profileData.profile?.goal || '',
+                        interests: (profileData.profile?.interests || []).join(','),
                     });
+
+                    const trendRes = await fetch(`/api/trend-briefing?${params.toString()}`);
 
                     if (trendRes.ok) {
                         const trendData = await trendRes.json();
@@ -68,7 +66,7 @@ export default function InsightsPage() {
 
     return (
         <div className="min-h-screen bg-background md:ml-20">
-            <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+            <div className="max-w-7xl mx-auto px-6 pt-20 md:pt-8 pb-8 space-y-8">
                 {/* Header */}
                 <div>
                     <h1 className="text-3xl font-bold mb-2">인사이트</h1>

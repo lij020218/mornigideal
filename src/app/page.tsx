@@ -81,6 +81,8 @@ export default function HomePage() {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const isFetchingRecommendations = useRef(false);
+    const hasFetchedRecommendations = useRef(false);
 
     // Load messages from localStorage on mount
     useEffect(() => {
@@ -206,20 +208,18 @@ export default function HomePage() {
 
         const fetchTrendBriefings = async () => {
             try {
-                const response = await fetch('/api/trend-briefing-list', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        level: userProfile.level || 'intermediate',
-                        job: userProfile.job || '',
-                        interests: userProfile.interests || [],
-                    }),
+                const params = new URLSearchParams({
+                    job: userProfile.job || 'Professional',
+                    goal: userProfile.goal || '',
+                    interests: (userProfile.interests || []).join(','),
                 });
+
+                const response = await fetch(`/api/trend-briefing?${params.toString()}`);
 
                 if (response.ok) {
                     const data = await response.json();
-                    setTrendBriefings(data.briefings || []);
-                    console.log('[Home] Loaded trend briefings:', data.briefings?.length);
+                    setTrendBriefings(data.trends || []);
+                    console.log('[Home] Loaded trend briefings:', data.trends?.length);
                 }
             } catch (error) {
                 console.error('[Home] Failed to fetch trend briefings:', error);
@@ -233,10 +233,15 @@ export default function HomePage() {
     useEffect(() => {
         if (appState !== "idle" || !session?.user?.email) return;
 
-        // Only fetch if we don't have recommendations yet
+        // Only fetch if we haven't fetched yet and we're not currently fetching
+        if (hasFetchedRecommendations.current || isFetchingRecommendations.current) return;
         if (recommendations.length > 0) return;
 
         const fetchRecommendations = async () => {
+            // Set flag to prevent duplicate calls
+            isFetchingRecommendations.current = true;
+            console.log('[Home] Fetching AI recommendations...');
+
             try {
                 const response = await fetch('/api/ai-suggest-schedules', {
                     method: 'POST',
@@ -256,14 +261,18 @@ export default function HomePage() {
                         priority: s.priority,
                     }));
                     setRecommendations(cards);
+                    hasFetchedRecommendations.current = true;
+                    console.log('[Home] AI recommendations fetched successfully:', cards.length);
                 }
             } catch (error) {
                 console.error('[Home] Failed to fetch recommendations:', error);
+            } finally {
+                isFetchingRecommendations.current = false;
             }
         };
 
         fetchRecommendations();
-    }, [appState, session, recommendations.length]);
+    }, [appState, session]);
 
     // Find current/next schedule
     const getCurrentSchedule = () => {
@@ -586,7 +595,7 @@ export default function HomePage() {
         <div className="h-screen bg-background flex flex-col relative md:ml-20">
             {/* 1️⃣ TOP: Current Schedule Card */}
             <motion.div
-                className="flex-shrink-0 px-6 pt-6"
+                className="flex-shrink-0 px-6 pt-20 md:pt-6"
                 initial={false}
                 animate={{ height: scheduleExpanded ? "auto" : "auto" }}
             >

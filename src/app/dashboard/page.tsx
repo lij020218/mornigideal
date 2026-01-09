@@ -27,7 +27,7 @@ export default async function DashboardPage() {
     ]);
 
     return (
-        <div className="min-h-screen bg-background relative ml-20">
+        <div className="min-h-screen bg-background relative md:ml-20">
             {/* Background Gradients */}
             <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-primary/5 to-transparent -z-10" />
             <Dashboard
