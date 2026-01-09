@@ -146,7 +146,7 @@ export async function analyzeWorkRestBalance(userEmail: string): Promise<WorkRes
     const isHoliday = false; // TODO: 실제 공휴일 API 연동
 
     // 다가오는 긴 휴식 (3일 이상)
-    const upcomingLongBreak = isWeekend && dayOfWeek === 5; // 금요일이면 주말 다가옴
+    const upcomingLongBreak = dayOfWeek === 5; // 금요일이면 주말 다가옴
 
     // 추천 방향 결정
     let recommendationType: WorkRestBalance['recommendationType'];

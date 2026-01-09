@@ -33,7 +33,7 @@ const db = {
 
             if (!tableName) {
                 console.warn('[DB] Could not parse table name from query');
-                return { rows: [] };
+                return { rows: [], rowCount: 0 };
             }
 
             // For SELECT queries
@@ -44,19 +44,26 @@ const db = {
 
                 if (error) {
                     console.error(`[DB] Query error on ${tableName}:`, error);
-                    return { rows: [] };
+                    return { rows: [], rowCount: 0 };
                 }
 
-                return { rows: data || [] };
+                return { rows: data || [], rowCount: data?.length || 0 };
+            }
+
+            // For DELETE queries
+            if (text.trim().toUpperCase().startsWith('DELETE')) {
+                // For now, return 0 as we're not implementing actual deletes
+                console.log(`[DB] DELETE query on ${tableName}, returning empty`);
+                return { rows: [], rowCount: 0 };
             }
 
             // For other queries, return empty for now
             console.log(`[DB] Non-SELECT query on ${tableName}, returning empty`);
-            return { rows: [] };
+            return { rows: [], rowCount: 0 };
 
         } catch (error) {
             console.error('[DB] Query execution error:', error);
-            return { rows: [] };
+            return { rows: [], rowCount: 0 };
         }
     },
 
