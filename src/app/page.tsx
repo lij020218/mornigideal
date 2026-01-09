@@ -84,9 +84,24 @@ export default function HomePage() {
     const isFetchingRecommendations = useRef(false);
     const hasFetchedRecommendations = useRef(false);
 
+    // Helper function to get chat date (5am cutoff)
+    const getChatDate = () => {
+        const now = new Date();
+        const hour = now.getHours();
+
+        // If before 5am, use previous day
+        if (hour < 5) {
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            return yesterday.toISOString().split('T')[0];
+        }
+
+        return now.toISOString().split('T')[0];
+    };
+
     // Load messages from localStorage on mount
     useEffect(() => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getChatDate();
         const savedMessages = localStorage.getItem(`chat_messages_${today}`);
 
         if (savedMessages) {
@@ -117,7 +132,7 @@ export default function HomePage() {
     // Save messages to localStorage whenever they change
     useEffect(() => {
         if (messages.length > 0) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getChatDate();
             localStorage.setItem(`chat_messages_${today}`, JSON.stringify(messages));
             console.log('[Home] Saved messages to localStorage:', messages.length);
         }
@@ -274,20 +289,33 @@ export default function HomePage() {
         fetchRecommendations();
     }, [appState, session]);
 
+    // Helper to convert time string to minutes
+    const timeToMinutes = (time: string) => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+    };
+
     // Find current/next schedule
     const getCurrentSchedule = () => {
         const now = new Date();
-        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-        const currentSchedule = todaySchedules.find(
-            (s) => s.startTime <= currentTime && (!s.endTime || s.endTime >= currentTime)
-        );
+        const currentSchedule = todaySchedules.find((s) => {
+            const startMinutes = timeToMinutes(s.startTime);
+            const endMinutes = s.endTime ? timeToMinutes(s.endTime) : startMinutes + 60; // 기본 1시간
+
+            return startMinutes <= currentMinutes && endMinutes >= currentMinutes;
+        });
 
         if (currentSchedule) {
             return { schedule: currentSchedule, status: 'in-progress' as const };
         }
 
-        const nextSchedule = todaySchedules.find((s) => s.startTime > currentTime);
+        const nextSchedule = todaySchedules.find((s) => {
+            const startMinutes = timeToMinutes(s.startTime);
+            return startMinutes > currentMinutes;
+        });
+
         if (nextSchedule) {
             return { schedule: nextSchedule, status: 'upcoming' as const };
         }

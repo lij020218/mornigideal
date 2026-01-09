@@ -71,9 +71,24 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Helper function to get chat date (5am cutoff)
+    const getChatDate = () => {
+        const now = new Date();
+        const hour = now.getHours();
+
+        // If before 5am, use previous day
+        if (hour < 5) {
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            return yesterday.toISOString().split('T')[0];
+        }
+
+        return now.toISOString().split('T')[0];
+    };
+
     // Load messages from localStorage on mount
     useEffect(() => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getChatDate();
         setCurrentDate(today);
 
         const savedMessages = localStorage.getItem(`chat_messages_${today}`);
@@ -125,12 +140,12 @@ export default function ChatPage() {
         }
     }, [messages, currentDate]);
 
-    // Check if date changed (midnight detection)
+    // Check if date changed (5am cutoff detection)
     useEffect(() => {
         const checkDate = setInterval(() => {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getChatDate();
             if (today !== currentDate) {
-                console.log('[Chat] Date changed, starting new chat');
+                console.log('[Chat] Date changed (5am cutoff), starting new chat');
                 setCurrentDate(today);
                 setMessages([]);
 
