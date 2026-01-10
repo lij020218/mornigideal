@@ -1750,21 +1750,37 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                     isActive && item.color === 'purple' && "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-105 z-10 ring-1 ring-purple-500/50",
                                     isActive && item.color === 'green' && "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-105 z-10 ring-1 ring-green-500/50",
                                     isActive && item.color === 'red' && "bg-gradient-to-br from-red-500/20 to-orange-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)] scale-105 z-10 ring-1 ring-red-500/50",
-                                    isActive && item.color === 'orange' && "bg-gradient-to-br from-orange-500/20 to-red-500/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)] scale-105 z-10 ring-1 ring-orange-500/50",
+                                    isActive && item.color === 'orange' && "bg-gradient-to-br from-orange-500/20 to-amber-500/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)] scale-105 z-10 ring-1 ring-orange-500/50",
                                     isActive && item.color === 'pink' && "bg-gradient-to-br from-pink-500/20 to-purple-500/20 border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)] scale-105 z-10 ring-1 ring-pink-500/50",
-                                    isActive && (!item.color || item.color === 'purple') && "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-105 z-10 ring-1 ring-purple-500/50",
+                                    isActive && item.color === 'amber' && "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-105 z-10 ring-1 ring-amber-500/50",
+                                    isActive && item.color === 'indigo' && "bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)] scale-105 z-10 ring-1 ring-indigo-500/50",
+                                    isActive && item.color === 'cyan' && "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)] scale-105 z-10 ring-1 ring-cyan-500/50",
+                                    isActive && item.color === 'teal' && "bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border-teal-500/50 shadow-[0_0_15px_rgba(20,184,166,0.15)] scale-105 z-10 ring-1 ring-teal-500/50",
+                                    isActive && item.color === 'emerald' && "bg-gradient-to-br from-emerald-500/20 to-green-500/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] scale-105 z-10 ring-1 ring-emerald-500/50",
+                                    isActive && item.color === 'violet' && "bg-gradient-to-br from-violet-500/20 to-purple-500/20 border-violet-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)] scale-105 z-10 ring-1 ring-violet-500/50",
+                                    isActive && item.color === 'rose' && "bg-gradient-to-br from-rose-500/20 to-pink-500/20 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.15)] scale-105 z-10 ring-1 ring-rose-500/50",
+                                    isActive && item.color === 'sky' && "bg-gradient-to-br from-sky-500/20 to-blue-500/20 border-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.15)] scale-105 z-10 ring-1 ring-sky-500/50",
+                                    isActive && (!item.color || item.color === 'primary') && "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-105 z-10 ring-1 ring-purple-500/50",
                                     // Upcoming state - 해당 일정 색상으로 은은하게 표시
-                                    isUpcoming && item.color === 'yellow' && "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'blue' && "bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'purple' && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'green' && "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'red' && "bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'orange' && "bg-gradient-to-br from-orange-500/10 to-red-500/10 border-orange-500/30 scale-100 z-0",
-                                    isUpcoming && item.color === 'pink' && "bg-gradient-to-br from-pink-500/10 to-purple-500/10 border-pink-500/30 scale-100 z-0",
-                                    isUpcoming && (!item.color || item.color === 'purple') && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'yellow' && "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30 ring-1 ring-yellow-500/20",
+                                    isUpcoming && item.color === 'blue' && "bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30 ring-1 ring-blue-500/20",
+                                    isUpcoming && item.color === 'purple' && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 ring-1 ring-purple-500/20",
+                                    isUpcoming && item.color === 'green' && "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30 ring-1 ring-green-500/20",
+                                    isUpcoming && item.color === 'red' && "bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/30 ring-1 ring-red-500/20",
+                                    isUpcoming && item.color === 'orange' && "bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/30 ring-1 ring-orange-500/20",
+                                    isUpcoming && item.color === 'pink' && "bg-gradient-to-br from-pink-500/10 to-purple-500/10 border-pink-500/30 ring-1 ring-pink-500/20",
+                                    isUpcoming && item.color === 'amber' && "bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 ring-1 ring-amber-500/20",
+                                    isUpcoming && item.color === 'indigo' && "bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-indigo-500/30 ring-1 ring-indigo-500/20",
+                                    isUpcoming && item.color === 'cyan' && "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/30 ring-1 ring-cyan-500/20",
+                                    isUpcoming && item.color === 'teal' && "bg-gradient-to-br from-teal-500/10 to-cyan-500/10 border-teal-500/30 ring-1 ring-teal-500/20",
+                                    isUpcoming && item.color === 'emerald' && "bg-gradient-to-br from-emerald-500/10 to-green-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20",
+                                    isUpcoming && item.color === 'violet' && "bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/30 ring-1 ring-violet-500/20",
+                                    isUpcoming && item.color === 'rose' && "bg-gradient-to-br from-rose-500/10 to-pink-500/10 border-rose-500/30 ring-1 ring-rose-500/20",
+                                    isUpcoming && item.color === 'sky' && "bg-gradient-to-br from-sky-500/10 to-blue-500/10 border-sky-500/30 ring-1 ring-sky-500/20",
+                                    isUpcoming && (!item.color || item.color === 'primary') && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 ring-1 ring-purple-500/20",
                                     // Past and default states
-                                    isPast && "bg-white/5 border-white/5 opacity-40 grayscale scale-95",
-                                    !isActive && !isUpcoming && !isPast && "bg-white/5 border-white/10"
+                                    isPast && "bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/5 opacity-50 grayscale scale-95",
+                                    !isActive && !isUpcoming && !isPast && "bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10"
                                 )}>
                                     {/* Connection Line (Visual only) */}
                                     {index < timelineItems.length - 1 && (
@@ -1801,19 +1817,19 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                         <h4
                                             className={cn(
                                                 "font-semibold text-sm mb-0.5 line-clamp-2 break-words",
-                                                (isActive || isUpcoming) ? "text-white" : "text-gray-300"
+                                                (isActive || isUpcoming) ? "text-gray-800 dark:text-white" : "text-gray-600 dark:text-gray-300"
                                             )}
                                             title={item.label}
                                         >
                                             {item.label.length > 30 ? item.label.substring(0, 30) + '...' : item.label}
                                         </h4>
                                         {isActive && (
-                                            <p className={cn("text-[10px] font-medium animate-pulse", colors.text)}>
+                                            <p className={cn("text-[10px] font-bold animate-pulse", colors.text)}>
                                                 현재 진행 중
                                             </p>
                                         )}
                                         {isUpcoming && (
-                                            <p className={cn("text-[10px] font-medium", colors.text)}>
+                                            <p className={cn("text-[10px] font-bold", colors.text)}>
                                                 예정됨
                                             </p>
                                         )}

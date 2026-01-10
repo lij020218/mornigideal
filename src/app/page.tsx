@@ -684,7 +684,7 @@ export default function HomePage() {
         <div className="h-screen bg-background flex flex-col relative md:ml-20">
             {/* 1️⃣ TOP: Current Schedule Card */}
             <motion.div
-                className="flex-shrink-0 px-6 pt-20 md:pt-6"
+                className="flex-shrink-0 px-4 sm:px-6 pt-16 sm:pt-20 md:pt-6"
                 initial={false}
                 animate={{ height: scheduleExpanded ? "auto" : "auto" }}
             >
@@ -751,13 +751,13 @@ export default function HomePage() {
                     {/* Collapsed View */}
                     <button
                         onClick={() => setScheduleExpanded(!scheduleExpanded)}
-                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 rounded-2xl transition-colors"
+                        className="w-full px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between hover:bg-white/5 rounded-2xl transition-colors"
                     >
-                        <div className="flex items-center gap-4 flex-1">
+                        <div className="flex items-center gap-3 sm:gap-4 flex-1">
                             {currentScheduleInfo ? (
                                 <>
                                     <div className={cn(
-                                        "w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300",
+                                        "w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300",
                                         (() => {
                                             const color = currentScheduleInfo.schedule.color || 'primary';
                                             // Match dashboard DailyRhythmTimeline icon styling with ring effect
@@ -792,7 +792,7 @@ export default function HomePage() {
                                     <div className="text-left flex-1">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={cn(
-                                                "text-xs font-bold px-3 py-1 rounded-full border",
+                                                "text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border",
                                                 (() => {
                                                     const color = currentScheduleInfo.schedule.color || 'primary';
                                                     // Match dashboard DailyRhythmTimeline badge styling
@@ -848,20 +848,20 @@ export default function HomePage() {
                                                 {currentScheduleInfo.schedule.startTime}
                                             </span>
                                         </div>
-                                        <p className="font-bold text-lg mb-1">{currentScheduleInfo.schedule.text}</p>
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="font-bold text-base sm:text-lg mb-0.5 sm:mb-1 line-clamp-1">{currentScheduleInfo.schedule.text}</p>
+                                        <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
                                             {getScheduleMessage(currentScheduleInfo.schedule.text, currentScheduleInfo.status)}
                                         </p>
                                     </div>
                                 </>
                             ) : (
                                 <>
-                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center shadow-lg">
-                                        <Sparkles className="w-7 h-7 text-white" />
+                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center shadow-lg">
+                                        <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                                     </div>
                                     <div className="text-left flex-1">
-                                        <p className="font-bold text-lg mb-1">오늘 일정이 없습니다</p>
-                                        <p className="text-xs text-muted-foreground">AI가 추천하는 일정을 추가해보세요</p>
+                                        <p className="font-bold text-base sm:text-lg mb-0.5 sm:mb-1">오늘 일정이 없습니다</p>
+                                        <p className="text-xs text-muted-foreground hidden sm:block">AI가 추천하는 일정을 추가해보세요</p>
                                     </div>
                                 </>
                             )}

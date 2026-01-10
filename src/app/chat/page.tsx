@@ -64,6 +64,7 @@ export default function ChatPage() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
+    const [showRecommendations, setShowRecommendations] = useState(false);
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [chatHistory, setChatHistory] = useState<{ date: string; title: string }[]>([]);
     const [showSidebar, setShowSidebar] = useState(false);
@@ -429,7 +430,8 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, userMessage]);
         setInput("");
         setIsLoading(true);
-        setAppState("chatting"); // Hide recommendations when chatting
+        setAppState("chatting");
+        setShowRecommendations(false); // Hide recommendations when chatting
 
         try {
             const today = getChatDate();
@@ -465,9 +467,10 @@ export default function ChatPage() {
 
             setMessages((prev) => [...prev, assistantMessage]);
 
-            // After response, go back to idle to show recommendations
+            // After response, go back to idle
             setTimeout(() => {
                 setAppState("idle");
+                // Do NOT show recommendations automatically - user must click button
             }, 1000);
 
         } catch (error) {
@@ -994,9 +997,25 @@ export default function ChatPage() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* 3️⃣ Recommendation Cards (Idle 상태에서만 표시) */}
+                {/* 3️⃣ Recommendation Cards - Show when: 1) Only greeting message (no user chat), or 2) showRecommendations is true */}
+                {/* Button to show recommendations (shown when hidden but available) */}
                 <AnimatePresence>
-                    {appState === "idle" && recommendations.length > 0 && (
+                    {appState === "idle" && recommendations.length > 0 && !showRecommendations && messages.filter(m => m.role === 'user').length > 0 && (
+                        <motion.button
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            onClick={() => setShowRecommendations(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-sm text-primary font-medium transition-colors mx-auto mb-4"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            추천 일정 보기
+                        </motion.button>
+                    )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                    {appState === "idle" && recommendations.length > 0 && (showRecommendations || messages.filter(m => m.role === 'user').length === 0) && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -1004,9 +1023,19 @@ export default function ChatPage() {
                             transition={{ duration: 0.3 }}
                             className="space-y-3"
                         >
-                            <div className="flex items-center gap-2 mb-4">
-                                <Sparkles className="w-5 h-5 text-primary" />
-                                <p className="font-semibold text-sm">💡 지금 하기 좋은 제안</p>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-primary" />
+                                    <p className="font-semibold text-sm">💡 지금 하기 좋은 제안</p>
+                                </div>
+                                {showRecommendations && messages.filter(m => m.role === 'user').length > 0 && (
+                                    <button
+                                        onClick={() => setShowRecommendations(false)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        <CloseIcon className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                             <div className="grid gap-3">
                                 {recommendations.map((card) => (
