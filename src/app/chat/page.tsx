@@ -318,6 +318,129 @@ export default function ChatPage() {
         fetchSchedules();
     }, [session]);
 
+    // Auto-send schedule-based messages
+    useEffect(() => {
+        if (!session?.user || todaySchedules.length === 0) return;
+
+        const checkAndSendScheduleMessages = () => {
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const today = getChatDate();
+
+            todaySchedules.forEach(schedule => {
+                const startMinutes = timeToMinutes(schedule.startTime);
+                const endMinutes = schedule.endTime ? timeToMinutes(schedule.endTime) : startMinutes + 60;
+
+                // 1. 일정 시작 10분 전 메시지
+                const tenMinutesBefore = startMinutes - 10;
+                const sentBeforeKey = `schedule_before_${schedule.id}_${today}`;
+                if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !localStorage.getItem(sentBeforeKey)) {
+                    localStorage.setItem(sentBeforeKey, 'true');
+
+                    const message: Message = {
+                        id: `auto-before-${Date.now()}`,
+                        role: 'assistant',
+                        content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n준비하실 것이 있나요? 필요한 자료나 정보를 찾아드릴까요?`,
+                        timestamp: now,
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+
+                // 2. 일정 시작 시 메시지
+                const sentStartKey = `schedule_start_${schedule.id}_${today}`;
+                if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !localStorage.getItem(sentStartKey)) {
+                    localStorage.setItem(sentStartKey, 'true');
+
+                    // AI 리소스 추천 요청
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: schedule.text,
+                            context: 'schedule_start'
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        const message: Message = {
+                            id: `auto-start-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 시간이네요!\n\n${data.recommendation}`,
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
+                }
+
+                // 3. 일정 종료 후 메시지
+                const sentAfterKey = `schedule_after_${schedule.id}_${today}`;
+                if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
+                    localStorage.setItem(sentAfterKey, 'true');
+
+                    const message: Message = {
+                        id: `auto-after-${Date.now()}`,
+                        role: 'assistant',
+                        content: `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?\n• 추가 일정이 필요하신가요?`,
+                        timestamp: now,
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+            });
+
+            // 4. 빈 시간 감지 (다음 일정까지 30분 이상 남았을 때)
+            const nextSchedule = todaySchedules
+                .filter(s => !s.completed && !s.skipped)
+                .find(s => timeToMinutes(s.startTime) > currentMinutes);
+
+            if (nextSchedule) {
+                const timeUntilNext = timeToMinutes(nextSchedule.startTime) - currentMinutes;
+                const sentGapKey = `schedule_gap_${nextSchedule.id}_${today}`;
+
+                if (timeUntilNext >= 30 && timeUntilNext <= 40 && !localStorage.getItem(sentGapKey)) {
+                    localStorage.setItem(sentGapKey, 'true');
+
+                    const message: Message = {
+                        id: `auto-gap-${Date.now()}`,
+                        role: 'assistant',
+                        content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                        timestamp: now,
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+            }
+
+            // 5. 하루 마무리 (마지막 일정 종료 후)
+            const lastSchedule = todaySchedules
+                .filter(s => s.endTime)
+                .sort((a, b) => timeToMinutes(b.endTime!) - timeToMinutes(a.endTime!))[0];
+
+            if (lastSchedule) {
+                const lastEndMinutes = timeToMinutes(lastSchedule.endTime!);
+                const sentDayEndKey = `day_end_${today}`;
+
+                if (currentMinutes >= lastEndMinutes + 10 && currentMinutes < lastEndMinutes + 30 && !localStorage.getItem(sentDayEndKey)) {
+                    localStorage.setItem(sentDayEndKey, 'true');
+
+                    const completed = todaySchedules.filter(s => s.completed).length;
+                    const total = todaySchedules.length;
+
+                    const message: Message = {
+                        id: `auto-dayend-${Date.now()}`,
+                        role: 'assistant',
+                        content: `오늘 일정이 모두 끝났어요! 🎉\n\n오늘의 성과:\n✅ 완료: ${completed}/${total}개\n\n내일을 위한 제안이 필요하신가요?`,
+                        timestamp: now,
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+            }
+        };
+
+        // 1분마다 체크
+        const interval = setInterval(checkAndSendScheduleMessages, 60000);
+        // 초기 실행
+        checkAndSendScheduleMessages();
+
+        return () => clearInterval(interval);
+    }, [session, todaySchedules]);
+
     // Fetch AI recommendations (when idle)
     useEffect(() => {
         if (appState !== "idle" || !session?.user?.email) return;
@@ -1000,7 +1123,7 @@ export default function ChatPage() {
                 {/* 3️⃣ Recommendation Cards - Show when: 1) Only greeting message (no user chat), or 2) showRecommendations is true */}
                 {/* Button to show recommendations (shown when hidden but available) */}
                 <AnimatePresence>
-                    {appState === "idle" && recommendations.length > 0 && !showRecommendations && messages.filter(m => m.role === 'user').length > 0 && (
+                    {appState === "idle" && recommendations.length > 0 && !showRecommendations && messages.length > 0 && (
                         <motion.button
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -1015,7 +1138,7 @@ export default function ChatPage() {
                 </AnimatePresence>
 
                 <AnimatePresence>
-                    {appState === "idle" && recommendations.length > 0 && (showRecommendations || messages.filter(m => m.role === 'user').length === 0) && (
+                    {appState === "idle" && recommendations.length > 0 && (showRecommendations || messages.length === 0) && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -1028,7 +1151,7 @@ export default function ChatPage() {
                                     <Sparkles className="w-5 h-5 text-primary" />
                                     <p className="font-semibold text-sm">💡 지금 하기 좋은 제안</p>
                                 </div>
-                                {showRecommendations && messages.filter(m => m.role === 'user').length > 0 && (
+                                {showRecommendations && messages.length > 0 && (
                                     <button
                                         onClick={() => setShowRecommendations(false)}
                                         className="text-muted-foreground hover:text-foreground transition-colors"

@@ -42,11 +42,6 @@ export default async function DashboardPage() {
                 showSuggestions={true}
                 briefings={[]}
                 recommendations={[]}
-                userProfile={user?.profile ? {
-                    job: user.profile.job,
-                    goal: user.profile.goal,
-                    customGoals: user.profile.customGoals
-                } : undefined}
             />
         </div>
     );

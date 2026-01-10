@@ -316,7 +316,7 @@ export default function HomePage() {
             const startMinutes = timeToMinutes(s.startTime);
             const endMinutes = s.endTime ? timeToMinutes(s.endTime) : startMinutes + 60; // 기본 1시간
 
-            const isInProgress = startMinutes <= currentMinutes && endMinutes >= currentMinutes;
+            const isInProgress = startMinutes <= currentMinutes && currentMinutes < endMinutes;
             console.log(`[Home] Checking "${s.text}": start=${startMinutes}, end=${endMinutes}, current=${currentMinutes}, inProgress=${isInProgress}`);
 
             return isInProgress;

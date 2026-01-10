@@ -136,7 +136,10 @@ export function FloatingAIAssistant({
 
     // Generate cards from props data
     useEffect(() => {
-        if (!showSuggestions) return;
+        if (!showSuggestions) {
+            setCards([]);
+            return;
+        }
 
         console.log('[FloatingAI] Received briefings:', briefings?.length, briefings);
         console.log('[FloatingAI] Received recommendations:', recommendations?.length);
@@ -564,7 +567,7 @@ export function FloatingAIAssistant({
         const lastMorningMessageDate = localStorage.getItem('lastMorningMessageDate');
         const alreadySentToday = lastMorningMessageDate === today;
 
-        if (isAfterMorningTime && !alreadySentToday && userProfile) {
+        if (showSuggestions && isAfterMorningTime && !alreadySentToday && userProfile) {
             console.log('[FloatingAI] Generating morning greeting with weather and schedule suggestions');
 
             // Fetch morning briefing (weather + AI schedule suggestions)
@@ -626,7 +629,7 @@ export function FloatingAIAssistant({
 
             fetchMorningBriefing();
         }
-    }, [userProfile]);
+    }, [userProfile, showSuggestions]);
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
@@ -790,7 +793,7 @@ export function FloatingAIAssistant({
                             }
                         }}
                         className={cn(
-                            "relative w-96 backdrop-blur-xl rounded-2xl p-6 shadow-xl cursor-grab active:cursor-grabbing",
+                            "relative w-[280px] sm:w-96 backdrop-blur-xl rounded-2xl p-5 sm:p-6 shadow-xl cursor-grab active:cursor-grabbing",
                             "border bg-white",
                             currentCard.color
                         )}
@@ -798,7 +801,7 @@ export function FloatingAIAssistant({
                         {/* Dismiss button */}
                         <button
                             onClick={() => setIsDismissed(true)}
-                            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
+                            className="absolute top-3 right-3 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
                         >
                             <X className="w-4 h-4 text-foreground/70" />
                         </button>
@@ -817,21 +820,21 @@ export function FloatingAIAssistant({
                             ))}
                         </div>
 
-                        <div className="pt-5 pr-8">
-                            <div className="flex items-center gap-3 mb-3">
-                                <CardIcon className="w-6 h-6 text-foreground" />
-                                <p className="font-bold text-lg text-foreground">
+                        <div className="pt-2 sm:pt-5 pr-4 sm:pr-8">
+                            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                                <CardIcon className="w-5 h-5 sm:w-6 sm:h-6 text-foreground" />
+                                <p className="font-bold text-base sm:text-lg text-foreground">
                                     {currentCard.title}
                                 </p>
                             </div>
-                            <p className="text-base text-muted-foreground mb-5 line-clamp-2 leading-relaxed">
+                            <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-5 line-clamp-2 leading-relaxed">
                                 {currentCard.message}
                             </p>
                             <Button
                                 size="default"
                                 variant="ghost"
                                 onClick={() => handleCardAction(currentCard)}
-                                className="h-10 px-5 text-base font-semibold bg-white hover:bg-black/5 text-foreground border border-black/10 rounded-full shadow-sm"
+                                className="h-9 sm:h-10 px-4 sm:px-5 text-sm sm:text-base font-semibold bg-white hover:bg-black/5 text-foreground border border-black/10 rounded-full shadow-sm"
                             >
                                 {currentCard.actionText}
                             </Button>

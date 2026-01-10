@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell } from "lucide-react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -21,7 +21,6 @@ import { DailyBriefingPopup } from "./DailyBriefingPopup";
 import { AppUsageTracker } from "./AppUsageTracker";
 import { SmartInsightsWidget } from "./SmartInsightsWidget";
 import { AIGreeting } from "./AIGreeting";
-import { TodaySuggestions } from "./TodaySuggestions";
 
 
 interface DashboardProps {
@@ -732,7 +731,7 @@ export function Dashboard({
             />
 
             {/* Dashboard Content */}
-            {/* Combined AI Suggestions + Daily Flow Section */}
+            {/* Dashboard Content */}
             <motion.div
                 variants={containerVariants}
                 initial="hidden"
@@ -740,17 +739,6 @@ export function Dashboard({
                 className="space-y-2 overflow-visible"
             >
                 <motion.section variants={itemVariants} className="space-y-2 overflow-visible">
-                    {/* AI Suggestions */}
-                    {userProfile && currentTime && (
-                        <TodaySuggestions
-                            userProfile={{
-                                job: userProfile.job,
-                                goal: userProfile.goal,
-                                level: userProfile.level
-                            }}
-                            currentTime={currentTime}
-                        />
-                    )}
 
                     {/* Daily Flow Header */}
                     <div className="flex justify-between items-center">
@@ -832,6 +820,7 @@ export function Dashboard({
                                     let end = eH * 60 + eM;
                                     if (end < start) end += 24 * 60;
                                     const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
+                                    const isUpcoming = !isCompleted && currentTimeValue < start;
                                     const Icon = targetSchedule.icon;
 
                                     const colorMap: Record<string, string> = {
@@ -842,9 +831,9 @@ export function Dashboard({
                                         red: "bg-red-500",
                                         orange: "bg-orange-500",
                                         pink: "bg-pink-500",
-                                        primary: "bg-primary"
+                                        primary: "bg-purple-600"
                                     };
-                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
+                                    const bgClass = colorMap[targetSchedule.color] || "bg-purple-600";
 
                                     return (
                                         <motion.button
@@ -855,20 +844,20 @@ export function Dashboard({
                                             className={cn(
                                                 "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
                                                 isCompleted ? "bg-green-500/10 border-green-500/30" :
-                                                    isActive ? "bg-primary/10 border-primary/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
+                                                    (isActive || isUpcoming) ? "bg-purple-500/10 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
                                                         "bg-white/5 border-white/10"
                                             )}
                                         >
                                             <div className={cn(
                                                 "w-8 h-8 rounded-full flex items-center justify-center",
                                                 isCompleted ? "bg-green-500 text-black" :
-                                                    isActive ? `${bgClass} text-white` :
+                                                    (isActive || isUpcoming) ? `${bgClass} text-white` :
                                                         "bg-white/10 text-muted-foreground"
                                             )}>
                                                 {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Icon className={cn("w-4 h-4", isActive && "animate-pulse")} />}
                                             </div>
                                             <div>
-                                                <p className={cn("font-semibold text-sm", isActive && "text-primary")}>{targetSchedule.text}</p>
+                                                <p className={cn("font-semibold text-sm", (isActive || isUpcoming) && "text-purple-400")}>{targetSchedule.text}</p>
                                                 <p className="text-xs text-muted-foreground">{targetSchedule.startTime}</p>
                                             </div>
                                         </motion.button>
@@ -1093,6 +1082,7 @@ export function Dashboard({
                                                     let end = eH * 60 + eM;
                                                     if (end < start) end += 24 * 60;
                                                     const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
+                                                    const isUpcoming = !isCompleted && currentTimeValue < start;
 
                                                     const Icon = targetSchedule.icon;
 
@@ -1105,9 +1095,9 @@ export function Dashboard({
                                                         red: "bg-red-500",
                                                         orange: "bg-orange-500",
                                                         pink: "bg-pink-500",
-                                                        primary: "bg-primary"
+                                                        primary: "bg-purple-600"
                                                     };
-                                                    const bgClass = colorMap[targetSchedule.color] || "bg-primary";
+                                                    const bgClass = colorMap[targetSchedule.color] || "bg-purple-600";
 
                                                     // Color maps for NOW badge and active card styling
                                                     const cardBgMap: Record<string, string> = {
@@ -1118,7 +1108,7 @@ export function Dashboard({
                                                         red: "bg-gradient-to-br from-red-500/20 to-red-600/20",
                                                         orange: "bg-gradient-to-br from-orange-500/20 to-orange-600/20",
                                                         pink: "bg-gradient-to-br from-pink-500/20 to-pink-600/20",
-                                                        primary: "bg-gradient-to-br from-primary/20 to-purple-500/20"
+                                                        primary: "bg-gradient-to-br from-purple-500/20 to-purple-600/20"
                                                     };
                                                     const cardBorderMap: Record<string, string> = {
                                                         yellow: "border-yellow-500/50",
@@ -1128,7 +1118,7 @@ export function Dashboard({
                                                         red: "border-red-500/50",
                                                         orange: "border-orange-500/50",
                                                         pink: "border-pink-500/50",
-                                                        primary: "border-primary/50"
+                                                        primary: "border-purple-500/50"
                                                     };
                                                     const cardShadowMap: Record<string, string> = {
                                                         yellow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
@@ -1148,7 +1138,7 @@ export function Dashboard({
                                                         red: "bg-red-500/20",
                                                         orange: "bg-orange-500/20",
                                                         pink: "bg-pink-500/20",
-                                                        primary: "bg-primary/20"
+                                                        primary: "bg-purple-500/20"
                                                     };
                                                     const badgeBorderMap: Record<string, string> = {
                                                         yellow: "border-yellow-500/30",
@@ -1158,7 +1148,7 @@ export function Dashboard({
                                                         red: "border-red-500/30",
                                                         orange: "border-orange-500/30",
                                                         pink: "border-pink-500/30",
-                                                        primary: "border-primary/30"
+                                                        primary: "border-purple-500/30"
                                                     };
                                                     const textColorMap: Record<string, string> = {
                                                         yellow: "text-yellow-400",
@@ -1168,7 +1158,7 @@ export function Dashboard({
                                                         red: "text-red-400",
                                                         orange: "text-orange-400",
                                                         pink: "text-pink-400",
-                                                        primary: "text-primary"
+                                                        primary: "text-purple-400"
                                                     };
 
                                                     const cardBg = cardBgMap[targetSchedule.color] || cardBgMap.primary;
@@ -1185,7 +1175,7 @@ export function Dashboard({
                                                                 "p-5 rounded-lg text-left transition-all border",
                                                                 isCompleted
                                                                     ? "bg-green-500/10 border-green-500/30"
-                                                                    : isActive
+                                                                    : (isActive || isUpcoming)
                                                                         ? `${cardBg} ${cardBorder} ${cardShadow}`
                                                                         : "bg-white/5 border-white/5"
                                                             )}
@@ -1195,7 +1185,7 @@ export function Dashboard({
                                                                     "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
                                                                     isCompleted
                                                                         ? "bg-green-500 text-white shadow-lg"
-                                                                        : isActive
+                                                                        : (isActive || isUpcoming)
                                                                             ? `${bgClass} text-white shadow-lg`
                                                                             : "bg-white/10 text-muted-foreground"
                                                                 )}>
@@ -1208,7 +1198,7 @@ export function Dashboard({
                                                                 <div className="flex-1 min-w-0">
                                                                     <p className={cn(
                                                                         "font-semibold text-base",
-                                                                        isCompleted ? "text-green-400" : isActive && textColor
+                                                                        isCompleted ? "text-green-400" : (isActive || isUpcoming) && textColor
                                                                     )}>
                                                                         {targetSchedule.text.length > 12
                                                                             ? `${targetSchedule.text.substring(0, 12)}...`
@@ -1441,61 +1431,85 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     useEffect(() => {
         if (!schedule || !isMobile || !scrollContainerRef.current || !currentTime) return;
 
-        // These variables are calculated below, so we need to recalculate them here
-        const now = currentTime;
-        const currentDayOfWeek = now.getDay();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        const currentTimeValue = currentHour * 60 + currentMinute;
+        // Use a timeout to ensure the DOM is fully rendered before scrolling
+        const scrollToActive = () => {
+            if (!scrollContainerRef.current) return;
 
-        // Build timeline to find active index
-        const tempTimelineItems: Array<{ time: string }> = [
-            ...(schedule?.wakeUp ? [{ time: schedule.wakeUp }] : []),
-            ...(schedule?.workStart ? [{ time: schedule.workStart }] : []),
-            ...(schedule?.workEnd ? [{ time: schedule.workEnd }] : []),
-            ...(schedule?.sleep ? [{ time: schedule.sleep }] : []),
-            ...(customGoals?.filter(g => g.daysOfWeek?.includes(currentDayOfWeek))
-                .filter(g => g.startTime)
-                .map(g => ({ time: g.startTime! })) || [])
-        ].sort((a, b) => {
-            const [aH, aM] = a.time.split(':').map(Number);
-            const [bH, bM] = b.time.split(':').map(Number);
-            return (aH * 60 + aM) - (bH * 60 + bM);
-        });
+            const now = currentTime;
+            const currentDayOfWeek = now.getDay();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTimeValue = currentHour * 60 + currentMinute;
 
-        let activeIndex = -1;
-        let nextIndex = -1;
-
-        for (let i = 0; i < tempTimelineItems.length; i++) {
-            const [h, m] = tempTimelineItems[i].time.split(':').map(Number);
-            const itemTime = h * 60 + m;
-            const nextItem = tempTimelineItems[i + 1];
-            let nextTime = 24 * 60;
-            if (nextItem) {
-                const [nh, nm] = nextItem.time.split(':').map(Number);
-                nextTime = nh * 60 + nm;
-            }
-            if (currentTimeValue >= itemTime && currentTimeValue < nextTime) {
-                activeIndex = i;
-                break;
-            }
-            if (currentTimeValue < itemTime && nextIndex === -1) {
-                nextIndex = i;
-            }
-        }
-
-        const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
-        if (targetIndex !== -1) {
-            const itemWidth = 140;
-            const gap = 12;
-            const containerWidth = scrollContainerRef.current.clientWidth;
-            const scrollLeft = (targetIndex * (itemWidth + gap)) + (itemWidth / 2) - (containerWidth / 2) + 4;
-
-            scrollContainerRef.current.scrollTo({
-                left: scrollLeft,
-                behavior: 'smooth'
+            // Build timeline to find active index
+            const tempTimelineItems: Array<{ time: string }> = [
+                ...(schedule?.wakeUp ? [{ time: schedule.wakeUp }] : []),
+                ...(schedule?.workStart ? [{ time: schedule.workStart }] : []),
+                ...(schedule?.workEnd ? [{ time: schedule.workEnd }] : []),
+                ...(schedule?.sleep ? [{ time: schedule.sleep, endTime: undefined }] : []),
+                ...(customGoals?.filter(g => g.daysOfWeek?.includes(currentDayOfWeek))
+                    .filter(g => g.startTime)
+                    .map(g => ({ time: g.startTime!, endTime: g.endTime })) || [])
+            ].sort((a, b) => {
+                const [aH, aM] = a.time.split(':').map(Number);
+                const [bH, bM] = b.time.split(':').map(Number);
+                return (aH * 60 + aM) - (bH * 60 + bM);
             });
-        }
+
+            let activeIndex = -1;
+            let nextIndex = -1;
+
+            for (let i = 0; i < tempTimelineItems.length; i++) {
+                const item = tempTimelineItems[i];
+                const [h, m] = item.time.split(':').map(Number);
+                const startTime = h * 60 + m;
+
+                const nextItem = tempTimelineItems[i + 1];
+                let nextStartTime = 24 * 60;
+
+                if (nextItem) {
+                    const [nh, nm] = nextItem.time.split(':').map(Number);
+                    nextStartTime = nh * 60 + nm;
+                }
+
+                let endTime = nextStartTime;
+
+                if (item.endTime) {
+                    const [eh, em] = item.endTime.split(':').map(Number);
+                    endTime = eh * 60 + em;
+                    if (endTime < startTime) endTime += 24 * 60;
+                }
+
+                if (currentTimeValue >= startTime && currentTimeValue < endTime) {
+                    activeIndex = i;
+                }
+
+                if (currentTimeValue < startTime && nextIndex === -1) {
+                    nextIndex = i;
+                }
+            }
+
+            const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
+            console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex);
+
+            if (targetIndex !== -1 && scrollContainerRef.current) {
+                const itemWidth = 140;
+                const gap = 12;
+                const containerWidth = scrollContainerRef.current.clientWidth;
+                const scrollLeft = Math.max(0, (targetIndex * (itemWidth + gap)) + (itemWidth / 2) - (containerWidth / 2));
+
+                scrollContainerRef.current.scrollTo({
+                    left: scrollLeft,
+                    behavior: 'smooth'
+                });
+            }
+        };
+
+        // Scroll immediately and after a delay (to ensure DOM is ready after animations)
+        scrollToActive();
+        const timer = setTimeout(scrollToActive, 300);
+
+        return () => clearTimeout(timer);
     }, [isMobile, schedule, customGoals, currentTime]);
 
     if (!schedule) return (
@@ -1528,6 +1542,31 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         '자기계발': Target,
         '병원': Heart,
         '휴식/여가': Gamepad2,
+        '영화': Film,
+        '영화 감상': Film,
+        '영화 보기': Film,
+        '게임': Gamepad2,
+        '게임하기': Gamepad2,
+        'TV': Tv,
+        'TV 시청': Tv,
+        '드라마': Tv,
+        '음악': Music,
+        '음악 감상': Music,
+        '팟캐스트': Headphones,
+        '팟캐스트 청취': Headphones,
+        '팟캐스트 듣기': Headphones,
+        '코딩': Code,
+        '프로그래밍': Code,
+        '개발': Laptop,
+        '공부': BookOpen,
+        '학습': BookOpen,
+        '글쓰기': Pen,
+        '작문': Pen,
+        '그림': Palette,
+        '그리기': Palette,
+        '미술': Palette,
+        '사진': Camera,
+        '촬영': Camera,
     };
 
     // Filter custom goals for today (both recurring and specific date)
@@ -1558,7 +1597,21 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     // Add today's custom goals to timeline
     todaysGoals.forEach(goal => {
         if (goal.startTime) {
-            const icon = activityIcons[goal.text] || Target;
+            // Try exact match first, then search for keywords in text
+            let icon = activityIcons[goal.text];
+            if (!icon) {
+                // Search for keywords in the goal text
+                const text = goal.text.toLowerCase();
+                for (const [keyword, iconComponent] of Object.entries(activityIcons)) {
+                    if (text.includes(keyword.toLowerCase())) {
+                        icon = iconComponent;
+                        break;
+                    }
+                }
+                // Default to Target if no match found
+                if (!icon) icon = Target;
+            }
+
             baseTimelineItems.push({
                 time: goal.startTime,
                 label: goal.text,
@@ -1591,21 +1644,32 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     for (let i = 0; i < timelineItems.length; i++) {
         const item = timelineItems[i];
         const [h, m] = item.time.split(':').map(Number);
-        const itemTime = h * 60 + m;
+        const startTime = h * 60 + m;
+
+        // Determine end time: strictly use item.endTime if available
+        let endTime = startTime + 60; // Default duration fallback
 
         const nextItem = timelineItems[i + 1];
-        let nextTime = 24 * 60; // End of day
+        let nextStartTime = 24 * 60;
         if (nextItem) {
             const [nh, nm] = nextItem.time.split(':').map(Number);
-            nextTime = nh * 60 + nm;
+            nextStartTime = nh * 60 + nm;
         }
 
-        if (currentTimeValue >= itemTime && currentTimeValue < nextTime) {
+        if (item.endTime) {
+            const [eh, em] = item.endTime.split(':').map(Number);
+            endTime = eh * 60 + em;
+            if (endTime < startTime) endTime += 24 * 60;
+        } else {
+            // If no explicit endTime, use next start time
+            endTime = nextStartTime;
+        }
+
+        if (currentTimeValue >= startTime && currentTimeValue < endTime) {
             activeIndex = i;
-            break;
         }
 
-        if (currentTimeValue < itemTime && nextIndex === -1) {
+        if (currentTimeValue < startTime && nextIndex === -1) {
             nextIndex = i;
         }
     }

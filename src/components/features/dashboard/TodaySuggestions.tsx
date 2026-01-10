@@ -387,8 +387,8 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: index * 0.05 }}
                             className={cn(
-                                "flex-shrink-0 w-[280px] snap-start",
-                                "relative overflow-visible rounded-2xl p-5 transition-all duration-300",
+                                "flex-shrink-0 w-[240px] md:w-[280px] snap-start",
+                                "relative overflow-visible rounded-2xl p-3 md:p-5 transition-all duration-300",
                                 "bg-white/40 backdrop-blur-xl border border-white/60",
                                 "shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
                                 "hover:bg-white/60 hover:-translate-y-1",
@@ -398,22 +398,22 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                             )}
                         >
                             {/* Icon + Title */}
-                            <div className="flex items-start gap-3 mb-3">
-                                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm border border-white/50", getIconBg(suggestion.category))}>
+                            <div className="flex items-start gap-2 md:gap-3 mb-2 md:mb-3">
+                                <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center text-base md:text-lg shadow-sm border border-white/50", getIconBg(suggestion.category))}>
                                     {suggestion.icon}
                                 </div>
                                 <div className="flex-1 min-w-0 pt-0.5">
-                                    <h3 className="font-bold text-gray-900 truncate tracking-tight text-[15px]">
+                                    <h3 className="font-bold text-gray-900 truncate tracking-tight text-sm md:text-[15px]">
                                         {suggestion.title}
                                     </h3>
-                                    <p className="text-xs text-gray-500 truncate mt-0.5 font-medium">
+                                    <p className="text-[11px] md:text-xs text-gray-500 truncate mt-0.5 font-medium">
                                         {suggestion.description}
                                     </p>
                                 </div>
                             </div>
 
                             {/* Footer */}
-                            <div className="flex items-center justify-between mt-4">
+                            <div className="flex items-center justify-between mt-3 md:mt-4">
                                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-white/50 px-2.5 py-1 rounded-full border border-white/20">
                                     <Clock className="w-3.5 h-3.5" />
                                     {suggestion.estimatedTime}
