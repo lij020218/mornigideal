@@ -71,7 +71,7 @@ export function MyPageContent({ username, email }: MyPageContentProps) {
     }
 
     return (
-        <div className="p-6 max-w-4xl mx-auto space-y-8">
+        <div className="p-6 pt-20 md:pt-6 max-w-4xl mx-auto space-y-8">
             {/* Header */}
             <header className="flex items-center gap-4">
                 <Link href="/dashboard">

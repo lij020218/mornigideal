@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home } from "lucide-react";
+import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
@@ -258,10 +258,15 @@ export default function HomePage() {
             console.log('[Home] Fetching AI recommendations...');
 
             try {
+                const now = new Date();
+                const currentHour = now.getHours();
                 const response = await fetch('/api/ai-suggest-schedules', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ requestCount: 3 }),
+                    body: JSON.stringify({
+                        requestCount: 3,
+                        currentHour: currentHour
+                    }),
                 });
 
                 if (response.ok) {
@@ -300,39 +305,86 @@ export default function HomePage() {
         const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+        console.log('[Home] Current time:', `${now.getHours()}:${now.getMinutes()}`, 'Minutes:', currentMinutes);
+        console.log('[Home] Today schedules:', todaySchedules.map(s => ({
+            text: s.text,
+            startTime: s.startTime,
+            startMinutes: timeToMinutes(s.startTime)
+        })));
+
         const currentSchedule = todaySchedules.find((s) => {
             const startMinutes = timeToMinutes(s.startTime);
             const endMinutes = s.endTime ? timeToMinutes(s.endTime) : startMinutes + 60; // 기본 1시간
 
-            return startMinutes <= currentMinutes && endMinutes >= currentMinutes;
+            const isInProgress = startMinutes <= currentMinutes && endMinutes >= currentMinutes;
+            console.log(`[Home] Checking "${s.text}": start=${startMinutes}, end=${endMinutes}, current=${currentMinutes}, inProgress=${isInProgress}`);
+
+            return isInProgress;
         });
 
         if (currentSchedule) {
+            console.log('[Home] Found current schedule:', currentSchedule.text);
             return { schedule: currentSchedule, status: 'in-progress' as const };
         }
 
-        const nextSchedule = todaySchedules.find((s) => {
-            const startMinutes = timeToMinutes(s.startTime);
-            return startMinutes > currentMinutes;
-        });
+        // Find next schedule that hasn't started yet
+        const nextSchedule = todaySchedules
+            .filter(s => !s.completed && !s.skipped) // 완료/놓친 일정 제외
+            .find((s) => {
+                const startMinutes = timeToMinutes(s.startTime);
+                const isUpcoming = startMinutes > currentMinutes;
+                console.log(`[Home] Checking next "${s.text}": start=${startMinutes}, current=${currentMinutes}, upcoming=${isUpcoming}`);
+                return isUpcoming;
+            });
 
         if (nextSchedule) {
+            console.log('[Home] Found next schedule:', nextSchedule.text);
             return { schedule: nextSchedule, status: 'upcoming' as const };
         }
 
+        console.log('[Home] No current or upcoming schedule found');
         return null;
     };
 
     const currentScheduleInfo = getCurrentSchedule();
 
-    // Get icon for schedule based on text
+    // Debug: log schedule color
+    if (currentScheduleInfo) {
+        console.log('[Home] Current schedule color:', currentScheduleInfo.schedule.color);
+    }
+
+    // Map activity labels to icons - EXACTLY matching dashboard DailyRhythmTimeline
+    const activityIcons: Record<string, any> = {
+        '기상': Sun,
+        '업무 시작': Briefcase,
+        '업무/수업 시작': Briefcase,
+        '업무 종료': Briefcase,
+        '업무/수업 종료': Briefcase,
+        '취침': Moon,
+        '아침 식사': Coffee,
+        '점심 식사': Coffee,
+        '저녁 식사': Coffee,
+        '운동': Dumbbell,
+        '독서': BookOpen,
+        '자기계발': Target,
+        '병원': Heart,
+        '휴식/여가': Gamepad2,
+    };
+
+    // Get icon for schedule - first try exact match, then keyword fallback
     const getScheduleIcon = (text: string) => {
+        // 1. Try exact match first (like dashboard)
+        if (activityIcons[text]) {
+            return activityIcons[text];
+        }
+
+        // 2. Fallback to keyword matching for custom schedules
         const lowerText = text.toLowerCase();
 
         // 식사
         if (lowerText.includes('아침') || lowerText.includes('breakfast')) return Coffee;
-        if (lowerText.includes('점심') || lowerText.includes('lunch')) return Utensils;
-        if (lowerText.includes('저녁') || lowerText.includes('dinner') || lowerText.includes('식사')) return Utensils;
+        if (lowerText.includes('점심') || lowerText.includes('lunch')) return Coffee;
+        if (lowerText.includes('저녁') || lowerText.includes('dinner') || lowerText.includes('식사')) return Coffee;
 
         // 수면
         if (lowerText.includes('취침') || lowerText.includes('수면') || lowerText.includes('잠')) return Moon;
@@ -348,6 +400,15 @@ export default function HomePage() {
         // 업무
         if (lowerText.includes('업무') || lowerText.includes('회의') || lowerText.includes('미팅') ||
             lowerText.includes('작업')) return Briefcase;
+
+        // 기상
+        if (lowerText.includes('기상') || lowerText.includes('wake')) return Sun;
+
+        // 휴식/여가
+        if (lowerText.includes('휴식') || lowerText.includes('여가') || lowerText.includes('게임')) return Gamepad2;
+
+        // 병원
+        if (lowerText.includes('병원') || lowerText.includes('진료')) return Heart;
 
         // 기본값
         return Target;
@@ -629,11 +690,63 @@ export default function HomePage() {
             >
                 <div className={cn(
                     "rounded-2xl transition-all",
-                    currentScheduleInfo?.status === 'in-progress'
-                        ? "bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-                        : currentScheduleInfo
-                            ? "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                            : "bg-gradient-to-br from-gray-500/10 to-gray-600/10 border border-gray-500/30"
+                    (() => {
+                        if (!currentScheduleInfo) {
+                            return "bg-gradient-to-br from-gray-500/10 to-gray-600/10 border border-gray-500/30";
+                        }
+
+                        const color = currentScheduleInfo.schedule.color || 'primary';
+                        console.log('[Home] Card color:', color, 'status:', currentScheduleInfo.status);
+
+                        // In-progress: use schedule's color with ring effect (matching dashboard DailyRhythmTimeline)
+                        if (currentScheduleInfo.status === 'in-progress') {
+                            const inProgressMap: Record<string, string> = {
+                                yellow: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)] ring-1 ring-yellow-500/50",
+                                purple: "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/50",
+                                green: "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)] ring-1 ring-green-500/50",
+                                blue: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/50",
+                                red: "bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)] ring-1 ring-red-500/50",
+                                orange: "bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)] ring-1 ring-orange-500/50",
+                                pink: "bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)] ring-1 ring-pink-500/50",
+                                // Additional colors from SchedulePopup PRESET_ACTIVITIES
+                                amber: "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/50",
+                                indigo: "bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/50",
+                                cyan: "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/50",
+                                teal: "bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/50 shadow-[0_0_15px_rgba(20,184,166,0.15)] ring-1 ring-teal-500/50",
+                                emerald: "bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/50",
+                                violet: "bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-violet-500/50",
+                                rose: "bg-gradient-to-br from-rose-500/20 to-pink-500/20 border border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/50",
+                                sky: "bg-gradient-to-br from-sky-500/20 to-blue-500/20 border border-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.15)] ring-1 ring-sky-500/50",
+                                primary: "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/50"
+                            };
+                            return inProgressMap[color] || inProgressMap.primary;
+                        }
+
+                        // Upcoming: use schedule's color with softer ring (matching dashboard)
+                        const colorMap: Record<string, string> = {
+                            yellow: "bg-gradient-to-br from-yellow-500/15 to-orange-500/15 border border-yellow-500/40 shadow-[0_0_10px_rgba(234,179,8,0.1)]",
+                            purple: "bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]",
+                            green: "bg-gradient-to-br from-green-500/15 to-emerald-500/15 border border-green-500/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]",
+                            blue: "bg-gradient-to-br from-blue-500/15 to-cyan-500/15 border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.1)]",
+                            red: "bg-gradient-to-br from-red-500/15 to-orange-500/15 border border-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
+                            orange: "bg-gradient-to-br from-orange-500/15 to-amber-500/15 border border-orange-500/40 shadow-[0_0_10px_rgba(249,115,22,0.1)]",
+                            pink: "bg-gradient-to-br from-pink-500/15 to-purple-500/15 border border-pink-500/40 shadow-[0_0_10px_rgba(236,72,153,0.1)]",
+                            // Additional colors from SchedulePopup PRESET_ACTIVITIES
+                            amber: "bg-gradient-to-br from-amber-500/15 to-orange-500/15 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.1)]",
+                            indigo: "bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.1)]",
+                            cyan: "bg-gradient-to-br from-cyan-500/15 to-blue-500/15 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.1)]",
+                            teal: "bg-gradient-to-br from-teal-500/15 to-cyan-500/15 border border-teal-500/40 shadow-[0_0_10px_rgba(20,184,166,0.1)]",
+                            emerald: "bg-gradient-to-br from-emerald-500/15 to-green-500/15 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
+                            violet: "bg-gradient-to-br from-violet-500/15 to-purple-500/15 border border-violet-500/40 shadow-[0_0_10px_rgba(139,92,246,0.1)]",
+                            rose: "bg-gradient-to-br from-rose-500/15 to-pink-500/15 border border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.1)]",
+                            sky: "bg-gradient-to-br from-sky-500/15 to-blue-500/15 border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.1)]",
+                            primary: "bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                        };
+
+                        const result = colorMap[color] || colorMap.primary;
+                        console.log('[Home] Applied card style:', result);
+                        return result;
+                    })()
                 )}>
                     {/* Collapsed View */}
                     <button
@@ -645,9 +758,31 @@ export default function HomePage() {
                                 <>
                                     <div className={cn(
                                         "w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300",
-                                        currentScheduleInfo.status === 'in-progress'
-                                            ? "bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-500/20"
-                                            : "bg-gradient-to-br from-purple-500 to-pink-600 shadow-purple-500/20"
+                                        (() => {
+                                            const color = currentScheduleInfo.schedule.color || 'primary';
+                                            // Match dashboard DailyRhythmTimeline icon styling with ring effect
+                                            const colorMap: Record<string, string> = {
+                                                yellow: "bg-gradient-to-br from-yellow-500 to-orange-500 shadow-yellow-500/30 ring-2 ring-white/20",
+                                                purple: "bg-gradient-to-br from-purple-500 to-pink-500 shadow-purple-500/30 ring-2 ring-white/20",
+                                                green: "bg-gradient-to-br from-green-500 to-emerald-500 shadow-green-500/30 ring-2 ring-white/20",
+                                                blue: "bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/30 ring-2 ring-white/20",
+                                                red: "bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/30 ring-2 ring-white/20",
+                                                orange: "bg-gradient-to-br from-orange-500 to-amber-500 shadow-orange-500/30 ring-2 ring-white/20",
+                                                pink: "bg-gradient-to-br from-pink-500 to-purple-500 shadow-pink-500/30 ring-2 ring-white/20",
+                                                // Additional colors
+                                                amber: "bg-gradient-to-br from-amber-500 to-orange-500 shadow-amber-500/30 ring-2 ring-white/20",
+                                                indigo: "bg-gradient-to-br from-indigo-500 to-purple-500 shadow-indigo-500/30 ring-2 ring-white/20",
+                                                cyan: "bg-gradient-to-br from-cyan-500 to-blue-500 shadow-cyan-500/30 ring-2 ring-white/20",
+                                                teal: "bg-gradient-to-br from-teal-500 to-cyan-500 shadow-teal-500/30 ring-2 ring-white/20",
+                                                emerald: "bg-gradient-to-br from-emerald-500 to-green-500 shadow-emerald-500/30 ring-2 ring-white/20",
+                                                violet: "bg-gradient-to-br from-violet-500 to-purple-500 shadow-violet-500/30 ring-2 ring-white/20",
+                                                rose: "bg-gradient-to-br from-rose-500 to-pink-500 shadow-rose-500/30 ring-2 ring-white/20",
+                                                sky: "bg-gradient-to-br from-sky-500 to-blue-500 shadow-sky-500/30 ring-2 ring-white/20",
+                                                primary: "bg-gradient-to-br from-purple-500 to-pink-500 shadow-purple-500/30 ring-2 ring-white/20"
+                                            };
+
+                                            return colorMap[color] || colorMap.primary;
+                                        })()
                                     )}>
                                         {(() => {
                                             const ScheduleIcon = getScheduleIcon(currentScheduleInfo.schedule.text);
@@ -658,11 +793,56 @@ export default function HomePage() {
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={cn(
                                                 "text-xs font-bold px-3 py-1 rounded-full border",
-                                                currentScheduleInfo.status === 'in-progress'
-                                                    ? "bg-blue-500 text-white border-blue-600 shadow-md"
-                                                    : "bg-purple-500/80 text-white border-purple-600 shadow-md"
+                                                (() => {
+                                                    const color = currentScheduleInfo.schedule.color || 'primary';
+                                                    // Match dashboard DailyRhythmTimeline badge styling
+                                                    if (currentScheduleInfo.status === 'in-progress') {
+                                                        const inProgressMap: Record<string, string> = {
+                                                            yellow: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
+                                                            purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+                                                            green: "bg-green-500/20 text-green-300 border-green-500/30",
+                                                            blue: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+                                                            red: "bg-red-500/20 text-red-300 border-red-500/30",
+                                                            orange: "bg-orange-500/20 text-orange-300 border-orange-500/30",
+                                                            pink: "bg-pink-500/20 text-pink-300 border-pink-500/30",
+                                                            // Additional colors
+                                                            amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+                                                            indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+                                                            cyan: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+                                                            teal: "bg-teal-500/20 text-teal-300 border-teal-500/30",
+                                                            emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                                                            violet: "bg-violet-500/20 text-violet-300 border-violet-500/30",
+                                                            rose: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+                                                            sky: "bg-sky-500/20 text-sky-300 border-sky-500/30",
+                                                            primary: "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                                                        };
+                                                        return inProgressMap[color] || inProgressMap.primary;
+                                                    }
+
+                                                    const colorMap: Record<string, string> = {
+                                                        yellow: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+                                                        purple: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                                                        green: "bg-green-500/10 text-green-400 border-green-500/20",
+                                                        blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                                                        red: "bg-red-500/10 text-red-400 border-red-500/20",
+                                                        orange: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+                                                        pink: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+                                                        // Additional colors
+                                                        amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                                                        indigo: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+                                                        cyan: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+                                                        teal: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+                                                        emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                                                        violet: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+                                                        rose: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+                                                        sky: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+                                                        primary: "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                                                    };
+
+                                                    return colorMap[color] || colorMap.primary;
+                                                })()
                                             )}>
-                                                {currentScheduleInfo.status === 'in-progress' ? '집중 중' : '곧 시작'}
+                                                {currentScheduleInfo.status === 'in-progress' ? '현재 진행 중' : '예정됨'}
                                             </span>
                                             <span className="text-sm font-mono text-muted-foreground">
                                                 {currentScheduleInfo.schedule.startTime}
@@ -714,26 +894,43 @@ export default function HomePage() {
                                             const isCompleted = schedule.completed || false;
                                             const isSkipped = schedule.skipped || false;
 
-                                            // Color maps matching dashboard
+                                            // NOTE: 'primary' is black in our theme, so we normalize to 'purple'
+                                            const normalizedColor = (schedule.color === 'primary' || !schedule.color) ? 'purple' : schedule.color;
+
+                                            // Color maps matching dashboard DailyRhythmTimeline dual-color gradients
                                             const iconBgMap: Record<string, string> = {
-                                                yellow: "bg-yellow-500",
-                                                purple: "bg-purple-500",
-                                                green: "bg-green-500",
-                                                blue: "bg-blue-500",
-                                                red: "bg-red-500",
-                                                orange: "bg-orange-500",
-                                                pink: "bg-pink-500",
-                                                primary: "bg-primary"
+                                                yellow: "bg-gradient-to-br from-yellow-500 to-orange-500",
+                                                purple: "bg-gradient-to-br from-purple-500 to-pink-500",
+                                                green: "bg-gradient-to-br from-green-500 to-emerald-500",
+                                                blue: "bg-gradient-to-br from-blue-500 to-cyan-500",
+                                                red: "bg-gradient-to-br from-red-500 to-orange-500",
+                                                orange: "bg-gradient-to-br from-orange-500 to-amber-500",
+                                                pink: "bg-gradient-to-br from-pink-500 to-purple-500",
+                                                amber: "bg-gradient-to-br from-amber-500 to-orange-500",
+                                                indigo: "bg-gradient-to-br from-indigo-500 to-purple-500",
+                                                cyan: "bg-gradient-to-br from-cyan-500 to-blue-500",
+                                                teal: "bg-gradient-to-br from-teal-500 to-cyan-500",
+                                                emerald: "bg-gradient-to-br from-emerald-500 to-green-500",
+                                                violet: "bg-gradient-to-br from-violet-500 to-purple-500",
+                                                rose: "bg-gradient-to-br from-rose-500 to-pink-500",
+                                                sky: "bg-gradient-to-br from-sky-500 to-blue-500",
                                             };
                                             const cardBgMap: Record<string, string> = {
-                                                yellow: "bg-gradient-to-br from-yellow-500/20 to-yellow-600/20",
-                                                purple: "bg-gradient-to-br from-purple-500/20 to-purple-600/20",
-                                                green: "bg-gradient-to-br from-green-500/20 to-green-600/20",
-                                                blue: "bg-gradient-to-br from-blue-500/20 to-blue-600/20",
-                                                red: "bg-gradient-to-br from-red-500/20 to-red-600/20",
-                                                orange: "bg-gradient-to-br from-orange-500/20 to-orange-600/20",
-                                                pink: "bg-gradient-to-br from-pink-500/20 to-pink-600/20",
-                                                primary: "bg-gradient-to-br from-primary/20 to-purple-500/20"
+                                                yellow: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20",
+                                                purple: "bg-gradient-to-br from-purple-500/20 to-pink-500/20",
+                                                green: "bg-gradient-to-br from-green-500/20 to-emerald-500/20",
+                                                blue: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20",
+                                                red: "bg-gradient-to-br from-red-500/20 to-orange-500/20",
+                                                orange: "bg-gradient-to-br from-orange-500/20 to-amber-500/20",
+                                                pink: "bg-gradient-to-br from-pink-500/20 to-purple-500/20",
+                                                amber: "bg-gradient-to-br from-amber-500/20 to-orange-500/20",
+                                                indigo: "bg-gradient-to-br from-indigo-500/20 to-purple-500/20",
+                                                cyan: "bg-gradient-to-br from-cyan-500/20 to-blue-500/20",
+                                                teal: "bg-gradient-to-br from-teal-500/20 to-cyan-500/20",
+                                                emerald: "bg-gradient-to-br from-emerald-500/20 to-green-500/20",
+                                                violet: "bg-gradient-to-br from-violet-500/20 to-purple-500/20",
+                                                rose: "bg-gradient-to-br from-rose-500/20 to-pink-500/20",
+                                                sky: "bg-gradient-to-br from-sky-500/20 to-blue-500/20",
                                             };
                                             const cardBorderMap: Record<string, string> = {
                                                 yellow: "border-yellow-500/50",
@@ -743,7 +940,14 @@ export default function HomePage() {
                                                 red: "border-red-500/50",
                                                 orange: "border-orange-500/50",
                                                 pink: "border-pink-500/50",
-                                                primary: "border-primary/50"
+                                                amber: "border-amber-500/50",
+                                                indigo: "border-indigo-500/50",
+                                                cyan: "border-cyan-500/50",
+                                                teal: "border-teal-500/50",
+                                                emerald: "border-emerald-500/50",
+                                                violet: "border-violet-500/50",
+                                                rose: "border-rose-500/50",
+                                                sky: "border-sky-500/50",
                                             };
                                             const cardShadowMap: Record<string, string> = {
                                                 yellow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
@@ -753,14 +957,20 @@ export default function HomePage() {
                                                 red: "shadow-[0_0_15px_rgba(239,68,68,0.15)]",
                                                 orange: "shadow-[0_0_15px_rgba(249,115,22,0.15)]",
                                                 pink: "shadow-[0_0_15px_rgba(236,72,153,0.15)]",
-                                                primary: "shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                                amber: "shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+                                                indigo: "shadow-[0_0_15px_rgba(99,102,241,0.15)]",
+                                                cyan: "shadow-[0_0_15px_rgba(6,182,212,0.15)]",
+                                                teal: "shadow-[0_0_15px_rgba(20,184,166,0.15)]",
+                                                emerald: "shadow-[0_0_15px_rgba(16,185,129,0.15)]",
+                                                violet: "shadow-[0_0_15px_rgba(139,92,246,0.15)]",
+                                                rose: "shadow-[0_0_15px_rgba(244,63,94,0.15)]",
+                                                sky: "shadow-[0_0_15px_rgba(14,165,233,0.15)]",
                                             };
 
-                                            const color = schedule.color || 'primary';
-                                            const iconBg = iconBgMap[color] || iconBgMap.primary;
-                                            const cardBg = cardBgMap[color] || cardBgMap.primary;
-                                            const cardBorder = cardBorderMap[color] || cardBorderMap.primary;
-                                            const cardShadow = cardShadowMap[color] || cardShadowMap.primary;
+                                            const iconBg = iconBgMap[normalizedColor] || iconBgMap.purple;
+                                            const cardBg = cardBgMap[normalizedColor] || cardBgMap.purple;
+                                            const cardBorder = cardBorderMap[normalizedColor] || cardBorderMap.purple;
+                                            const cardShadow = cardShadowMap[normalizedColor] || cardShadowMap.purple;
 
                                             return (
                                                 <motion.div
@@ -788,9 +998,10 @@ export default function HomePage() {
                                                                 <CheckCircle2 className="w-6 h-6" />
                                                             ) : isSkipped ? (
                                                                 <X className="w-6 h-6" />
-                                                            ) : (
-                                                                <Target className="w-6 h-6" />
-                                                            )}
+                                                            ) : (() => {
+                                                                const ScheduleIcon = getScheduleIcon(schedule.text);
+                                                                return <ScheduleIcon className="w-6 h-6" />;
+                                                            })()}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <p className={cn(
@@ -818,47 +1029,56 @@ export default function HomePage() {
                                                     </div>
 
                                                     {/* Action buttons */}
-                                                    {!isCompleted && !isSkipped && (
-                                                        <div className="flex gap-2">
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => {
-                                                                    // Mark as completed
-                                                                    setTodaySchedules(prev => prev.map(s =>
-                                                                        s.id === schedule.id ? { ...s, completed: true, skipped: false } : s
-                                                                    ));
-                                                                    // Save to localStorage
-                                                                    const today = new Date().toISOString().split('T')[0];
-                                                                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
-                                                                    completions[schedule.id] = { completed: true, skipped: false };
-                                                                    localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
-                                                                }}
-                                                                className="flex-1 h-9 bg-white/10 hover:bg-white/20 border border-white/10 text-foreground"
-                                                            >
-                                                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                                                                완료
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => {
-                                                                    // Mark as skipped
-                                                                    setTodaySchedules(prev => prev.map(s =>
-                                                                        s.id === schedule.id ? { ...s, skipped: true, completed: false } : s
-                                                                    ));
-                                                                    // Save to localStorage
-                                                                    const today = new Date().toISOString().split('T')[0];
-                                                                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
-                                                                    completions[schedule.id] = { completed: false, skipped: true };
-                                                                    localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
-                                                                }}
-                                                                className="flex-1 h-9 hover:bg-white/10 text-muted-foreground"
-                                                            >
-                                                                <X className="w-4 h-4 mr-1.5" />
-                                                                놓침
-                                                            </Button>
-                                                        </div>
-                                                    )}
+                                                    {!isCompleted && !isSkipped && (() => {
+                                                        const now = new Date();
+                                                        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                                                        const scheduleStartMinutes = timeToMinutes(schedule.startTime);
+                                                        const canComplete = currentMinutes >= scheduleStartMinutes;
+
+                                                        return (
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    size="sm"
+                                                                    disabled={!canComplete}
+                                                                    onClick={() => {
+                                                                        // Mark as completed
+                                                                        setTodaySchedules(prev => prev.map(s =>
+                                                                            s.id === schedule.id ? { ...s, completed: true, skipped: false } : s
+                                                                        ));
+                                                                        // Save to localStorage
+                                                                        const today = new Date().toISOString().split('T')[0];
+                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                                                        completions[schedule.id] = { completed: true, skipped: false };
+                                                                        localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+                                                                    }}
+                                                                    className={`flex-1 h-9 border border-white/10 ${canComplete ? 'bg-white/10 hover:bg-white/20 text-foreground' : 'bg-white/5 text-muted-foreground/50 cursor-not-allowed'}`}
+                                                                >
+                                                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                                                    완료
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    disabled={!canComplete}
+                                                                    onClick={() => {
+                                                                        // Mark as skipped
+                                                                        setTodaySchedules(prev => prev.map(s =>
+                                                                            s.id === schedule.id ? { ...s, skipped: true, completed: false } : s
+                                                                        ));
+                                                                        // Save to localStorage
+                                                                        const today = new Date().toISOString().split('T')[0];
+                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                                                        completions[schedule.id] = { completed: false, skipped: true };
+                                                                        localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+                                                                    }}
+                                                                    className={`flex-1 h-9 ${canComplete ? 'hover:bg-white/10 text-muted-foreground' : 'text-muted-foreground/50 cursor-not-allowed'}`}
+                                                                >
+                                                                    <X className="w-4 h-4 mr-1.5" />
+                                                                    놓침
+                                                                </Button>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </motion.div>
                                             );
                                         })
@@ -906,8 +1126,8 @@ export default function HomePage() {
                                         message.role === "user"
                                             ? "bg-primary text-primary-foreground rounded-br-md"
                                             : message.role === "system"
-                                            ? "bg-green-100 text-green-900 border border-green-200"
-                                            : "bg-muted border border-border rounded-bl-md"
+                                                ? "bg-green-100 text-green-900 border border-green-200"
+                                                : "bg-muted border border-border rounded-bl-md"
                                     )}
                                 >
                                     <p className="whitespace-pre-wrap">{message.content}</p>

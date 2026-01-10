@@ -732,7 +732,7 @@ export function Dashboard({
             />
 
             {/* Dashboard Content */}
-                            {/* Combined AI Suggestions + Daily Flow Section */}
+            {/* Combined AI Suggestions + Daily Flow Section */}
             <motion.div
                 variants={containerVariants}
                 initial="hidden"
@@ -740,19 +740,19 @@ export function Dashboard({
                 className="space-y-2 overflow-visible"
             >
                 <motion.section variants={itemVariants} className="space-y-2 overflow-visible">
-                            {/* AI Suggestions */}
-                            {userProfile && currentTime && (
-                                <TodaySuggestions
-                                    userProfile={{
-                                        job: userProfile.job,
-                                        goal: userProfile.goal,
-                                        level: userProfile.level
-                                    }}
-                                    currentTime={currentTime}
-                                />
-                            )}
+                    {/* AI Suggestions */}
+                    {userProfile && currentTime && (
+                        <TodaySuggestions
+                            userProfile={{
+                                job: userProfile.job,
+                                goal: userProfile.goal,
+                                level: userProfile.level
+                            }}
+                            currentTime={currentTime}
+                        />
+                    )}
 
-                            {/* Daily Flow Header */}
+                    {/* Daily Flow Header */}
                     <div className="flex justify-between items-center">
                         <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                             <Clock className="w-6 h-6 text-primary" /> Daily Flow
@@ -1563,7 +1563,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 time: goal.startTime,
                 label: goal.text,
                 icon: icon,
-                color: goal.color || 'primary',
+                color: goal.color || 'purple',
                 goalId: goal.id,
                 endTime: goal.endTime,
             });
@@ -1611,6 +1611,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     }
 
     const getColorClasses = (color: string, isActive: boolean = false) => {
+        // NOTE: 'primary' is black in our theme, so we use 'purple' as default
+        const normalizedColor = color === 'primary' || !color ? 'purple' : color;
+
         const bgColors: Record<string, string> = {
             yellow: isActive ? 'bg-yellow-500' : 'bg-yellow-500/30',
             blue: isActive ? 'bg-blue-500' : 'bg-blue-500/30',
@@ -1622,7 +1625,6 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             amber: isActive ? 'bg-amber-500' : 'bg-amber-500/30',
             cyan: isActive ? 'bg-cyan-500' : 'bg-cyan-500/30',
             indigo: isActive ? 'bg-indigo-500' : 'bg-indigo-500/30',
-            primary: isActive ? 'bg-primary' : 'bg-primary/30',
         };
 
         const activeGradients: Record<string, string> = {
@@ -1636,7 +1638,6 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             amber: 'bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]',
             cyan: 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]',
             indigo: 'bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)]',
-            primary: 'bg-gradient-to-br from-primary/20 to-purple-500/20 border-primary/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]',
         };
 
         const textColors: Record<string, string> = {
@@ -1650,7 +1651,6 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             amber: 'text-amber-400',
             cyan: 'text-cyan-400',
             indigo: 'text-indigo-400',
-            primary: 'text-primary',
         };
 
         const borderColors: Record<string, string> = {
@@ -1664,14 +1664,27 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             amber: 'border-amber-500/30',
             cyan: 'border-cyan-500/30',
             indigo: 'border-indigo-500/30',
-            primary: 'border-primary/30',
+        };
+
+        const badgeBgColors: Record<string, string> = {
+            yellow: 'bg-yellow-500/20',
+            blue: 'bg-blue-500/20',
+            purple: 'bg-purple-500/20',
+            green: 'bg-green-500/20',
+            red: 'bg-red-500/20',
+            orange: 'bg-orange-500/20',
+            pink: 'bg-pink-500/20',
+            amber: 'bg-amber-500/20',
+            cyan: 'bg-cyan-500/20',
+            indigo: 'bg-indigo-500/20',
         };
 
         return {
-            bg: bgColors[color] || bgColors.primary,
-            activeGradient: activeGradients[color] || activeGradients.primary,
-            text: textColors[color] || textColors.primary,
-            border: borderColors[color] || borderColors.primary,
+            bg: bgColors[normalizedColor] || bgColors.purple,
+            activeGradient: activeGradients[normalizedColor] || activeGradients.purple,
+            text: textColors[normalizedColor] || textColors.purple,
+            border: borderColors[normalizedColor] || borderColors.purple,
+            badgeBg: badgeBgColors[normalizedColor] || badgeBgColors.purple,
         };
     };
 
@@ -1719,6 +1732,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         const colors = getColorClasses(item.color, isActive || isUpcoming);
                         const completion = todayCompletions[item.goalId];
 
+                        console.log(`[Timeline] ${item.label}: color=${item.color}, isActive=${isActive}, isUpcoming=${isUpcoming}, gradient=${colors.activeGradient}`);
+
                         return (
                             <motion.div
                                 key={index}
@@ -1729,13 +1744,27 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                             >
                                 <div className={cn(
                                     "relative w-[140px] p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
-                                    isActive
-                                        ? `${colors.activeGradient} scale-105 z-10 ring-1 ring-primary/50`
-                                        : isUpcoming
-                                            ? "bg-white/10 border-white/20 scale-100 z-0 opacity-100" // Upcoming: Clearer but not 'active' styles
-                                            : isPast
-                                                ? "bg-white/5 border-white/5 opacity-40 grayscale scale-95" // Past: More receded
-                                                : "bg-white/5 border-white/10"
+                                    // Active state - 현재 진행중인 일정만 색상으로 강조
+                                    isActive && item.color === 'yellow' && "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)] scale-105 z-10 ring-1 ring-yellow-500/50",
+                                    isActive && item.color === 'blue' && "bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)] scale-105 z-10 ring-1 ring-blue-500/50",
+                                    isActive && item.color === 'purple' && "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-105 z-10 ring-1 ring-purple-500/50",
+                                    isActive && item.color === 'green' && "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-105 z-10 ring-1 ring-green-500/50",
+                                    isActive && item.color === 'red' && "bg-gradient-to-br from-red-500/20 to-orange-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)] scale-105 z-10 ring-1 ring-red-500/50",
+                                    isActive && item.color === 'orange' && "bg-gradient-to-br from-orange-500/20 to-red-500/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)] scale-105 z-10 ring-1 ring-orange-500/50",
+                                    isActive && item.color === 'pink' && "bg-gradient-to-br from-pink-500/20 to-purple-500/20 border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)] scale-105 z-10 ring-1 ring-pink-500/50",
+                                    isActive && (!item.color || item.color === 'purple') && "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-105 z-10 ring-1 ring-purple-500/50",
+                                    // Upcoming state - 해당 일정 색상으로 은은하게 표시
+                                    isUpcoming && item.color === 'yellow' && "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'blue' && "bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'purple' && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'green' && "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'red' && "bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'orange' && "bg-gradient-to-br from-orange-500/10 to-red-500/10 border-orange-500/30 scale-100 z-0",
+                                    isUpcoming && item.color === 'pink' && "bg-gradient-to-br from-pink-500/10 to-purple-500/10 border-pink-500/30 scale-100 z-0",
+                                    isUpcoming && (!item.color || item.color === 'purple') && "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 scale-100 z-0",
+                                    // Past and default states
+                                    isPast && "bg-white/5 border-white/5 opacity-40 grayscale scale-95",
+                                    !isActive && !isUpcoming && !isPast && "bg-white/5 border-white/10"
                                 )}>
                                     {/* Connection Line (Visual only) */}
                                     {index < timelineItems.length - 1 && (
@@ -1833,117 +1862,117 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                     }}
                 >
                     {timelineItems.map((item, index) => {
-                const Icon = item.icon;
-                const completion = todayCompletions[item.goalId];
-                const isActive = index === activeIndex;
-                const isUpcoming = activeIndex === -1 && index === nextIndex;
-                const isPast = index < activeIndex || (activeIndex === -1 && index < nextIndex && nextIndex !== -1);
-                const colors = getColorClasses(item.color, isActive || isUpcoming);
+                        const Icon = item.icon;
+                        const completion = todayCompletions[item.goalId];
+                        const isActive = index === activeIndex;
+                        const isUpcoming = activeIndex === -1 && index === nextIndex;
+                        const isPast = index < activeIndex || (activeIndex === -1 && index < nextIndex && nextIndex !== -1);
+                        const colors = getColorClasses(item.color, isActive || isUpcoming);
 
-                return (
-                    <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="relative flex items-center gap-4 group"
-                    >
-                        {/* Enhanced Timeline dot with glow effect */}
-                        <div className={cn(
-                            "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
-                            colors.bg,
-                            (isActive || isUpcoming) && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
-                        )}>
-                            <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                (isActive || isUpcoming) ? "bg-white" : "bg-background/50"
-                            )} />
-                        </div>
-
-                        {/* Enhanced Content card */}
-                        <div className={cn(
-                            "flex-1 rounded-xl p-4 border transition-all w-full",
-                            isActive
-                                ? `${colors.activeGradient} shadow-md`
-                                : isUpcoming
-                                    ? `${colors.activeGradient} shadow-md opacity-80`
-                                    : isPast
-                                        ? "bg-white/5 border-white/5 opacity-60"
-                                        : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
-                        )}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    {/* Icon with colored background */}
+                        return (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                                className="relative flex items-center gap-4 group"
+                            >
+                                {/* Enhanced Timeline dot with glow effect */}
+                                <div className={cn(
+                                    "absolute -left-8 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center z-10 transition-all",
+                                    colors.bg,
+                                    (isActive || isUpcoming) && "ring-4 ring-white/20 scale-110 shadow-lg shadow-primary/50"
+                                )}>
                                     <div className={cn(
-                                        "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                                        colors.bg,
-                                        (isActive || isUpcoming) && "shadow-lg"
-                                    )}>
-                                        <Icon className={cn("w-5 h-5", (isActive || isUpcoming) ? "text-white" : colors.text)} />
-                                    </div>
-
-                                    <div className="flex-1 min-w-0 max-w-[400px]">
-                                        <h4
-                                            className={cn(
-                                                "font-semibold text-base truncate",
-                                                (isActive || isUpcoming) && "text-white"
-                                            )}
-                                            title={item.label}
-                                        >
-                                            {item.label.length > 50 ? item.label.substring(0, 50) + '...' : item.label}
-                                        </h4>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <p className={cn(
-                                                "text-sm font-mono",
-                                                (isActive || isUpcoming) ? "text-white/70" : "text-muted-foreground"
-                                            )}>
-                                                {item.time}
-                                                {item.endTime && ` - ${item.endTime}`}
-                                            </p>
-                                            {isActive && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-                                                    진행 중
-                                                </span>
-                                            )}
-                                            {isUpcoming && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-                                                    예정됨
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                        "w-2 h-2 rounded-full",
+                                        (isActive || isUpcoming) ? "bg-white" : "bg-background/50"
+                                    )} />
                                 </div>
 
-                                {/* Completion status */}
-                                {completion && (
-                                    <motion.span
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className={cn(
-                                            "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
-                                            completion.completed
-                                                ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                                : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                {/* Enhanced Content card */}
+                                <div className={cn(
+                                    "flex-1 rounded-xl p-4 border transition-all w-full",
+                                    isActive
+                                        ? `${colors.activeGradient} shadow-md`
+                                        : isUpcoming
+                                            ? `${colors.activeGradient} shadow-md opacity-80`
+                                            : isPast
+                                                ? "bg-white/5 border-white/5 opacity-60"
+                                                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                                )}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            {/* Icon with colored background */}
+                                            <div className={cn(
+                                                "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
+                                                colors.bg,
+                                                (isActive || isUpcoming) && "shadow-lg"
+                                            )}>
+                                                <Icon className={cn("w-5 h-5", (isActive || isUpcoming) ? "text-white" : colors.text)} />
+                                            </div>
+
+                                            <div className="flex-1 min-w-0 max-w-[400px]">
+                                                <h4
+                                                    className={cn(
+                                                        "font-semibold text-base truncate",
+                                                        (isActive || isUpcoming) ? "text-gray-900" : "text-foreground"
+                                                    )}
+                                                    title={item.label}
+                                                >
+                                                    {item.label.length > 50 ? item.label.substring(0, 50) + '...' : item.label}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className={cn(
+                                                        "text-sm font-mono",
+                                                        (isActive || isUpcoming) ? "text-gray-700" : "text-muted-foreground"
+                                                    )}>
+                                                        {item.time}
+                                                        {item.endTime && ` - ${item.endTime}`}
+                                                    </p>
+                                                    {isActive && (
+                                                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", colors.badgeBg, colors.text)}>
+                                                            진행 중
+                                                        </span>
+                                                    )}
+                                                    {isUpcoming && (
+                                                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", colors.badgeBg, colors.text)}>
+                                                            예정됨
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Completion status */}
+                                        {completion && (
+                                            <motion.span
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                className={cn(
+                                                    "text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5",
+                                                    completion.completed
+                                                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                                        : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                                )}
+                                            >
+                                                {completion.completed ? (
+                                                    <>
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        완료
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        미완료
+                                                    </>
+                                                )}
+                                            </motion.span>
                                         )}
-                                    >
-                                        {completion.completed ? (
-                                            <>
-                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                완료
-                                            </>
-                                        ) : (
-                                            <>
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                미완료
-                                            </>
-                                        )}
-                                    </motion.span>
-                                )}
-                            </div>
-                        </div>
-                    </motion.div>
-                );
-            })}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
                 </div>
             )}
         </div>

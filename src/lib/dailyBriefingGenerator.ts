@@ -106,11 +106,11 @@ export async function generateDailyBriefings() {
                - Note: If data is empty, it means they didn't record activity.
             
             2. TODAY'S SCHEDULE (${dateStr}):
-               - Wake Up: ${userSchedule.wakeUp || "07:00"}
-               - Work Start: ${userSchedule.workStart || "09:00"}
-               - Work End: ${userSchedule.workEnd || "18:00"}
-               - Sleep: ${userSchedule.sleep || "23:00"}
-               - Custom Events: ${JSON.stringify(todayEvents.map((e: any) => ({ time: e.startTime, title: e.text })))}
+               ${todayEvents.length > 0 ? `- Today's Events:\n${todayEvents.map((e: any) => `  ${e.startTime || '시간 미정'}: ${e.text}`).join('\n')}` : '- No specific events scheduled for today'}
+               - Default Routine (only mention if no custom events):
+                 * Wake Up: ${userSchedule.wakeUp || "07:00"}
+                 * Work: ${userSchedule.workStart || "09:00"} - ${userSchedule.workEnd || "18:00"}
+                 * Sleep: ${userSchedule.sleep || "23:00"}
 
             3. TRENDS FOR YOU (${finalTrends.length} personalized articles):
 ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
@@ -124,11 +124,18 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
             - greeting: Warm morning greeting emphasizing ${job} role.
             - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
             - yesterday_score: integer 0-100 (estimate based on activity).
-            - today_schedule_summary: **CRITICAL - ANALYZE THE ACTUAL SCHEDULE DATA PROVIDED ABOVE**
-              * Use the REAL wake up time (${userSchedule.wakeUp || "07:00"}), work hours (${userSchedule.workStart || "09:00"} - ${userSchedule.workEnd || "18:00"}), and sleep time (${userSchedule.sleep || "23:00"})
-              * ${todayEvents.length > 0 ? `Mention these specific custom events: ${todayEvents.map((e: any) => `"${e.text}" at ${e.startTime}`).join(', ')}` : 'Mention it\'s a regular work day without special events'}
-              * Be specific and accurate - do NOT use generic times like "8시 30분" or "10시 30분" if they don't match the data
-              * Example good format: "${userSchedule.wakeUp || '07:00'}에 기상하여 ${userSchedule.workStart || '09:00'}부터 ${userSchedule.workEnd || '18:00'}까지 근무하시는 날입니다. ${todayEvents.length > 0 ? todayEvents.map((e: any) => `${e.startTime}에 "${e.text}" 일정이 있습니다.`).join(' ') : '특별한 일정은 없으며, 평소와 같은 업무 루틴을 이어갈 예정입니다.'}"
+            - today_schedule_summary: **CRITICAL - USE ONLY THE ACTUAL SCHEDULE DATA FROM "TODAY'S SCHEDULE" SECTION ABOVE**
+              ${todayEvents.length > 0 ? `
+              * PRIORITY: Mention these SPECIFIC custom events from the user's calendar:
+                ${todayEvents.map((e: any) => `"${e.text}" at ${e.startTime}`).join(', ')}
+              * Format: List each event with its exact time and title
+              * Do NOT mention default routine (wake/work/sleep) if there are custom events
+              * Example: "${todayEvents[0]?.startTime || '09:00'}에 "${todayEvents[0]?.text || '일정'}" 일정이 있습니다.${todayEvents.length > 1 ? ` ${todayEvents[1].startTime}에는 "${todayEvents[1].text}" 일정이 예정되어 있습니다.` : ''}"
+              ` : `
+              * NO custom events today - use default routine times ONLY
+              * Format: "${userSchedule.wakeUp || '07:00'}에 기상하여 ${userSchedule.workStart || '09:00'}부터 ${userSchedule.workEnd || '18:00'}까지 근무 예정입니다. ${userSchedule.sleep || '23:00'}에 취침하세요."
+              `}
+              * NEVER use generic fake times that don't match the provided data
             - trend_summary: **ONLY list the article TITLES** from the ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
               1. Use double line breaks (\\n\\n) to separate each article
               2. Start EACH article with a bullet point (•)

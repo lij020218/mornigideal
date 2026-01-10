@@ -14,6 +14,7 @@ interface Schedule {
     startTime: string;
     endTime?: string;
     completed?: boolean;
+    skipped?: boolean;
     color?: string;
 }
 
@@ -64,7 +65,6 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
-    const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [chatHistory, setChatHistory] = useState<{ date: string; title: string }[]>([]);
     const [showSidebar, setShowSidebar] = useState(false);
 
@@ -85,6 +85,9 @@ export default function ChatPage() {
 
         return now.toISOString().split('T')[0];
     };
+
+    // Initialize currentDate with 5am cutoff
+    const [currentDate, setCurrentDate] = useState<string>(getChatDate());
 
     // Load messages from localStorage on mount
     useEffect(() => {
@@ -131,6 +134,85 @@ export default function ChatPage() {
 
         setChatHistory(history);
     }, []);
+
+    // Send initial greeting message with AI recommendations if no messages exist
+    useEffect(() => {
+        // Only send greeting if:
+        // 1. No messages in the current chat
+        // 2. Session is loaded
+        // 3. Not already loading
+        // 4. Schedules are loaded
+        if (messages.length === 0 && session?.user && !isLoading && todaySchedules.length >= 0) {
+            const sendGreeting = async () => {
+                try {
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const today = getChatDate();
+
+                    // Check if we already sent greeting today
+                    const greetingSentKey = `greeting_sent_${today}`;
+                    if (localStorage.getItem(greetingSentKey)) {
+                        console.log('[Chat] Greeting already sent today');
+                        return;
+                    }
+
+                    console.log('[Chat] Sending initial greeting message with recommendations');
+
+                    // Generate greeting based on time of day
+                    let greeting = '안녕하세요!';
+                    if (hour >= 5 && hour < 12) greeting = '좋은 아침이에요!';
+                    else if (hour >= 12 && hour < 18) greeting = '좋은 오후에요!';
+                    else if (hour >= 18 && hour < 22) greeting = '좋은 저녁이에요!';
+                    else greeting = '아직도 깨어 계시네요!';
+
+                    // Fetch AI recommendations
+                    let recommendationsText = '';
+                    try {
+                        const currentHour = now.getHours();
+                        const response = await fetch('/api/ai-suggest-schedules', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                requestCount: 5,
+                                currentHour: currentHour
+                            }),
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.suggestions && data.suggestions.length > 0) {
+                                recommendationsText = '\n\n오늘 이런 활동은 어떠세요?\n\n';
+                                data.suggestions.forEach((s: any, idx: number) => {
+                                    recommendationsText += `${idx + 1}. ${s.icon} **${s.title}**\n   ${s.description} (약 ${s.estimatedTime})\n\n`;
+                                });
+                                recommendationsText += '원하시는 활동이 있으면 말씀해주세요. 일정에 추가해드릴게요!';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[Chat] Failed to fetch recommendations:', error);
+                    }
+
+                    const greetingMessage: Message = {
+                        id: `assistant-greeting-${Date.now()}`,
+                        role: 'assistant',
+                        content: `${greeting} 오늘 하루 어떻게 보내실 계획이신가요?\n\n저는 당신의 일정 관리와 성장을 돕는 AI 어시스턴트예요.${recommendationsText}\n\n궁금한 점이나 도움이 필요하신 것이 있으면 언제든 말씀해주세요! 😊`,
+                        timestamp: new Date(),
+                    };
+
+                    setMessages([greetingMessage]);
+
+                    // Mark greeting as sent
+                    localStorage.setItem(greetingSentKey, 'true');
+                } catch (error) {
+                    console.error('[Chat] Failed to send greeting:', error);
+                }
+            };
+
+            // Small delay to ensure everything is loaded
+            const timer = setTimeout(sendGreeting, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [messages.length, session, isLoading, todaySchedules]);
 
     // Save messages to localStorage whenever they change
     useEffect(() => {
@@ -198,12 +280,34 @@ export default function ChatPage() {
 
         const fetchSchedules = async () => {
             try {
-                const response = await fetch('/api/user/schedule/get');
+                const response = await fetch('/api/user/profile');
                 if (response.ok) {
                     const data = await response.json();
-                    const today = new Date().toISOString().split('T')[0];
-                    const todayGoals = data.customGoals?.filter((g: any) => g.specificDate === today) || [];
-                    setTodaySchedules(todayGoals.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
+                    const today = getChatDate(); // Use 5am cutoff
+                    const now = new Date();
+                    const currentDay = now.getDay();
+
+                    console.log('[Chat] Fetching schedules for date:', today, 'day:', currentDay);
+                    console.log('[Chat] Custom goals:', data.profile?.customGoals);
+
+                    // Include both specific date schedules AND recurring schedules for today
+                    const todayGoals = data.profile?.customGoals?.filter((g: any) => {
+                        const isSpecificDate = g.specificDate === today;
+                        const isRecurringToday = g.daysOfWeek?.includes(currentDay);
+                        console.log(`[Chat] Checking goal "${g.text}": specificDate=${g.specificDate}, daysOfWeek=${g.daysOfWeek}, matches=${isSpecificDate || isRecurringToday}`);
+                        return isSpecificDate || isRecurringToday;
+                    }) || [];
+
+                    // Load completion status from localStorage
+                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                    const schedulesWithStatus = todayGoals.map((g: any) => ({
+                        ...g,
+                        completed: completions[g.id]?.completed || false,
+                        skipped: completions[g.id]?.skipped || false
+                    }));
+
+                    setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
+                    console.log('[Chat] Loaded schedules:', schedulesWithStatus.length, schedulesWithStatus);
                 }
             } catch (error) {
                 console.error('[Chat] Failed to fetch schedules:', error);
@@ -222,10 +326,17 @@ export default function ChatPage() {
 
         const fetchRecommendations = async () => {
             try {
+                const now = new Date();
+                const currentHour = now.getHours();
+                console.log('[Chat] Fetching AI recommendations for hour:', currentHour);
+
                 const response = await fetch('/api/ai-suggest-schedules', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ requestCount: 3 }),
+                    body: JSON.stringify({
+                        requestCount: 3,
+                        currentHour: currentHour
+                    }),
                 });
 
                 if (response.ok) {
@@ -248,24 +359,57 @@ export default function ChatPage() {
         fetchRecommendations();
     }, [appState, session, recommendations.length]);
 
+    // Helper to convert time string to minutes
+    const timeToMinutes = (time: string) => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+    };
+
     // Find current/next schedule
     const getCurrentSchedule = () => {
         const now = new Date();
-        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-        const currentSchedule = todaySchedules.find(
-            (s) => s.startTime <= currentTime && (!s.endTime || s.endTime >= currentTime)
-        );
+        console.log('[Chat] Current time:', `${now.getHours()}:${now.getMinutes()}`, 'Minutes:', currentMinutes);
+        console.log('[Chat] Today schedules:', todaySchedules.map(s => ({
+            text: s.text,
+            startTime: s.startTime,
+            startMinutes: timeToMinutes(s.startTime),
+            completed: s.completed,
+            skipped: s.skipped
+        })));
+
+        const currentSchedule = todaySchedules.find((s) => {
+            const startMinutes = timeToMinutes(s.startTime);
+            const endMinutes = s.endTime ? timeToMinutes(s.endTime) : startMinutes + 60;
+
+            const isInProgress = startMinutes <= currentMinutes && endMinutes >= currentMinutes;
+            console.log(`[Chat] Checking "${s.text}": start=${startMinutes}, end=${endMinutes}, current=${currentMinutes}, inProgress=${isInProgress}`);
+
+            return isInProgress;
+        });
 
         if (currentSchedule) {
+            console.log('[Chat] Found current schedule:', currentSchedule.text);
             return { schedule: currentSchedule, status: 'in-progress' as const };
         }
 
-        const nextSchedule = todaySchedules.find((s) => s.startTime > currentTime);
+        // Find next schedule that hasn't started yet
+        const nextSchedule = todaySchedules
+            .filter(s => !s.completed && !s.skipped)
+            .find((s) => {
+                const startMinutes = timeToMinutes(s.startTime);
+                const isUpcoming = startMinutes > currentMinutes;
+                console.log(`[Chat] Checking next "${s.text}": start=${startMinutes}, current=${currentMinutes}, upcoming=${isUpcoming}, completed=${s.completed}, skipped=${s.skipped}`);
+                return isUpcoming;
+            });
+
         if (nextSchedule) {
+            console.log('[Chat] Found next schedule:', nextSchedule.text);
             return { schedule: nextSchedule, status: 'upcoming' as const };
         }
 
+        console.log('[Chat] No current or upcoming schedule found');
         return null;
     };
 
@@ -288,6 +432,11 @@ export default function ChatPage() {
         setAppState("chatting"); // Hide recommendations when chatting
 
         try {
+            const today = getChatDate();
+            const now = new Date();
+
+            console.log('[Chat] Sending message with context - today:', today, 'schedules:', todaySchedules.length);
+
             const res = await fetch("/api/ai-chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -296,6 +445,11 @@ export default function ChatPage() {
                         role: m.role,
                         content: m.content,
                     })),
+                    context: {
+                        currentDate: today,
+                        currentTime: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
+                        schedules: todaySchedules
+                    }
                 }),
             });
 
@@ -625,60 +779,82 @@ export default function ChatPage() {
 
                                             {todaySchedules.map((schedule, index) => {
                                                 // Get color classes based on schedule color
+                                                // NOTE: 'primary' is black in our theme, so we use 'purple' as default
                                                 const getColorClasses = (color: string) => {
-                                                    const colorMap: Record<string, { bg: string; activeGradient: string; text: string }> = {
+                                                    const normalizedColor = color === 'primary' || !color ? 'purple' : color;
+                                                    const colorMap: Record<string, { bg: string; activeGradient: string; text: string; border: string; badgeBg: string }> = {
                                                         yellow: {
                                                             bg: 'bg-yellow-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)]',
-                                                            text: 'text-yellow-400'
+                                                            text: 'text-yellow-600',
+                                                            border: 'border-yellow-500/30',
+                                                            badgeBg: 'bg-yellow-500/20'
                                                         },
                                                         blue: {
                                                             bg: 'bg-blue-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)]',
-                                                            text: 'text-blue-400'
+                                                            text: 'text-blue-600',
+                                                            border: 'border-blue-500/30',
+                                                            badgeBg: 'bg-blue-500/20'
                                                         },
                                                         purple: {
                                                             bg: 'bg-purple-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]',
-                                                            text: 'text-purple-400'
+                                                            text: 'text-purple-600',
+                                                            border: 'border-purple-500/30',
+                                                            badgeBg: 'bg-purple-500/20'
                                                         },
                                                         green: {
                                                             bg: 'bg-green-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)]',
-                                                            text: 'text-green-400'
+                                                            text: 'text-green-600',
+                                                            border: 'border-green-500/30',
+                                                            badgeBg: 'bg-green-500/20'
                                                         },
                                                         red: {
                                                             bg: 'bg-red-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-red-500/20 to-orange-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)]',
-                                                            text: 'text-red-400'
+                                                            text: 'text-red-600',
+                                                            border: 'border-red-500/30',
+                                                            badgeBg: 'bg-red-500/20'
                                                         },
                                                         orange: {
                                                             bg: 'bg-orange-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-orange-500/20 to-red-500/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)]',
-                                                            text: 'text-orange-400'
+                                                            text: 'text-orange-600',
+                                                            border: 'border-orange-500/30',
+                                                            badgeBg: 'bg-orange-500/20'
                                                         },
                                                         pink: {
                                                             bg: 'bg-pink-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-pink-500/20 to-purple-500/20 border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)]',
-                                                            text: 'text-pink-400'
+                                                            text: 'text-pink-600',
+                                                            border: 'border-pink-500/30',
+                                                            badgeBg: 'bg-pink-500/20'
                                                         },
                                                         amber: {
                                                             bg: 'bg-amber-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]',
-                                                            text: 'text-amber-400'
+                                                            text: 'text-amber-600',
+                                                            border: 'border-amber-500/30',
+                                                            badgeBg: 'bg-amber-500/20'
                                                         },
                                                         cyan: {
                                                             bg: 'bg-cyan-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]',
-                                                            text: 'text-cyan-400'
+                                                            text: 'text-cyan-600',
+                                                            border: 'border-cyan-500/30',
+                                                            badgeBg: 'bg-cyan-500/20'
                                                         },
                                                         indigo: {
                                                             bg: 'bg-indigo-500/30',
                                                             activeGradient: 'bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)]',
-                                                            text: 'text-indigo-400'
+                                                            text: 'text-indigo-600',
+                                                            border: 'border-indigo-500/30',
+                                                            badgeBg: 'bg-indigo-500/20'
                                                         },
                                                     };
-                                                    return colorMap[color] || colorMap.purple;
+                                                    return colorMap[normalizedColor] || colorMap.purple;
                                                 };
 
                                                 const colors = getColorClasses(schedule.color || 'purple');
@@ -795,8 +971,8 @@ export default function ChatPage() {
                                     message.role === "user"
                                         ? "bg-primary text-primary-foreground rounded-br-md"
                                         : message.role === "system"
-                                        ? "bg-green-100 text-green-900 border border-green-200"
-                                        : "bg-muted border border-border rounded-bl-md"
+                                            ? "bg-green-100 text-green-900 border border-green-200"
+                                            : "bg-muted border border-border rounded-bl-md"
                                 )}
                             >
                                 <p className="whitespace-pre-wrap">{message.content}</p>

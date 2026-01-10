@@ -43,12 +43,12 @@ export default async function AnalysisPage({ params }: PageProps) {
     });
 
     return (
-        <div className="min-h-screen bg-gradient-mesh text-foreground relative overflow-hidden">
+        <div className="min-h-screen bg-gradient-mesh text-foreground relative overflow-hidden md:ml-20">
             {/* Background Effects */}
             <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
 
             {/* Header */}
-            <div className="sticky top-0 z-50 border-b border-white/5 bg-background/5 backdrop-blur-xl">
+            <div className="sticky top-16 md:top-0 z-50 border-b border-white/5 bg-background/5 backdrop-blur-xl">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Link href="/materials">

@@ -168,7 +168,7 @@ export default function CurriculumDetailPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background selection:bg-primary/30">
+        <div className="min-h-screen bg-background selection:bg-primary/30 md:ml-20">
             {/* Background Gradient */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
 
@@ -176,7 +176,7 @@ export default function CurriculumDetailPage() {
             <motion.header
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="sticky top-0 z-50 glass border-b border-white/5 backdrop-blur-xl"
+                className="sticky top-16 md:top-0 z-50 glass border-b border-white/5 backdrop-blur-xl"
             >
                 <div className="max-w-7xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center">
                     <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">

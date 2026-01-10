@@ -18,8 +18,7 @@ interface CacheEntry {
 const suggestionCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-function getCachedSuggestions(email: string, requestCount: number): any | null {
-    const cacheKey = `${email}-${requestCount}`;
+function getCachedSuggestions(cacheKey: string, requestCount: number): any | null {
     const cached = suggestionCache.get(cacheKey);
 
     if (!cached) return null;
@@ -30,12 +29,11 @@ function getCachedSuggestions(email: string, requestCount: number): any | null {
         return null;
     }
 
-    console.log('[AI Suggest Schedules] Cache hit! Returning cached suggestions');
+    console.log('[AI Suggest Schedules] Cache hit! Returning cached suggestions for', cacheKey);
     return cached.data;
 }
 
-function setCachedSuggestions(email: string, requestCount: number, data: any): void {
-    const cacheKey = `${email}-${requestCount}`;
+function setCachedSuggestions(cacheKey: string, requestCount: number, data: any): void {
     suggestionCache.set(cacheKey, {
         data,
         timestamp: Date.now()
@@ -53,11 +51,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { requestCount = 3 } = await request.json();
+        const { requestCount = 3, currentHour } = await request.json();
         console.log("[AI Suggest Schedules] 요청 개수:", requestCount);
+        console.log("[AI Suggest Schedules] 현재 시간:", currentHour);
 
-        // Check cache first
-        const cachedResult = getCachedSuggestions(session.user.email, requestCount);
+        // Check cache first (with hour to avoid stale recommendations)
+        const cacheKey = `${session.user.email}-${requestCount}-${currentHour}`;
+        const cachedResult = getCachedSuggestions(cacheKey, requestCount);
         if (cachedResult) {
             return NextResponse.json(cachedResult);
         }
@@ -77,11 +77,29 @@ export async function POST(request: NextRequest) {
 
         // Get current context
         const now = new Date();
-        const hour = now.getHours();
+        const hour = currentHour !== undefined ? currentHour : now.getHours();
         const currentSeason = now.getMonth() >= 11 || now.getMonth() <= 1 ? "겨울" :
                              now.getMonth() >= 2 && now.getMonth() <= 4 ? "봄" :
                              now.getMonth() >= 5 && now.getMonth() <= 7 ? "여름" : "가을";
         const timeOfDayLabel = hour < 12 ? "오전" : hour < 18 ? "오후" : "저녁";
+
+        // 시간대별 적절한 활동 카테고리
+        let timeAppropriateCategories = "";
+        if (hour >= 0 && hour < 6) {
+            timeAppropriateCategories = "❌ 새벽 시간 (0-6시): 취침/수면 제외 모든 추천 금지. 사용자가 잠자야 할 시간입니다.";
+        } else if (hour >= 6 && hour < 9) {
+            timeAppropriateCategories = "✅ 아침 시간 (6-9시): 기상, 아침 운동, 아침 식사, 간단한 학습, 하루 계획 세우기 추천. ❌ 친구 만남, 저녁 활동 금지.";
+        } else if (hour >= 9 && hour < 12) {
+            timeAppropriateCategories = "✅ 오전 시간 (9-12시): 집중 업무, 학습, 회의, 프로젝트 작업 추천. ❌ 운동, 친구 만남, 저녁 식사 금지.";
+        } else if (hour >= 12 && hour < 14) {
+            timeAppropriateCategories = "✅ 점심 시간 (12-14시): 점심 식사, 가벼운 산책, 짧은 휴식 추천. ❌ 격렬한 운동, 긴 시간 프로젝트, 저녁 활동 금지.";
+        } else if (hour >= 14 && hour < 18) {
+            timeAppropriateCategories = "✅ 오후 시간 (14-18시): 실행 업무, 프로젝트 작업, 가벼운 운동, 네트워킹 추천. ❌ 아침 활동, 저녁 식사 금지.";
+        } else if (hour >= 18 && hour < 21) {
+            timeAppropriateCategories = "✅ 저녁 시간 (18-21시): 저녁 식사, 친구 만남, 취미 활동, 복습, 가벼운 학습 추천. ❌ 아침 활동, 집중 업무 금지.";
+        } else {
+            timeAppropriateCategories = "✅ 밤 시간 (21-24시): 정리, 복습, 내일 준비, 가벼운 독서, 명상, 취침 준비 추천. ❌ 운동, 친구 만남, 업무 금지.";
+        }
 
         // 오늘 날짜의 실제 일정을 DB에서 실시간으로 가져오기
         const today = new Date().toISOString().split('T')[0];
@@ -130,6 +148,9 @@ export async function POST(request: NextRequest) {
 - 목표: ${context.profile.goal || '미설정'}
 - 현재 시간: ${timeOfDayLabel} ${hour}시
 - 계절: ${currentSeason}
+
+**[⏰ 시간대별 추천 제약 - 절대 준수] 🚨 최우선 규칙**
+${timeAppropriateCategories}
 
 **[실제 생활 패턴 - 일정 분석 기반]**
 ${patternText}
@@ -335,7 +356,7 @@ ${addedSchedulesText}
         };
 
         // Cache the result
-        setCachedSuggestions(session.user.email, requestCount, responseData);
+        setCachedSuggestions(cacheKey, requestCount, responseData);
 
         return NextResponse.json(responseData);
     } catch (error: any) {

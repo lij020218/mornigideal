@@ -44,8 +44,14 @@ export async function POST(request: Request) {
 - 레벨: ${p.level || "intermediate"}
 - 관심 분야: ${(p.interests || []).join(", ") || "미설정"}
 `;
-                // Include today's schedule
-                if (p.customGoals && p.customGoals.length > 0) {
+                // Use schedules from context if provided, otherwise fetch from profile
+                if (context?.schedules && context.schedules.length > 0) {
+                    console.log('[AI Chat] Using schedules from context:', context.currentDate);
+                    scheduleContext = `
+오늘의 일정 (${context.currentDate}):
+${context.schedules.map((g: any) => `- ${g.startTime}: ${g.text}${g.completed ? ' ✓ 완료' : g.skipped ? ' ⊘ 건너뜀' : ''}`).join('\n')}
+`;
+                } else if (p.customGoals && p.customGoals.length > 0) {
                     const today = new Date();
                     const todayStr = today.toISOString().split('T')[0];
                     const dayOfWeek = today.getDay();
@@ -57,7 +63,7 @@ export async function POST(request: Request) {
 
                     if (todayGoals.length > 0) {
                         scheduleContext = `
-오늘의 일정:
+오늘의 일정 (${todayStr}):
 ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
 `;
                     }
@@ -96,18 +102,37 @@ ${context.trendBriefings.map((t: any, i: number) =>
 
         // Get current date/time for context
         const now = new Date();
-        const currentDateContext = `
+        let currentDateContext = "";
+
+        if (context?.currentDate && context?.currentTime) {
+            // Use provided date and time (with 5am cutoff applied)
+            const [year, month, day] = context.currentDate.split('-');
+            const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            const weekdayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            const weekday = weekdayNames[dateObj.getDay()];
+
+            currentDateContext = `
+현재 날짜: ${year}년 ${month}월 ${day}일 ${weekday}
+현재 시간: ${context.currentTime}
+현재 연도: ${year}년
+
+중요: 사용자가 "오늘" 또는 "today"라고 하면 ${year}년 ${month}월 ${day}일을 의미합니다.
+`;
+            console.log('[AI Chat] Using context date:', context.currentDate, context.currentTime);
+        } else {
+            currentDateContext = `
 현재 날짜 및 시간: ${now.toLocaleString('ko-KR', {
-            timeZone: 'Asia/Seoul',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            weekday: 'long',
-            hour: '2-digit',
-            minute: '2-digit'
-        })}
+                timeZone: 'Asia/Seoul',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'long',
+                hour: '2-digit',
+                minute: '2-digit'
+            })}
 현재 연도: ${now.getFullYear()}년
 `;
+        }
 
         const systemPrompt = `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 사용자의 학습과 성장을 돕습니다.
 ${currentDateContext}
@@ -138,18 +163,39 @@ ${pendingScheduleContext}
   * 여러 브리핑을 요약할 경우 각각에 대한 상세보기 버튼 제공
 
 일정 추가 요청 처리:
-사용자가 "일정 추가해줘", "운동 일정 넣어줘" 등 요청 시 일정 이름, 시간, 날짜를 파악해서 actions 배열로 버튼 제공하세요.
+사용자가 "일정 추가해줘", "운동 일정 넣어줘" 등 요청 시:
+1. 일정 이름, 시간, 날짜를 파악해서 actions 배열에 add_schedule 액션 포함 (시스템이 자동으로 추가함)
+2. **중요**: 메시지에는 일정이 추가되었다고 알려주고, 해당 활동에 대한 유용한 정보를 포함하세요:
+   - 해당 활동을 더 효과적으로 하는 팁 (2-3가지)
+   - 추천 리소스 (팟캐스트/영상/책/웹사이트 등 구체적 이름)
+   - 관련 통계나 동기부여가 되는 사실
+   - 주의사항이나 준비물
+
+예시:
+사용자: "창업 관련 팟캐스트 듣기 일정 추가해줘"
+응답 메시지에 포함할 내용:
+✅ "창업 관련 팟캐스트 듣기" 일정을 추가했어요! 🎧
+
+팟캐스트 추천:
+• "스타트업 인사이트" - 국내 창업가들의 생생한 경험담
+• "How I Built This" - 글로벌 기업 창업 스토리 (NPR)
+• "StartUp Podcast" - 실제 창업 과정을 따라가는 시리즈
+
+효과적으로 듣는 팁:
+1. 메모 앱을 준비해서 핵심 인사이트를 바로 기록하세요
+2. 1.5배속으로 들으면 시간을 절약할 수 있어요
+3. 출퇴근 시간이나 운동 중에 들으면 시간을 효율적으로 활용할 수 있습니다
 
 JSON 응답 형식:
 반드시 다음 JSON 형식으로만 응답하세요:
 {
-  "message": "사용자에게 보여줄 메시지 (반드시 존댓말 사용!)",
+  "message": "사용자에게 보여줄 메시지 (일정 추가 시 '✅ [일정이름] 일정을 추가했어요!'로 시작, 반드시 존댓말 사용!)",
   "actions": [
     {
       "type": "add_schedule" | "open_briefing",
-      "label": "버튼에 표시될 텍스트",
+      "label": "버튼에 표시될 텍스트 (add_schedule의 경우 빈 문자열 가능)",
       "data": {
-        // add_schedule인 경우
+        // add_schedule인 경우 (시스템이 자동으로 일정 추가)
         "text": "일정 이름",
         "startTime": "HH:MM",
         "endTime": "HH:MM",
