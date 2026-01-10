@@ -18,6 +18,15 @@ interface Schedule {
     color?: string;
 }
 
+interface TrendBriefing {
+    id: string;
+    title: string;
+    category: string;
+    summary: string;
+    time: string;
+    source: string;
+}
+
 interface Message {
     id: string;
     role: "user" | "assistant" | "system";
@@ -68,6 +77,8 @@ export default function ChatPage() {
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [chatHistory, setChatHistory] = useState<{ date: string; title: string }[]>([]);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [todayTrends, setTodayTrends] = useState<TrendBriefing[]>([]);
+    const [readTrendIds, setReadTrendIds] = useState<string[]>([]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -318,6 +329,39 @@ export default function ChatPage() {
         fetchSchedules();
     }, [session]);
 
+    // Fetch today's trend briefings
+    useEffect(() => {
+        if (!session?.user?.email) return;
+
+        const fetchTrends = async () => {
+            try {
+                // Fetch trend briefings
+                const trendsResponse = await fetch('/api/trend-briefing/get');
+                if (trendsResponse.ok) {
+                    const trendsData = await trendsResponse.json();
+                    if (trendsData.trends && trendsData.trends.length > 0) {
+                        setTodayTrends(trendsData.trends);
+                        console.log('[Chat] Loaded trends:', trendsData.trends.length);
+                    }
+                }
+
+                // Fetch read trend IDs from user_events
+                const today = getChatDate();
+                const eventsResponse = await fetch(`/api/user/events?type=trend_briefing_read&startDate=${today}&endDate=${today}`);
+                if (eventsResponse.ok) {
+                    const eventsData = await eventsResponse.json();
+                    const readIds = eventsData.events?.map((e: any) => e.metadata?.trend_id).filter(Boolean) || [];
+                    setReadTrendIds(readIds);
+                    console.log('[Chat] Read trend IDs:', readIds);
+                }
+            } catch (error) {
+                console.error('[Chat] Failed to fetch trends:', error);
+            }
+        };
+
+        fetchTrends();
+    }, [session]);
+
     // Auto-send schedule-based messages
     useEffect(() => {
         if (!session?.user || todaySchedules.length === 0) return;
@@ -441,6 +485,43 @@ export default function ChatPage() {
         return () => clearInterval(interval);
     }, [session, todaySchedules]);
 
+    // Auto-send unread trend briefing reminder
+    useEffect(() => {
+        if (!session?.user || todayTrends.length === 0) return;
+
+        const checkAndSendTrendReminder = () => {
+            const today = getChatDate();
+            const sentTrendReminderKey = `trend_reminder_${today}`;
+
+            // 이미 알림을 보냈으면 스킵
+            if (localStorage.getItem(sentTrendReminderKey)) return;
+
+            // 읽지 않은 브리핑 찾기
+            const unreadTrends = todayTrends.filter(trend => !readTrendIds.includes(trend.id));
+
+            if (unreadTrends.length > 0) {
+                localStorage.setItem(sentTrendReminderKey, 'true');
+
+                const trendList = unreadTrends.slice(0, 3).map((trend, idx) =>
+                    `${idx + 1}. ${trend.title} (${trend.category})`
+                ).join('\n');
+
+                const message: Message = {
+                    id: `auto-trend-${Date.now()}`,
+                    role: 'assistant',
+                    content: `📰 오늘의 트렌드 브리핑이 도착했어요!\n\n아직 읽지 않으신 ${unreadTrends.length}개의 브리핑이 있습니다:\n\n${trendList}\n\n대시보드나 인사이트 페이지에서 확인해보세요!`,
+                    timestamp: new Date(),
+                };
+                setMessages(prev => [...prev, message]);
+            }
+        };
+
+        // 1분 후에 체크 (페이지 로드 직후 바로 보내지 않도록)
+        const timeout = setTimeout(checkAndSendTrendReminder, 60000);
+
+        return () => clearTimeout(timeout);
+    }, [session, todayTrends, readTrendIds]);
+
     // Fetch AI recommendations (when idle)
     useEffect(() => {
         if (appState !== "idle" || !session?.user?.email) return;
@@ -562,6 +643,14 @@ export default function ChatPage() {
 
             console.log('[Chat] Sending message with context - today:', today, 'schedules:', todaySchedules.length);
 
+            // 읽지 않은 트렌드 브리핑 정보 준비
+            const unreadTrends = todayTrends.filter(trend => !readTrendIds.includes(trend.id));
+            const trendBriefingInfo = unreadTrends.length > 0 ? {
+                total: todayTrends.length,
+                unread: unreadTrends.length,
+                unreadTitles: unreadTrends.map(t => ({ title: t.title, category: t.category }))
+            } : null;
+
             const res = await fetch("/api/ai-chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -573,7 +662,8 @@ export default function ChatPage() {
                     context: {
                         currentDate: today,
                         currentTime: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`,
-                        schedules: todaySchedules
+                        schedules: todaySchedules,
+                        trendBriefings: trendBriefingInfo
                     }
                 }),
             });

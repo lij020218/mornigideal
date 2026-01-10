@@ -75,12 +75,17 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
 
         // Trend briefing context (if provided)
         let trendContext = "";
-        if (context?.trendBriefings && context.trendBriefings.length > 0) {
+        if (context?.trendBriefings) {
+            const tb = context.trendBriefings;
             trendContext = `
-현재 대시보드에 표시된 트렌드 브리핑:
-${context.trendBriefings.map((t: any, i: number) =>
-                `${i + 1}. [${t.category}] ${t.title}\n   요약: ${t.summary}\n   출처: ${t.source}`
-            ).join('\n\n')}
+📰 오늘의 트렌드 브리핑 정보:
+- 총 브리핑 수: ${tb.total}개
+- 읽지 않은 브리핑: ${tb.unread}개
+
+아직 읽지 않은 브리핑 목록:
+${tb.unreadTitles.map((t: any, i: number) => `${i + 1}. [${t.category}] ${t.title}`).join('\n')}
+
+사용자가 "브리핑", "트렌드", "안 읽은", "뭐 있어" 등의 키워드로 물어보면 위의 읽지 않은 브리핑 목록을 자연스럽게 알려주세요.
 `;
         }
 
