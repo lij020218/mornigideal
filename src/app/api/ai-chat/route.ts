@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
-import { logOpenAIUsage } from "@/lib/openai-usage";
-import { routeChatRequest } from "@/lib/smart-chat-router";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -29,53 +27,6 @@ export async function POST(request: Request) {
                 { status: 400 }
             );
         }
-
-        // Get the latest user message
-        const latestMessage = messages[messages.length - 1];
-        if (latestMessage.role !== 'user') {
-            return NextResponse.json(
-                { error: "Last message must be from user" },
-                { status: 400 }
-            );
-        }
-
-        // Try rule-based routing first
-        const routeResult = routeChatRequest(latestMessage.content, context);
-
-        if (routeResult.type === 'rule-based') {
-            console.log('[AI Chat] ✅ Handled by rule-based system - NO AI COST');
-
-            const response: any = {
-                message: routeResult.message || "처리했습니다.",
-                actions: [],
-            };
-
-            // Add actions based on route result
-            if (routeResult.action === 'add_schedule' && routeResult.data) {
-                response.actions.push({
-                    type: 'add_schedule',
-                    label: '',
-                    data: routeResult.data,
-                });
-            } else if (routeResult.action === 'show_briefings' && routeResult.data?.briefings) {
-                // Add briefing actions
-                routeResult.data.briefings.slice(0, 3).forEach((b: any) => {
-                    response.actions.push({
-                        type: 'open_briefing',
-                        label: `${b.title} 자세히 보기`,
-                        data: {
-                            briefingId: b.id,
-                            title: b.title,
-                        },
-                    });
-                });
-            }
-
-            return NextResponse.json(response);
-        }
-
-        // If AI is required, proceed with OpenAI API call
-        console.log('[AI Chat] 🤖 Complex request - using AI');
 
         // Get user profile for context
         let userContext = "";
@@ -238,18 +189,6 @@ ${pendingScheduleContext}
         });
 
         const responseContent = completion.choices[0]?.message?.content || '{"message": "죄송합니다. 응답을 생성하지 못했습니다."}';
-
-        // Log usage
-        const usage = completion.usage;
-        if (usage) {
-            await logOpenAIUsage(
-                session.user.email,
-                modelName,
-                '/api/ai-chat',
-                usage.prompt_tokens,
-                usage.completion_tokens
-            );
-        }
 
         try {
             const parsed = JSON.parse(responseContent);
