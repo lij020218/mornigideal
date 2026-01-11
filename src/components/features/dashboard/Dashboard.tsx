@@ -1442,14 +1442,14 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             const currentTimeValue = currentHour * 60 + currentMinute;
 
             // Build timeline to find active index
-            const tempTimelineItems: Array<{ time: string }> = [
-                ...(schedule?.wakeUp ? [{ time: schedule.wakeUp }] : []),
-                ...(schedule?.workStart ? [{ time: schedule.workStart }] : []),
-                ...(schedule?.workEnd ? [{ time: schedule.workEnd }] : []),
+            const timelineItemsForScroll: Array<{ time: string; endTime?: string | undefined }> = [
+                ...(schedule?.wakeUp ? [{ time: schedule.wakeUp, endTime: undefined }] : []),
+                ...(schedule?.workStart ? [{ time: schedule.workStart, endTime: undefined }] : []),
+                ...(schedule?.workEnd ? [{ time: schedule.workEnd, endTime: undefined }] : []),
                 ...(schedule?.sleep ? [{ time: schedule.sleep, endTime: undefined }] : []),
-                ...(customGoals?.filter(g => g.daysOfWeek?.includes(currentDayOfWeek))
-                    .filter(g => g.startTime)
-                    .map(g => ({ time: g.startTime!, endTime: g.endTime })) || [])
+                ...(customGoals?.filter((g: any) => g.daysOfWeek?.includes(currentDayOfWeek))
+                    .filter((g: any) => g.startTime)
+                    .map((g: any) => ({ time: g.startTime!, endTime: g.endTime || undefined })) || [])
             ].sort((a, b) => {
                 const [aH, aM] = a.time.split(':').map(Number);
                 const [bH, bM] = b.time.split(':').map(Number);
@@ -1459,12 +1459,11 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             let activeIndex = -1;
             let nextIndex = -1;
 
-            for (let i = 0; i < tempTimelineItems.length; i++) {
-                const item = tempTimelineItems[i];
+            timelineItemsForScroll.forEach((item, i) => {
                 const [h, m] = item.time.split(':').map(Number);
                 const startTime = h * 60 + m;
 
-                const nextItem = tempTimelineItems[i + 1];
+                const nextItem = timelineItemsForScroll[i + 1];
                 let nextStartTime = 24 * 60;
 
                 if (nextItem) {
@@ -1487,7 +1486,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 if (currentTimeValue < startTime && nextIndex === -1) {
                     nextIndex = i;
                 }
-            }
+            });
 
             const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
             console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex);
