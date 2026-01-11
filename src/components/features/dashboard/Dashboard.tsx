@@ -708,6 +708,54 @@ export function Dashboard({
 
     return (
         <div className="p-4 md:p-6 pt-20 md:pt-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm overflow-visible">
+            {/* Fixed Mobile Header */}
+            <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border md:hidden">
+                <div className="flex items-center justify-between px-4 py-3">
+                    <Link href="/dashboard" className="flex items-center">
+                        <div className="w-10 h-10 bg-foreground text-background rounded-xl flex items-center justify-center font-bold text-lg">
+                            F
+                        </div>
+                    </Link>
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="relative"
+                                onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                            >
+                                <Bell className="w-5 h-5" />
+                            </Button>
+                            {showNotificationDropdown && (
+                                <NotificationDropdown
+                                    goals={userProfile?.customGoals || []}
+                                    onClose={() => setShowNotificationDropdown(false)}
+                                />
+                            )}
+                        </div>
+                        <div className="relative">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                            >
+                                <User className="w-5 h-5" />
+                            </Button>
+                            {showProfileMenu && (
+                                <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg py-2 z-50">
+                                    <Link href="/mypage" className="block px-4 py-2 hover:bg-accent">
+                                        마이페이지
+                                    </Link>
+                                    <Link href="/settings" className="block px-4 py-2 hover:bg-accent">
+                                        설정
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <ScheduleNotificationManager goals={userProfile?.customGoals || []} />
             {showDailyBriefing && dailyBriefingData && (
                 <DailyBriefingPopup
@@ -1492,23 +1540,35 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex);
 
             if (targetIndex !== -1 && scrollContainerRef.current) {
-                const itemWidth = 140;
-                const gap = 12;
-                const containerWidth = scrollContainerRef.current.clientWidth;
-                const scrollLeft = Math.max(0, (targetIndex * (itemWidth + gap)) + (itemWidth / 2) - (containerWidth / 2));
+                // Get all timeline items
+                const items = scrollContainerRef.current.querySelectorAll('[data-timeline-item]');
+                if (items.length > targetIndex) {
+                    const targetItem = items[targetIndex] as HTMLElement;
+                    const container = scrollContainerRef.current;
 
-                scrollContainerRef.current.scrollTo({
-                    left: scrollLeft,
-                    behavior: 'smooth'
-                });
+                    // Calculate scroll position to center the item
+                    const itemLeft = targetItem.offsetLeft;
+                    const itemWidth = targetItem.offsetWidth;
+                    const containerWidth = container.clientWidth;
+                    const scrollLeft = Math.max(0, itemLeft + (itemWidth / 2) - (containerWidth / 2));
+
+                    container.scrollTo({
+                        left: scrollLeft,
+                        behavior: 'smooth'
+                    });
+                }
             }
         };
 
-        // Scroll immediately and after a delay (to ensure DOM is ready after animations)
+        // Scroll with multiple attempts to ensure DOM is ready
         scrollToActive();
-        const timer = setTimeout(scrollToActive, 300);
+        const timer1 = setTimeout(scrollToActive, 100);
+        const timer2 = setTimeout(scrollToActive, 500);
 
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+        };
     }, [isMobile, schedule, customGoals, currentTime]);
 
     if (!schedule) return (
@@ -1804,6 +1864,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: index * 0.05 }}
                                 className="snap-center shrink-0"
+                                data-timeline-item
                             >
                                 <div className={cn(
                                     "relative w-[140px] p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
