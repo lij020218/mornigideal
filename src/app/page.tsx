@@ -77,7 +77,11 @@ export default function HomePage() {
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
     const [trendBriefings, setTrendBriefings] = useState<any[]>([]);
     const [userProfile, setUserProfile] = useState<any>(null);
-    const [showRecommendations, setShowRecommendations] = useState(true);
+    const [showRecommendations, setShowRecommendations] = useState(() => {
+        // Check localStorage on initial load
+        const saved = localStorage.getItem('showRecommendations');
+        return saved === null ? true : saved === 'true';
+    });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -243,6 +247,289 @@ export default function HomePage() {
 
         fetchTrendBriefings();
     }, [session, userProfile]);
+
+    // Auto-send schedule-based messages
+    useEffect(() => {
+        if (!session?.user) {
+            console.log('[AutoMessage] Skipping - no session');
+            return;
+        }
+
+        const checkAndSendScheduleMessages = () => {
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const today = now.toISOString().split('T')[0];
+            const hour = now.getHours();
+
+            console.log('[AutoMessage] Checking schedules:', {
+                currentTime: `${now.getHours()}:${now.getMinutes()}`,
+                currentMinutes,
+                today,
+                schedulesCount: todaySchedules.length
+            });
+
+            // 0. 아침 인사 메시지 (6-9시 사이 한 번만) - AI 기반
+            const morningGreetingKey = `morning_greeting_${today}`;
+            if (hour >= 6 && hour < 9 && !localStorage.getItem(morningGreetingKey)) {
+                localStorage.setItem(morningGreetingKey, 'true');
+                console.log('[AutoMessage] ✅ Sending AI morning greeting');
+
+                // AI에게 아침 인사 + 일정 추천 요청
+                fetch('/api/ai-morning-greeting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        todaySchedules: todaySchedules.map(s => ({
+                            text: s.text,
+                            startTime: s.startTime,
+                            endTime: s.endTime,
+                        })),
+                        userProfile: userProfile,
+                    }),
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('[AutoMessage] Received AI morning greeting:', data);
+                        const message: Message = {
+                            id: `auto-morning-${Date.now()}`,
+                            role: 'assistant',
+                            content: data.greeting || '좋은 아침이에요! ☀️',
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    })
+                    .catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI morning greeting:', err);
+                        // Fallback
+                        const message: Message = {
+                            id: `auto-morning-${Date.now()}`,
+                            role: 'assistant',
+                            content: '좋은 아침이에요! ☀️\n\n활기찬 하루 보내세요! 💪',
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
+            }
+
+            // 일정이 없으면 여기서 종료
+            if (todaySchedules.length === 0) {
+                return;
+            }
+
+            todaySchedules.forEach(schedule => {
+                const startMinutes = timeToMinutes(schedule.startTime);
+                const endMinutes = schedule.endTime ? timeToMinutes(schedule.endTime) : startMinutes + 60;
+
+                console.log('[AutoMessage] Checking schedule:', {
+                    text: schedule.text,
+                    startTime: schedule.startTime,
+                    startMinutes,
+                    currentMinutes,
+                    diff: startMinutes - currentMinutes
+                });
+
+                // 1. 일정 시작 10분 전 메시지
+                const tenMinutesBefore = startMinutes - 10;
+                const sentBeforeKey = `schedule_before_${schedule.id}_${today}`;
+                const alreadySentBefore = !!localStorage.getItem(sentBeforeKey);
+
+                console.log('[AutoMessage] 10분 전 체크:', {
+                    tenMinutesBefore,
+                    currentMinutes,
+                    inRange: currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes,
+                    alreadySent: alreadySentBefore,
+                    key: sentBeforeKey
+                });
+
+                if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !alreadySentBefore) {
+                    console.log('[AutoMessage] ✅ Sending 10분 전 message for:', schedule.text);
+                    localStorage.setItem(sentBeforeKey, 'true');
+
+                    // AI 사전 알림 요청
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: schedule.text,
+                            context: 'schedule_pre_reminder'
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI pre-reminder:', data);
+                        const recommendation = data.recommendation || "곧 일정이 시작됩니다. 준비하실 것이 있나요?";
+                        const message: Message = {
+                            id: `auto-before-${Date.now()}`,
+                            role: 'assistant',
+                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n${recommendation}`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI pre-reminder:', err);
+                        // Fallback
+                        const message: Message = {
+                            id: `auto-before-${Date.now()}`,
+                            role: 'assistant',
+                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n준비하실 것이 있나요? 필요하신 정보를 찾아드릴까요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
+                }
+
+                // 2. 일정 시작 시 메시지
+                const sentStartKey = `schedule_start_${schedule.id}_${today}`;
+                const alreadySentStart = !!localStorage.getItem(sentStartKey);
+
+                console.log('[AutoMessage] 시작 시 체크:', {
+                    startMinutes,
+                    currentMinutes,
+                    inRange: currentMinutes >= startMinutes && currentMinutes < startMinutes + 5,
+                    alreadySent: alreadySentStart,
+                    key: sentStartKey
+                });
+
+                if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !alreadySentStart) {
+                    console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
+                    localStorage.setItem(sentStartKey, 'true');
+
+                    // AI 리소스 추천 요청
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: schedule.text,
+                            context: 'schedule_start'
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI resource:', data);
+                        const recommendation = data.recommendation || "일정을 시작해볼까요? 화이팅!";
+                        const message: Message = {
+                            id: `auto-start-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 시간이네요!\n\n${recommendation}`,
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI resource:', err);
+                    });
+                }
+
+                // 3. 일정 종료 후 메시지
+                const sentAfterKey = `schedule_after_${schedule.id}_${today}`;
+                if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
+                    localStorage.setItem(sentAfterKey, 'true');
+
+                    // AI 맞춤형 피드백 요청
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: schedule.text,
+                            context: 'schedule_completed'
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI feedback prompt:', data);
+                        const recommendation = data.recommendation || "어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?";
+                        const message: Message = {
+                            id: `auto-after-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 일정이 끝났습니다.\n\n${recommendation}`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI feedback:', err);
+                        // Fallback to basic message
+                        const message: Message = {
+                            id: `auto-after-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?\n• 추가 일정이 필요하신가요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
+                }
+            });
+
+            // 4. 빈 시간 감지 (다음 일정까지 30분 이상 남았을 때)
+            const nextSchedule = todaySchedules
+                .filter(s => !s.completed && !s.skipped)
+                .find(s => timeToMinutes(s.startTime) > currentMinutes);
+
+            if (nextSchedule) {
+                const timeUntilNext = timeToMinutes(nextSchedule.startTime) - currentMinutes;
+                const sentGapKey = `schedule_gap_${nextSchedule.id}_${today}`;
+
+                if (timeUntilNext >= 30 && timeUntilNext <= 40 && !localStorage.getItem(sentGapKey)) {
+                    localStorage.setItem(sentGapKey, 'true');
+
+                    // AI 추천 요청 with 다음 일정 정보
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: nextSchedule.text,
+                            context: 'upcoming_schedule',
+                            timeUntil: timeUntilNext
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI resource for upcoming schedule:', data);
+                        const recommendation = data.recommendation || "준비할 시간이 충분하네요. 다음 일정을 위해 가볍게 준비해볼까요?";
+                        const message: Message = {
+                            id: `auto-gap-${Date.now()}`,
+                            role: 'assistant',
+                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n${recommendation}\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI resource for gap:', err);
+                        // Fallback to basic message
+                        const message: Message = {
+                            id: `auto-gap-${Date.now()}`,
+                            role: 'assistant',
+                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
+                }
+            }
+
+            // 5. 하루 마무리 (마지막 일정 종료 후)
+            const lastSchedule = todaySchedules
+                .filter(s => s.endTime)
+                .sort((a, b) => timeToMinutes(b.endTime!) - timeToMinutes(a.endTime!))[0];
+
+            if (lastSchedule) {
+                const lastEndMinutes = timeToMinutes(lastSchedule.endTime!);
+                const sentDayEndKey = `day_end_${today}`;
+
+                if (currentMinutes >= lastEndMinutes + 10 && currentMinutes < lastEndMinutes + 30 && !localStorage.getItem(sentDayEndKey)) {
+                    localStorage.setItem(sentDayEndKey, 'true');
+
+                    const completed = todaySchedules.filter(s => s.completed).length;
+                    const total = todaySchedules.length;
+
+                    const message: Message = {
+                        id: `auto-dayend-${Date.now()}`,
+                        role: 'assistant',
+                        content: `오늘 일정이 모두 끝났어요! 🎉\n\n오늘의 성과:\n✅ 완료: ${completed}/${total}개\n\n내일을 위한 제안이 필요하신가요?`,
+                        timestamp: now,
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+            }
+        };
+
+        // 1분마다 체크
+        const interval = setInterval(checkAndSendScheduleMessages, 60000);
+        // 초기 실행
+        checkAndSendScheduleMessages();
+
+        return () => clearInterval(interval);
+    }, [session, todaySchedules]);
 
     // Fetch AI recommendations (when idle)
     useEffect(() => {
@@ -420,6 +707,13 @@ export default function HomePage() {
 
         if (status === 'in-progress') {
             // 집중 중일 때
+            // 종료/마무리 관련 키워드 먼저 체크
+            if (lowerText.includes('종료') || lowerText.includes('마침') || lowerText.includes('끝')) {
+                if (lowerText.includes('업무') || lowerText.includes('작업')) return '업무 마무리 시간이에요! 정리해볼까요? ✅';
+                if (lowerText.includes('회의') || lowerText.includes('미팅')) return '회의 마무리 시간! 결론 정리하세요 📝';
+                return '마무리 시간이에요! 정리해볼까요? ✅';
+            }
+
             if (lowerText.includes('아침')) return '좋은 아침이에요! 맛있게 드세요 😊';
             if (lowerText.includes('점심')) return '점심 시간이에요! 맛있게 드세요 🍽️';
             if (lowerText.includes('저녁') || lowerText.includes('식사')) return '저녁 시간이에요! 맛있게 드세요 ✨';
@@ -434,6 +728,13 @@ export default function HomePage() {
             return '지금 하고 있는 일에 집중하세요! 🎯';
         } else {
             // 곧 시작할 때
+            // 종료/마무리 관련 키워드 먼저 체크
+            if (lowerText.includes('종료') || lowerText.includes('마침') || lowerText.includes('끝')) {
+                if (lowerText.includes('업무') || lowerText.includes('작업')) return '곧 업무 마무리 시간! 정리 준비하세요';
+                if (lowerText.includes('회의') || lowerText.includes('미팅')) return '곧 회의 마무리! 요약 준비하세요';
+                return '곧 마무리 시간! 정리 준비하세요';
+            }
+
             if (lowerText.includes('아침')) return '곧 아침 식사 시간이에요!';
             if (lowerText.includes('점심')) return '곧 점심 시간이에요!';
             if (lowerText.includes('저녁') || lowerText.includes('식사')) return '곧 저녁 시간이에요!';
@@ -475,6 +776,8 @@ export default function HomePage() {
                     context: {
                         trendBriefings: trendBriefings,
                         schedules: todaySchedules,
+                        currentDate: getChatDate(),
+                        currentTime: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
                     },
                 }),
             });
@@ -482,102 +785,87 @@ export default function HomePage() {
             if (!res.ok) throw new Error("Failed to get response");
 
             const data = await res.json();
-            const assistantMessage: Message = {
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: data.message,
-                timestamp: new Date(),
-                actions: data.actions || [],
-            };
 
-            setMessages((prev) => [...prev, assistantMessage]);
+            // Add assistant message
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `assistant-${Date.now()}`,
+                    role: "assistant",
+                    content: data.message,
+                    timestamp: new Date(),
+                    actions: data.actions || [],
+                },
+            ]);
 
-            // Handle actions (e.g., add_schedule)
-            if (data.actions && Array.isArray(data.actions)) {
-                for (const action of data.actions) {
-                    if (action.type === 'add_schedule' && action.data) {
-                        try {
-                            // Add schedule via API
-                            const scheduleRes = await fetch("/api/user/schedule/add", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(action.data),
-                            });
-
-                            if (scheduleRes.ok) {
-                                // Show success message
-                                setMessages((prev) => [
-                                    ...prev,
-                                    {
-                                        id: `system-${Date.now()}`,
-                                        role: "system",
-                                        content: `✅ "${action.data.text}" 일정이 추가되었습니다!`,
-                                        timestamp: new Date(),
-                                    },
-                                ]);
-
-                                // Trigger schedule update event
-                                window.dispatchEvent(new CustomEvent('schedule-added', { detail: { source: 'ai-chat' } }));
-
-                                // Refetch schedules
-                                const profileRes = await fetch('/api/user/profile');
-                                if (profileRes.ok) {
-                                    const profileData = await profileRes.json();
-                                    const today = new Date().toISOString().split('T')[0];
-                                    const currentDay = new Date().getDay();
-                                    const todayGoals = profileData.profile?.customGoals?.filter((g: any) => {
-                                        const isSpecificDate = g.specificDate === today;
-                                        const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                                        return isSpecificDate || isRecurringToday;
-                                    }) || [];
-
-                                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
-                                    const schedulesWithStatus = todayGoals.map((g: any) => ({
-                                        ...g,
-                                        completed: completions[g.id]?.completed || false,
-                                        skipped: completions[g.id]?.skipped || false
-                                    }));
-
-                                    setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) =>
-                                        (a.startTime || '').localeCompare(b.startTime || '')
-                                    ));
-                                }
-                            } else {
-                                setMessages((prev) => [
-                                    ...prev,
-                                    {
-                                        id: `error-${Date.now()}`,
-                                        role: "system",
-                                        content: "❌ 일정 추가에 실패했습니다.",
-                                        timestamp: new Date(),
-                                    },
-                                ]);
-                            }
-                        } catch (error) {
-                            console.error('[Home] Failed to add schedule from AI:', error);
-                        }
-                    }
-                }
+            // Handle actions (if any)
+            if (data.actions && data.actions.length > 0) {
+                handleMessageActions(data.actions);
             }
 
-            // After response, go back to idle to show recommendations
-            setTimeout(() => {
-                setAppState("idle");
-            }, 1000);
-
         } catch (error) {
-            console.error("Chat error:", error);
+            console.error("Error sending message:", error);
+            // Show error message
             setMessages((prev) => [
                 ...prev,
                 {
                     id: `error-${Date.now()}`,
                     role: "assistant",
-                    content: "죄송합니다. 응답을 가져오는데 실패했습니다.",
+                    content: "죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.",
                     timestamp: new Date(),
                 },
             ]);
         } finally {
             setIsLoading(false);
+            // After response, go back to idle to show recommendations
+            setTimeout(() => setAppState("idle"), 500);
+        }
+    };
+
+    // Handle message actions separately
+    const handleMessageActions = async (actions: any[]) => {
+        for (const action of actions) {
+            if (action.type === 'add_schedule' && action.data) {
+                try {
+                    // Add schedule via API
+                    const scheduleRes = await fetch("/api/user/schedule/add", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(action.data),
+                    });
+
+                    if (scheduleRes.ok) {
+                        // Trigger schedule update event
+                        window.dispatchEvent(new CustomEvent('schedule-added', { detail: { source: 'ai-chat' } }));
+
+                        // Refetch schedules
+                        const profileRes = await fetch('/api/user/profile');
+                        if (profileRes.ok) {
+                            const profileData = await profileRes.json();
+                            const today = new Date().toISOString().split('T')[0];
+                            const currentDay = new Date().getDay();
+                            const todayGoals = profileData.profile?.customGoals?.filter((g: any) => {
+                                const isSpecificDate = g.specificDate === today;
+                                const isRecurringToday = g.daysOfWeek?.includes(currentDay);
+                                return isSpecificDate || isRecurringToday;
+                            }) || [];
+
+                            const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                            const schedulesWithStatus = todayGoals.map((g: any) => ({
+                                ...g,
+                                completed: completions[g.id]?.completed || false,
+                                skipped: completions[g.id]?.skipped || false
+                            }));
+
+                            setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) =>
+                                (a.startTime || '').localeCompare(b.startTime || '')
+                            ));
+                        }
+                    }
+                } catch (error) {
+                    console.error('[Home] Failed to add schedule from AI:', error);
+                }
+            }
         }
     };
 
@@ -1040,7 +1328,7 @@ export default function HomePage() {
                                                                 <Button
                                                                     size="sm"
                                                                     disabled={!canComplete}
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
                                                                         // Mark as completed
                                                                         setTodaySchedules(prev => prev.map(s =>
                                                                             s.id === schedule.id ? { ...s, completed: true, skipped: false } : s
@@ -1050,6 +1338,22 @@ export default function HomePage() {
                                                                         const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
                                                                         completions[schedule.id] = { completed: true, skipped: false };
                                                                         localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+
+                                                                        // Save to server
+                                                                        try {
+                                                                            await fetch('/api/user/schedule/update', {
+                                                                                method: 'POST',
+                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                body: JSON.stringify({
+                                                                                    scheduleId: schedule.id,
+                                                                                    completed: true,
+                                                                                    skipped: false
+                                                                                })
+                                                                            });
+                                                                            console.log('[Home] Schedule marked as completed on server');
+                                                                        } catch (error) {
+                                                                            console.error('[Home] Failed to save completion to server:', error);
+                                                                        }
                                                                     }}
                                                                     className={`flex-1 h-9 border border-white/10 ${canComplete ? 'bg-white/10 hover:bg-white/20 text-foreground' : 'bg-white/5 text-muted-foreground/50 cursor-not-allowed'}`}
                                                                 >
@@ -1060,7 +1364,7 @@ export default function HomePage() {
                                                                     size="sm"
                                                                     variant="ghost"
                                                                     disabled={!canComplete}
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
                                                                         // Mark as skipped
                                                                         setTodaySchedules(prev => prev.map(s =>
                                                                             s.id === schedule.id ? { ...s, skipped: true, completed: false } : s
@@ -1070,6 +1374,22 @@ export default function HomePage() {
                                                                         const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
                                                                         completions[schedule.id] = { completed: false, skipped: true };
                                                                         localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+
+                                                                        // Save to server
+                                                                        try {
+                                                                            await fetch('/api/user/schedule/update', {
+                                                                                method: 'POST',
+                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                body: JSON.stringify({
+                                                                                    scheduleId: schedule.id,
+                                                                                    completed: false,
+                                                                                    skipped: true
+                                                                                })
+                                                                            });
+                                                                            console.log('[Home] Schedule marked as skipped on server');
+                                                                        } catch (error) {
+                                                                            console.error('[Home] Failed to save skip to server:', error);
+                                                                        }
                                                                     }}
                                                                     className={`flex-1 h-9 ${canComplete ? 'hover:bg-white/10 text-muted-foreground' : 'text-muted-foreground/50 cursor-not-allowed'}`}
                                                                 >
@@ -1114,51 +1434,53 @@ export default function HomePage() {
                             key={message.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className={cn(
-                                "flex",
-                                message.role === "user" ? "justify-end" : "justify-start"
-                            )}
+                            className="flex flex-col items-center w-full"
                         >
-                            <div className="max-w-[80%] flex flex-col gap-2">
-                                <div
-                                    className={cn(
-                                        "rounded-2xl px-4 py-3 text-sm",
-                                        message.role === "user"
-                                            ? "bg-primary text-primary-foreground rounded-br-md"
-                                            : message.role === "system"
-                                                ? "bg-green-100 text-green-900 border border-green-200"
-                                                : "bg-muted border border-border rounded-bl-md"
-                                    )}
-                                >
-                                    <p className="whitespace-pre-wrap">{message.content}</p>
-                                </div>
+                            <div className="w-full max-w-3xl px-4">
+                                {message.role === "user" ? (
+                                    // User message - compact pill style
+                                    <div className="flex justify-end mb-6">
+                                        <div className="bg-primary text-primary-foreground rounded-full px-5 py-2.5 text-sm max-w-[70%]">
+                                            <p className="whitespace-pre-wrap">{message.content}</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // Assistant message - center-aligned, no bubble
+                                    <div className="mb-8">
+                                        <div className="text-sm text-foreground leading-relaxed">
+                                            <p className="whitespace-pre-wrap">{message.content}</p>
+                                        </div>
+                                    </div>
+                                )}
 
-                                {/* Action buttons */}
-                                {message.actions && message.actions.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        {message.actions.map((action, idx) => (
-                                            <Button
-                                                key={idx}
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    if (action.type === 'open_briefing' && action.data.briefingId) {
-                                                        // Find the full briefing object from trendBriefings
-                                                        const fullBriefing = trendBriefings.find(
-                                                            (b: any) => b.id === action.data.briefingId
-                                                        );
-                                                        if (fullBriefing) {
-                                                            setSelectedBriefing(fullBriefing);
-                                                        } else {
-                                                            console.error('[Home] Briefing not found:', action.data.briefingId);
+                                {/* Action buttons - only show non-schedule actions */}
+                                {message.actions && message.actions.length > 0 && message.role === "assistant" && (
+                                    <div className="flex flex-wrap gap-2 mt-4">
+                                        {message.actions
+                                            .filter((action) => action.type !== 'add_schedule')
+                                            .map((action, idx) => (
+                                                <Button
+                                                    key={idx}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        if (action.type === 'open_briefing' && action.data.briefingId) {
+                                                            // Find the full briefing object from trendBriefings
+                                                            const fullBriefing = trendBriefings.find(
+                                                                (b: any) => b.id === action.data.briefingId
+                                                            );
+                                                            if (fullBriefing) {
+                                                                setSelectedBriefing(fullBriefing);
+                                                            } else {
+                                                                console.error('[Home] Briefing not found:', action.data.briefingId);
+                                                            }
                                                         }
-                                                    }
-                                                }}
-                                                className="w-full justify-start text-xs h-8"
-                                            >
-                                                {action.label}
-                                            </Button>
-                                        ))}
+                                                    }}
+                                                    className="text-xs h-8 rounded-full"
+                                                >
+                                                    {action.label}
+                                                </Button>
+                                            ))}
                                     </div>
                                 )}
                             </div>
@@ -1166,11 +1488,13 @@ export default function HomePage() {
                     ))}
 
                     {isLoading && (
-                        <div className="flex justify-start">
-                            <div className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                    <span className="text-sm text-muted-foreground">생각 중...</span>
+                        <div className="flex flex-col items-center w-full">
+                            <div className="w-full max-w-3xl px-4">
+                                <div className="mb-8">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                        <span>생각 중...</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1199,7 +1523,10 @@ export default function HomePage() {
                                     <span className="text-[10px] text-muted-foreground">{recommendations.length}</span>
                                 </div>
                                 <button
-                                    onClick={() => setShowRecommendations(false)}
+                                    onClick={() => {
+                                        setShowRecommendations(false);
+                                        localStorage.setItem('showRecommendations', 'false');
+                                    }}
                                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                     title="추천 숨기기"
                                 >
@@ -1325,7 +1652,10 @@ export default function HomePage() {
                         <button className="hover:text-foreground transition-colors">/분석</button>
                         {!showRecommendations && recommendations.length > 0 && appState === "idle" && (
                             <button
-                                onClick={() => setShowRecommendations(true)}
+                                onClick={() => {
+                                    setShowRecommendations(true);
+                                    localStorage.setItem('showRecommendations', 'true');
+                                }}
                                 className="hover:text-foreground transition-colors flex items-center gap-1"
                             >
                                 <Sparkles className="w-3 h-3" />
