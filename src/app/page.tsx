@@ -78,9 +78,12 @@ export default function HomePage() {
     const [trendBriefings, setTrendBriefings] = useState<any[]>([]);
     const [userProfile, setUserProfile] = useState<any>(null);
     const [showRecommendations, setShowRecommendations] = useState(() => {
-        // Check localStorage on initial load
-        const saved = localStorage.getItem('showRecommendations');
-        return saved === null ? true : saved === 'true';
+        // Check localStorage on initial load (client-side only)
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('showRecommendations');
+            return saved === null ? true : saved === 'true';
+        }
+        return true;
     });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
