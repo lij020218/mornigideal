@@ -354,7 +354,8 @@ export default function HomePage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             activityName: schedule.text,
-                            context: 'schedule_pre_reminder'
+                            context: 'schedule_pre_reminder',
+                            userProfile: userProfile
                         }),
                     }).then(res => res.json()).then(data => {
                         console.log('[AutoMessage] Received AI pre-reminder:', data);
@@ -401,7 +402,8 @@ export default function HomePage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             activityName: schedule.text,
-                            context: 'schedule_start'
+                            context: 'schedule_start',
+                            userProfile: userProfile
                         }),
                     }).then(res => res.json()).then(data => {
                         console.log('[AutoMessage] Received AI resource:', data);
@@ -429,7 +431,8 @@ export default function HomePage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             activityName: schedule.text,
-                            context: 'schedule_completed'
+                            context: 'schedule_completed',
+                            userProfile: userProfile
                         }),
                     }).then(res => res.json()).then(data => {
                         console.log('[AutoMessage] Received AI feedback prompt:', data);
@@ -474,7 +477,8 @@ export default function HomePage() {
                         body: JSON.stringify({
                             activityName: nextSchedule.text,
                             context: 'upcoming_schedule',
-                            timeUntil: timeUntilNext
+                            timeUntil: timeUntilNext,
+                            userProfile: userProfile
                         }),
                     }).then(res => res.json()).then(data => {
                         console.log('[AutoMessage] Received AI resource for upcoming schedule:', data);
