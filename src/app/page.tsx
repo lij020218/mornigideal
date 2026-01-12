@@ -588,7 +588,7 @@ export default function HomePage() {
                         const message: Message = {
                             id: `auto-briefing-reminder-${Date.now()}`,
                             role: 'assistant',
-                            content: `📰 읽지 않은 트렌드 브리핑이 ${unreadCount}개 있어요!\n\n잠깐 시간 내서 최신 트렌드를 확인해보시는 건 어떨까요? 🚀`,
+                            content: `아직 안 읽은 트렌드 브리핑이 ${unreadCount}개 있어요 📰\n\n잠깐 시간 내서 확인해보실래요? 최신 트렌드 놓치기 아까울 것 같아요! 🚀`,
                             timestamp: now,
                         };
                         setMessages(prev => [...prev, message]);
@@ -612,11 +612,16 @@ export default function HomePage() {
                         localStorage.setItem(idleCheckKey, 'true');
                         console.log('[AutoMessage] ✅ Sending idle time schedule recommendation');
 
-                        const timeContext = hour === 12 ? '점심 시간' : hour === 16 ? '오후 시간' : '저녁 시간';
+                        const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
+                        const activities = hour === 12
+                            ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
+                            : hour === 16
+                            ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
+                            : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
                         const message: Message = {
                             id: `auto-idle-${Date.now()}`,
                             role: 'assistant',
-                            content: `⏰ ${timeContext}에 등록된 일정이 없네요.\n\n이 시간을 활용해보시는 건 어떨까요?\n\n추천 활동:\n• 짧은 산책이나 스트레칭 🚶\n• 책 읽기 또는 학습 📚\n• 목표 관련 작업 💪\n• 휴식 및 재충전 ☕\n\n일정을 추가하시겠어요?`,
+                            content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
                             timestamp: now,
                         };
                         setMessages(prev => [...prev, message]);
