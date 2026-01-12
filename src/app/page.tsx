@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2 } from "lucide-react";
+import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
@@ -17,6 +17,7 @@ interface Schedule {
     completed?: boolean;
     skipped?: boolean;
     color?: string;
+    location?: string;
 }
 
 interface ChatAction {
@@ -1472,6 +1473,12 @@ export default function HomePage() {
                                                                 {schedule.startTime}
                                                                 {schedule.endTime && ` - ${schedule.endTime}`}
                                                             </p>
+                                                            {schedule.location && (
+                                                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                                                    <MapPin className="w-3 h-3" />
+                                                                    {schedule.location}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         {isCompleted && (
                                                             <div className="shrink-0 px-2.5 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-[11px] text-green-400 font-bold">
