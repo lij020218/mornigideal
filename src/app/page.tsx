@@ -1778,7 +1778,7 @@ export default function HomePage() {
                 briefing={selectedBriefing}
                 isOpen={!!selectedBriefing}
                 onClose={() => {
-                    // Mark briefing as read when closing
+                    // Mark briefing as read when closing + log activity for personalization
                     if (selectedBriefing?.id) {
                         const today = getChatDate();
                         const readBriefings = JSON.parse(localStorage.getItem(`read_briefings_${today}`) || '[]');
@@ -1786,6 +1786,21 @@ export default function HomePage() {
                             readBriefings.push(selectedBriefing.id);
                             localStorage.setItem(`read_briefings_${today}`, JSON.stringify(readBriefings));
                             console.log('[Home] Marked briefing as read:', selectedBriefing.id);
+
+                            // Log activity for personalization
+                            fetch('/api/user/activity-log', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    activityType: 'briefing_read',
+                                    metadata: {
+                                        briefingId: selectedBriefing.id,
+                                        title: selectedBriefing.title,
+                                        category: selectedBriefing.category || 'uncategorized',
+                                        keywords: selectedBriefing.keywords || [],
+                                    },
+                                }),
+                            }).catch(err => console.error('[Home] Failed to log activity:', err));
                         }
                     }
                     setSelectedBriefing(null);
