@@ -409,27 +409,51 @@ export default function HomePage() {
                     console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
                     localStorage.setItem(sentStartKey, 'true');
 
-                    // AI 리소스 추천 요청
+                    // 조용한 시작 알림 (AI 호출 없음)
+                    const message: Message = {
+                        id: `auto-start-${Date.now()}`,
+                        role: 'assistant',
+                        content: `"${schedule.text}" 시간이에요 🕐\n\n집중해서 시작해보세요!`,
+                        timestamp: new Date(),
+                    };
+                    setMessages(prev => [...prev, message]);
+                }
+
+                // 2.5. 일정 시작 30분 후 인사이트 (T+30) - 업무 일정에만 적용
+                const thirtyMinutesAfterStart = startMinutes + 30;
+                const sentInsightKey = `schedule_insight_${schedule.id}_${today}`;
+                const alreadySentInsight = !!localStorage.getItem(sentInsightKey);
+
+                // 업무 관련 일정에만 인사이트 제공 (운동, 식사 등은 제외)
+                const isWorkRelated = ['업무 시작', '업무', '회의', '학습', '공부', '프로젝트', '작업'].some(keyword =>
+                    schedule.text.includes(keyword)
+                );
+
+                if (isWorkRelated && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
+                    console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);
+                    localStorage.setItem(sentInsightKey, 'true');
+
+                    // AI 인사이트 요청 (업무 진행 중 도움)
                     fetch('/api/ai-resource-recommend', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             activityName: schedule.text,
-                            context: 'schedule_start',
+                            context: 'in_progress',
                             userProfile: userProfile
                         }),
                     }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI resource:', data);
-                        const recommendation = data.recommendation || "일정을 시작해볼까요? 화이팅!";
+                        console.log('[AutoMessage] Received AI insight:', data);
+                        const recommendation = data.recommendation || "잘 하고 계시네요! 화이팅입니다 💪";
                         const message: Message = {
-                            id: `auto-start-${Date.now()}`,
+                            id: `auto-insight-${Date.now()}`,
                             role: 'assistant',
-                            content: `"${schedule.text}" 시간이네요!\n\n${recommendation}`,
+                            content: `"${schedule.text}" 진행 중이시네요!\n\n${recommendation}\n\n필요하면 언제든 물어보세요 😊`,
                             timestamp: new Date(),
                         };
                         setMessages(prev => [...prev, message]);
                     }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI resource:', err);
+                        console.error('[AutoMessage] Failed to fetch AI insight:', err);
                     });
                 }
 
