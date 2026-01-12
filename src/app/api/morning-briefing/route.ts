@@ -134,7 +134,7 @@ ${addedSchedulesText}
 }`;
 
         const aiResponse = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-5.1-2025-11-13",
             messages: [
                 {
                     role: "system",
@@ -164,9 +164,9 @@ ${addedSchedulesText}
         // 4. 날씨 이모지 선택
         const weatherEmoji =
             weatherInfo.condition === 'clear' ? '☀️' :
-            weatherInfo.condition === 'clouds' ? '☁️' :
-            weatherInfo.condition === 'rain' ? '🌧️' :
-            weatherInfo.condition === 'snow' ? '❄️' : '🌤️';
+                weatherInfo.condition === 'clouds' ? '☁️' :
+                    weatherInfo.condition === 'rain' ? '🌧️' :
+                        weatherInfo.condition === 'snow' ? '❄️' : '🌤️';
 
         // 5. 아침 인사 메시지 생성
         const morningMessage = `좋은 아침입니다! ${weatherEmoji}

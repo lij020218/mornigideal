@@ -159,6 +159,23 @@ ${pendingScheduleContext}
     2. 사용자가 이미 장소/메모를 제공함
     3. 이전 대화에서 이미 세부사항 질문을 했고 사용자가 답변함
   - **물어보기 조건**: 위 조건에 해당하지 않고, 사용자가 처음으로 일정만 요청한 경우에만 "장소나 세부 사항도 같이 기록할까요?"라고 **딱 한 번만** 물어봄.
+  - **일정 이름 정규화** (중요!): 다음 키워드가 포함되면 정확한 이름으로 변환
+    * "기상", "일어나", "일어나기", "깨어나" → text: "기상"
+    * "취침", "자기", "잠자기", "잠" → text: "취침"
+    * "업무 시작", "출근", "일 시작" → text: "업무 시작"
+    * "업무 종료", "퇴근", "일 끝" → text: "업무 종료"
+    * "아침 식사", "아침밥", "조식" → text: "아침"
+    * "점심 식사", "점심밥", "중식" → text: "점심"
+    * "저녁 식사", "저녁밥", "석식", "dinner" → text: "저녁"
+    * "운동", "헬스", "요가", "필라테스" → text: "운동"
+    * "독서", "책 읽기", "독서하기" → text: "독서"
+    * 기타는 사용자가 말한 그대로 유지
+  - **반복 일정** (매일/매주):
+    * "매일", "every day", "일일" 등이 포함되면 daysOfWeek: [0,1,2,3,4,5,6] 추가
+    * "매주 월수금" → daysOfWeek: [1,3,5]
+    * "평일마다" → daysOfWeek: [1,2,3,4,5]
+    * "주말마다" → daysOfWeek: [0,6]
+    * specificDate는 반복 일정이면 null, 특정 날짜면 "YYYY-MM-DD"
   - 장소(location), 메모(memo) 정보가 있으면 data에 포함, 없으면 빈 문자열로.
 - **트렌드 브리핑**: 컨텍스트 참고하여 요약하고 actions에 open_briefing 포함.
 
@@ -170,7 +187,10 @@ ${pendingScheduleContext}
       "type": "add_schedule" | "open_briefing",
       "label": "버튼 텍스트",
       "data": {
-        // add_schedule: { text, startTime, endTime, specificDate, color: 'primary' }
+        // add_schedule: { text, startTime, endTime, specificDate, daysOfWeek, color: 'primary', location, memo }
+        // - text: 정규화된 일정 이름 (예: "기상", "업무 시작", "운동")
+        // - daysOfWeek: 반복 요일 배열 [0-6] 또는 null (0=일, 1=월, ..., 6=토)
+        // - specificDate: 특정 날짜 "YYYY-MM-DD" 또는 null (반복 일정이면 null)
         // open_briefing: { briefingId, title }
       }
     }

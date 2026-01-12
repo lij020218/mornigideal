@@ -10,7 +10,7 @@ export async function POST(request: Request) {
         }
 
         const scheduleData = await request.json();
-        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration } = scheduleData;
+        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo } = scheduleData;
 
         if (!text) {
             return NextResponse.json(
@@ -218,6 +218,8 @@ export async function POST(request: Request) {
             specificDate: specificDate || undefined,
             daysOfWeek: daysOfWeek || undefined,
             notificationEnabled: true,
+            location: location || undefined,
+            memo: memo || undefined,
         };
 
         // Add to customGoals

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronUp, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Menu, X as CloseIcon, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Menu, X as CloseIcon, MessageSquare, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
@@ -16,6 +16,7 @@ interface Schedule {
     completed?: boolean;
     skipped?: boolean;
     color?: string;
+    location?: string;
 }
 
 interface TrendBriefing {
@@ -364,35 +365,97 @@ export default function ChatPage() {
 
     // Auto-send schedule-based messages
     useEffect(() => {
-        if (!session?.user || todaySchedules.length === 0) return;
+        if (!session?.user || todaySchedules.length === 0) {
+            console.log('[AutoMessage] Skipping - session or schedules missing:', { hasSession: !!session?.user, schedulesCount: todaySchedules.length });
+            return;
+        }
 
         const checkAndSendScheduleMessages = () => {
             const now = new Date();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
             const today = getChatDate();
 
+            console.log('[AutoMessage] Checking schedules:', {
+                currentTime: `${now.getHours()}:${now.getMinutes()}`,
+                currentMinutes,
+                today,
+                schedulesCount: todaySchedules.length
+            });
+
             todaySchedules.forEach(schedule => {
                 const startMinutes = timeToMinutes(schedule.startTime);
                 const endMinutes = schedule.endTime ? timeToMinutes(schedule.endTime) : startMinutes + 60;
 
+                console.log('[AutoMessage] Checking schedule:', {
+                    text: schedule.text,
+                    startTime: schedule.startTime,
+                    startMinutes,
+                    currentMinutes,
+                    diff: startMinutes - currentMinutes
+                });
+
                 // 1. 일정 시작 10분 전 메시지
                 const tenMinutesBefore = startMinutes - 10;
                 const sentBeforeKey = `schedule_before_${schedule.id}_${today}`;
-                if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !localStorage.getItem(sentBeforeKey)) {
+                const alreadySentBefore = !!localStorage.getItem(sentBeforeKey);
+
+                console.log('[AutoMessage] 10분 전 체크:', {
+                    tenMinutesBefore,
+                    currentMinutes,
+                    inRange: currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes,
+                    alreadySent: alreadySentBefore,
+                    key: sentBeforeKey
+                });
+
+                if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !alreadySentBefore) {
+                    console.log('[AutoMessage] ✅ Sending 10분 전 message for:', schedule.text);
                     localStorage.setItem(sentBeforeKey, 'true');
 
-                    const message: Message = {
-                        id: `auto-before-${Date.now()}`,
-                        role: 'assistant',
-                        content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n준비하실 것이 있나요? 필요한 자료나 정보를 찾아드릴까요?`,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
+                    // AI 사전 알림 요청
+                    fetch('/api/ai-resource-recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            activityName: schedule.text,
+                            context: 'schedule_pre_reminder'
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI pre-reminder:', data);
+                        const recommendation = data.recommendation || "곧 일정이 시작됩니다. 준비하실 것이 있나요?";
+                        const message: Message = {
+                            id: `auto-before-${Date.now()}`,
+                            role: 'assistant',
+                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n${recommendation}`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI pre-reminder:', err);
+                        // Fallback
+                        const message: Message = {
+                            id: `auto-before-${Date.now()}`,
+                            role: 'assistant',
+                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n준비하실 것이 있나요? 필요하신 정보를 찾아드릴까요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
                 }
 
                 // 2. 일정 시작 시 메시지
                 const sentStartKey = `schedule_start_${schedule.id}_${today}`;
-                if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !localStorage.getItem(sentStartKey)) {
+                const alreadySentStart = !!localStorage.getItem(sentStartKey);
+
+                console.log('[AutoMessage] 시작 시 체크:', {
+                    startMinutes,
+                    currentMinutes,
+                    inRange: currentMinutes >= startMinutes && currentMinutes < startMinutes + 5,
+                    alreadySent: alreadySentStart,
+                    key: sentStartKey
+                });
+
+                if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !alreadySentStart) {
+                    console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
                     localStorage.setItem(sentStartKey, 'true');
 
                     // AI 리소스 추천 요청
@@ -404,13 +467,17 @@ export default function ChatPage() {
                             context: 'schedule_start'
                         }),
                     }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI resource:', data);
+                        const recommendation = data.recommendation || "활기차게 시작해볼까요? 화이팅!";
                         const message: Message = {
                             id: `auto-start-${Date.now()}`,
                             role: 'assistant',
-                            content: `"${schedule.text}" 시간이네요!\n\n${data.recommendation}`,
+                            content: `"${schedule.text}" 시간이네요!\n\n${recommendation}`,
                             timestamp: new Date(),
                         };
                         setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI resource:', err);
                     });
                 }
 
@@ -951,6 +1018,12 @@ export default function ChatPage() {
                                             </span>
                                         </div>
                                         <p className="font-semibold text-lg">{currentScheduleInfo.schedule.text}</p>
+                                        {currentScheduleInfo.schedule.location && (
+                                            <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
+                                                <MapPin className="w-3.5 h-3.5" />
+                                                <span>{currentScheduleInfo.schedule.location}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             ) : (

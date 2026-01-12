@@ -25,6 +25,8 @@ export interface CustomGoal {
     notificationEnabled?: boolean;
     specificDate?: string; // YYYY-MM-DD format for specific date goals
     memo?: string; // Memo for the activity
+    location?: string; // Location of the activity
+    detailedInfo?: string; // Additional details
 }
 
 interface SchedulePopupProps {

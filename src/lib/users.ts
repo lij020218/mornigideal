@@ -88,3 +88,32 @@ export async function validateUser(email: string, password: string): Promise<Use
 
     return user;
 }
+
+export async function updateUserProfile(email: string, profileUpdates: any): Promise<User | null> {
+    try {
+        const user = await getUserByEmail(email);
+        if (!user) return null;
+
+        const updatedProfile = {
+            ...user.profile,
+            ...profileUpdates,
+        };
+
+        const { data, error } = await supabase
+            .from('users')
+            .update({ profile: updatedProfile })
+            .eq('email', email)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[updateUserProfile] Error:', error);
+            throw error;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[updateUserProfile] Exception:', error);
+        throw error;
+    }
+}

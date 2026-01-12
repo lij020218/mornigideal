@@ -271,9 +271,17 @@ export default function HomePage() {
                 schedulesCount: todaySchedules.length
             });
 
-            // 0. 아침 인사 메시지 (6-9시 사이 한 번만) - AI 기반
+            // 0. 아침 인사 메시지 (5-12시 사이 한 번만) - AI 기반
             const morningGreetingKey = `morning_greeting_${today}`;
-            if (hour >= 6 && hour < 9 && !localStorage.getItem(morningGreetingKey)) {
+            const alreadySentMorning = localStorage.getItem(morningGreetingKey);
+            console.log('[AutoMessage] Morning greeting check:', {
+                hour,
+                inTimeRange: hour >= 5 && hour < 12,
+                alreadySent: !!alreadySentMorning,
+                key: morningGreetingKey
+            });
+
+            if (hour >= 5 && hour < 12 && !alreadySentMorning) {
                 localStorage.setItem(morningGreetingKey, 'true');
                 console.log('[AutoMessage] ✅ Sending AI morning greeting');
 
@@ -536,7 +544,7 @@ export default function HomePage() {
         checkAndSendScheduleMessages();
 
         return () => clearInterval(interval);
-    }, [session, todaySchedules]);
+    }, [session, todaySchedules, userProfile]);
 
     // Fetch AI recommendations (when idle)
     useEffect(() => {
