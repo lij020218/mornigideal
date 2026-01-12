@@ -1000,10 +1000,8 @@ export default function HomePage() {
                 },
             ]);
 
-            // Handle actions (if any)
-            if (data.actions && data.actions.length > 0) {
-                handleMessageActions(data.actions);
-            }
+            // Note: Actions are now only executed via button clicks, not automatically
+            // This prevents duplicate schedule additions when AI suggests adding a schedule
 
         } catch (error) {
             console.error("Error sending message:", error);
@@ -1502,8 +1500,8 @@ export default function HomePage() {
                                                                 {schedule.text}
                                                             </p>
                                                             <p className="text-sm text-muted-foreground mt-0.5 font-mono">
-                                                                {schedule.startTime}
-                                                                {schedule.endTime && ` - ${schedule.endTime}`}
+                                                                {schedule.startTime?.includes('T') ? schedule.startTime.split('T')[1]?.slice(0, 5) : schedule.startTime}
+                                                                {schedule.endTime && ` - ${schedule.endTime?.includes('T') ? schedule.endTime.split('T')[1]?.slice(0, 5) : schedule.endTime}`}
                                                             </p>
                                                             {schedule.location && (
                                                                 <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -1672,15 +1670,26 @@ export default function HomePage() {
                                                     size="sm"
                                                     variant="outline"
                                                     onClick={() => {
-                                                        if (action.type === 'open_briefing' && action.data.briefingId) {
-                                                            // Find the full briefing object from trendBriefings
-                                                            const fullBriefing = trendBriefings.find(
-                                                                (b: any) => b.id === action.data.briefingId
-                                                            );
-                                                            if (fullBriefing) {
-                                                                setSelectedBriefing(fullBriefing);
+                                                        console.log('[Home] Action clicked:', action);
+                                                        console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
+
+                                                        if (action.type === 'open_briefing') {
+                                                            const briefingId = action.data?.briefingId || action.data?.id;
+                                                            console.log('[Home] Looking for briefing ID:', briefingId);
+
+                                                            if (briefingId) {
+                                                                // Find the full briefing object from trendBriefings
+                                                                const fullBriefing = trendBriefings.find(
+                                                                    (b: any) => b.id === briefingId || b.id === parseInt(briefingId)
+                                                                );
+                                                                if (fullBriefing) {
+                                                                    console.log('[Home] Opening briefing:', fullBriefing.title);
+                                                                    setSelectedBriefing(fullBriefing);
+                                                                } else {
+                                                                    console.error('[Home] Briefing not found. ID:', briefingId, 'Available IDs:', trendBriefings.map((b: any) => b.id));
+                                                                }
                                                             } else {
-                                                                console.error('[Home] Briefing not found:', action.data.briefingId);
+                                                                console.error('[Home] No briefingId in action.data:', action.data);
                                                             }
                                                         }
                                                     }}

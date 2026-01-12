@@ -82,10 +82,11 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
 📰 오늘의 트렌드 브리핑 정보:
 - 총 브리핑 수: ${briefings.length}개
 
-브리핑 목록:
-${briefings.map((t: any, i: number) => `${i + 1}. [${t.category || '일반'}] ${t.title || t.name || '제목 없음'}`).join('\n')}
+브리핑 목록 (ID와 함께):
+${briefings.map((t: any, i: number) => `${i + 1}. [ID: ${t.id}] [${t.category || '일반'}] ${t.title || t.name || '제목 없음'}`).join('\n')}
 
-사용자가 "브리핑", "트렌드", "안 읽은", "뭐 있어" 등의 키워드로 물어보면 위의 브리핑 목록을 자연스럽게 알려주세요.
+**중요**: 사용자가 브리핑을 추천하거나 열어보라고 할 때는 반드시 actions에 open_briefing을 포함하고, data에 briefingId를 넣으세요.
+예: actions: [{ "type": "open_briefing", "label": "브리핑 열어보기", "data": { "briefingId": ${briefings[0]?.id}, "title": "${briefings[0]?.title}" } }]
 `;
             }
         }
