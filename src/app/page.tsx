@@ -18,6 +18,7 @@ interface Schedule {
     skipped?: boolean;
     color?: string;
     location?: string;
+    workMode?: 'focus' | 'research' | 'brainstorm' | 'light' | null;
 }
 
 interface ChatAction {
@@ -419,17 +420,24 @@ export default function HomePage() {
                     setMessages(prev => [...prev, message]);
                 }
 
-                // 2.5. 일정 시작 30분 후 인사이트 (T+30) - 업무 일정에만 적용
+                // 2.5. 일정 시작 30분 후 인사이트 (T+30) - work_mode 기반 결정
                 const thirtyMinutesAfterStart = startMinutes + 30;
                 const sentInsightKey = `schedule_insight_${schedule.id}_${today}`;
                 const alreadySentInsight = !!localStorage.getItem(sentInsightKey);
 
-                // 업무 관련 일정에만 인사이트 제공 (운동, 식사 등은 제외)
-                const isWorkRelated = ['업무 시작', '업무', '회의', '학습', '공부', '프로젝트', '작업'].some(keyword =>
-                    schedule.text.includes(keyword)
-                );
+                // work_mode가 있으면 그것을 우선 사용, 없으면 일정 이름으로 추론
+                let shouldSendInsight = false;
+                if (schedule.workMode) {
+                    // 'focus' 모드는 인사이트 제공 안 함 (집중 중)
+                    shouldSendInsight = schedule.workMode !== 'focus';
+                } else {
+                    // 기존 로직: 업무 관련 일정에만 인사이트 제공
+                    shouldSendInsight = ['업무 시작', '업무', '회의', '학습', '공부', '프로젝트', '작업'].some(keyword =>
+                        schedule.text.includes(keyword)
+                    );
+                }
 
-                if (isWorkRelated && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
+                if (shouldSendInsight && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
                     console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);
                     localStorage.setItem(sentInsightKey, 'true');
 
