@@ -596,7 +596,7 @@ export default function HomePage() {
                 }
             }
 
-            // 7. 빈 시간대 일정 추천 (12시, 16시, 19시에 일정이 없으면)
+            // 7. 빈 시간대 일정 추천 (12시, 16시, 19시에 일정이 없으면) - AI 기반
             const idleCheckHours = [12, 16, 19];
             if (idleCheckHours.includes(hour)) {
                 const idleCheckKey = `idle_check_${today}_${hour}`;
@@ -610,21 +610,83 @@ export default function HomePage() {
 
                     if (!hasUpcomingSchedule) {
                         localStorage.setItem(idleCheckKey, 'true');
-                        console.log('[AutoMessage] ✅ Sending idle time schedule recommendation');
+                        console.log('[AutoMessage] ✅ Fetching smart schedule recommendations');
 
-                        const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
-                        const activities = hour === 12
-                            ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
-                            : hour === 16
-                            ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
-                            : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
-                        const message: Message = {
-                            id: `auto-idle-${Date.now()}`,
-                            role: 'assistant',
-                            content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
+                        // Fetch AI-powered recommendations based on user patterns
+                        fetch('/api/ai-schedule-recommendations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                date: today,
+                                currentSchedules: todaySchedules.map(s => ({
+                                    text: s.text,
+                                    startTime: s.startTime,
+                                    endTime: s.endTime,
+                                    start_time: `${today}T${s.startTime}:00`,
+                                    end_time: `${today}T${s.endTime}:00`,
+                                })),
+                            }),
+                        }).then(res => res.json()).then(data => {
+                            const recommendations = data.recommendations || [];
+                            console.log('[AutoMessage] Received AI recommendations:', recommendations);
+
+                            if (recommendations.length > 0) {
+                                // Pick top priority recommendation
+                                const topRec = recommendations.sort((a: any, b: any) => {
+                                    const priority = { high: 3, medium: 2, low: 1 };
+                                    return (priority[b.priority as keyof typeof priority] || 0) - (priority[a.priority as keyof typeof priority] || 0);
+                                })[0];
+
+                                const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
+                                const message: Message = {
+                                    id: `auto-idle-${Date.now()}`,
+                                    role: 'assistant',
+                                    content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n💡 추천: **${topRec.scheduleText}** (${topRec.suggestedDuration}분)\n시작 시간: ${topRec.suggestedStartTime}\n\n${topRec.reason}\n\n일정 추가하실래요?`,
+                                    timestamp: now,
+                                    actions: [{
+                                        type: 'add_schedule',
+                                        label: `${topRec.scheduleText} 추가하기`,
+                                        data: {
+                                            text: topRec.scheduleText,
+                                            startTime: topRec.suggestedStartTime,
+                                            duration: topRec.suggestedDuration,
+                                        }
+                                    }]
+                                };
+                                setMessages(prev => [...prev, message]);
+                            } else {
+                                // Fallback to generic message
+                                const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
+                                const activities = hour === 12
+                                    ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
+                                    : hour === 16
+                                    ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
+                                    : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
+                                const message: Message = {
+                                    id: `auto-idle-${Date.now()}`,
+                                    role: 'assistant',
+                                    content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
+                                    timestamp: now,
+                                };
+                                setMessages(prev => [...prev, message]);
+                            }
+                        }).catch(err => {
+                            console.error('[AutoMessage] Failed to fetch recommendations:', err);
+                            // Fallback to generic message
+                            const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
+                            const activities = hour === 12
+                                ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
+                                : hour === 16
+                                ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
+                                : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
+                            const message: Message = {
+                                id: `auto-idle-${Date.now()}`,
+                                role: 'assistant',
+                                content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
+                                timestamp: now,
+                            };
+                            setMessages(prev => [...prev, message]);
+                        });
                     }
                 }
             }
