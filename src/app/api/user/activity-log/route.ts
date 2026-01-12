@@ -7,9 +7,16 @@ import { supabase } from "@/lib/supabase";
  *
  * Activity types:
  * - briefing_read: User read a trend briefing
+ *   metadata: { briefingId, title, category, keywords }
+ *
  * - schedule_complete: User completed a schedule
+ *   metadata: { scheduleId, scheduleType, scheduleText, startTime, endTime, duration }
+ *
  * - schedule_skip: User skipped a schedule
+ *   metadata: { scheduleId, scheduleType, scheduleText, startTime, reason }
+ *
  * - chat_interaction: User interacted with AI chat
+ *   metadata: { messageCount, topic }
  */
 
 export async function POST(request: Request) {

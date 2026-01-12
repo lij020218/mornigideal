@@ -50,6 +50,22 @@ export async function GET(request: Request) {
 
         const scheduleInsights = analyzeSchedulePatterns(schedules || []);
 
+        // Fetch wellness analytics from schedule patterns
+        let wellnessAnalytics = null;
+        try {
+            const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/schedule-analytics?days=30`, {
+                headers: {
+                    'Cookie': request.headers.get('Cookie') || '',
+                },
+            });
+            if (wellnessResponse.ok) {
+                const data = await wellnessResponse.json();
+                wellnessAnalytics = data.analytics;
+            }
+        } catch (error) {
+            console.error('[Enhanced Profile] Failed to fetch wellness analytics:', error);
+        }
+
         // Build enhanced profile
         const enhancedProfile = {
             ...profile,
@@ -69,8 +85,14 @@ export async function GET(request: Request) {
                 total_schedules_completed: analytics.scheduleCompleted,
                 chat_interactions: analytics.chatInteractions,
 
+                // Wellness insights (from schedule analytics)
+                exercise_analytics: wellnessAnalytics?.exerciseAnalytics,
+                sleep_analytics: wellnessAnalytics?.sleepAnalytics,
+                wellness_insights: wellnessAnalytics?.wellnessInsights,
+                time_slot_patterns: wellnessAnalytics?.timeSlotPatterns,
+
                 // Recommendations for AI
-                ai_recommendations: generateAIRecommendations(analytics, scheduleInsights, profile),
+                ai_recommendations: generateAIRecommendations(analytics, scheduleInsights, profile, wellnessAnalytics),
             },
             last_updated: new Date().toISOString(),
         };
@@ -174,11 +196,12 @@ function analyzeSchedulePatterns(schedules: any[]) {
     };
 }
 
-function generateAIRecommendations(analytics: any, scheduleInsights: any, profile: any) {
+function generateAIRecommendations(analytics: any, scheduleInsights: any, profile: any, wellnessAnalytics: any = null) {
     const recommendations = {
         briefing_focus: [] as string[],
         schedule_suggestions: [] as string[],
         engagement_tips: [] as string[],
+        wellness_recommendations: [] as string[],
     };
 
     // Briefing recommendations
@@ -210,6 +233,40 @@ function generateAIRecommendations(analytics: any, scheduleInsights: any, profil
             `Most active during: ${analytics.mostActiveTimeSlots.join(', ')}`,
             'Schedule important tasks during these times',
         ];
+    }
+
+    // Wellness recommendations
+    if (wellnessAnalytics?.wellnessInsights) {
+        const insights = wellnessAnalytics.wellnessInsights;
+
+        // Exercise recommendations
+        if (insights.exerciseStatus === 'insufficient') {
+            recommendations.wellness_recommendations.push(
+                'User needs more exercise - suggest workout activities',
+                `Recommend exercising at ${wellnessAnalytics.exerciseAnalytics?.preferredExerciseTimes?.[0] || 'morning'}`
+            );
+        } else if (insights.exerciseStatus === 'excellent') {
+            recommendations.wellness_recommendations.push(
+                'User has excellent exercise habits - encourage maintaining routine'
+            );
+        }
+
+        // Sleep recommendations
+        if (insights.sleepStatus === 'insufficient') {
+            recommendations.wellness_recommendations.push(
+                'User needs better sleep - encourage consistent sleep schedule',
+                wellnessAnalytics.sleepAnalytics?.recommendation || 'Aim for 7-9 hours of sleep'
+            );
+        } else if (insights.sleepStatus === 'excellent') {
+            recommendations.wellness_recommendations.push(
+                'User has excellent sleep habits - acknowledge this achievement'
+            );
+        }
+
+        // Add specific alerts as recommendations
+        if (insights.alerts?.length > 0) {
+            recommendations.wellness_recommendations.push(...insights.alerts);
+        }
     }
 
     return recommendations;
