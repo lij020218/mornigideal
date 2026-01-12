@@ -16,6 +16,21 @@ export async function POST(request: Request) {
 
         const { todaySchedules, userProfile } = await request.json();
 
+        // Fetch weather information
+        let weatherInfo = '';
+        try {
+            const weatherRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/weather`);
+            if (weatherRes.ok) {
+                const weather = await weatherRes.json();
+                const weatherEmoji = weather.condition === 'rain' ? '🌧️' :
+                                   weather.condition === 'snow' ? '⛄' :
+                                   weather.condition === 'clouds' ? '☁️' : '☀️';
+                weatherInfo = `\n현재 날씨: ${weather.description} ${weatherEmoji} (기온: ${weather.temp}°C, 체감: ${weather.feels_like}°C)`;
+            }
+        } catch (error) {
+            console.error('[AI Morning Greeting] Failed to fetch weather:', error);
+        }
+
         console.log('[AI Morning Greeting] Generating personalized morning greeting');
 
         // Build context from user profile
@@ -42,7 +57,7 @@ export async function POST(request: Request) {
 
         const prompt = `당신은 Fi.eri 앱의 AI 어시스턴트입니다.
 
-현재 시간: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+현재 시간: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}${weatherInfo}
 
 사용자 프로필:
 - 이름: ${userProfile?.name || '사용자'}
@@ -55,14 +70,17 @@ ${todaySchedules?.length > 0 ? todaySchedules.map((s: any) => `- ${s.startTime}:
 
 **요청사항:**
 1. 따뜻하고 개인화된 아침 인사 (2-3문장, 존댓말, 이모지 1개)
-2. 오늘 일정에 대한 간단한 코멘트
-3. 사용자의 직업, 목표, 관심사를 고려한 **오늘 추천 활동 5개**:
+2. 날씨를 고려한 조언 (비가 오면 우산, 추우면 따뜻하게 등)
+3. 오늘 일정에 대한 간단한 코멘트
+4. 사용자의 직업, 목표, 관심사를 고려한 **오늘 추천 활동 5개**:
    - 빈 시간대에 할 수 있는 생산적인 활동
    - 각 활동은 간결하게 (예: "• 10:00 - 영어 단어 암기 30분")
    - 사용자의 레벨과 목표에 맞게 조정
 
 **응답 형식:**
-[인사 및 일정 코멘트]
+[인사 및 날씨 조언]
+
+[일정 코멘트]
 
 오늘 추천 활동:
 • [시간] - [활동명 및 간단한 설명]

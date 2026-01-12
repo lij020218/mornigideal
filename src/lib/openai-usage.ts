@@ -11,12 +11,22 @@ interface UsageLog {
     timestamp: Date;
 }
 
-// Model pricing (per 1M tokens)
+// Model pricing (per 1M tokens) - Updated 2026-01-12
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+    // GPT-5 Series
+    'gpt-5.2-2025-12-11': {
+        input: 5.0,   // $5 per 1M input tokens
+        output: 15.0, // $15 per 1M output tokens
+    },
     'gpt-5.1-2025-11-13': {
         input: 10.0,  // $10 per 1M input tokens
         output: 30.0, // $30 per 1M output tokens
     },
+    'gpt-5-mini-2025-08-07': {
+        input: 0.10,  // $0.10 per 1M input tokens
+        output: 0.40, // $0.40 per 1M output tokens
+    },
+    // GPT-4 Series
     'gpt-4o': {
         input: 5.0,   // $5 per 1M input tokens
         output: 15.0, // $15 per 1M output tokens
@@ -67,12 +77,28 @@ export async function logOpenAIUsage(
         timestamp: new Date(),
     };
 
-    // Console log for immediate visibility
-    console.log(`[OpenAI Usage] ${endpoint}`);
-    console.log(`  User: ${userEmail}`);
-    console.log(`  Model: ${model}`);
-    console.log(`  Tokens: ${inputTokens} in + ${outputTokens} out = ${totalTokens} total`);
-    console.log(`  Cost: $${estimatedCost.toFixed(6)}`);
+    // Console log for immediate visibility with color and formatting
+    const costInWon = estimatedCost * 1335; // KRW conversion (approximate)
+    const timestamp = new Date().toLocaleTimeString('ko-KR');
+
+    console.log('');
+    console.log('💰 ========================================');
+    console.log(`⏰ ${timestamp}`);
+    console.log(`📍 Endpoint: ${endpoint}`);
+    console.log(`👤 User: ${userEmail}`);
+    console.log(`🤖 Model: ${model}`);
+    console.log(`📊 Tokens:`);
+    console.log(`   ↗️  Input:  ${inputTokens.toLocaleString()} tokens`);
+    console.log(`   ↙️  Output: ${outputTokens.toLocaleString()} tokens`);
+    console.log(`   📦 Total:  ${totalTokens.toLocaleString()} tokens`);
+    console.log(`💵 Cost:`);
+    console.log(`   $${estimatedCost.toFixed(6)} USD`);
+    console.log(`   ₩${costInWon.toFixed(2)} KRW`);
+    console.log('========================================');
+    console.log('');
+
+    // Log daily cumulative cost
+    logDailyCumulativeCost(estimatedCost, totalTokens);
 
     // Store in database (create table if needed)
     try {
@@ -86,6 +112,42 @@ export async function logOpenAIUsage(
     } catch (error) {
         console.error('[OpenAI Usage] Database logging error:', error);
     }
+}
+
+/**
+ * Log cumulative daily cost to console
+ */
+let dailyCumulativeCost = 0;
+let dailyCumulativeTokens = 0;
+let dailyCallCount = 0;
+let lastResetDate = new Date().toDateString();
+
+export function logDailyCumulativeCost(costToAdd: number, tokensToAdd: number): void {
+    const today = new Date().toDateString();
+
+    // Reset counters at midnight
+    if (today !== lastResetDate) {
+        dailyCumulativeCost = 0;
+        dailyCumulativeTokens = 0;
+        dailyCallCount = 0;
+        lastResetDate = today;
+    }
+
+    dailyCumulativeCost += costToAdd;
+    dailyCumulativeTokens += tokensToAdd;
+    dailyCallCount++;
+
+    const dailyCostInWon = dailyCumulativeCost * 1335;
+
+    console.log('📈 ======== DAILY CUMULATIVE ========');
+    console.log(`📅 Date: ${today}`);
+    console.log(`🔢 Total API Calls Today: ${dailyCallCount}`);
+    console.log(`📦 Total Tokens Today: ${dailyCumulativeTokens.toLocaleString()}`);
+    console.log(`💰 Total Cost Today:`);
+    console.log(`   $${dailyCumulativeCost.toFixed(6)} USD`);
+    console.log(`   ₩${dailyCostInWon.toFixed(2)} KRW`);
+    console.log('====================================');
+    console.log('');
 }
 
 /**

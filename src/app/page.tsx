@@ -353,30 +353,34 @@ export default function HomePage() {
                 });
 
                 if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !alreadySentBefore) {
-                    console.log('[AutoMessage] ✅ Sending 10분 전 message for:', schedule.text);
+                    console.log('[AutoMessage] ✅ Sending 10-15분 전 preparation message for:', schedule.text);
                     localStorage.setItem(sentBeforeKey, 'true');
 
-                    // AI 사전 알림 요청
-                    fetch('/api/ai-resource-recommend', {
+                    // AI 준비 조언 요청 (10-15분 전) - gpt-5.2 사용
+                    const timeUntilStart = startMinutes - currentMinutes;
+                    fetch('/api/ai-schedule-prep', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            activityName: schedule.text,
-                            context: 'schedule_pre_reminder',
-                            userProfile: userProfile
+                            schedule: {
+                                text: schedule.text,
+                                startTime: schedule.startTime
+                            },
+                            userProfile: userProfile,
+                            timeUntil: timeUntilStart
                         }),
                     }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI pre-reminder:', data);
-                        const recommendation = data.recommendation || "곧 일정이 시작됩니다. 준비하실 것이 있나요?";
+                        console.log('[AutoMessage] Received AI schedule prep advice:', data);
+                        const advice = data.advice || `${timeUntilStart}분 후 "${schedule.text}" 일정이 시작됩니다! 준비하세요 🕐`;
                         const message: Message = {
                             id: `auto-before-${Date.now()}`,
                             role: 'assistant',
-                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n${recommendation}`,
+                            content: advice,
                             timestamp: now,
                         };
                         setMessages(prev => [...prev, message]);
                     }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI pre-reminder:', err);
+                        console.error('[AutoMessage] Failed to fetch AI schedule prep:', err);
                         // Fallback
                         const message: Message = {
                             id: `auto-before-${Date.now()}`,
@@ -512,7 +516,7 @@ export default function HomePage() {
                 }
             }
 
-            // 5. 하루 마무리 (마지막 일정 종료 후)
+            // 5. 하루 마무리 (마지막 일정 종료 후) - AI 피드백
             const lastSchedule = todaySchedules
                 .filter(s => s.endTime)
                 .sort((a, b) => timeToMinutes(b.endTime!) - timeToMinutes(a.endTime!))[0];
@@ -527,13 +531,44 @@ export default function HomePage() {
                     const completed = todaySchedules.filter(s => s.completed).length;
                     const total = todaySchedules.length;
 
-                    const message: Message = {
-                        id: `auto-dayend-${Date.now()}`,
-                        role: 'assistant',
-                        content: `오늘 일정이 모두 끝났어요! 🎉\n\n오늘의 성과:\n✅ 완료: ${completed}/${total}개\n\n내일을 위한 제안이 필요하신가요?`,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
+                    console.log('[AutoMessage] ✅ Sending AI day summary');
+
+                    // AI 하루 마무리 요청 - gpt-5.2 사용
+                    fetch('/api/ai-day-summary', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            todaySchedules: todaySchedules.map(s => ({
+                                text: s.text,
+                                startTime: s.startTime,
+                                endTime: s.endTime,
+                                completed: s.completed
+                            })),
+                            completedCount: completed,
+                            totalCount: total,
+                            userProfile: userProfile
+                        }),
+                    }).then(res => res.json()).then(data => {
+                        console.log('[AutoMessage] Received AI day summary:', data);
+                        const summary = data.summary || `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completed}/${total}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
+                        const message: Message = {
+                            id: `auto-dayend-${Date.now()}`,
+                            role: 'assistant',
+                            content: summary,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch AI day summary:', err);
+                        // Fallback
+                        const message: Message = {
+                            id: `auto-dayend-${Date.now()}`,
+                            role: 'assistant',
+                            content: `오늘 일정이 모두 끝났어요! 🎉\n\n오늘의 성과:\n✅ 완료: ${completed}/${total}개\n\n내일을 위한 제안이 필요하신가요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
                 }
             }
         };
