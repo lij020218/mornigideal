@@ -571,6 +571,58 @@ export default function HomePage() {
                     });
                 }
             }
+
+            // 6. 트렌드 브리핑 읽기 알림 (10시, 15시, 20시에 한 번씩)
+            const briefingReminderHours = [10, 15, 20];
+            if (briefingReminderHours.includes(hour)) {
+                const briefingReminderKey = `briefing_reminder_${today}_${hour}`;
+                if (!localStorage.getItem(briefingReminderKey)) {
+                    // Check if there are unread briefings
+                    const readBriefings = JSON.parse(localStorage.getItem(`read_briefings_${today}`) || '[]');
+                    const unreadCount = trendBriefings.filter(b => !readBriefings.includes(b.id)).length;
+
+                    if (unreadCount > 0) {
+                        localStorage.setItem(briefingReminderKey, 'true');
+                        console.log('[AutoMessage] ✅ Sending briefing reminder:', unreadCount);
+
+                        const message: Message = {
+                            id: `auto-briefing-reminder-${Date.now()}`,
+                            role: 'assistant',
+                            content: `📰 읽지 않은 트렌드 브리핑이 ${unreadCount}개 있어요!\n\n잠깐 시간 내서 최신 트렌드를 확인해보시는 건 어떨까요? 🚀`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }
+                }
+            }
+
+            // 7. 빈 시간대 일정 추천 (12시, 16시, 19시에 일정이 없으면)
+            const idleCheckHours = [12, 16, 19];
+            if (idleCheckHours.includes(hour)) {
+                const idleCheckKey = `idle_check_${today}_${hour}`;
+                if (!localStorage.getItem(idleCheckKey)) {
+                    // Check if there's no schedule in the next 2 hours
+                    const twoHoursLater = currentMinutes + 120;
+                    const hasUpcomingSchedule = todaySchedules.some(s => {
+                        const sMinutes = timeToMinutes(s.startTime);
+                        return sMinutes >= currentMinutes && sMinutes <= twoHoursLater;
+                    });
+
+                    if (!hasUpcomingSchedule) {
+                        localStorage.setItem(idleCheckKey, 'true');
+                        console.log('[AutoMessage] ✅ Sending idle time schedule recommendation');
+
+                        const timeContext = hour === 12 ? '점심 시간' : hour === 16 ? '오후 시간' : '저녁 시간';
+                        const message: Message = {
+                            id: `auto-idle-${Date.now()}`,
+                            role: 'assistant',
+                            content: `⏰ ${timeContext}에 등록된 일정이 없네요.\n\n이 시간을 활용해보시는 건 어떨까요?\n\n추천 활동:\n• 짧은 산책이나 스트레칭 🚶\n• 책 읽기 또는 학습 📚\n• 목표 관련 작업 💪\n• 휴식 및 재충전 ☕\n\n일정을 추가하시겠어요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }
+                }
+            }
         };
 
         // 1분마다 체크
@@ -579,7 +631,7 @@ export default function HomePage() {
         checkAndSendScheduleMessages();
 
         return () => clearInterval(interval);
-    }, [session, todaySchedules, userProfile]);
+    }, [session, todaySchedules, userProfile, trendBriefings]);
 
     // Fetch AI recommendations (when idle)
     useEffect(() => {
@@ -1720,7 +1772,19 @@ export default function HomePage() {
             <TrendBriefingDetail
                 briefing={selectedBriefing}
                 isOpen={!!selectedBriefing}
-                onClose={() => setSelectedBriefing(null)}
+                onClose={() => {
+                    // Mark briefing as read when closing
+                    if (selectedBriefing?.id) {
+                        const today = getChatDate();
+                        const readBriefings = JSON.parse(localStorage.getItem(`read_briefings_${today}`) || '[]');
+                        if (!readBriefings.includes(selectedBriefing.id)) {
+                            readBriefings.push(selectedBriefing.id);
+                            localStorage.setItem(`read_briefings_${today}`, JSON.stringify(readBriefings));
+                            console.log('[Home] Marked briefing as read:', selectedBriefing.id);
+                        }
+                    }
+                    setSelectedBriefing(null);
+                }}
                 userLevel={userProfile?.level || 'intermediate'}
                 userJob={userProfile?.job || ''}
             />
