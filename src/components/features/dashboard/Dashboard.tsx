@@ -729,6 +729,7 @@ export function Dashboard({
                             {showNotificationDropdown && (
                                 <NotificationDropdown
                                     goals={userProfile?.customGoals || []}
+                                    isOpen={showNotificationDropdown}
                                     onClose={() => setShowNotificationDropdown(false)}
                                 />
                             )}
