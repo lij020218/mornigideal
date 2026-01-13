@@ -1454,7 +1454,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                         const newGoal: CustomGoal = {
                                                             id: `goal_${Date.now()}`,
                                                             text: activityName,
-                                                            completed: false,
                                                             specificDate: formatDate(selectedDate!),
                                                             startTime,
                                                             endTime,
