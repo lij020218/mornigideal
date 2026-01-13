@@ -83,7 +83,35 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                     const pregenData = await pregenResponse.json();
                     if (pregenData.trends && pregenData.trends.length > 0) {
                         console.log('[TrendBriefing] Found pre-generated briefing!');
-                        setBriefings(pregenData.trends);
+
+                        // Check if summaries are too long (old format) and need updating
+                        const hasLongSummaries = pregenData.trends.some((t: any) =>
+                            t.summary && t.summary.length > 60 && !t.summary.includes('확인하세요!')
+                        );
+
+                        if (hasLongSummaries) {
+                            console.log('[TrendBriefing] Detected old format summaries, updating...');
+                            try {
+                                const updateResponse = await fetch('/api/trend-briefing/update-summaries', {
+                                    method: 'POST'
+                                });
+
+                                if (updateResponse.ok) {
+                                    const updateData = await updateResponse.json();
+                                    console.log('[TrendBriefing] Summaries updated successfully!');
+                                    setBriefings(updateData.trends);
+                                } else {
+                                    // If update fails, use old summaries
+                                    setBriefings(pregenData.trends);
+                                }
+                            } catch (updateError) {
+                                console.error('[TrendBriefing] Failed to update summaries:', updateError);
+                                setBriefings(pregenData.trends);
+                            }
+                        } else {
+                            setBriefings(pregenData.trends);
+                        }
+
                         setLastUpdated(pregenData.generated_at || new Date().toISOString());
                         setIsCached(true);
                         setLoading(false);
@@ -325,7 +353,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                 <h3 className="font-bold text-base md:text-lg leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
                                     {briefing.title}
                                 </h3>
-                                <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                                <p className="text-sm text-foreground/80 leading-relaxed font-medium">
                                     {briefing.summary}
                                 </p>
                             </div>

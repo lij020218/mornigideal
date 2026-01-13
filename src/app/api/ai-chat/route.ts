@@ -163,12 +163,24 @@ ${pendingScheduleContext}
 **기능별 지침:**
 - **일정 추가**:
   - **즉시 등록 조건** (다음 중 하나라도 해당하면 바로 add_schedule action 포함):
-    1. 사용자가 "바로 등록", "필요 없어", "없어", "그냥 등록", "세부사항 필요 없어", "기록할 필요 없어" 등 명확한 의사 표현
-    2. 사용자가 이미 장소/메모를 제공함
-    3. 이전 대화에서 이미 세부사항 질문을 했고 사용자가 답변함
+    1. **최우선**: 사용자 메시지에 "바로 등록", "바로 추가", "즉시 등록", "그냥 등록" 같은 키워드가 포함되면 무조건 즉시 등록
+    2. 사용자가 "필요 없어", "없어", "세부사항 필요 없어" 등 거부 의사 표현
+    3. 사용자가 이미 장소를 제공함 (예: "장소는 집", "집에서")
+    4. 이전 대화에서 이미 세부사항 질문을 했고 사용자가 답변함
+  - **즉시 등록 예시** (반드시 actions 배열에 add_schedule 포함):
+    * 사용자: "오늘 7시 반에 저녁 식사 잡아줘. 장소는 집이고 바로 등록해"
+    * 응답: {"message": "좋아요! 오늘 7시 반에 저녁 식사 일정(장소: 집) 바로 등록할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
+    * 사용자: "오늘 7시 반에 저녁 식사 잡아줘. 장소는 집"
+    * 응답: {"message": "좋아요! 오늘 7시 반에 저녁 식사 일정(장소: 집) 등록할게요. 메모 추가할 내용 있으면 알려주세요 😊", "actions": []}
+    * 사용자: "없어"
+    * 응답: {"message": "알겠어요! 바로 등록할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
+    * 사용자: "오늘 3시에 운동 일정 잡아줘"
+    * 응답: {"message": "3시에 운동 일정 추가할게요! 어디서 하시는지 장소 알려주시면 같이 적을게요 😊", "actions": []}
+    * 사용자: "헬스장"
+    * 응답: {"message": "헬스장에서 운동하시는군요! 바로 등록할게요 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
   - **물어보기 조건**: 위 조건에 해당하지 않고, 사용자가 처음으로 일정만 요청한 경우에만 자연스럽게 물어봄.
-    * 예시: "네, 오늘 4시 28분부터 7시까지 '업무 일정' 넣어드릴게요! 어디서 하시는지 장소 알려주시면 같이 적어둘게요~" (딱딱한 느낌 ❌)
     * 예시: "4시 28분부터 7시까지 '업무 일정' 추가할게요! 장소나 메모 있으면 알려주세요 😊" (자연스러운 느낌 ✅)
+    * 이 경우 actions는 빈 배열 []로 응답
   - **시간 제안 시**: 사용자에게 빈 시간을 제안할 때는 현재 시간(${context.currentTime}) 이후의 시간만 제안합니다. 현재 시간보다 이전 시간은 절대 제안하지 마세요.
   - **일정 이름 정규화** (절대적으로 중요! 캘린더에 정의된 정확한 이름 사용):
     **규칙**: 사용자가 말한 키워드를 아래 **정확한 일정 이름**으로 변환하세요. 캘린더에 미리 정의된 이름과 일치해야 아이콘과 색상이 제대로 표시됩니다.
@@ -196,7 +208,10 @@ ${pendingScheduleContext}
 
     **기타**:
     * "쉬기", "휴식", "rest", "쉬는 시간" → **"휴식"** (정확히 이것!)
-    * "놀기", "여가", "취미", "여가 시간" → **"여가"** (정확히 이것!)
+    * "여가", "취미", "여가 시간" → **"여가"** (정확히 이것!)
+    * "게임하기", "게임 하기", "게임 시간" → **"게임"** (정확히 이것!)
+    * "영화 보기", "영화 감상", "영화 시청" → **"영화"** (정확히 이것!)
+    * "드라마 보기", "드라마 시청" → **"드라마"** (정확히 이것!)
 
     **예시 (정확한 변환)**:
     ✅ 사용자: "저녁 식사 잡아줘" → text: "저녁 식사"
@@ -206,6 +221,9 @@ ${pendingScheduleContext}
     ✅ 사용자: "업무 일정" → text: "업무 시작"
     ✅ 사용자: "일어날 시간" → text: "기상"
     ✅ 사용자: "헬스 가기" → text: "운동"
+    ✅ 사용자: "게임할 시간" → text: "게임"
+    ✅ 사용자: "영화 보기" → text: "영화"
+    ✅ 사용자: "드라마 시청" → text: "드라마"
 
     **절대 금지 (커스텀 일정으로 등록됨)**:
     ❌ "저녁" (X) → "저녁 식사" (O)
@@ -238,7 +256,18 @@ ${pendingScheduleContext}
       }
     }
   ]
-}`;
+}
+
+**CRITICAL: 일정 등록 시 actions 배열 필수!**
+- 사용자가 "없어", "필요 없어", "그냥 등록해" 등으로 확정하면 **반드시** actions 배열에 add_schedule을 포함하세요.
+- message만 보내고 actions를 빈 배열로 보내면 일정이 등록되지 않습니다!
+- "등록해드렸어요", "추가할게요" 같은 메시지를 보낼 때는 **반드시** actions에 실제 동작을 포함해야 합니다.
+
+**좋은 예 (올바른 즉시 등록):**
+{"message": "좋아요! 오늘 7시 반에 저녁 식사 일정 추가할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
+
+**나쁜 예 (말만 하고 등록 안 됨):**
+{"message": "좋아요! 등록해드렸어요", "actions": []} ❌❌❌`;
 
         const modelName = "gpt-5-mini-2025-08-07";
         const completion = await openai.chat.completions.create({
@@ -253,14 +282,21 @@ ${pendingScheduleContext}
 
         const responseContent = completion.choices[0]?.message?.content || '{"message": "죄송합니다. 응답을 생성하지 못했습니다."}';
 
+        // Debug logging
+        console.log('[AI Chat] Raw AI Response:', responseContent);
+
         try {
             const parsed = JSON.parse(responseContent);
+            console.log('[AI Chat] Parsed Response:', JSON.stringify(parsed, null, 2));
+            console.log('[AI Chat] Actions included:', parsed.actions?.length || 0);
+
             return NextResponse.json({
                 message: parsed.message || "응답을 처리하지 못했습니다.",
                 actions: parsed.actions || [],
             });
-        } catch {
+        } catch (e) {
             // If JSON parsing fails, return as plain message
+            console.error('[AI Chat] JSON parse error:', e);
             return NextResponse.json({
                 message: responseContent,
                 actions: [],

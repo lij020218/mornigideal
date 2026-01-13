@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2, MapPin } from "lucide-react";
+import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2, MapPin, Film, Tv, Music, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileText, Hospital, Lightbulb, Pen, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
@@ -860,46 +860,103 @@ export default function HomePage() {
         '휴식/여가': Gamepad2,
     };
 
-    // Get icon for schedule - first try exact match, then keyword fallback
+    // Get icon for schedule - comprehensive mapping matching dashboard
     const getScheduleIcon = (text: string) => {
         // 1. Try exact match first (like dashboard)
         if (activityIcons[text]) {
             return activityIcons[text];
         }
 
-        // 2. Fallback to keyword matching for custom schedules
+        // 2. Fallback to keyword matching for custom schedules (same as dashboard)
         const lowerText = text.toLowerCase();
 
-        // 식사
-        if (lowerText.includes('아침') || lowerText.includes('breakfast')) return Coffee;
-        if (lowerText.includes('점심') || lowerText.includes('lunch')) return Coffee;
-        if (lowerText.includes('저녁') || lowerText.includes('dinner') || lowerText.includes('식사')) return Coffee;
-
+        // 식사 (아침, 점심, 저녁 포함)
+        if (lowerText.includes('식사') || lowerText.includes('아침') || lowerText.includes('점심') || lowerText.includes('저녁')) {
+            return Utensils;
+        }
         // 수면
-        if (lowerText.includes('취침') || lowerText.includes('수면') || lowerText.includes('잠')) return Moon;
-
+        if (lowerText.includes('기상') || lowerText.includes('일어나')) {
+            return Sun;
+        }
+        if (lowerText.includes('취침') || lowerText.includes('잠')) {
+            return Moon;
+        }
+        // 업무 (시작/종료 포함)
+        if (lowerText.includes('업무') || lowerText.includes('수업') || lowerText.includes('출근')) {
+            if (lowerText.includes('종료')) {
+                return CheckCircle2; // 종료는 체크 아이콘
+            }
+            return Briefcase;
+        }
         // 운동
-        if (lowerText.includes('운동') || lowerText.includes('헬스') || lowerText.includes('조깅') ||
-            lowerText.includes('요가') || lowerText.includes('수영')) return Dumbbell;
+        if (lowerText.includes('운동') || lowerText.includes('헬스')) {
+            return Dumbbell;
+        }
+        if (lowerText.includes('요가')) {
+            return Activity;
+        }
+        // 건강
+        if (lowerText.includes('병원') || lowerText.includes('진료')) {
+            return Hospital;
+        }
+        if (lowerText.includes('거북목') || lowerText.includes('스트레칭')) {
+            return Activity;
+        }
+        if (lowerText.includes('산책')) {
+            return TreePine;
+        }
+        // 학습
+        if (lowerText.includes('독서') || lowerText.includes('책') || lowerText.includes('읽기')) {
+            return BookOpen;
+        }
+        if (lowerText.includes('공부') || lowerText.includes('학습')) {
+            return Pen;
+        }
+        if (lowerText.includes('자기계발')) {
+            return Lightbulb;
+        }
+        // 휴식
+        if (lowerText.includes('휴식')) {
+            return Coffee;
+        }
+        // 엔터테인먼트 (각 유형별 고유 아이콘)
+        if (lowerText === '게임' || lowerText.includes('게임')) {
+            return Gamepad2;
+        }
+        if (lowerText === '영화' || lowerText.includes('영화')) {
+            return Film;
+        }
+        if (lowerText === '드라마' || lowerText.includes('드라마') || lowerText.includes('tv')) {
+            return Tv;
+        }
+        if (lowerText.includes('음악')) {
+            return Music;
+        }
+        // 여가 (일반)
+        if (lowerText.includes('여가') || lowerText.includes('취미')) {
+            return Heart;
+        }
+        // 프로젝트/스타트업/비즈니스
+        if (lowerText.includes('스타트업') || lowerText.includes('린 스타트업') || lowerText.includes('mvp')) {
+            return Rocket;
+        }
+        if (lowerText.includes('프로젝트') || lowerText.includes('실습')) {
+            return Code;
+        }
+        if (lowerText.includes('ai') || lowerText.includes('알고리즘')) {
+            return Brain;
+        }
+        if (lowerText.includes('분석')) {
+            return BarChart3;
+        }
+        if (lowerText.includes('캠페인') || lowerText.includes('마케팅')) {
+            return Megaphone;
+        }
+        if (lowerText.includes('기획') || lowerText.includes('콘텐츠')) {
+            return FileText;
+        }
 
-        // 학습/독서
-        if (lowerText.includes('공부') || lowerText.includes('학습') || lowerText.includes('독서') ||
-            lowerText.includes('책')) return BookOpen;
-
-        // 업무
-        if (lowerText.includes('업무') || lowerText.includes('회의') || lowerText.includes('미팅') ||
-            lowerText.includes('작업')) return Briefcase;
-
-        // 기상
-        if (lowerText.includes('기상') || lowerText.includes('wake')) return Sun;
-
-        // 휴식/여가
-        if (lowerText.includes('휴식') || lowerText.includes('여가') || lowerText.includes('게임')) return Gamepad2;
-
-        // 병원
-        if (lowerText.includes('병원') || lowerText.includes('진료')) return Heart;
-
-        // 기본값
+        // 기본 아이콘 (매칭되지 않는 경우만)
         return Target;
     };
 
@@ -1000,8 +1057,14 @@ export default function HomePage() {
                 },
             ]);
 
-            // Note: Actions are now only executed via button clicks, not automatically
-            // This prevents duplicate schedule additions when AI suggests adding a schedule
+            // Auto-execute add_schedule actions immediately (for "바로 등록해" case)
+            // Other actions (like open_briefing) will still show as buttons
+            if (data.actions && data.actions.length > 0) {
+                const scheduleActions = data.actions.filter((a: any) => a.type === 'add_schedule');
+                if (scheduleActions.length > 0) {
+                    await handleMessageActions(scheduleActions);
+                }
+            }
 
         } catch (error) {
             console.error("Error sending message:", error);
@@ -1659,7 +1722,7 @@ export default function HomePage() {
                                     </div>
                                 )}
 
-                                {/* Action buttons - only show non-schedule actions */}
+                                {/* Action buttons - only show non-schedule actions (schedule actions auto-execute) */}
                                 {message.actions && message.actions.length > 0 && message.role === "assistant" && (
                                     <div className="flex flex-wrap gap-2 mt-4">
                                         {message.actions
@@ -1671,9 +1734,9 @@ export default function HomePage() {
                                                     variant="outline"
                                                     onClick={() => {
                                                         console.log('[Home] Action clicked:', action);
-                                                        console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
 
                                                         if (action.type === 'open_briefing') {
+                                                            console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
                                                             const briefingId = action.data?.briefingId || action.data?.id;
                                                             console.log('[Home] Looking for briefing ID:', briefingId);
 

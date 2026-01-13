@@ -276,7 +276,7 @@ OUTPUT JSON:
       "id": <number>,
       "title_korean": "명확한 한국어 제목",
       "category": "AI|Business|Tech|Finance|Strategy|Innovation|Sports",
-      "summary_korean": "${job}에게 왜 중요한지 2문장",
+      "one_line_summary": "핵심 내용을 1줄로 요약한 문장입니다. 확인하세요!",
       "relevance_korean": "구체적 가치 1문장",
       "interest_match_tags": ["태그"],
       "relevance_score": <1-10>,
@@ -287,6 +287,24 @@ OUTPUT JSON:
 
 Requirements:
 - All Korean text (titles, summaries)
+- **one_line_summary format**:
+  * ⚠️ **CRITICAL: 반드시 주어 + 동사가 있는 완전한 문장!**
+  * 최대 25자 이내
+  * "~이/가" (주격조사) 필수!
+  * "~했습니다/~합니다/~했어요/~됩니다" (완전한 서술어) 필수!
+  *
+  * ✅ 좋은 예:
+  * "하이포가 AI 세일즈로 전환했습니다. 확인하세요!"
+  * "메타가 자체 AI 칩 개발을 시작합니다. 확인하세요!"
+  * "테슬라 주가가 10% 급등했어요. 확인하세요!"
+  * "현대차가 로봇 사업에 진출합니다. 확인하세요!"
+  *
+  * ❌ 나쁜 예 (절대 금지):
+  * "로봇, 현대차 주가↑" (주어+동사 없음 X)
+  * "하이포, AI 세일즈 전환" (동사 없음 X)
+  * "메타 AI 칩 개발 추진" (주격조사 없음 X)
+  *
+  * 2문장 금지! 무조건 1문장만!
 - Focus on practical value for ${job}
 - ${interests ? `At least 3 articles matching: ${interestList}` : ""}
 - **MANDATORY: Exactly 3 international + 3 Korean articles (total 6)**
@@ -325,7 +343,7 @@ Select now.`;
                 id: generateTrendId(selected.title_korean),
                 title: selected.title_korean,
                 category: selected.category || "General",
-                summary: selected.summary_korean,
+                summary: selected.one_line_summary || selected.summary_korean, // Use one_line_summary if available
                 time: pubDate,
                 imageColor: "bg-blue-500/20",
                 originalUrl: originalArticle?.link || "",

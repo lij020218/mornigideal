@@ -169,6 +169,10 @@ export async function POST(request: Request) {
             '휴식': 'green',
             '여가': 'green',
             '휴식/여가': 'green',
+            '게임': 'purple',
+            '영화': 'red',
+            '드라마': 'amber',
+            '음악': 'cyan',
             // Smart suggestions colors (bright colors)
             '거북목': 'pink',
             '산책': 'green',
