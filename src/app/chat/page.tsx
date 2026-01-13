@@ -1043,8 +1043,8 @@ export default function ChatPage() {
                                 </>
                             ) : (
                                 <>
-                                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
-                                        <Sparkles className="w-6 h-6 text-gray-400" />
+                                    <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+                                        <FieriLogo className="w-8 h-8" />
                                     </div>
                                     <div className="text-left">
                                         <p className="font-semibold text-lg">오늘 일정이 없습니다</p>
