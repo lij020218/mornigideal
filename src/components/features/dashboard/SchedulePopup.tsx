@@ -1451,9 +1451,15 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                         const location = locationLine ? locationLine.replace('📍 ', '') : undefined;
                                                         const memoWithoutLocation = activityMemo.split('\n').filter(l => !l.startsWith('📍')).join('\n').trim();
 
+                                                        // Determine time period based on startTime
+                                                        const timeHour = parseInt(startTime.split(':')[0]);
+                                                        const timePeriod: "morning" | "afternoon" | "evening" =
+                                                            timeHour < 12 ? "morning" : timeHour < 18 ? "afternoon" : "evening";
+
                                                         const newGoal: CustomGoal = {
                                                             id: `goal_${Date.now()}`,
                                                             text: activityName,
+                                                            time: timePeriod,
                                                             specificDate: formatDate(selectedDate!),
                                                             startTime,
                                                             endTime,
