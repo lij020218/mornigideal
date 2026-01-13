@@ -84,12 +84,21 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                     if (pregenData.trends && pregenData.trends.length > 0) {
                         console.log('[TrendBriefing] Found pre-generated briefing!');
 
-                        // Check if summaries are too long (old format) and need updating
-                        const hasLongSummaries = pregenData.trends.some((t: any) =>
-                            t.summary && t.summary.length > 60 && !t.summary.includes('확인하세요!')
-                        );
+                        // Check if summaries need updating (old format: too long OR keyword-style)
+                        // Keyword-style detection: contains comma/arrow patterns like "키워드, 키워드↑" or missing proper verb endings
+                        const needsUpdate = pregenData.trends.some((t: any) => {
+                            if (!t.summary) return false;
+                            const summary = t.summary.replace('확인하세요!', '').trim();
+                            // Too long
+                            if (summary.length > 40) return true;
+                            // Keyword style: has comma followed by space and more text, or has arrows
+                            if (/,\s+\S/.test(summary) || /[↑↓]/.test(summary)) return true;
+                            // Missing proper sentence ending (should end with 다, 요, 요! before 확인하세요)
+                            if (!/[다요]\.\s*$/.test(summary) && !summary.endsWith('합니다.') && !summary.endsWith('했습니다.') && !summary.endsWith('됩니다.') && !summary.endsWith('했어요.')) return true;
+                            return false;
+                        });
 
-                        if (hasLongSummaries) {
+                        if (needsUpdate) {
                             console.log('[TrendBriefing] Detected old format summaries, updating...');
                             try {
                                 const updateResponse = await fetch('/api/trend-briefing/update-summaries', {
