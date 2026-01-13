@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2, Users } from "lucide-react";
+import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2, Users, MapPin, FileText, Film, Tv, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -105,6 +105,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
     const [showActivityPicker, setShowActivityPicker] = useState(false);
     const [showDurationPicker, setShowDurationPicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false); // New: for quick add time selection
+    const [pendingActivity, setPendingActivity] = useState<typeof PRESET_ACTIVITIES[0] | null>(null); // Activity waiting for time selection
     const [selectedActivity, setSelectedActivity] = useState<typeof PRESET_ACTIVITIES[0] | null>(null);
     const [duration, setDuration] = useState<number>(1);
     const [customActivityText, setCustomActivityText] = useState("");
@@ -170,6 +172,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     const resetPickers = () => {
         setShowActivityPicker(false);
         setShowDurationPicker(false);
+        setShowTimePicker(false);
+        setPendingActivity(null);
         setShowEditOptions(false);
         setSelectedTimeSlot(null);
         setSelectedActivity(null);
@@ -985,12 +989,38 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
                                                 const isToday = isSameDay(date, new Date());
 
-                                                // Check if has custom goals (use current state, not initial)
-                                                const hasGoals = customGoals?.some(g => {
+                                                // Get all goals for this date with their colors
+                                                const goalsForDate = customGoals?.filter(g => {
                                                     if (g.specificDate) return g.specificDate === formatDate(date);
                                                     if (g.daysOfWeek && g.daysOfWeek.includes(date.getDay()) && !g.specificDate) return true;
                                                     return false;
-                                                });
+                                                }) || [];
+
+                                                // Get unique colors (max 4 to display)
+                                                const uniqueColors = [...new Set(goalsForDate.map(g => g.color || 'primary'))].slice(0, 4);
+
+                                                // Color mapping for schedule indicators
+                                                const getIndicatorColor = (color: string) => {
+                                                    const colorMap: Record<string, string> = {
+                                                        yellow: 'bg-yellow-400',
+                                                        blue: 'bg-blue-400',
+                                                        purple: 'bg-purple-400',
+                                                        violet: 'bg-violet-400',
+                                                        green: 'bg-green-400',
+                                                        emerald: 'bg-emerald-400',
+                                                        red: 'bg-red-400',
+                                                        rose: 'bg-rose-400',
+                                                        orange: 'bg-orange-400',
+                                                        pink: 'bg-pink-400',
+                                                        amber: 'bg-amber-400',
+                                                        cyan: 'bg-cyan-400',
+                                                        sky: 'bg-sky-400',
+                                                        teal: 'bg-teal-400',
+                                                        indigo: 'bg-indigo-400',
+                                                        primary: 'bg-primary',
+                                                    };
+                                                    return colorMap[color] || 'bg-primary';
+                                                };
 
                                                 return (
                                                     <motion.button
@@ -1019,9 +1049,19 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             )}
                                                         </div>
 
-                                                        {hasGoals && (
-                                                            <div className="flex gap-1.5 mt-auto">
-                                                                <div className="w-2 h-2 rounded-full bg-primary shadow-sm" />
+                                                        {/* Schedule indicators - colored bars */}
+                                                        {uniqueColors.length > 0 && (
+                                                            <div className="flex flex-col gap-0.5 mt-auto w-full">
+                                                                {uniqueColors.map((color, idx) => (
+                                                                    <div
+                                                                        key={idx}
+                                                                        className={cn(
+                                                                            "h-1 rounded-full",
+                                                                            getIndicatorColor(color)
+                                                                        )}
+                                                                        style={{ width: `${Math.min(100, 40 + idx * 15)}%` }}
+                                                                    />
+                                                                ))}
                                                             </div>
                                                         )}
 
@@ -1034,84 +1074,411 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 </motion.div>
                             )}
 
-                            {/* MODE 2: DAILY DETAIL (Same as original right side but expanded) */}
-                            {viewMode === 'daily-detail' && (
+                            {/* MODE 2: DAILY DETAIL - Clean card-based design */}
+                            {viewMode === 'daily-detail' && selectedDate && (
                                 <div className="flex h-full">
-                                    {/* Sidebar: Mini Calendar & Back Button */}
-                                    <div className="w-64 border-r border-border p-4 bg-muted flex flex-col">
-                                        <Button
-                                            variant="outline"
-                                            onClick={handleBackToCalendar}
-                                            className="mb-6 w-full flex items-center gap-2"
-                                        >
-                                            <ChevronLeft className="w-4 h-4" /> 캘린더로 돌아가기
-                                        </Button>
+                                    {/* Left Sidebar */}
+                                    <div className="w-72 border-r border-border bg-muted/50 flex flex-col">
+                                        {/* Fixed Header */}
+                                        <div className="p-6 pb-4">
+                                            <Button
+                                                variant="ghost"
+                                                onClick={handleBackToCalendar}
+                                                className="mb-4 w-fit flex items-center gap-2 -ml-2 text-muted-foreground hover:text-foreground"
+                                            >
+                                                <ChevronLeft className="w-4 h-4" /> 돌아가기
+                                            </Button>
 
-                                        <div className="mb-4">
-                                            <h3 className="text-lg font-bold text-foreground">
-                                                {selectedDate?.getMonth()! + 1}월 {selectedDate?.getDate()}일
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground">
-                                                {DAYS_OF_WEEK.find(d => d.id === selectedDate?.getDay())?.fullLabel}
-                                            </p>
+                                            <div>
+                                                <h3 className="text-3xl font-bold text-foreground">
+                                                    {selectedDate?.getDate()}일
+                                                </h3>
+                                                <p className="text-lg text-muted-foreground">
+                                                    {selectedDate?.getMonth()! + 1}월 · {DAYS_OF_WEEK.find(d => d.id === selectedDate?.getDay())?.fullLabel}
+                                                </p>
+                                            </div>
                                         </div>
 
-                                        {/* Mini Calendar for context (optional, or just reuse prev/next day nav) */}
-                                        <div className="mt-auto pt-4 border-t border-border">
-                                            <p className="text-xs text-muted-foreground text-center">
-                                                시간대를 클릭하여<br />일정을 추가하거나 수정하세요.
-                                            </p>
+                                        {/* Scrollable Activity List */}
+                                        <div className="flex-1 overflow-y-auto px-6 pb-6 hide-scrollbar">
+                                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 sticky top-0 bg-muted/50 py-2">일정 추가</h4>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {PRESET_ACTIVITIES.map((activity) => {
+                                                    const ActivityIcon = activity.icon;
+                                                    return (
+                                                        <motion.button
+                                                            key={activity.id}
+                                                            whileHover={{ scale: 1.05 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => {
+                                                                // Set pending activity and show time picker
+                                                                setPendingActivity(activity);
+                                                                setShowTimePicker(true);
+                                                                setShowActivityPicker(false);
+                                                                setShowDurationPicker(false);
+                                                                setShowEditOptions(false);
+                                                                setActivityMemo("");
+                                                            }}
+                                                            className={cn(
+                                                                "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md",
+                                                                getColorClasses(activity.color)
+                                                            )}
+                                                        >
+                                                            <ActivityIcon className="w-4 h-4" />
+                                                            <span className="text-[9px] font-medium text-center leading-tight">{activity.label.slice(0, 4)}</span>
+                                                        </motion.button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Custom Activity Button */}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full border-dashed mt-4"
+                                                onClick={() => {
+                                                    setShowTimePicker(true);
+                                                    setPendingActivity(null);
+                                                    setIsAddingCustom(true);
+                                                    setShowEditOptions(false);
+                                                    setActivityMemo("");
+                                                    setCustomActivityText("");
+                                                }}
+                                            >
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                직접 입력
+                                            </Button>
                                         </div>
                                     </div>
 
-                                    {/* Main Timeline */}
+                                    {/* Main Content */}
                                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white">
-                                        <div className="space-y-1">
-                                            {timeSlots.map((time) => {
-                                                const activity = getScheduledActivityAtTime(time);
-                                                const isHourMark = time.endsWith(':00');
+                                        {(() => {
+                                            // Get goals for selected date
+                                            const dateGoals = customGoals.filter(g => {
+                                                const isSpecificDate = g.specificDate === formatDate(selectedDate);
+                                                const isRecurringOnThisDay = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
+                                                return isSpecificDate || isRecurringOnThisDay;
+                                            }).sort((a, b) => {
+                                                const [aH, aM] = (a.startTime || "00:00").split(':').map(Number);
+                                                const [bH, bM] = (b.startTime || "00:00").split(':').map(Number);
+                                                return (aH * 60 + aM) - (bH * 60 + bM);
+                                            });
 
+                                            if (dateGoals.length === 0) {
+                                                // No schedules - show empty state
                                                 return (
-                                                    <motion.div
-                                                        key={time}
-                                                        whileHover={{ scale: 1.005 }}
-                                                        onClick={() => handleTimeSlotClick(time)}
-                                                        className={cn(
-                                                            "flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border",
-                                                            activity
-                                                                ? getColorClasses(activity.color, activity.isStart !== false) + " border"
-                                                                : "bg-white border-border hover:bg-muted hover:border-primary/30",
-                                                            isHourMark && "border-l-2 border-l-primary/50"
-                                                        )}
-                                                    >
-                                                        <span className={cn(
-                                                            "font-mono text-sm shrink-0 w-14",
-                                                            isHourMark ? "font-bold text-foreground" : "text-muted-foreground"
-                                                        )}>
-                                                            {time}
-                                                        </span>
-
-                                                        {activity ? (
-                                                            <div className="flex items-center gap-2 flex-1">
-                                                                {activity.isStart !== false && <activity.icon className="w-4 h-4" />}
-                                                                <span className="text-sm font-medium">
-                                                                    {activity.isStart === false ? '⋮' : activity.label}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex-1 h-6 border border-dashed border-border rounded flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                                                <Plus className="w-3 h-3 text-muted-foreground" />
-                                                            </div>
-                                                        )}
-                                                    </motion.div>
+                                                    <div className="h-full flex flex-col items-center justify-center text-center">
+                                                        <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-6">
+                                                            <CalendarIcon className="w-10 h-10 text-muted-foreground" />
+                                                        </div>
+                                                        <h3 className="text-xl font-semibold text-foreground mb-2">일정이 없습니다</h3>
+                                                        <p className="text-muted-foreground max-w-sm">
+                                                            왼쪽에서 일정을 선택하여 추가하세요.
+                                                        </p>
+                                                    </div>
                                                 );
-                                            })}
-                                        </div>
+                                            }
+
+                                            // Has schedules - show card-based timeline
+                                            return (
+                                                <div className="space-y-4">
+                                                    <h3 className="text-lg font-semibold mb-4">이 날의 일정</h3>
+
+                                                    {dateGoals.map((goal) => {
+                                                        const preset = PRESET_ACTIVITIES.find(a => a.label === goal.text);
+                                                        const GoalIcon = preset?.icon || Target;
+                                                        const goalColor = goal.color || preset?.color || 'primary';
+
+                                                        return (
+                                                            <motion.div
+                                                                key={goal.id}
+                                                                initial={{ opacity: 0, y: 10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                whileHover={{ scale: 1.01 }}
+                                                                onClick={() => {
+                                                                    setSelectedTimeSlot(goal.startTime || "09:00");
+                                                                    setSelectedActivityId(goal.id);
+                                                                    setShowEditOptions(true);
+                                                                    setActivityMemo(goal.memo || "");
+                                                                }}
+                                                                className={cn(
+                                                                    "p-4 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-lg",
+                                                                    getColorClasses(goalColor)
+                                                                )}
+                                                            >
+                                                                <div className="flex items-start gap-4">
+                                                                    <div className={cn(
+                                                                        "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                                                                        `bg-${goalColor}-200/50`
+                                                                    )}>
+                                                                        <GoalIcon className="w-6 h-6" />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className="font-bold text-lg">{goal.text}</span>
+                                                                            {goal.daysOfWeek && goal.daysOfWeek.length > 0 && !goal.specificDate && (
+                                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-white/50 text-muted-foreground">반복</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                                                            <span className="flex items-center gap-1">
+                                                                                <Clock className="w-3.5 h-3.5" />
+                                                                                {goal.startTime} - {goal.endTime || "??:??"}
+                                                                            </span>
+                                                                            {goal.location && (
+                                                                                <span className="flex items-center gap-1">
+                                                                                    <MapPin className="w-3.5 h-3.5" />
+                                                                                    {goal.location}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {goal.memo && (
+                                                                            <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+                                                                                {goal.memo}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </motion.div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
-                                    {/* Right Sidebar: Tools (Reused) */}
-                                    <div className="w-80 border-l border-border p-4 bg-muted overflow-y-auto custom-scrollbar">
-                                        {renderActivityTools()}
+                                    {/* Right Sidebar: Edit Panel */}
+                                    <div className="w-80 border-l border-border p-5 bg-muted/50 overflow-y-auto custom-scrollbar">
+                                        {showEditOptions && selectedActivityId ? (
+                                            <motion.div
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="space-y-5"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-semibold">일정 수정</h4>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={resetPickers}>
+                                                        <X className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+
+                                                {/* Time Edit */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground">시간</label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <span className="text-xs text-muted-foreground">시작</span>
+                                                            <Input
+                                                                type="time"
+                                                                value={customGoals.find(g => g.id === selectedActivityId)?.startTime || ""}
+                                                                onChange={(e) => {
+                                                                    setCustomGoals(customGoals.map(g =>
+                                                                        g.id === selectedActivityId ? { ...g, startTime: e.target.value } : g
+                                                                    ));
+                                                                }}
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs text-muted-foreground">종료</span>
+                                                            <Input
+                                                                type="time"
+                                                                value={customGoals.find(g => g.id === selectedActivityId)?.endTime || ""}
+                                                                onChange={(e) => {
+                                                                    setCustomGoals(customGoals.map(g =>
+                                                                        g.id === selectedActivityId ? { ...g, endTime: e.target.value } : g
+                                                                    ));
+                                                                }}
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Location */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                                        <MapPin className="w-3.5 h-3.5" /> 장소
+                                                    </label>
+                                                    <Input
+                                                        placeholder="장소를 입력하세요"
+                                                        value={customGoals.find(g => g.id === selectedActivityId)?.location || ""}
+                                                        onChange={(e) => {
+                                                            setCustomGoals(customGoals.map(g =>
+                                                                g.id === selectedActivityId ? { ...g, location: e.target.value } : g
+                                                            ));
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                {/* Memo / Details */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                                        <FileText className="w-3.5 h-3.5" /> 세부사항
+                                                    </label>
+                                                    <textarea
+                                                        value={activityMemo}
+                                                        onChange={(e) => setActivityMemo(e.target.value)}
+                                                        onBlur={handleMemoUpdate}
+                                                        placeholder="세부사항을 입력하세요..."
+                                                        className="w-full min-h-[100px] px-3 py-2 bg-white border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                                    />
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="pt-4 border-t border-border space-y-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                        onClick={handleDeleteActivity}
+                                                    >
+                                                        <Trash2 className="w-4 h-4 mr-2" />
+                                                        일정 삭제
+                                                    </Button>
+                                                </div>
+                                            </motion.div>
+                                        ) : showTimePicker ? (
+                                            // Time picker for quick add
+                                            <motion.div
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="space-y-5"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-semibold">
+                                                        {pendingActivity ? pendingActivity.label : '새 일정'} 추가
+                                                    </h4>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={resetPickers}>
+                                                        <X className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+
+                                                {/* Custom Activity Name (when adding custom) */}
+                                                {isAddingCustom && !pendingActivity && (
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium text-muted-foreground">일정 이름</label>
+                                                        <Input
+                                                            placeholder="일정 이름을 입력하세요"
+                                                            value={customActivityText}
+                                                            onChange={(e) => setCustomActivityText(e.target.value)}
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* Time Selection */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground">시간</label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <span className="text-xs text-muted-foreground">시작</span>
+                                                            <Input
+                                                                type="time"
+                                                                value={selectedTimeSlot || "09:00"}
+                                                                onChange={(e) => setSelectedTimeSlot(e.target.value)}
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs text-muted-foreground">종료</span>
+                                                            <Input
+                                                                type="time"
+                                                                value={(() => {
+                                                                    const start = selectedTimeSlot || "09:00";
+                                                                    const [h, m] = start.split(':').map(Number);
+                                                                    const endH = h + duration;
+                                                                    return `${String(endH % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                                                })()}
+                                                                onChange={(e) => {
+                                                                    const start = selectedTimeSlot || "09:00";
+                                                                    const [sH] = start.split(':').map(Number);
+                                                                    const [eH] = e.target.value.split(':').map(Number);
+                                                                    setDuration(Math.max(1, eH - sH));
+                                                                }}
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Location */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                                        <MapPin className="w-3.5 h-3.5" /> 장소 (선택)
+                                                    </label>
+                                                    <Input
+                                                        placeholder="장소를 입력하세요"
+                                                        value={activityMemo.split('\n')[0]?.startsWith('📍') ? activityMemo.split('\n')[0].replace('📍 ', '') : ''}
+                                                        onChange={(e) => {
+                                                            // Store location temporarily
+                                                            const currentMemo = activityMemo.split('\n').filter(l => !l.startsWith('📍')).join('\n');
+                                                            setActivityMemo(e.target.value ? `📍 ${e.target.value}\n${currentMemo}` : currentMemo);
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                {/* Memo / Details */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                                                        <FileText className="w-3.5 h-3.5" /> 세부사항 (선택)
+                                                    </label>
+                                                    <textarea
+                                                        value={activityMemo.split('\n').filter(l => !l.startsWith('📍')).join('\n')}
+                                                        onChange={(e) => {
+                                                            const locationLine = activityMemo.split('\n').find(l => l.startsWith('📍'));
+                                                            setActivityMemo(locationLine ? `${locationLine}\n${e.target.value}` : e.target.value);
+                                                        }}
+                                                        placeholder="세부사항을 입력하세요..."
+                                                        className="w-full min-h-[80px] px-3 py-2 bg-white border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                                    />
+                                                </div>
+
+                                                {/* Add Button */}
+                                                <Button
+                                                    className="w-full"
+                                                    disabled={isAddingCustom && !pendingActivity && !customActivityText.trim()}
+                                                    onClick={() => {
+                                                        const activityName = pendingActivity?.label || customActivityText.trim();
+                                                        const activityColor = pendingActivity?.color || 'primary';
+                                                        const startTime = selectedTimeSlot || "09:00";
+                                                        const [sH, sM] = startTime.split(':').map(Number);
+                                                        const endH = sH + duration;
+                                                        const endTime = `${String(endH % 24).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
+
+                                                        // Extract location from memo
+                                                        const locationLine = activityMemo.split('\n').find(l => l.startsWith('📍'));
+                                                        const location = locationLine ? locationLine.replace('📍 ', '') : undefined;
+                                                        const memoWithoutLocation = activityMemo.split('\n').filter(l => !l.startsWith('📍')).join('\n').trim();
+
+                                                        const newGoal: CustomGoal = {
+                                                            id: `goal_${Date.now()}`,
+                                                            text: activityName,
+                                                            completed: false,
+                                                            specificDate: formatDate(selectedDate!),
+                                                            startTime,
+                                                            endTime,
+                                                            color: activityColor,
+                                                            location,
+                                                            memo: memoWithoutLocation || undefined,
+                                                        };
+
+                                                        setCustomGoals([...customGoals, newGoal]);
+                                                        resetPickers();
+                                                    }}
+                                                >
+                                                    <Plus className="w-4 h-4 mr-2" />
+                                                    일정 추가
+                                                </Button>
+                                            </motion.div>
+                                        ) : showActivityPicker || showDurationPicker ? (
+                                            renderActivityTools()
+                                        ) : (
+                                            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
+                                                <CalendarIcon className="w-8 h-8 mb-3 opacity-50" />
+                                                <p className="text-sm">왼쪽에서 일정을 선택하거나<br />기존 일정을 클릭하세요</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1217,11 +1584,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     </motion.div>
 
                     <style jsx global>{`
-                        .custom-scrollbar {
+                        .custom-scrollbar,
+                        .hide-scrollbar {
                             -ms-overflow-style: none;  /* IE and Edge */
                             scrollbar-width: none;  /* Firefox */
                         }
-                        .custom-scrollbar::-webkit-scrollbar {
+                        .custom-scrollbar::-webkit-scrollbar,
+                        .hide-scrollbar::-webkit-scrollbar {
                             display: none;
                         }
                     `}</style>
