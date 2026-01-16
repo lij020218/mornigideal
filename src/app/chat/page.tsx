@@ -186,7 +186,12 @@ export default function ChatPage() {
         fetch('/api/user/chat-history?cleanup=true', { method: 'DELETE' })
             .catch(err => console.error('[Chat] Failed to cleanup old chats in DB:', err));
 
-        // Check for pending learning tip (from Learning page)
+        // Check for pending learning tip (from Learning page) - 초기 로드 시
+        checkPendingLearningTip();
+    }, []);
+
+    // Helper function to check and process pending learning tips
+    const checkPendingLearningTip = () => {
         const pendingTip = localStorage.getItem('pending_learning_tip');
         if (pendingTip) {
             try {
@@ -210,6 +215,24 @@ export default function ChatPage() {
                 localStorage.removeItem('pending_learning_tip');
             }
         }
+    };
+
+    // Listen for new learning tips added from other pages (growth page)
+    useEffect(() => {
+        const handleLearningTipAdded = () => {
+            console.log('[Chat] Learning tip added event received');
+            // Small delay to ensure localStorage is updated
+            setTimeout(checkPendingLearningTip, 100);
+        };
+
+        window.addEventListener('learning-tip-added', handleLearningTipAdded);
+        // Also check on window focus (in case user navigated away and back)
+        window.addEventListener('focus', checkPendingLearningTip);
+
+        return () => {
+            window.removeEventListener('learning-tip-added', handleLearningTipAdded);
+            window.removeEventListener('focus', checkPendingLearningTip);
+        };
     }, []);
 
     // Listen for load-chat-date event from Sidebar

@@ -495,9 +495,23 @@ export function LearningCurriculumView({
                         dayTitle: day.title,
                         topic: curriculum.topic,
                     }));
+
+                    // 채팅 페이지에 학습 팁이 추가되었음을 알림
+                    window.dispatchEvent(new Event('learning-tip-added'));
+                    console.log('[Learning] Dispatched learning-tip-added event');
                 }
             } catch (tipError) {
                 console.error('[Learning] Failed to generate tip:', tipError);
+                // 팁 생성 실패해도 기본 메시지는 저장
+                localStorage.setItem('pending_learning_tip', JSON.stringify({
+                    greeting: `오늘의 학습: ${day.title}`,
+                    tips: [],
+                    encouragement: '오늘도 화이팅!',
+                    scheduleId: newSchedule.id,
+                    dayTitle: day.title,
+                    topic: curriculum.topic,
+                }));
+                window.dispatchEvent(new Event('learning-tip-added'));
             }
 
             // 채팅 알림 이벤트 발생 (다른 페이지에 있을 때 알림용)
