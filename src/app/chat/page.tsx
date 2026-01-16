@@ -263,8 +263,8 @@ export default function ChatPage() {
             }
         };
 
-        window.addEventListener('load-chat-date', handleLoadChatDate as EventListener);
-        return () => window.removeEventListener('load-chat-date', handleLoadChatDate as EventListener);
+        window.addEventListener('load-chat-date', handleLoadChatDate as unknown as EventListener);
+        return () => window.removeEventListener('load-chat-date', handleLoadChatDate as unknown as EventListener);
     }, []);
 
     // Send initial greeting message with AI recommendations if no messages exist
