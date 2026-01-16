@@ -1987,7 +1987,7 @@ export default function ChatPage() {
                                         <FieriLogo className="w-8 h-8" />
                                     </div>
                                     <div className="text-left">
-                                        <p className="font-semibold text-lg">오늘 일정이 없습니다</p>
+                                        <p className="font-semibold text-lg">현재 일정이 없습니다</p>
                                         <p className="text-sm text-muted-foreground">새로운 일정을 추가해보세요</p>
                                     </div>
                                 </>
