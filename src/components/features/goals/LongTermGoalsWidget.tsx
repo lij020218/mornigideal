@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Flag, Calendar, CalendarDays, CalendarRange,
-    Plus, Check, Trash2,
+    Plus, Check, Trash2, ChevronDown, ChevronUp, Clock,
     TrendingUp, Loader2, Trophy, Flame, Star, Dumbbell,
     Briefcase, Heart, BookOpen, Coins, Users, Palette, MoreHorizontal
 } from "lucide-react";
@@ -38,6 +38,16 @@ interface LongTermGoal {
     completed: boolean;
     createdAt: string;
     updatedAt: string;
+}
+
+interface LinkedSchedule {
+    id: string;
+    text: string;
+    startTime: string;
+    endTime?: string;
+    specificDate?: string;
+    daysOfWeek?: number[];
+    completed?: boolean;
 }
 
 interface LongTermGoals {
@@ -79,10 +89,66 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
     const [activeTab, setActiveTab] = useState<"weekly" | "monthly" | "yearly">("weekly");
     const [editingProgress, setEditingProgress] = useState<string | null>(null);
     const [hoveredGoal, setHoveredGoal] = useState<string | null>(null);
+    const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
+    const [linkedSchedules, setLinkedSchedules] = useState<Record<string, LinkedSchedule[]>>({});
+    const [loadingSchedules, setLoadingSchedules] = useState<string | null>(null);
 
     useEffect(() => {
         fetchGoals();
     }, []);
+
+    // 목표에 연결된 일정 가져오기
+    const fetchLinkedSchedules = async (goalId: string) => {
+        if (linkedSchedules[goalId]) {
+            // 이미 로드된 경우 캐시 사용
+            return;
+        }
+
+        setLoadingSchedules(goalId);
+        try {
+            const profileRes = await fetch('/api/user/profile');
+            if (profileRes.ok) {
+                const { profile } = await profileRes.json();
+                const customGoals = profile?.customGoals || [];
+
+                // 목표와 연결된 일정 필터링
+                const linked = customGoals.filter((schedule: any) =>
+                    schedule.linkedGoalId === goalId
+                );
+
+                // 완료 상태 확인
+                const today = new Date();
+                const kstDate = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+                const todayStr = `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
+                const completionsStr = localStorage.getItem(`schedule_completions_${todayStr}`);
+                const completions = completionsStr ? JSON.parse(completionsStr) : {};
+
+                const schedulesWithStatus = linked.map((s: any) => ({
+                    ...s,
+                    completed: completions[s.id]?.completed || false,
+                }));
+
+                setLinkedSchedules(prev => ({
+                    ...prev,
+                    [goalId]: schedulesWithStatus,
+                }));
+            }
+        } catch (error) {
+            console.error('[LongTermGoalsWidget] Failed to fetch linked schedules:', error);
+        } finally {
+            setLoadingSchedules(null);
+        }
+    };
+
+    // 목표 확장/축소 토글
+    const toggleExpanded = async (goalId: string) => {
+        if (expandedGoal === goalId) {
+            setExpandedGoal(null);
+        } else {
+            setExpandedGoal(goalId);
+            await fetchLinkedSchedules(goalId);
+        }
+    };
 
     const fetchGoals = async () => {
         try {
@@ -318,7 +384,10 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                             {currentGoals.map((goal, index) => {
                                 const config = categoryConfig[goal.category || "general"];
                                 const isHovered = hoveredGoal === goal.id;
+                                const isExpanded = expandedGoal === goal.id;
                                 const CategoryIcon = config.icon;
+                                const schedules = linkedSchedules[goal.id] || [];
+                                const isLoadingThisGoal = loadingSchedules === goal.id;
 
                                 return (
                                     <motion.div
@@ -329,12 +398,16 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                         onMouseEnter={() => setHoveredGoal(goal.id)}
                                         onMouseLeave={() => setHoveredGoal(null)}
                                         className={cn(
-                                            "group relative p-4 rounded-xl transition-all duration-200",
+                                            "group relative rounded-xl transition-all duration-200 cursor-pointer",
                                             goal.completed
                                                 ? "bg-gradient-to-r from-green-50 to-emerald-50/50 dark:from-green-950/20 dark:to-emerald-950/10 ring-1 ring-green-200 dark:ring-green-800"
                                                 : "bg-white dark:bg-card/80 hover:shadow-md hover:ring-1 hover:ring-primary/20"
                                         )}
                                     >
+                                        <div
+                                            className="p-4"
+                                            onClick={() => toggleExpanded(goal.id)}
+                                        >
                                         <div className="flex items-start gap-4">
                                             {/* Category Icon */}
                                             <div className={cn(
@@ -477,29 +550,153 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                                 )}
                                             </div>
 
-                                            {/* Actions */}
-                                            <div className={cn(
-                                                "flex flex-col gap-1 transition-opacity duration-200",
-                                                isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                            )}>
-                                                {!goal.completed && (
-                                                    <button
-                                                        onClick={() => completeGoal(goal)}
-                                                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800/50 transition-colors"
-                                                        title="완료"
-                                                    >
-                                                        <Check className="w-4 h-4" />
-                                                    </button>
-                                                )}
+                                            {/* Actions & Expand Button */}
+                                            <div className="flex flex-col gap-1">
+                                                {/* Expand/Collapse Indicator */}
                                                 <button
-                                                    onClick={() => deleteGoal(goal)}
-                                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors"
-                                                    title="삭제"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleExpanded(goal.id);
+                                                    }}
+                                                    className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                                                        isExpanded
+                                                            ? "bg-primary/10 text-primary"
+                                                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                                                    )}
+                                                    title={isExpanded ? "접기" : "연결된 일정 보기"}
                                                 >
-                                                    <Trash2 className="w-4 h-4" />
+                                                    {isExpanded ? (
+                                                        <ChevronUp className="w-4 h-4" />
+                                                    ) : (
+                                                        <ChevronDown className="w-4 h-4" />
+                                                    )}
                                                 </button>
+                                                <div className={cn(
+                                                    "flex flex-col gap-1 transition-opacity duration-200",
+                                                    isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                                )}>
+                                                    {!goal.completed && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                completeGoal(goal);
+                                                            }}
+                                                            className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800/50 transition-colors"
+                                                            title="완료"
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            deleteGoal(goal);
+                                                        }}
+                                                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors"
+                                                        title="삭제"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
+                                        </div>
+
+                                        {/* Linked Schedules - Expanded Section */}
+                                        <AnimatePresence>
+                                            {isExpanded && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: "auto", opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.2 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="px-4 pb-4 pt-2 border-t border-border/50 mx-4">
+                                                        <div className="flex items-center gap-2 mb-3">
+                                                            <Calendar className="w-4 h-4 text-primary" />
+                                                            <span className="text-sm font-medium">연결된 일정</span>
+                                                            {schedules.length > 0 && (
+                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                                                    {schedules.length}개
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {isLoadingThisGoal ? (
+                                                            <div className="flex items-center justify-center py-4">
+                                                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                                            </div>
+                                                        ) : schedules.length === 0 ? (
+                                                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                                                <p>연결된 일정이 없습니다</p>
+                                                                <p className="text-xs mt-1">
+                                                                    일정 추가 시 이 목표와 연결하면 진행률이 자동으로 계산됩니다
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {schedules.map((schedule) => {
+                                                                    const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+                                                                    const repeatDays = schedule.daysOfWeek?.map(d => dayLabels[d]).join(', ');
+
+                                                                    return (
+                                                                        <div
+                                                                            key={schedule.id}
+                                                                            className={cn(
+                                                                                "flex items-center gap-3 p-3 rounded-lg transition-colors",
+                                                                                schedule.completed
+                                                                                    ? "bg-green-50 dark:bg-green-950/20"
+                                                                                    : "bg-muted/30 hover:bg-muted/50"
+                                                                            )}
+                                                                        >
+                                                                            <div className={cn(
+                                                                                "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                                                                                schedule.completed
+                                                                                    ? "bg-green-100 dark:bg-green-900/30"
+                                                                                    : "bg-white dark:bg-card"
+                                                                            )}>
+                                                                                {schedule.completed ? (
+                                                                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                                                                ) : (
+                                                                                    <Clock className="w-4 h-4 text-muted-foreground" />
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className={cn(
+                                                                                    "text-sm font-medium truncate",
+                                                                                    schedule.completed && "text-muted-foreground line-through"
+                                                                                )}>
+                                                                                    {schedule.text}
+                                                                                </p>
+                                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                    <span>{schedule.startTime}{schedule.endTime && ` - ${schedule.endTime}`}</span>
+                                                                                    {schedule.specificDate ? (
+                                                                                        <span className="px-1.5 py-0.5 rounded bg-muted">
+                                                                                            {schedule.specificDate}
+                                                                                        </span>
+                                                                                    ) : repeatDays && (
+                                                                                        <span className="px-1.5 py-0.5 rounded bg-muted">
+                                                                                            매주 {repeatDays}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                            {schedule.completed && (
+                                                                                <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                                                                    완료
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </motion.div>
                                 );
                             })}
