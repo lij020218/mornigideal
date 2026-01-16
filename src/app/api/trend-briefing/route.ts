@@ -270,11 +270,12 @@ TASK: Select 6 most relevant NEW articles.
 CRITERIA (IN ORDER OF PRIORITY):
 1. **🔥 RECENCY (HIGHEST PRIORITY)**: Strongly prefer articles with recencyScore >= 70 (published within last 2 days: today=100, yesterday=90, 2 days ago=70). Fresh news is CRITICAL.
 2. **🌍 SOURCE BALANCE (MANDATORY)**: MUST select EXACTLY 3 international articles (Reuters, Bloomberg, BBC, CNN, TechCrunch, WSJ, NYT, AP News, etc.) and EXACTLY 3 Korean articles (한국경제, 조선일보, 매일경제, etc.)
-3. Match interests (${interestList}) - minimum 3 articles
-4. Valuable for ${job} daily work
-5. Support goal: ${goal || "career growth"}
-6. Mix of topics and categories
-7. **FRESH content - select different articles from previous selections**
+3. **📰 SAME SOURCE LIMIT (MANDATORY)**: Maximum 2 articles from the SAME source! (예: BBC에서 최대 2개, 한국경제에서 최대 2개)
+4. Match interests (${interestList}) - minimum 3 articles
+5. Valuable for ${job} daily work
+6. Support goal: ${goal || "career growth"}
+7. Mix of topics and categories
+8. **FRESH content - select different articles from previous selections**
 
 ⭐ NOTE: Each article has a "recencyScore" field. Prioritize articles with scores 100, 90, 70 over older articles (50, 20).
 
@@ -332,11 +333,32 @@ Select now.`;
             return NextResponse.json({ error: "Failed to process articles" }, { status: 500 });
         }
 
-        const selectedArticles = data.selectedArticles || [];
+        let selectedArticles = data.selectedArticles || [];
 
         if (selectedArticles.length === 0) {
             return NextResponse.json({ error: "No relevant articles found" }, { status: 500 });
         }
+
+        // Step 2.5: Enforce same source limit (max 2 articles per source)
+        const sourceCount: Record<string, number> = {};
+        selectedArticles = selectedArticles.filter((article: any) => {
+            const filteredArticle = filteredArticles[article.id];
+            const sourceName = filteredArticle?.source || 'Unknown';
+
+            if (!sourceCount[sourceName]) {
+                sourceCount[sourceName] = 0;
+            }
+
+            if (sourceCount[sourceName] >= 2) {
+                console.log(`[API] Skipping article from ${sourceName} (already 2 from this source)`);
+                return false;
+            }
+
+            sourceCount[sourceName]++;
+            return true;
+        });
+
+        console.log('[API] Source distribution after filtering:', sourceCount);
 
         // Step 3: Map selected articles back to original RSS articles
         const trends = selectedArticles.map((selected: any) => {
