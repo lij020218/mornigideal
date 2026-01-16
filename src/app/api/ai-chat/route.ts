@@ -8,7 +8,7 @@ const openai = new OpenAI({
 });
 
 interface ChatAction {
-    type: "add_schedule" | "open_link" | "open_curriculum" | "web_search";
+    type: "add_schedule" | "delete_schedule" | "open_link" | "open_curriculum" | "web_search";
     label: string;
     data: Record<string, any>;
 }
@@ -311,6 +311,20 @@ ${pendingScheduleContext}
     * "주말마다" → daysOfWeek: [0,6]
     * specificDate는 반복 일정이면 null, 특정 날짜면 "YYYY-MM-DD"
   - 장소(location), 메모(memo) 정보가 있으면 data에 포함, 없으면 빈 문자열로.
+- **일정 삭제**:
+  - "삭제해줘", "지워줘", "취소해줘", "없애줘" 등의 요청이 있으면 delete_schedule 액션 포함
+  - **반복 일정 삭제**:
+    * "매일 아침 9시 기상 삭제" → 해당 시간과 이름이 일치하는 반복 일정 삭제
+    * data에 text(일정 이름), startTime(시작 시간) 포함
+    * 반복 일정이면 isRepeating: true 추가
+  - **특정 날짜 일정 삭제**:
+    * "오늘 3시 회의 삭제" → 해당 날짜의 특정 일정 삭제
+    * data에 text, startTime, specificDate 포함
+  - **예시**:
+    * 사용자: "매일 아침 9시 기상 일정 삭제해줘"
+    * 응답: {"message": "매일 아침 9시 기상 일정 삭제했어요! 🗑️", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}
+    * 사용자: "오늘 3시 회의 취소해줘"
+    * 응답: {"message": "오늘 오후 3시 회의 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "회의 삭제", "data": {"text": "회의", "startTime": "15:00", "specificDate": "2026-01-17"}}]}
 - **트렌드 브리핑**: 컨텍스트 참고하여 요약하고 actions에 open_briefing 포함.
 - **자료/정보 검색 요청**: 사용자가 자료, 정보, 검색, 찾아줘 등을 요청하면:
   * actions에 web_search를 포함하여 Gemini 웹 검색 트리거
@@ -324,13 +338,18 @@ ${pendingScheduleContext}
   "message": "사용자에게 보여줄 메시지 (존댓말)",
   "actions": [
     {
-      "type": "add_schedule" | "open_briefing" | "web_search",
+      "type": "add_schedule" | "delete_schedule" | "open_briefing" | "web_search",
       "label": "버튼 텍스트",
       "data": {
         // add_schedule: { text, startTime, endTime, specificDate, daysOfWeek, color: 'primary', location, memo }
         // - text: 정규화된 일정 이름 (예: "기상", "업무 시작", "운동")
         // - daysOfWeek: 반복 요일 배열 [0-6] 또는 null (0=일, 1=월, ..., 6=토)
         // - specificDate: 특정 날짜 "YYYY-MM-DD" 또는 null (반복 일정이면 null)
+        // delete_schedule: { text, startTime, isRepeating?, specificDate? }
+        // - text: 삭제할 일정 이름
+        // - startTime: 시작 시간 (예: "09:00")
+        // - isRepeating: true면 반복 일정 삭제
+        // - specificDate: 특정 날짜만 삭제할 경우
         // open_briefing: { briefingId, title }
         // web_search: { query, activity }
       }

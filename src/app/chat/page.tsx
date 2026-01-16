@@ -1504,6 +1504,96 @@ export default function ChatPage() {
                         } catch (scheduleError) {
                             console.error('[Chat] Error adding schedule:', scheduleError);
                         }
+                    } else if (action.type === 'delete_schedule' && action.data) {
+                        // Handle schedule deletion
+                        console.log('[Chat] Processing delete_schedule action:', action.data);
+                        try {
+                            const { text, startTime, isRepeating, specificDate } = action.data;
+
+                            // Fetch current profile
+                            const profileRes = await fetch('/api/user/profile');
+                            if (profileRes.ok) {
+                                const profileData = await profileRes.json();
+                                const customGoals = profileData.profile?.customGoals || [];
+
+                                // Find matching schedules to delete
+                                const normalizedText = text.toLowerCase().trim();
+                                const schedulesToKeep = customGoals.filter((goal: any) => {
+                                    const goalText = goal.text.toLowerCase().trim();
+                                    const goalStartTime = goal.startTime;
+
+                                    // Check if this is the schedule to delete
+                                    const textMatches = goalText.includes(normalizedText) || normalizedText.includes(goalText);
+                                    const timeMatches = !startTime || goalStartTime === startTime;
+
+                                    if (textMatches && timeMatches) {
+                                        // For repeating schedules
+                                        if (isRepeating && goal.daysOfWeek && goal.daysOfWeek.length > 0) {
+                                            console.log('[Chat] Deleting repeating schedule:', goal.text, goal.startTime);
+                                            return false; // Delete this
+                                        }
+                                        // For specific date schedules
+                                        if (specificDate && goal.specificDate === specificDate) {
+                                            console.log('[Chat] Deleting specific date schedule:', goal.text, goal.specificDate);
+                                            return false; // Delete this
+                                        }
+                                        // If no specificDate provided, delete all matching
+                                        if (!specificDate && !isRepeating) {
+                                            console.log('[Chat] Deleting schedule (any type):', goal.text);
+                                            return false; // Delete this
+                                        }
+                                    }
+                                    return true; // Keep this
+                                });
+
+                                const deletedCount = customGoals.length - schedulesToKeep.length;
+                                console.log('[Chat] Deleted schedules count:', deletedCount);
+
+                                if (deletedCount > 0) {
+                                    // Update profile with remaining schedules
+                                    await fetch('/api/user/profile', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            ...profileData.profile,
+                                            customGoals: schedulesToKeep,
+                                        }),
+                                    });
+
+                                    // Dispatch events to update other components
+                                    window.dispatchEvent(new CustomEvent('schedule-updated'));
+                                    window.dispatchEvent(new Event('profile-updated'));
+
+                                    // Refresh local state
+                                    const today = getChatDate();
+                                    const currentDay = new Date().getDay();
+                                    const specificDateGoals = schedulesToKeep.filter((g: any) => g.specificDate === today);
+                                    const recurringGoals = schedulesToKeep.filter((g: any) => {
+                                        if (g.specificDate) return false;
+                                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                        return !specificDateGoals.some((sg: any) =>
+                                            sg.text === g.text && sg.startTime === g.startTime
+                                        );
+                                    });
+                                    const todayGoals = [...specificDateGoals, ...recurringGoals];
+
+                                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                    const schedulesWithStatus = todayGoals.map((g: any) => ({
+                                        ...g,
+                                        completed: completions[g.id]?.completed || false,
+                                        skipped: completions[g.id]?.skipped || false
+                                    }));
+
+                                    setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
+                                    console.log('[Chat] Schedules refreshed after deletion');
+                                } else {
+                                    finalMessage += `\n\n해당 일정을 찾지 못했어요. 일정 이름과 시간을 다시 확인해주세요.`;
+                                }
+                            }
+                        } catch (deleteError) {
+                            console.error('[Chat] Error deleting schedule:', deleteError);
+                            finalMessage += `\n\n일정 삭제 중 오류가 발생했습니다.`;
+                        }
                     } else if (action.type === 'web_search' && action.data) {
                         // Handle web search using Gemini
                         console.log('[Chat] Processing web_search action:', action.data);
