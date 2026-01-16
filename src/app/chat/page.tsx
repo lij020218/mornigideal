@@ -111,6 +111,7 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isDateChangingRef = useRef(false); // 날짜 변경 중인지 추적
+    const messagesRef = useRef<Message[]>([]); // 현재 메시지 참조 (날짜 변경 시 사용)
 
     // Helper function to get chat date (midnight cutoff, KST timezone)
     const getChatDate = () => {
@@ -486,10 +487,25 @@ export default function ChatPage() {
                 // 날짜 변경 중임을 표시 (이 동안 저장하지 않음)
                 isDateChangingRef.current = true;
 
-                // 1. 먼저 이전 날짜의 메시지가 제대로 저장되어 있는지 확인
-                const previousMessages = localStorage.getItem(`chat_messages_${currentDate}`);
-                if (previousMessages) {
-                    console.log('[Chat] Previous date messages saved:', currentDate);
+                // 1. 현재 state의 메시지를 이전 날짜로 저장 (매우 중요!)
+                // messagesRef.current는 항상 최신 메시지를 참조
+                const currentMessages = messagesRef.current;
+                if (currentMessages.length > 0) {
+                    localStorage.setItem(`chat_messages_${currentDate}`, JSON.stringify(currentMessages));
+                    console.log('[Chat] Saved previous date messages:', currentDate, currentMessages.length, 'messages');
+
+                    // DB에도 저장
+                    fetch('/api/user/chat-history', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            date: currentDate,
+                            messages: currentMessages.map(m => ({
+                                ...m,
+                                timestamp: m.timestamp.toISOString()
+                            }))
+                        })
+                    }).catch(err => console.error('[Chat] Failed to save previous date to DB:', err));
                 }
 
                 // 2. 새 날짜의 메시지 로드 (있으면) 또는 빈 배열
@@ -568,6 +584,11 @@ export default function ChatPage() {
     // Scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    // Keep messagesRef updated (for date change detection)
+    useEffect(() => {
+        messagesRef.current = messages;
     }, [messages]);
 
     // Fetch today's schedules
