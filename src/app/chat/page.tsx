@@ -110,6 +110,7 @@ export default function ChatPage() {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const isDateChangingRef = useRef(false); // 날짜 변경 중인지 추적
 
     // Helper function to get chat date (midnight cutoff, KST timezone)
     const getChatDate = () => {
@@ -432,10 +433,23 @@ export default function ChatPage() {
 
     // Save messages to localStorage and DB whenever they change
     useEffect(() => {
+        // 날짜 변경 중에는 저장하지 않음
+        if (isDateChangingRef.current) {
+            console.log('[Chat] Skipping save during date change');
+            return;
+        }
+
         if (messages.length > 0) {
+            // 현재 날짜와 메시지의 날짜가 일치하는지 확인
+            const today = getChatDate();
+            if (currentDate !== today) {
+                console.log('[Chat] Skipping save - date mismatch:', currentDate, 'vs', today);
+                return;
+            }
+
             // localStorage 저장 (빠른 접근용)
             localStorage.setItem(`chat_messages_${currentDate}`, JSON.stringify(messages));
-            console.log('[Chat] Saved messages to localStorage:', messages.length);
+            console.log('[Chat] Saved messages to localStorage:', messages.length, 'for date:', currentDate);
 
             // DB 저장 (지속성 및 동기화)
             const saveToDb = async () => {
@@ -466,12 +480,42 @@ export default function ChatPage() {
     useEffect(() => {
         const handleDateChange = () => {
             const today = getChatDate();
-            if (today !== currentDate) {
-                console.log('[Chat] Date changed (midnight), starting new chat for:', today);
-                setCurrentDate(today);
-                setMessages([]);
+            if (today !== currentDate && currentDate) {
+                console.log('[Chat] Date changed from', currentDate, 'to', today);
 
-                // Update chat history
+                // 날짜 변경 중임을 표시 (이 동안 저장하지 않음)
+                isDateChangingRef.current = true;
+
+                // 1. 먼저 이전 날짜의 메시지가 제대로 저장되어 있는지 확인
+                const previousMessages = localStorage.getItem(`chat_messages_${currentDate}`);
+                if (previousMessages) {
+                    console.log('[Chat] Previous date messages saved:', currentDate);
+                }
+
+                // 2. 새 날짜의 메시지 로드 (있으면) 또는 빈 배열
+                const newDateMessages = localStorage.getItem(`chat_messages_${today}`);
+                if (newDateMessages) {
+                    try {
+                        const parsed = JSON.parse(newDateMessages);
+                        const messagesWithDates = parsed.map((m: any) => ({
+                            ...m,
+                            timestamp: new Date(m.timestamp)
+                        }));
+                        setMessages(messagesWithDates);
+                        console.log('[Chat] Loaded existing messages for new date:', today, messagesWithDates.length);
+                    } catch (e) {
+                        setMessages([]);
+                    }
+                } else {
+                    // 새 날짜는 빈 채팅방으로 시작
+                    setMessages([]);
+                    console.log('[Chat] Starting fresh chat for:', today);
+                }
+
+                // 3. 날짜 업데이트
+                setCurrentDate(today);
+
+                // 4. 채팅 히스토리 업데이트
                 const allKeys = Object.keys(localStorage);
                 const chatDates = allKeys
                     .filter(key => key.startsWith('chat_messages_'))
@@ -481,10 +525,10 @@ export default function ChatPage() {
                 const history = chatDates
                     .filter(date => date !== today)
                     .map(date => {
-                        const messages = localStorage.getItem(`chat_messages_${date}`);
+                        const msgs = localStorage.getItem(`chat_messages_${date}`);
                         let title = date;
                         try {
-                            const parsed = JSON.parse(messages || '[]');
+                            const parsed = JSON.parse(msgs || '[]');
                             if (parsed.length > 0 && parsed[0].content) {
                                 title = parsed[0].content.substring(0, 30) + (parsed[0].content.length > 30 ? '...' : '');
                             }
@@ -495,6 +539,12 @@ export default function ChatPage() {
                     });
 
                 setChatHistory(history);
+
+                // 날짜 변경 완료 - 약간의 지연 후 플래그 해제
+                setTimeout(() => {
+                    isDateChangingRef.current = false;
+                    console.log('[Chat] Date change complete');
+                }, 100);
             }
         };
 
