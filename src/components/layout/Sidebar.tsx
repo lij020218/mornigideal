@@ -197,15 +197,24 @@ export function Sidebar() {
                 </div>
             )}
 
-            {/* Mobile Overlay - Only on mobile when open */}
+            {/* Overlay - Mobile when open OR Desktop when expanded */}
             <AnimatePresence>
-                {isOpen && isMobile && (
+                {((isOpen && isMobile) || (isExpanded && !isMobile)) && (
                     <motion.div
                         initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
+                        animate={{ opacity: isMobile ? 1 : 0 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-                        onClick={() => setIsOpen(false)}
+                        className={cn(
+                            "fixed inset-0 z-40",
+                            isMobile ? "bg-black/50 backdrop-blur-sm" : "bg-transparent"
+                        )}
+                        onClick={() => {
+                            if (isMobile) {
+                                setIsOpen(false);
+                            } else {
+                                setIsExpanded(false);
+                            }
+                        }}
                     />
                 )}
             </AnimatePresence>
