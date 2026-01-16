@@ -105,6 +105,13 @@ export default function HomePage() {
         }
         return true;
     });
+    const [learningTips, setLearningTips] = useState<{
+        greeting: string;
+        tips: { emoji: string; title: string; content: string }[];
+        encouragement: string;
+        scheduleId: string;
+    } | null>(null);
+    const [isLoadingLearningTips, setIsLoadingLearningTips] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +292,52 @@ export default function HomePage() {
 
         fetchTrendBriefings();
     }, [session, userProfile]);
+
+    // Fetch learning tips when there's a learning schedule
+    useEffect(() => {
+        if (!session?.user?.email || todaySchedules.length === 0) return;
+
+        const fetchLearningTips = async () => {
+            // 학습 일정 찾기 (isLearning: true 또는 learningData가 있는 일정)
+            const learningSchedule = todaySchedules.find(
+                (s: any) => s.isLearning && s.learningData && !s.completed && !s.skipped
+            );
+
+            if (!learningSchedule || learningTips?.scheduleId === (learningSchedule as any).id) {
+                return;
+            }
+
+            const learningData = (learningSchedule as any).learningData;
+            if (!learningData) return;
+
+            setIsLoadingLearningTips(true);
+            try {
+                const res = await fetch('/api/ai-learning-tip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        learningData,
+                        userLevel: 'intermediate',
+                    }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setLearningTips({
+                        ...data,
+                        scheduleId: (learningSchedule as any).id,
+                    });
+                    console.log('[Home] Loaded learning tips for:', learningData.dayTitle);
+                }
+            } catch (error) {
+                console.error('[Home] Failed to fetch learning tips:', error);
+            } finally {
+                setIsLoadingLearningTips(false);
+            }
+        };
+
+        fetchLearningTips();
+    }, [session, todaySchedules, learningTips?.scheduleId]);
 
     // Auto-send schedule-based messages
     useEffect(() => {
@@ -732,8 +785,8 @@ export default function HomePage() {
                 }
             }
 
-            // 6. 트렌드 브리핑 읽기 알림 (10시, 15시, 20시에 한 번씩)
-            const briefingReminderHours = [10, 15, 20];
+            // 6. 트렌드 브리핑 읽기 알림 (10시, 14시, 18시, 22시 - 4시간 간격)
+            const briefingReminderHours = [10, 14, 18, 22];
             if (briefingReminderHours.includes(hour)) {
                 const briefingReminderKey = `briefing_reminder_${today}_${hour}`;
                 if (!localStorage.getItem(briefingReminderKey)) {
@@ -1833,6 +1886,67 @@ export default function HomePage() {
                             <p className="text-xs text-muted-foreground">
                                 일정, 학습, 목표에 대해 무엇이든 물어보세요
                             </p>
+                        </div>
+                    )}
+
+                    {/* Learning Tips Card - 학습 일정이 있을 때 표시 */}
+                    <AnimatePresence>
+                        {learningTips && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="relative bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4 max-w-3xl mx-auto"
+                            >
+                                <div className="flex items-start gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xl">📚</span>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-1">오늘의 학습 꿀팁</h3>
+                                        <p className="text-sm text-blue-700 dark:text-blue-300">{learningTips.greeting}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {learningTips.tips.map((tip, index) => (
+                                        <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: index * 0.1 }}
+                                            className="flex items-start gap-3 bg-white/60 dark:bg-white/5 rounded-xl p-3"
+                                        >
+                                            <span className="text-lg flex-shrink-0">{tip.emoji}</span>
+                                            <div>
+                                                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{tip.title}</p>
+                                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{tip.content}</p>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-4 pt-3 border-t border-blue-200/30 dark:border-blue-800/30">
+                                    <p className="text-xs text-center text-blue-600 dark:text-blue-400 font-medium">
+                                        {learningTips.encouragement}
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={() => setLearningTips(null)}
+                                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Loading Learning Tips */}
+                    {isLoadingLearningTips && (
+                        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4 flex items-center justify-center max-w-3xl mx-auto">
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                            <span className="text-sm text-blue-600 dark:text-blue-400">학습 팁을 준비하고 있어요...</span>
                         </div>
                     )}
 

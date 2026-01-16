@@ -46,7 +46,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { topic, reason, currentLevel, targetLevel, duration, userPlan } = await request.json();
+        const { topic, category, subTopic, reason, currentLevel, targetLevel, duration, userPlan } = await request.json();
 
         if (!topic || !reason || !currentLevel || !targetLevel || !duration) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -54,6 +54,31 @@ export async function POST(request: Request) {
 
         const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
         const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
+
+        // 언어 학습인지 확인
+        const isLanguageLearning = category === "language" || /영어|english|일본어|japanese|중국어|chinese|스페인어|spanish|프랑스어|french|독일어|german/i.test(topic);
+
+        // 프로그래밍 학습인지 확인
+        const isProgramming = category === "programming" || /python|javascript|java|swift|kotlin|react|flutter|c#|c\+\+/i.test(topic);
+
+        // 언어/프로그래밍별 특별 지침
+        let specialInstructions = "";
+        if (isLanguageLearning) {
+            specialInstructions = `
+**언어 학습 특별 지침:**
+- 각 일차에 실제 ${topic} 표현, 문장, 어휘를 포함하세요
+- 예: 영어라면 "How are you doing?", "I'd like to..." 같은 실제 표현
+- 일상 회화, 비즈니스, 여행 등 실용적인 상황별 표현 포함
+- 발음 팁이나 문화적 뉘앙스도 설명해주세요
+- 각 일차 제목에 배울 표현 카테고리를 명시하세요 (예: "일상 인사 표현", "음식 주문 표현")`;
+        } else if (isProgramming) {
+            specialInstructions = `
+**프로그래밍 학습 특별 지침:**
+- 각 일차에 실제 ${topic} 코드 예제나 개념을 포함하세요
+- 실습 프로젝트는 점진적으로 복잡해지도록 구성
+- 실무에서 자주 사용하는 패턴과 베스트 프랙티스 포함
+- 디버깅 방법과 일반적인 오류 해결법도 다루세요`;
+        }
 
         const prompt = `당신은 전문 교육 커리큘럼 설계자입니다. 다음 정보를 바탕으로 ${duration}일 분량의 맞춤형 학습 커리큘럼을 만들어주세요.
 
@@ -63,7 +88,7 @@ export async function POST(request: Request) {
 - 현재 수준: ${currentLevelLabel}
 - 목표 수준: ${targetLevelLabel}
 - 학습 기간: ${duration}일
-
+${specialInstructions}
 **규칙:**
 1. 총 ${duration}일의 일별 학습 계획을 세워주세요
 2. 현재 수준(${currentLevelLabel})에서 목표 수준(${targetLevelLabel})까지 단계적으로 성장할 수 있도록 구성
@@ -71,6 +96,7 @@ export async function POST(request: Request) {
 4. 각 일차별 학습 시간은 30분~60분 정도로 설정
 5. 주제가 점진적으로 심화되도록 구성
 6. 실습이나 프로젝트도 적절히 포함
+7. 제목과 설명에 이모지 사용하지 마세요
 
 **JSON 형식으로 응답** (다른 텍스트 없이 JSON만):
 {

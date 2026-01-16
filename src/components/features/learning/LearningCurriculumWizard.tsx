@@ -19,6 +19,7 @@ interface LearningCurriculumWizardProps {
 
 interface WizardData {
     topic: string;
+    subTopic: string;
     customTopic: string;
     reason: string;
     targetLevel: string;
@@ -72,6 +73,71 @@ const LEVEL_OPTIONS = [
     { id: "expert", label: "전문가", description: "최고 수준의 전문성", icon: "👑" },
 ];
 
+// 세부 분야 옵션 (분야별)
+const SUB_TOPICS: Record<string, { id: string; label: string; description: string }[]> = {
+    programming: [
+        { id: "python", label: "Python", description: "데이터 분석, AI, 웹 개발" },
+        { id: "javascript", label: "JavaScript", description: "웹 프론트엔드, Node.js" },
+        { id: "java", label: "Java", description: "안드로이드, 백엔드 개발" },
+        { id: "swift", label: "Swift", description: "iOS, macOS 앱 개발" },
+        { id: "kotlin", label: "Kotlin", description: "안드로이드 앱 개발" },
+        { id: "csharp", label: "C#", description: "Unity 게임, 윈도우 앱" },
+        { id: "react", label: "React", description: "웹 프론트엔드 프레임워크" },
+        { id: "flutter", label: "Flutter", description: "크로스 플랫폼 앱 개발" },
+    ],
+    design: [
+        { id: "ui-ux", label: "UI/UX 디자인", description: "앱, 웹 인터페이스 설계" },
+        { id: "graphic", label: "그래픽 디자인", description: "포스터, 로고, 브랜딩" },
+        { id: "web", label: "웹 디자인", description: "웹사이트 디자인" },
+        { id: "motion", label: "모션 그래픽", description: "영상, 애니메이션" },
+        { id: "3d", label: "3D 디자인", description: "3D 모델링, 렌더링" },
+        { id: "product", label: "제품 디자인", description: "산업 디자인" },
+        { id: "fashion", label: "패션 디자인", description: "의류, 액세서리 디자인" },
+        { id: "interior", label: "인테리어", description: "공간 디자인" },
+    ],
+    marketing: [
+        { id: "digital", label: "디지털 마케팅", description: "온라인 광고, SEO" },
+        { id: "content", label: "콘텐츠 마케팅", description: "블로그, SNS 콘텐츠" },
+        { id: "sns", label: "SNS 마케팅", description: "인스타, 틱톡, 유튜브" },
+        { id: "performance", label: "퍼포먼스 마케팅", description: "광고 최적화, ROAS" },
+        { id: "branding", label: "브랜딩", description: "브랜드 전략, 아이덴티티" },
+        { id: "growth", label: "그로스 해킹", description: "성장 전략, A/B 테스트" },
+    ],
+    language: [
+        { id: "english", label: "영어", description: "비즈니스, 일상 영어" },
+        { id: "japanese", label: "일본어", description: "JLPT, 일상 회화" },
+        { id: "chinese", label: "중국어", description: "HSK, 비즈니스 중국어" },
+        { id: "spanish", label: "스페인어", description: "DELE, 일상 회화" },
+        { id: "french", label: "프랑스어", description: "DELF, 일상 회화" },
+        { id: "german", label: "독일어", description: "Goethe, 일상 회화" },
+        { id: "korean", label: "한국어", description: "TOPIK, 한국어 교육" },
+    ],
+    data: [
+        { id: "excel", label: "엑셀", description: "데이터 분석, 피벗 테이블" },
+        { id: "sql", label: "SQL", description: "데이터베이스 쿼리" },
+        { id: "python-data", label: "Python 데이터 분석", description: "Pandas, NumPy" },
+        { id: "visualization", label: "데이터 시각화", description: "Tableau, Power BI" },
+        { id: "ml", label: "머신러닝", description: "AI, 예측 모델" },
+        { id: "statistics", label: "통계학", description: "기초 통계, 분석" },
+    ],
+    business: [
+        { id: "management", label: "경영 전략", description: "기업 운영, 전략 수립" },
+        { id: "leadership", label: "리더십", description: "팀 관리, 조직 문화" },
+        { id: "startup", label: "창업", description: "스타트업, 사업 계획" },
+        { id: "negotiation", label: "협상", description: "비즈니스 협상 스킬" },
+        { id: "presentation", label: "프레젠테이션", description: "발표, 스피치" },
+        { id: "pm", label: "프로젝트 관리", description: "PM, 애자일" },
+    ],
+    finance: [
+        { id: "stock", label: "주식 투자", description: "가치 투자, 기술적 분석" },
+        { id: "realestate", label: "부동산", description: "부동산 투자, 임대" },
+        { id: "crypto", label: "가상화폐", description: "비트코인, 블록체인" },
+        { id: "fund", label: "펀드/ETF", description: "간접 투자" },
+        { id: "tax", label: "세금/절세", description: "세금 관리, 절세 전략" },
+        { id: "retire", label: "은퇴 설계", description: "연금, 노후 준비" },
+    ],
+};
+
 export function LearningCurriculumWizard({
     isOpen,
     onClose,
@@ -82,6 +148,7 @@ export function LearningCurriculumWizard({
     const [isGenerating, setIsGenerating] = useState(false);
     const [data, setData] = useState<WizardData>({
         topic: "",
+        subTopic: "",
         customTopic: "",
         reason: "",
         targetLevel: "",
@@ -89,7 +156,9 @@ export function LearningCurriculumWizard({
         duration: 14,
     });
 
-    const totalSteps = 5;
+    // 세부 분야가 있는 토픽인지 확인
+    const hasSubTopics = data.topic !== "" && data.topic !== "custom" && SUB_TOPICS[data.topic]?.length > 0;
+    const totalSteps = hasSubTopics ? 6 : 5;
 
     const handleNext = () => {
         if (step < totalSteps) {
@@ -104,34 +173,64 @@ export function LearningCurriculumWizard({
     };
 
     const canProceed = () => {
-        switch (step) {
-            case 1:
-                return data.topic !== "" && (data.topic !== "custom" || data.customTopic.trim() !== "");
-            case 2:
-                return data.reason.trim().length >= 10;
-            case 3:
-                return data.currentLevel !== "";
-            case 4:
-                return data.targetLevel !== "";
-            case 5:
-                return data.duration > 0;
-            default:
-                return false;
+        if (hasSubTopics) {
+            // 6단계: 토픽 -> 세부분야 -> 이유 -> 현재레벨 -> 목표레벨 -> 기간
+            switch (step) {
+                case 1:
+                    return data.topic !== "" && (data.topic !== "custom" || data.customTopic.trim() !== "");
+                case 2:
+                    return data.subTopic !== "";
+                case 3:
+                    return data.reason.trim().length >= 10;
+                case 4:
+                    return data.currentLevel !== "";
+                case 5:
+                    return data.targetLevel !== "";
+                case 6:
+                    return data.duration > 0;
+                default:
+                    return false;
+            }
+        } else {
+            // 5단계: 토픽(+직접입력) -> 이유 -> 현재레벨 -> 목표레벨 -> 기간
+            switch (step) {
+                case 1:
+                    return data.topic !== "" && (data.topic !== "custom" || data.customTopic.trim() !== "");
+                case 2:
+                    return data.reason.trim().length >= 10;
+                case 3:
+                    return data.currentLevel !== "";
+                case 4:
+                    return data.targetLevel !== "";
+                case 5:
+                    return data.duration > 0;
+                default:
+                    return false;
+            }
         }
     };
 
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            const topicName = data.topic === "custom"
-                ? data.customTopic
-                : POPULAR_TOPICS.find(t => t.id === data.topic)?.label || data.topic;
+            // 토픽 이름 결정 (세부 분야가 있으면 세부 분야 이름 사용)
+            let topicName: string;
+            if (data.topic === "custom") {
+                topicName = data.customTopic;
+            } else if (data.subTopic && SUB_TOPICS[data.topic]) {
+                const subTopicLabel = SUB_TOPICS[data.topic].find(st => st.id === data.subTopic)?.label;
+                topicName = subTopicLabel || data.subTopic;
+            } else {
+                topicName = POPULAR_TOPICS.find(t => t.id === data.topic)?.label || data.topic;
+            }
 
             const res = await fetch("/api/ai-learning-curriculum", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     topic: topicName,
+                    category: data.topic, // 대분류 (programming, language 등)
+                    subTopic: data.subTopic, // 세부 분야 (python, english 등)
                     reason: data.reason,
                     currentLevel: data.currentLevel,
                     targetLevel: data.targetLevel,
@@ -157,6 +256,7 @@ export function LearningCurriculumWizard({
         setStep(1);
         setData({
             topic: "",
+            subTopic: "",
             customTopic: "",
             reason: "",
             targetLevel: "",
@@ -273,10 +373,51 @@ export function LearningCurriculumWizard({
                                 </motion.div>
                             )}
 
-                            {/* Step 2: Reason */}
-                            {step === 2 && (
+                            {/* Step 2: SubTopic Selection (세부 분야가 있는 경우만) */}
+                            {step === 2 && hasSubTopics && (
                                 <motion.div
-                                    key="step2"
+                                    key="step2-subtopic"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -20 }}
+                                    className="space-y-4"
+                                >
+                                    <div>
+                                        <h3 className="text-base font-semibold mb-1">
+                                            {data.topic === "language" ? "어떤 언어를 배우고 싶으세요?" :
+                                             data.topic === "programming" ? "어떤 프로그래밍 언어/기술을 배우고 싶으세요?" :
+                                             data.topic === "design" ? "어떤 분야의 디자인을 배우고 싶으세요?" :
+                                             "세부 분야를 선택해주세요"}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            더 구체적인 커리큘럼을 만들어 드릴게요
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {SUB_TOPICS[data.topic]?.map((subTopic) => (
+                                            <button
+                                                key={subTopic.id}
+                                                onClick={() => setData({ ...data, subTopic: subTopic.id })}
+                                                className={cn(
+                                                    "p-3 rounded-xl text-left transition-all",
+                                                    data.subTopic === subTopic.id
+                                                        ? "bg-purple-500/20 ring-1 ring-purple-500/50"
+                                                        : "bg-white/[0.03] hover:bg-white/[0.06]"
+                                                )}
+                                            >
+                                                <h4 className="font-medium text-sm">{subTopic.label}</h4>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{subTopic.description}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Step 2 (no subtopics) or Step 3 (with subtopics): Reason */}
+                            {((step === 2 && !hasSubTopics) || (step === 3 && hasSubTopics)) && (
+                                <motion.div
+                                    key="step-reason"
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
@@ -307,10 +448,10 @@ export function LearningCurriculumWizard({
                                 </motion.div>
                             )}
 
-                            {/* Step 3: Current Level */}
-                            {step === 3 && (
+                            {/* Step 3 (no subtopics) or Step 4 (with subtopics): Current Level */}
+                            {((step === 3 && !hasSubTopics) || (step === 4 && hasSubTopics)) && (
                                 <motion.div
-                                    key="step3"
+                                    key="step-current-level"
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
@@ -349,8 +490,8 @@ export function LearningCurriculumWizard({
                                 </motion.div>
                             )}
 
-                            {/* Step 4: Target Level */}
-                            {step === 4 && (
+                            {/* Step 4 (no subtopics) or Step 5 (with subtopics): Target Level */}
+                            {((step === 4 && !hasSubTopics) || (step === 5 && hasSubTopics)) && (
                                 <motion.div
                                     key="step4"
                                     initial={{ opacity: 0, x: 20 }}
@@ -408,10 +549,10 @@ export function LearningCurriculumWizard({
                                 </motion.div>
                             )}
 
-                            {/* Step 5: Duration */}
-                            {step === 5 && (
+                            {/* Step 5 (no subtopics) or Step 6 (with subtopics): Duration */}
+                            {((step === 5 && !hasSubTopics) || (step === 6 && hasSubTopics)) && (
                                 <motion.div
-                                    key="step5"
+                                    key="step-duration"
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
