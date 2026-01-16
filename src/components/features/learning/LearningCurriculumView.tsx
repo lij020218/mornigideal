@@ -473,13 +473,13 @@ export function LearningCurriculumView({
             window.dispatchEvent(new CustomEvent('schedule-updated'));
             window.dispatchEvent(new Event('profile-updated'));
 
-            // 추가된 상태 업데이트
+            // 추가된 상태 업데이트 (일정에 추가됨, 아직 완료 아님)
             setAddedToSchedule(prev => new Set([...prev, day.day]));
 
-            // 진행 상황 업데이트
-            await handleCompleteDay(day.day);
+            // 진행 상황은 일정 완료 시 업데이트됨 (여기서는 업데이트하지 않음)
+            // handleCompleteDay는 실제로 일정을 완료했을 때 호출되어야 함
 
-            console.log('[Learning] Added schedule for day:', day.day);
+            console.log('[Learning] Added schedule for day:', day.day, '(completion pending)');
 
             // 학습 팁 생성 요청 & 채팅 페이지로 이동
             try {

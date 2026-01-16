@@ -110,6 +110,8 @@ export default function HomePage() {
         tips: { emoji: string; title: string; content: string }[];
         encouragement: string;
         scheduleId: string;
+        objectives?: string[];
+        dayTitle?: string;
     } | null>(null);
     const [isLoadingLearningTips, setIsLoadingLearningTips] = useState(false);
 
@@ -326,6 +328,8 @@ export default function HomePage() {
                     setLearningTips({
                         ...data,
                         scheduleId: (learningSchedule as any).id,
+                        objectives: learningData.objectives || [],
+                        dayTitle: learningData.dayTitle,
                     });
                     console.log('[Home] Loaded learning tips for:', learningData.dayTitle);
                 }
@@ -1809,6 +1813,23 @@ export default function HomePage() {
                                                                                 })
                                                                             });
                                                                             console.log('[Home] Schedule marked as completed on server');
+
+                                                                            // 학습 일정인 경우 커리큘럼 진도 업데이트
+                                                                            const scheduleWithLearning = schedule as any;
+                                                                            if (scheduleWithLearning.isLearning && scheduleWithLearning.learningData) {
+                                                                                const { curriculumId, dayNumber } = scheduleWithLearning.learningData;
+                                                                                if (curriculumId && dayNumber) {
+                                                                                    await fetch('/api/user/learning-progress', {
+                                                                                        method: 'POST',
+                                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                                        body: JSON.stringify({
+                                                                                            curriculumId,
+                                                                                            completedDay: dayNumber
+                                                                                        })
+                                                                                    });
+                                                                                    console.log('[Home] Learning progress updated for day:', dayNumber);
+                                                                                }
+                                                                            }
                                                                         } catch (error) {
                                                                             console.error('[Home] Failed to save completion to server:', error);
                                                                         }
@@ -1903,10 +1924,27 @@ export default function HomePage() {
                                         <span className="text-xl">📚</span>
                                     </div>
                                     <div>
-                                        <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-1">오늘의 학습 꿀팁</h3>
+                                        <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-1">
+                                            {learningTips.dayTitle || '오늘의 학습'}
+                                        </h3>
                                         <p className="text-sm text-blue-700 dark:text-blue-300">{learningTips.greeting}</p>
                                     </div>
                                 </div>
+
+                                {/* 학습 목표 표시 */}
+                                {learningTips.objectives && learningTips.objectives.length > 0 && (
+                                    <div className="mb-4 p-3 bg-white/40 dark:bg-white/5 rounded-xl">
+                                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">오늘의 학습 목표</p>
+                                        <ul className="space-y-1.5">
+                                            {learningTips.objectives.map((obj, idx) => (
+                                                <li key={idx} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                    <span className="text-blue-500 mt-0.5">•</span>
+                                                    <span>{obj}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
 
                                 <div className="space-y-3">
                                     {learningTips.tips.map((tip, index) => (
