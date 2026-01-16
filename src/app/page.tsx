@@ -23,6 +23,7 @@ const FieriLogo = ({ className = "" }: { className?: string }) => (
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { TrendBriefingDetail } from "@/components/features/dashboard/TrendBriefingDetail";
+import { markScheduleCompletion } from "@/lib/scheduleNotifications";
 
 interface Schedule {
     id: string;
@@ -34,6 +35,8 @@ interface Schedule {
     color?: string;
     location?: string;
     workMode?: 'focus' | 'research' | 'brainstorm' | 'light' | null;
+    linkedGoalId?: string;
+    linkedGoalType?: "weekly" | "monthly" | "yearly";
 }
 
 interface ChatAction {
@@ -1733,11 +1736,13 @@ export default function HomePage() {
                                                                         setTodaySchedules(prev => prev.map(s =>
                                                                             s.id === schedule.id ? { ...s, completed: true, skipped: false } : s
                                                                         ));
-                                                                        // Save to localStorage
-                                                                        const todayKST = getChatDate(); // Use KST timezone
-                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${todayKST}`) || '{}');
-                                                                        completions[schedule.id] = { completed: true, skipped: false };
-                                                                        localStorage.setItem(`schedule_completions_${todayKST}`, JSON.stringify(completions));
+                                                                        // Save to localStorage and update linked goal progress
+                                                                        markScheduleCompletion(
+                                                                            schedule.id,
+                                                                            true,
+                                                                            schedule.linkedGoalId,
+                                                                            schedule.linkedGoalType
+                                                                        );
 
                                                                         // Save to server
                                                                         try {
@@ -1769,11 +1774,13 @@ export default function HomePage() {
                                                                         setTodaySchedules(prev => prev.map(s =>
                                                                             s.id === schedule.id ? { ...s, skipped: true, completed: false } : s
                                                                         ));
-                                                                        // Save to localStorage
-                                                                        const todayKST = getChatDate(); // Use KST timezone
-                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${todayKST}`) || '{}');
-                                                                        completions[schedule.id] = { completed: false, skipped: true };
-                                                                        localStorage.setItem(`schedule_completions_${todayKST}`, JSON.stringify(completions));
+                                                                        // Save to localStorage (skipped schedules don't count as completed)
+                                                                        markScheduleCompletion(
+                                                                            schedule.id,
+                                                                            false,
+                                                                            schedule.linkedGoalId,
+                                                                            schedule.linkedGoalType
+                                                                        );
 
                                                                         // Save to server
                                                                         try {

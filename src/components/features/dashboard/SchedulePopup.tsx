@@ -27,6 +27,8 @@ export interface CustomGoal {
     memo?: string; // Memo for the activity
     location?: string; // Location of the activity
     detailedInfo?: string; // Additional details
+    linkedGoalId?: string; // ID of the long-term goal this schedule is linked to
+    linkedGoalType?: "weekly" | "monthly" | "yearly"; // Type of the linked goal
 }
 
 interface SchedulePopupProps {

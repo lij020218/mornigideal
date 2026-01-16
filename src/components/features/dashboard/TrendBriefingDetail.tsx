@@ -80,8 +80,29 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
         };
     }, [isOpen, briefing]);
 
+    // Mark briefing as read in localStorage
+    const markBriefingAsRead = (briefingId: string) => {
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const readBriefingsKey = `read_briefings_${today}`;
+        const readBriefings = JSON.parse(localStorage.getItem(readBriefingsKey) || '[]');
+
+        if (!readBriefings.includes(briefingId)) {
+            readBriefings.push(briefingId);
+            localStorage.setItem(readBriefingsKey, JSON.stringify(readBriefings));
+            console.log('[TrendBriefingDetail] Marked briefing as read:', briefingId);
+
+            // Dispatch event so Dashboard can update dailyGoals
+            window.dispatchEvent(new CustomEvent('briefing-read', {
+                detail: { briefingId, readCount: readBriefings.length }
+            }));
+        }
+    };
+
     const fetchDetail = async () => {
         if (!briefing) return;
+
+        // Mark as read when detail is loaded
+        markBriefingAsRead(briefing.id);
 
         try {
             setLoading(true);

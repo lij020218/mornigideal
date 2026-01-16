@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
+import { markScheduleCompletion } from "@/lib/scheduleNotifications";
 
 interface Schedule {
     id: string;
@@ -33,6 +34,8 @@ interface Schedule {
     skipped?: boolean;
     color?: string;
     location?: string;
+    linkedGoalId?: string;
+    linkedGoalType?: "weekly" | "monthly" | "yearly";
 }
 
 interface TrendBriefing {
@@ -262,174 +265,146 @@ export default function ChatPage() {
     }, []);
 
     // Send initial greeting message with AI recommendations if no messages exist
-    // Or upgrade to rich greeting in morning hours
     useEffect(() => {
-        const now = new Date();
-        const hour = now.getHours();
-        const today = getChatDate();
-        const isMorning = hour >= 5 && hour < 12;
-        const richGreetingKey = `rich_greeting_sent_${today}`;
-        const hasRichGreeting = localStorage.getItem(richGreetingKey);
-
-        // Allow greeting if:
-        // 1. No messages in the current chat, OR
-        // 2. Morning hours AND rich greeting not sent yet (to upgrade basic greeting)
-        const shouldAttemptGreeting = messages.length === 0 || (isMorning && !hasRichGreeting && messages.length <= 1);
-
-        if (shouldAttemptGreeting && session?.user && !isLoading && todaySchedules.length >= 0) {
-            const sendGreeting = async () => {
-                try {
-                    const now = new Date();
-                    const hour = now.getHours();
-                    const today = getChatDate();
-
-                    // Check if we already sent RICH greeting today
-                    // We use a separate key for rich vs basic greetings
-                    const richGreetingKey = `rich_greeting_sent_${today}`;
-                    const basicGreetingKey = `basic_greeting_sent_${today}`;
-                    const oldGreetingKey = `greeting_sent_${today}`; // legacy key for migration
-
-                    // If rich greeting was already sent, don't resend
-                    if (localStorage.getItem(richGreetingKey)) {
-                        console.log('[Chat] Rich greeting already sent today');
-                        return;
-                    }
-
-                    // 아침 시간대에는 basic greeting이 보내졌어도 rich greeting 시도
-                    // 아침이 아닌 시간대에는 basic greeting이 있으면 skip
-                    const hasBasicGreeting = localStorage.getItem(basicGreetingKey) || localStorage.getItem(oldGreetingKey);
-                    if (hasBasicGreeting && !(hour >= 5 && hour < 12)) {
-                        console.log('[Chat] Basic greeting already sent (non-morning hours)');
-                        return;
-                    }
-
-                    console.log('[Chat] Sending initial greeting message with recommendations (hasBasic:', !!hasBasicGreeting, ')');
-
-                    // 아침 시간대 (5am - 12pm)에는 Morning Briefing API 호출
-                    if (hour >= 5 && hour < 12) {
-                        try {
-                            console.log('[Chat] Fetching morning briefing...');
-                            const briefingRes = await fetch('/api/morning-briefing', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                            });
-
-                            if (briefingRes.ok) {
-                                const briefingData = await briefingRes.json();
-                                if (briefingData.success) {
-                                    // 풍부한 아침 인사 메시지 생성
-                                    let richGreeting = `좋은 아침이에요! ☀️\n\n`;
-
-                                    // 날씨 정보
-                                    if (briefingData.weather) {
-                                        richGreeting += `**오늘의 날씨**: ${briefingData.weather.description}, ${briefingData.weather.temp}°C\n\n`;
-                                    }
-
-                                    // 오늘의 목표
-                                    if (briefingData.todayGoal) {
-                                        richGreeting += `🎯 **오늘의 목표**\n${briefingData.todayGoal.text}\n_${briefingData.todayGoal.motivation}_\n\n`;
-                                    }
-
-                                    // 추천 활동 5가지
-                                    if (briefingData.suggestions && briefingData.suggestions.length > 0) {
-                                        richGreeting += `📋 **오늘 추천 활동** (5개 달성시 성취도 100%!)\n`;
-                                        briefingData.suggestions.forEach((s: any, i: number) => {
-                                            richGreeting += `${i + 1}. ${s.icon} ${s.title} (${s.estimatedTime})\n`;
-                                        });
-                                        richGreeting += `\n`;
-                                    }
-
-                                    // 책 추천
-                                    if (briefingData.bookRecommendation) {
-                                        richGreeting += `📚 **오늘의 책**: "${briefingData.bookRecommendation.title}" - ${briefingData.bookRecommendation.author}\n`;
-                                        richGreeting += `> "${briefingData.bookRecommendation.quote}"\n\n`;
-                                    }
-
-                                    // 노래 추천
-                                    if (briefingData.songRecommendation) {
-                                        richGreeting += `🎵 **오늘의 노래**: "${briefingData.songRecommendation.title}" - ${briefingData.songRecommendation.artist}\n\n`;
-                                    }
-
-                                    richGreeting += `오늘도 멋진 하루 보내세요! 💪`;
-
-                                    const greetingMessage: Message = {
-                                        id: `assistant-greeting-${Date.now()}`,
-                                        role: 'assistant',
-                                        content: richGreeting,
-                                        timestamp: new Date(),
-                                    };
-
-                                    setMessages([greetingMessage]);
-                                    localStorage.setItem(richGreetingKey, 'true');
-                                    console.log('[Chat] Rich morning greeting sent successfully');
-                                    return;
-                                }
-                            }
-                        } catch (briefingError) {
-                            console.error('[Chat] Morning briefing failed, using fallback:', briefingError);
-                        }
-                    }
-
-                    // Fallback: 기본 인사 (아침 API 실패시 또는 아침이 아닐 때)
-                    let greeting = '';
-                    let callToAction = '';
-
-                    if (hour >= 5 && hour < 12) {
-                        // 아침 (5am - 12pm) - fallback
-                        greeting = '좋은 아침이에요! ☀️';
-                        callToAction = '\n\n오늘 하루를 어떻게 보내실 건가요? 일정을 추가하거나 오늘의 목표를 세워보세요!';
-                    } else if (hour >= 12 && hour < 18) {
-                        // 오후 (12pm - 6pm)
-                        greeting = '좋은 오후에요! 🌤️';
-                        callToAction = '\n\n오후 일정은 어떻게 되시나요? 남은 시간을 계획해볼까요?';
-                    } else if (hour >= 18 && hour < 22) {
-                        // 저녁 (6pm - 10pm)
-                        greeting = '좋은 저녁이에요! 🌙';
-                        callToAction = '\n\n오늘 하루 수고하셨어요. 내일 일정을 미리 계획해볼까요?';
-                    } else {
-                        // 심야 (10pm - 5am)
-                        greeting = '아직 깨어 계시네요! 🌃';
-                        callToAction = '\n\n늦은 시간이에요. 푹 쉬시고 내일 일정이 궁금하시면 말씀해주세요.';
-                    }
-
-                    // 오늘 일정 요약
-                    let schedulesSummary = '';
-                    if (todaySchedules.length > 0) {
-                        const pendingSchedules = todaySchedules.filter((s: Schedule) => !s.completed && !s.skipped);
-                        if (pendingSchedules.length > 0) {
-                            schedulesSummary = `\n\n📋 **오늘 일정 (${pendingSchedules.length}개)**\n`;
-                            pendingSchedules.slice(0, 3).forEach((s: Schedule) => {
-                                schedulesSummary += `• ${s.startTime} - ${s.text}\n`;
-                            });
-                            if (pendingSchedules.length > 3) {
-                                schedulesSummary += `...외 ${pendingSchedules.length - 3}개`;
-                            }
-                        }
-                    } else if (hour >= 5 && hour < 18) {
-                        schedulesSummary = '\n\n아직 오늘 일정이 없네요. "오후 3시에 회의 추가해줘" 처럼 말씀해주시면 바로 추가해드릴게요!';
-                    }
-
-                    const greetingMessage: Message = {
-                        id: `assistant-greeting-${Date.now()}`,
-                        role: 'assistant',
-                        content: `${greeting}${schedulesSummary}${callToAction}`,
-                        timestamp: new Date(),
-                    };
-
-                    setMessages([greetingMessage]);
-
-                    // Mark basic greeting as sent (but rich greeting can still be sent later if user refreshes during morning)
-                    localStorage.setItem(basicGreetingKey, 'true');
-                    console.log('[Chat] Basic greeting sent (fallback)');
-                } catch (error) {
-                    console.error('[Chat] Failed to send greeting:', error);
-                }
-            };
-
-            // Small delay to ensure everything is loaded
-            const timer = setTimeout(sendGreeting, 1000);
-            return () => clearTimeout(timer);
+        // Only attempt greeting if no messages and user is logged in
+        if (messages.length > 0 || !session?.user || isLoading) {
+            return;
         }
+
+        const sendGreeting = async () => {
+            try {
+                const now = new Date();
+                const hour = now.getHours();
+                const today = getChatDate();
+                const isMorning = hour >= 5 && hour < 12;
+
+                console.log('[Chat] Attempting to send greeting. Hour:', hour, 'isMorning:', isMorning);
+
+                const richGreetingKey = `rich_greeting_sent_${today}`;
+                const basicGreetingKey = `basic_greeting_sent_${today}`;
+
+                // 아침 시간대 (5am - 12pm)에는 Morning Briefing API 호출
+                if (isMorning) {
+                    try {
+                        console.log('[Chat] Fetching morning briefing...');
+                        const briefingRes = await fetch('/api/morning-briefing', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                        });
+
+                        if (briefingRes.ok) {
+                            const briefingData = await briefingRes.json();
+                            if (briefingData.success) {
+                                // 풍부한 아침 인사 메시지 생성
+                                let richGreeting = `좋은 아침이에요! ☀️\n\n`;
+
+                                // 날씨 정보
+                                if (briefingData.weather) {
+                                    richGreeting += `**오늘의 날씨**: ${briefingData.weather.description}, ${briefingData.weather.temp}°C\n\n`;
+                                }
+
+                                // 오늘의 목표
+                                if (briefingData.todayGoal) {
+                                    richGreeting += `🎯 **오늘의 목표**\n${briefingData.todayGoal.text}\n_${briefingData.todayGoal.motivation}_\n\n`;
+                                }
+
+                                // 추천 활동 5가지
+                                if (briefingData.suggestions && briefingData.suggestions.length > 0) {
+                                    richGreeting += `📋 **오늘 추천 활동** (5개 달성시 성취도 100%!)\n`;
+                                    briefingData.suggestions.forEach((s: any, i: number) => {
+                                        richGreeting += `${i + 1}. ${s.icon} ${s.title} (${s.estimatedTime})\n`;
+                                    });
+                                    richGreeting += `\n`;
+                                }
+
+                                // 책 추천
+                                if (briefingData.bookRecommendation) {
+                                    richGreeting += `📚 **오늘의 책**: "${briefingData.bookRecommendation.title}" - ${briefingData.bookRecommendation.author}\n`;
+                                    richGreeting += `> "${briefingData.bookRecommendation.quote}"\n\n`;
+                                }
+
+                                // 노래 추천
+                                if (briefingData.songRecommendation) {
+                                    richGreeting += `🎵 **오늘의 노래**: "${briefingData.songRecommendation.title}" - ${briefingData.songRecommendation.artist}\n\n`;
+                                }
+
+                                richGreeting += `오늘도 멋진 하루 보내세요! 💪`;
+
+                                const greetingMessage: Message = {
+                                    id: `assistant-greeting-${Date.now()}`,
+                                    role: 'assistant',
+                                    content: richGreeting,
+                                    timestamp: new Date(),
+                                };
+
+                                setMessages([greetingMessage]);
+                                localStorage.setItem(richGreetingKey, 'true');
+                                console.log('[Chat] Rich morning greeting sent successfully');
+                                return;
+                            }
+                        }
+                    } catch (briefingError) {
+                        console.error('[Chat] Morning briefing failed, using fallback:', briefingError);
+                    }
+                }
+
+                // Fallback: 기본 인사 (아침 API 실패시 또는 아침이 아닐 때)
+                let greeting = '';
+                let callToAction = '';
+
+                if (hour >= 5 && hour < 12) {
+                    // 아침 (5am - 12pm) - fallback
+                    greeting = '좋은 아침이에요! ☀️';
+                    callToAction = '\n\n오늘 하루를 어떻게 보내실 건가요? 일정을 추가하거나 오늘의 목표를 세워보세요!';
+                } else if (hour >= 12 && hour < 18) {
+                    // 오후 (12pm - 6pm)
+                    greeting = '좋은 오후에요! 🌤️';
+                    callToAction = '\n\n오후 일정은 어떻게 되시나요? 남은 시간을 계획해볼까요?';
+                } else if (hour >= 18 && hour < 22) {
+                    // 저녁 (6pm - 10pm)
+                    greeting = '좋은 저녁이에요! 🌙';
+                    callToAction = '\n\n오늘 하루 수고하셨어요. 내일 일정을 미리 계획해볼까요?';
+                } else {
+                    // 심야 (10pm - 5am)
+                    greeting = '아직 깨어 계시네요! 🌃';
+                    callToAction = '\n\n늦은 시간이에요. 푹 쉬시고 내일 일정이 궁금하시면 말씀해주세요.';
+                }
+
+                // 오늘 일정 요약
+                let schedulesSummary = '';
+                if (todaySchedules.length > 0) {
+                    const pendingSchedules = todaySchedules.filter((s: Schedule) => !s.completed && !s.skipped);
+                    if (pendingSchedules.length > 0) {
+                        schedulesSummary = `\n\n📋 **오늘 일정 (${pendingSchedules.length}개)**\n`;
+                        pendingSchedules.slice(0, 3).forEach((s: Schedule) => {
+                            schedulesSummary += `• ${s.startTime} - ${s.text}\n`;
+                        });
+                        if (pendingSchedules.length > 3) {
+                            schedulesSummary += `...외 ${pendingSchedules.length - 3}개`;
+                        }
+                    }
+                } else if (hour >= 5 && hour < 18) {
+                    schedulesSummary = '\n\n아직 오늘 일정이 없네요. "오후 3시에 회의 추가해줘" 처럼 말씀해주시면 바로 추가해드릴게요!';
+                }
+
+                const greetingMessage: Message = {
+                    id: `assistant-greeting-${Date.now()}`,
+                    role: 'assistant',
+                    content: `${greeting}${schedulesSummary}${callToAction}`,
+                    timestamp: new Date(),
+                };
+
+                setMessages([greetingMessage]);
+                localStorage.setItem(basicGreetingKey, 'true');
+                console.log('[Chat] Basic greeting sent (fallback)');
+            } catch (error) {
+                console.error('[Chat] Failed to send greeting:', error);
+            }
+        };
+
+        // Small delay to ensure everything is loaded
+        const timer = setTimeout(sendGreeting, 500);
+        return () => clearTimeout(timer);
     }, [messages.length, session, isLoading, todaySchedules, currentDate]);
 
     // Save messages to localStorage and DB whenever they change
@@ -586,6 +561,20 @@ export default function ChatPage() {
         };
 
         fetchSchedules();
+
+        // Listen for schedule updates from other components
+        const handleScheduleUpdate = () => {
+            console.log('[Chat] Schedule updated event received, refreshing schedules...');
+            fetchSchedules();
+        };
+
+        window.addEventListener('schedule-updated', handleScheduleUpdate);
+        window.addEventListener('profile-updated', handleScheduleUpdate);
+
+        return () => {
+            window.removeEventListener('schedule-updated', handleScheduleUpdate);
+            window.removeEventListener('profile-updated', handleScheduleUpdate);
+        };
     }, [session, currentDate]);
 
     // Fetch today's trend briefings

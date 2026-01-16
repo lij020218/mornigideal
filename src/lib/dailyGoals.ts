@@ -33,28 +33,49 @@ function getTodayString(): string {
 export function getDailyGoals(): DailyGoals {
     if (typeof window === "undefined") return getDefaultGoals();
 
+    const today = getTodayString();
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return getDefaultGoals();
 
-    try {
-        const { date, goals }: StoredGoals = JSON.parse(stored);
+    let goals: DailyGoals;
 
-        // Reset if it's a new day
-        if (date !== getTodayString()) {
-            // Archive yesterday's goals before resetting
-            localStorage.setItem("previous_daily_goals", JSON.stringify({
-                date: date,
-                goals: goals
-            }));
+    if (!stored) {
+        goals = getDefaultGoals();
+    } else {
+        try {
+            const { date, goals: storedGoals }: StoredGoals = JSON.parse(stored);
 
-            localStorage.removeItem(STORAGE_KEY);
-            return getDefaultGoals();
+            // Reset if it's a new day
+            if (date !== today) {
+                // Archive yesterday's goals before resetting
+                localStorage.setItem("previous_daily_goals", JSON.stringify({
+                    date: date,
+                    goals: storedGoals
+                }));
+
+                localStorage.removeItem(STORAGE_KEY);
+                goals = getDefaultGoals();
+            } else {
+                // Merge with default goals to ensure all fields exist (migration)
+                goals = { ...getDefaultGoals(), ...storedGoals };
+            }
+        } catch {
+            goals = getDefaultGoals();
         }
-        // Merge with default goals to ensure all fields exist (migration)
-        return { ...getDefaultGoals(), ...goals };
-    } catch {
-        return getDefaultGoals();
     }
+
+    // 항상 read_briefings에서 읽은 브리핑 개수 동기화
+    try {
+        const readBriefingsKey = `read_briefings_${today}`;
+        const readBriefings = localStorage.getItem(readBriefingsKey);
+        if (readBriefings) {
+            const readIds = JSON.parse(readBriefings);
+            goals.trendBriefing = Array.isArray(readIds) ? readIds.length : 0;
+        }
+    } catch (e) {
+        console.warn('[DailyGoals] Failed to load read briefings:', e);
+    }
+
+    return goals;
 }
 
 export function getPreviousDailyGoals(): DailyGoals | null {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -113,6 +114,18 @@ ${fullContent}`;
     });
 
     let conceptsContent = response.choices[0].message.content!.trim();
+
+    // Log usage
+    const usage = response.usage;
+    if (usage) {
+      await logOpenAIUsage(
+        session.user.email,
+        MINI_MODEL,
+        "generate-concepts",
+        usage.prompt_tokens,
+        usage.completion_tokens
+      );
+    }
 
     // 백틱 코드 블록 제거
     conceptsContent = conceptsContent

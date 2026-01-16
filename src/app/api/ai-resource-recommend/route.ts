@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
+import { getUserByEmail } from "@/lib/users";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
+
+interface UserProfileData {
+    userType?: string;
+    major?: string;
+    field?: string;
+    experience?: string;
+    goal?: string;
+    interests?: string[];
+    job?: string;
+    level?: string;
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -17,7 +30,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { activity, category, context, timeUntil, activityName, userProfile } = await request.json();
+        const { activity, category, context, timeUntil, activityName, userProfile: providedProfile } = await request.json();
         console.log("[AI Resource Recommend] 요청 데이터:", { activity, category, context, timeUntil, activityName });
 
         // activityName is used for schedule_start context
@@ -30,15 +43,53 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 사용자 프로필 정보
+        // Get user profile from database if not provided
+        let userProfile: UserProfileData = providedProfile || {};
+        if (!providedProfile || Object.keys(providedProfile).length === 0) {
+            try {
+                const user = await getUserByEmail(session.user.email);
+                if (user?.profile) {
+                    userProfile = user.profile as UserProfileData;
+                    console.log("[AI Resource Recommend] DB에서 프로필 로드:", userProfile);
+                }
+            } catch (error) {
+                console.error("[AI Resource Recommend] 프로필 로드 실패:", error);
+            }
+        }
+
+        // Build user context with enhanced profile data
+        const interestMap: Record<string, string> = {
+            ai: "AI/인공지능",
+            startup: "스타트업/창업",
+            marketing: "마케팅/브랜딩",
+            development: "개발/프로그래밍",
+            design: "디자인/UX",
+            finance: "재테크/투자",
+            selfdev: "자기계발",
+            health: "건강/운동",
+        };
+
+        const experienceMap: Record<string, string> = {
+            student: "학생/취준생",
+            junior: "1-3년차",
+            mid: "4-7년차",
+            senior: "8년차 이상",
+            beginner: "입문자",
+            intermediate: "중급자",
+        };
+
+        const interestLabels = (userProfile.interests || []).map(i => interestMap[i] || i);
+        const experienceLabel = experienceMap[userProfile.experience || userProfile.level || ""] || userProfile.experience || userProfile.level || "미설정";
+
         let userContext = "";
-        if (userProfile) {
+        if (userProfile && Object.keys(userProfile).length > 0) {
             userContext = `
 사용자 정보:
-- 직업: ${userProfile.job || '미설정'}
+- 직업/분야: ${userProfile.job || userProfile.field || '미설정'}
+- 경력: ${experienceLabel}
 - 목표: ${userProfile.goal || '미설정'}
-- 레벨: ${userProfile.level || 'intermediate'}
-- 관심사: ${(userProfile.interests || []).join(', ') || '미설정'}
+- 관심사: ${interestLabels.join(', ') || '미설정'}
+${userProfile.major ? `- 전공: ${userProfile.major}` : ''}
 `;
         }
 
@@ -71,46 +122,118 @@ export async function POST(request: NextRequest) {
             // 일정 종료 후 맞춤형 피드백 요청
             prompt = `${userContext}
 사용자가 "${targetActivity}" 일정을 마쳤습니다.
-사용자의 목표와 관심사를 고려하여, 이 활동에 대한 맞춤형 피드백 질문 2-3개를 리스트(•)로 제안하세요. 존댓말과 이모지 1개를 사용하세요.
-예: "독서는 어떠셨나요? 📚
-• 흥미로운 인사이트가 있었다면 메모해드릴까요?
-• 다음 읽을 책을 추천해드릴까요?"`;
+
+**역할**: 사용자 직업("${userProfile?.job || userProfile?.field || '전문직'}")을 이해하는 전문 비서
+
+**핵심 지침**:
+1. "${targetActivity}"는 어떠셨나요? 라고 자연스럽게 물어보세요
+2. 해당 **직업에 특화된** 후속 질문 2-3개를 리스트(•)로 제안하세요
+3. 활동을 **시작하기 전** 건넬 말이 아니라, **끝난 후** 회고/정리에 초점을 맞추세요
+4. 존댓말과 이모지 1개를 사용하세요
+
+**직업별 좋은 예시**:
+
+- (회계사 + 업무) "업무는 어떠셨나요? 📊
+• 오늘 처리한 전표나 세무 업무를 정리해드릴까요?
+• 내일 마감인 신고 건이 있나요?
+• 클라이언트에게 전달할 검토 사항이 있나요?"
+
+- (개발자 + 업무) "개발 업무는 어떠셨나요? 💻
+• 오늘 커밋한 내용을 정리해드릴까요?
+• 코드 리뷰가 필요한 PR이 있나요?
+• 내일 이어서 작업할 이슈가 있나요?"
+
+- (마케터 + 업무) "마케팅 업무는 어떠셨나요? 📈
+• 오늘 캠페인 성과 데이터를 정리해드릴까요?
+• 다음 주 콘텐츠 일정을 확인해볼까요?
+• A/B 테스트 결과를 분석해드릴까요?"
+
+- (디자이너 + 업무) "디자인 작업은 어떠셨나요? 🎨
+• 오늘 작업한 디자인을 정리해드릴까요?
+• 피드백 받을 준비가 된 시안이 있나요?
+• 내일 핸드오프 예정인 작업이 있나요?"
+
+- (영업 + 업무) "영업 활동은 어떠셨나요? 📞
+• 오늘 미팅 결과를 CRM에 기록해드릴까요?
+• 팔로업이 필요한 고객이 있나요?
+• 다음 주 파이프라인을 정리해볼까요?"
+
+**일반 활동 예시**:
+- (공부) "공부는 어떠셨나요? 📚
+• 오늘 배운 내용을 간단히 요약해드릴까요?
+• 이해가 안 되는 부분이 있었나요?"
+
+- (운동) "운동은 어떠셨나요? 💪
+• 오늘 운동 기록을 남겨드릴까요?
+• 스트레칭은 충분히 하셨나요?"
+
+**나쁜 예시** (시작 전 말투라서 부적절):
+❌ "어떤 영화를 보실지 결정하셨나요?"
+❌ "회의 자료는 모두 준비되셨나요?"
+
+**중요**: 사용자의 직업에 맞는 **실무적인 후속 질문**을 하세요. 일반적인 질문은 금지입니다.`;
         } else if (context === "in_progress") {
             // T+30분: 업무 진행 중 인사이트 제공
             prompt = `${userContext}
 사용자가 "${targetActivity}" 활동을 시작한 지 30분이 지났습니다.
 
-**역할: 전략적 멘토**
-이제 집중 방해 없이 가치 있는 인사이트를 제공할 시점입니다.
+**역할: 해당 직업 분야의 전문 멘토**
+사용자의 직업("${userProfile?.job || userProfile?.field || '전문직'}")에 **실제로 도움이 되는 업무 관련 정보**를 제공하세요.
 
 **핵심 원칙:**
-1. **목표 연결**: 사용자의 목표("${userProfile?.goal}")와 관심사(${(userProfile?.interests || []).join(', ')})를 명시적으로 언급
-2. **실행 가능한 제안**: 지금 바로 실천할 수 있는 구체적인 행동 1-2가지
-3. **자연스러운 톤**: 강요하지 않고 제안하는 느낌
+1. **직업 특화 정보**: 해당 직업에서 실제로 사용하는 도구, 자료, 최신 동향을 언급
+2. **실무에 바로 적용 가능**: 일반적인 조언이 아닌, 지금 업무에 바로 쓸 수 있는 구체적 팁
+3. **업계 용어 사용**: 해당 분야 종사자라면 바로 이해할 수 있는 전문 용어 포함
 4. **간결함**: 2-3문장
 
-**좋은 예시:**
-- (업무 시작 + 목표: AI 스타트업) "**AI 스타트업 준비**에 도움될 만한 자료가 있어요! SK하이닉스의 최신 HBM 뉴스나 엔비디아의 파트너십 전략을 체크해보시면 어떨까요? 💡"
-- (학습 + 목표: 영어 공부) "**영어 공부** 목표에 맞춰, 지금 보는 자료를 영어로도 읽어보시는 건 어떠세요? 📚"
-- (회의 + 관심사: 마케팅) "회의 내용을 **마케팅 전략** 관점에서 정리해두면 나중에 유용할 것 같아요 ✍️"
+**직업별 좋은 예시:**
+
+- (회계사) "이번 달 부가세 신고 마감이 다가오고 있어요 📊 국세청 홈택스에서 전자세금계산서 합계표를 미리 확인해보시는 건 어떨까요? 최근 개정된 법인세법 시행령도 참고하시면 좋겠습니다."
+
+- (개발자) "코드 리뷰 시간이라면, GitHub Copilot의 최신 기능으로 리팩토링 제안을 받아보세요 💻 오늘 발표된 Node.js 22 LTS 업데이트 내용도 체크해보시면 좋겠습니다."
+
+- (마케터) "구글 애널리틱스 4에서 이번 주 전환율 추이를 확인해보세요 📈 메타 광고 관리자에서 A/B 테스트 결과도 같이 검토하면 인사이트를 얻을 수 있어요."
+
+- (디자이너) "Figma의 Dev Mode로 개발팀과 핸드오프 준비를 해보세요 🎨 Auto Layout 설정이 잘 되어 있는지 확인하면 협업이 수월해집니다."
+
+- (변호사) "대법원 종합법률정보에서 최근 판례를 검색해보세요 ⚖️ 이번 달 시행되는 개정 법률 중 담당 사건과 관련된 내용이 있는지 확인해보시는 건 어떨까요?"
+
+- (의사/간호사) "최신 의학 저널(NEJM, Lancet)에서 관련 분야 연구를 체크해보세요 🏥 진료 가이드라인 업데이트 사항도 확인하면 좋겠습니다."
+
+- (교사) "학생 평가 자료를 정리하면서, 에듀넷 T-CLEAR의 성취기준 자료를 참고해보세요 📝 다음 수업 자료 준비에 도움이 될 거예요."
+
+- (영업/세일즈) "CRM에서 이번 주 팔로업해야 할 고객 리스트를 확인해보세요 📞 업계 동향 뉴스도 체크하면 고객 미팅 때 대화 소재가 됩니다."
 
 **나쁜 예시:**
 ❌ "잘 하고 계시네요! 화이팅!" (너무 일반적)
-❌ "지금까지 한 내용을 정리해보세요" (추측성 지시)
+❌ "뽀모도로 기법을 사용해보세요" (직업과 무관한 일반 생산성 팁)
+❌ "물 한 잔 드시고 스트레칭 하세요" (업무와 무관)
 
-**중요**: 목표나 관심사를 **구체적으로 언급**하고, 그에 맞는 행동을 제안하세요.`;
+**중요**: 사용자의 직업을 파악하고, 그 직업에서 **실제로 사용하는 도구, 사이트, 자료**를 언급하세요. 일반적인 생산성 조언은 금지입니다.`;
         } else if (context === "schedule_start") {
-            // 일정 시작 시 리소스 추천 (더 이상 사용 안 함 - 조용한 알림으로 대체됨)
+            // 일정 시작 시 리소스 추천
             prompt = `${userContext}
 "${targetActivity}" 시간이 시작되었습니다.
-사용자의 직업, 목표, 레벨, 관심사를 고려하여 이 활동을 효과적으로 수행하는 데 도움이 되는 구체적인 조언이나 리소스를 2-3문장으로 제공하세요. 존댓말과 이모지 1개를 사용하세요.
 
-**예시**:
-- (독서 + 목표: 영어공부) "영어 원서 읽기를 시도해보세요 📚 '해리포터' 같은 친숙한 이야기부터 시작하면 부담이 적습니다."
-- (업무 + 목표: 생산성 향상) "뽀모도로 타이머를 설정하고 25분 집중 작업을 시작해보세요 ⏰ 휴대폰은 서랍에 넣어두세요."
-- (운동 + 레벨: beginner) "가벼운 스트레칭으로 몸을 풀고 시작하세요 🏃 유튜브 '힙으뜸' 채널의 초보자용 루틴을 추천합니다."
+**역할**: 사용자 직업("${userProfile?.job || userProfile?.field || '전문직'}")에 특화된 전문 비서
 
-**주의**: 사용자 정보가 없으면 일반적인 조언을 제공하되, 있다면 반드시 활용하세요.`;
+**핵심 원칙:**
+1. **직업 맞춤 시작 팁**: 해당 직업에서 업무/활동을 시작할 때 실제로 도움이 되는 구체적 조언
+2. **실무 도구/자료 언급**: 해당 분야에서 사용하는 실제 도구, 사이트, 자료 추천
+3. **간결함**: 2-3문장, 존댓말과 이모지 1개
+
+**직업별 좋은 예시:**
+- (회계사 + 업무) "오늘 처리할 전표 목록을 먼저 확인해보세요 📊 더존이나 세무사랑 프로그램에서 미결 건을 체크하면 우선순위를 정하기 쉽습니다."
+- (개발자 + 업무) "오늘의 Jira 티켓을 확인하고 PR 리뷰부터 시작해보세요 💻 아침에 코드 리뷰하면 집중이 잘 됩니다."
+- (마케터 + 업무) "오늘 광고 성과 데이터부터 확인해보세요 📈 어제 대비 CTR 변화를 체크하면 오늘 최적화 방향이 보입니다."
+- (디자이너 + 업무) "Figma에서 어제 받은 피드백 코멘트부터 확인해보세요 🎨 수정 사항을 먼저 처리하면 오후에 새 작업에 집중할 수 있어요."
+- (영업 + 업무) "오늘 미팅 예정인 고객사 정보를 CRM에서 다시 확인해보세요 📞 최근 커뮤니케이션 히스토리를 파악하면 대화가 수월해집니다."
+
+**일반 활동 예시:**
+- (독서 + 목표: 영어공부) "영어 원서 읽기를 시도해보세요 📚 Kindle 앱의 단어 탭 기능을 활용하면 모르는 단어를 바로 확인할 수 있어요."
+- (운동 + 레벨: beginner) "가벼운 동적 스트레칭으로 몸을 풀고 시작하세요 🏃 부상 예방에 중요합니다."
+
+**주의**: 사용자의 직업이 있다면 해당 직업에서 실제 사용하는 도구와 워크플로우를 언급하세요.`;
         } else {
             // 기존 일정 추가 시 리소스 추천 (기본)
             prompt = `${userContext}
@@ -128,13 +251,21 @@ export async function POST(request: NextRequest) {
         }
 
         console.log("[AI Resource Recommend] OpenAI 요청 시작");
-        const modelName = "gpt-5.1-2025-11-13";
+        const modelName = "gpt-5.2-2025-12-11";
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [
                 {
                     role: "system",
-                    content: "당신은 전문적인 AI 비서입니다. 사용자에게 필요한 핵심 정보와 실질적인 리소스를 간결하게 제공하세요. 존댓말을 사용하고, 각 활동에 맞는 구체적인 검색어, 플랫폼, 실행 가능한 조언을 제시하세요. 장황하지 않되 가치 있는 내용을 담으세요."
+                    content: `당신은 사용자의 직업과 분야를 깊이 이해하는 전문 AI 비서입니다.
+
+**핵심 원칙:**
+1. **직업 특화**: 사용자의 직업(회계사, 개발자, 마케터, 디자이너, 변호사, 의사, 교사 등)에 따라 해당 분야에서 실제로 사용하는 도구, 사이트, 용어, 워크플로우를 언급하세요.
+2. **실무 중심**: 일반적인 생산성 팁(뽀모도로, 물 마시기, 스트레칭 등)이 아닌, 해당 업무에 직접 도움이 되는 정보만 제공하세요.
+3. **업계 지식**: 해당 분야의 최신 동향, 마감일(세금 신고, 분기 마감 등), 자주 사용하는 플랫폼(홈택스, Jira, Figma, CRM 등)을 알고 있어야 합니다.
+4. **간결함**: 2-3문장으로 핵심만 전달하세요. 존댓말을 사용하세요.
+
+당신의 목표는 사용자가 "이 AI가 내 직업을 정말 이해하는구나"라고 느끼게 만드는 것입니다.`
                 },
                 {
                     role: "user",
@@ -146,6 +277,18 @@ export async function POST(request: NextRequest) {
 
         console.log("[AI Resource Recommend] OpenAI 응답 성공");
         const recommendation = completion.choices[0]?.message?.content || "리소스를 추천할 수 없습니다.";
+
+        // Log usage
+        const usage = completion.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                session.user.email,
+                modelName,
+                "ai-resource-recommend",
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
 
         return NextResponse.json({
             recommendation,

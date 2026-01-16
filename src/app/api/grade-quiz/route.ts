@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const FINAL_MODEL = "gpt-5.1-2025-11-13";
+const FINAL_MODEL = "gpt-5.2-2025-12-11";
 
 interface QuizResult {
   question: string;
@@ -114,6 +115,19 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
       });
 
       const result = JSON.parse(grading.choices[0].message.content || "{}");
+
+      // Log usage for each essay grading
+      const usage = grading.usage;
+      if (usage) {
+        await logOpenAIUsage(
+          session.user!.email!,
+          FINAL_MODEL,
+          "grade-quiz/essay",
+          usage.prompt_tokens,
+          usage.completion_tokens
+        );
+      }
+
       return {
         question: q.question,
         userAnswer,
@@ -189,6 +203,18 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     });
 
     const advice = adviceResult.choices[0].message.content || "계속해서 학습을 이어가세요!";
+
+    // Log usage for advice generation
+    const adviceUsage = adviceResult.usage;
+    if (adviceUsage) {
+      await logOpenAIUsage(
+        session.user.email,
+        FINAL_MODEL,
+        "grade-quiz/advice",
+        adviceUsage.prompt_tokens,
+        adviceUsage.completion_tokens
+      );
+    }
 
     const result = {
       score: Math.round(totalScore * 10) / 10,

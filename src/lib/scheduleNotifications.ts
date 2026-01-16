@@ -5,6 +5,8 @@ export interface ScheduleCompletion {
     date: string; // YYYY-MM-DD
     completed: boolean;
     timestamp: number;
+    linkedGoalId?: string; // ID of the linked long-term goal
+    linkedGoalType?: "weekly" | "monthly" | "yearly";
 }
 
 // Get today's date in YYYY-MM-DD format (KST timezone)
@@ -31,7 +33,12 @@ export function getTodayCompletions(): Record<string, ScheduleCompletion> {
 }
 
 // Mark a schedule as completed or not completed
-export function markScheduleCompletion(goalId: string, completed: boolean): void {
+export function markScheduleCompletion(
+    goalId: string,
+    completed: boolean,
+    linkedGoalId?: string,
+    linkedGoalType?: "weekly" | "monthly" | "yearly"
+): void {
     const today = getTodayDateString();
     const key = `schedule_completions_${today}`;
     const completions = getTodayCompletions();
@@ -41,9 +48,73 @@ export function markScheduleCompletion(goalId: string, completed: boolean): void
         date: today,
         completed,
         timestamp: Date.now(),
+        linkedGoalId,
+        linkedGoalType,
     };
 
     localStorage.setItem(key, JSON.stringify(completions));
+
+    // If schedule is linked to a goal and completed, update goal progress
+    if (completed && linkedGoalId && linkedGoalType) {
+        updateLinkedGoalProgress(linkedGoalId, linkedGoalType);
+    }
+}
+
+// Update the progress of a linked long-term goal
+async function updateLinkedGoalProgress(goalId: string, goalType: "weekly" | "monthly" | "yearly"): Promise<void> {
+    try {
+        // First, get the current goal to calculate new progress
+        const res = await fetch("/api/user/long-term-goals");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const goals = data.goals[goalType] || [];
+        const goal = goals.find((g: any) => g.id === goalId);
+
+        if (!goal || goal.completed) return;
+
+        // Count total schedules linked to this goal
+        const userProfile = localStorage.getItem("user_profile");
+        if (!userProfile) return;
+
+        const profile = JSON.parse(userProfile);
+        const customGoals = profile.customGoals || [];
+        const linkedSchedules = customGoals.filter(
+            (s: any) => s.linkedGoalId === goalId
+        );
+
+        if (linkedSchedules.length === 0) return;
+
+        // Count completed schedules for this goal today
+        const completions = getTodayCompletions();
+        const completedCount = linkedSchedules.filter(
+            (s: any) => completions[s.id]?.completed
+        ).length;
+
+        // Calculate progress based on schedule completion rate
+        // For weekly goals: each schedule completion adds progress
+        // For longer goals: use accumulated daily completion rate
+        const newProgress = Math.min(100, Math.round((completedCount / linkedSchedules.length) * 100));
+
+        // Only update if progress increased
+        if (newProgress > goal.progress) {
+            await fetch("/api/user/long-term-goals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "updateProgress",
+                    goal: { id: goalId, type: goalType, progress: newProgress },
+                }),
+            });
+
+            // Dispatch event to notify UI components
+            window.dispatchEvent(new CustomEvent("goal-progress-updated", {
+                detail: { goalId, goalType, progress: newProgress }
+            }));
+        }
+    } catch (error) {
+        console.error("[scheduleNotifications] Failed to update goal progress:", error);
+    }
 }
 
 // Check if a schedule is completed today

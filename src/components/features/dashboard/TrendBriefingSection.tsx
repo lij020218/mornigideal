@@ -34,9 +34,10 @@ interface TrendBriefingSectionProps {
     onSelectBriefing: (briefing: TrendBriefing) => void;
     onAddInterest?: (interest: string) => void;
     onRemoveInterest?: (interest: string) => void;
+    onReadBriefing?: (readCount: number) => void;
 }
 
-export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefing, onAddInterest, onRemoveInterest }: TrendBriefingSectionProps) {
+export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefing, onAddInterest, onRemoveInterest, onReadBriefing }: TrendBriefingSectionProps) {
     const [briefings, setBriefings] = useState<TrendBriefing[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +58,13 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
         if (storedRead) {
             try {
                 const readIds = JSON.parse(storedRead);
-                setReadBriefings(new Set(readIds));
+                const readSet = new Set<string>(readIds);
+                setReadBriefings(readSet);
+
+                // 저장된 읽음 개수를 부모에게 전달
+                if (onReadBriefing) {
+                    onReadBriefing(readSet.size);
+                }
             } catch (e) {
                 console.error('[TrendBriefing] Failed to parse read briefings:', e);
             }
@@ -69,7 +76,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                 localStorage.removeItem(key);
             }
         });
-    }, []);
+    }, [onReadBriefing]);
 
     // Mark briefing as read
     const markAsRead = (briefingId: string) => {
@@ -77,10 +84,19 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
         const storedReadKey = `read_briefings_${today}`;
 
         setReadBriefings(prev => {
+            // 이미 읽은 브리핑이면 무시
+            if (prev.has(briefingId)) return prev;
+
             const newSet = new Set(prev);
             newSet.add(briefingId);
             // Save to localStorage
             localStorage.setItem(storedReadKey, JSON.stringify([...newSet]));
+
+            // 읽음 개수를 부모에게 전달
+            if (onReadBriefing) {
+                onReadBriefing(newSet.size);
+            }
+
             return newSet;
         });
     };

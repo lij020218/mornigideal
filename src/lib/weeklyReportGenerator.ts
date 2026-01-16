@@ -33,6 +33,23 @@ export interface WeeklyReportData {
         topCategories: Array<{ category: string; count: number }>;
         readingStreak: number;
     };
+    // Focus Mode Analysis
+    focusAnalysis: {
+        totalFocusMinutes: number;
+        focusSessions: number;
+        avgSessionMinutes: number;
+        totalInterruptions: number;
+        mostFocusedDay: string;
+    };
+    // Sleep Analysis
+    sleepAnalysis: {
+        totalSleepMinutes: number;
+        sleepSessions: number;
+        avgSleepHours: number;
+        earliestSleep: string;
+        latestSleep: string;
+        sleepConsistencyScore: number; // 0-100
+    };
     growthMetrics: {
         newHabitsFormed: number;
         consistencyScore: number; // 0-100
@@ -159,7 +176,85 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     );
     const readingStreak = readingDays.size;
 
-    // 3. Growth Metrics
+    // 3. Focus Mode Analysis
+    const { data: focusEvents } = await supabase
+        .from('user_events')
+        .select('*')
+        .eq('email', userEmail)
+        .in('event_type', ['focus_start', 'focus_end', 'focus_interrupted'])
+        .gte('created_at', oneWeekAgo.toISOString())
+        .lte('created_at', now.toISOString());
+
+    let totalFocusMinutes = 0;
+    let focusSessions = 0;
+    let totalInterruptions = 0;
+    const focusDayMinutes: Record<string, number> = {};
+
+    focusEvents?.filter((e: any) => e.event_type === 'focus_end').forEach((event: any) => {
+        const duration = event.metadata?.duration || 0;
+        const minutes = Math.floor(duration / 60);
+        totalFocusMinutes += minutes;
+        focusSessions++;
+
+        if (event.metadata?.interruptCount) {
+            totalInterruptions += event.metadata.interruptCount;
+        }
+
+        const day = new Date(event.created_at).toISOString().split('T')[0];
+        focusDayMinutes[day] = (focusDayMinutes[day] || 0) + minutes;
+    });
+
+    const sortedFocusDays = Object.entries(focusDayMinutes).sort((a, b) => b[1] - a[1]);
+    const mostFocusedDay = sortedFocusDays[0]?.[0] || 'N/A';
+    const avgFocusSessionMinutes = focusSessions > 0 ? Math.round(totalFocusMinutes / focusSessions) : 0;
+
+    // 4. Sleep Analysis
+    const { data: sleepEvents } = await supabase
+        .from('user_events')
+        .select('*')
+        .eq('email', userEmail)
+        .in('event_type', ['sleep_start', 'sleep_end'])
+        .gte('created_at', oneWeekAgo.toISOString())
+        .lte('created_at', now.toISOString());
+
+    let totalSleepMinutes = 0;
+    let sleepSessions = 0;
+    const sleepTimes: string[] = [];
+
+    sleepEvents?.filter((e: any) => e.event_type === 'sleep_end').forEach((event: any) => {
+        const durationMinutes = event.metadata?.durationMinutes || 0;
+        totalSleepMinutes += durationMinutes;
+        sleepSessions++;
+
+        if (event.metadata?.startTime) {
+            const startTime = new Date(event.metadata.startTime);
+            const timeStr = `${startTime.getHours().toString().padStart(2, '0')}:${startTime.getMinutes().toString().padStart(2, '0')}`;
+            sleepTimes.push(timeStr);
+        }
+    });
+
+    const avgSleepHours = sleepSessions > 0 ? totalSleepMinutes / sleepSessions / 60 : 0;
+    const sortedSleepTimes = [...sleepTimes].sort();
+    const earliestSleep = sortedSleepTimes[0] || 'N/A';
+    const latestSleep = sortedSleepTimes[sortedSleepTimes.length - 1] || 'N/A';
+
+    // Sleep consistency score (based on variance in sleep times)
+    let sleepConsistencyScore = 0;
+    if (sleepTimes.length >= 2) {
+        const timeMinutes = sleepTimes.map(t => {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        });
+        const avg = timeMinutes.reduce((a, b) => a + b, 0) / timeMinutes.length;
+        const variance = timeMinutes.reduce((sum, t) => sum + Math.pow(t - avg, 2), 0) / timeMinutes.length;
+        const stdDev = Math.sqrt(variance);
+        // Lower standard deviation = higher consistency
+        sleepConsistencyScore = Math.max(0, Math.min(100, 100 - stdDev / 3));
+    } else if (sleepTimes.length === 1) {
+        sleepConsistencyScore = 50; // Not enough data
+    }
+
+    // 5. Growth Metrics
     const { data: allEvents } = await supabase
         .from('user_events')
         .select('*')
@@ -170,7 +265,10 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const learningEvents = allEvents?.filter((e: any) => e.event_type === 'learning_completed') || [];
 
     const newHabitsFormed = workoutEvents.length >= 3 ? 1 : 0; // 주 3회 이상이면 습관으로 간주
-    const consistencyScore = Math.min(100, (completionRate + readingStreak * 10) / 2);
+    // Include focus and sleep data in consistency score
+    const focusBonus = focusSessions >= 3 ? 10 : focusSessions * 3;
+    const sleepBonus = sleepConsistencyScore / 10;
+    const consistencyScore = Math.min(100, (completionRate + readingStreak * 10 + focusBonus + sleepBonus) / 3);
 
     const focusAreas: string[] = [];
     if (categoryBreakdown.work > categoryBreakdown.learning) focusAreas.push('업무');
@@ -202,6 +300,20 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     if (readingStreak >= 5) {
         achievements.push(`🔥 ${readingStreak}일 연속 학습! 놀라운 일관성입니다.`);
     }
+    // Focus mode achievements
+    if (totalFocusMinutes >= 120) {
+        achievements.push(`🎯 이번 주 ${Math.round(totalFocusMinutes / 60)}시간 집중! 대단한 집중력이에요.`);
+    }
+    if (focusSessions >= 5) {
+        achievements.push(`⚡ ${focusSessions}번의 집중 세션을 완료했어요!`);
+    }
+    // Sleep achievements
+    if (avgSleepHours >= 7 && avgSleepHours <= 9) {
+        achievements.push(`😴 평균 수면 ${avgSleepHours.toFixed(1)}시간! 건강한 수면 패턴이에요.`);
+    }
+    if (sleepConsistencyScore >= 70) {
+        achievements.push(`🌙 수면 규칙성 ${sleepConsistencyScore.toFixed(0)}점! 일정한 취침 시간을 유지하고 계세요.`);
+    }
 
     // Improvements
     if (completionRate < 50) {
@@ -215,6 +327,20 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     }
     if (categoryBreakdown.wellness === 0) {
         improvements.push('휴식과 회복 시간이 부족합니다. 번아웃 예방을 위해 휴식 일정을 추가해보세요.');
+    }
+    // Focus mode improvements
+    if (totalInterruptions > focusSessions * 2) {
+        improvements.push(`집중 중 이탈이 ${totalInterruptions}회 있었어요. 방해 요소를 줄여보세요.`);
+    }
+    if (focusSessions === 0) {
+        improvements.push('이번 주 집중 모드를 사용하지 않으셨어요. 집중이 필요한 작업에 활용해보세요!');
+    }
+    // Sleep improvements
+    if (avgSleepHours < 6 && sleepSessions > 0) {
+        improvements.push(`평균 수면 시간이 ${avgSleepHours.toFixed(1)}시간으로 부족해요. 7-8시간을 권장합니다.`);
+    }
+    if (sleepConsistencyScore < 50 && sleepSessions >= 3) {
+        improvements.push('취침 시간이 불규칙해요. 일정한 시간에 잠자리에 들어보세요.');
     }
 
     // Recommendations
@@ -273,6 +399,21 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
             avgReadPerDay,
             topCategories,
             readingStreak,
+        },
+        focusAnalysis: {
+            totalFocusMinutes,
+            focusSessions,
+            avgSessionMinutes: avgFocusSessionMinutes,
+            totalInterruptions,
+            mostFocusedDay,
+        },
+        sleepAnalysis: {
+            totalSleepMinutes,
+            sleepSessions,
+            avgSleepHours,
+            earliestSleep,
+            latestSleep,
+            sleepConsistencyScore,
         },
         growthMetrics: {
             newHabitsFormed,

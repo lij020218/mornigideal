@@ -12,30 +12,38 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// RSS Feed URLs for top priority sources
+// RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
 const RSS_FEEDS = [
     // International Sources - News & Business
-    { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business" },
-    { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology" },
-    { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News" },
-    { name: "BB Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
+    // Reuters/AP 피드가 막혀서 대체 소스 사용
+    { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "Business" },
+    { name: "Financial Times", url: "https://www.ft.com/?format=rss", category: "Business" },
+    { name: "Economist", url: "https://www.economist.com/business/rss.xml", category: "Business" },
+    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
     { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
+    { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories" },
 
     // Tech & Startup Sources
     { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Technology" },
     { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Technology" },
+    { name: "Wired", url: "https://www.wired.com/feed/rss", category: "Technology" },
+    { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: "Technology" },
     { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Technology" },
-    { name: "Product Hunt", url: "https://www.producthunt.com/feed", category: "Product" },
 
-    // Marketing & Business
-    { name: "Marketing Land", url: "https://martech.org/feed/", category: "Marketing" },
-    { name: "AdAge", url: "https://adage.com/feeds/rss/news.xml", category: "Advertising" },
-    { name: "HBR", url: "https://hbr.org/feed", category: "Business" },
+    // Premium Business Sources
+    { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business" },
+    { name: "Bloomberg Economics", url: "https://feeds.bloomberg.com/economics/news.rss", category: "Economics" },
+    { name: "WSJ World News", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", category: "Business" },
+    { name: "New York Times Economy", url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", category: "Economics" },
 
     // Korean Sources
-    { name: "조선비즈", url: "https://biz.chosun.com/rss/", category: "Business" },
-    { name: "한경비즈", url: "https://www.hankyung.com/feed/it", category: "Technology" },
-    { name: "매경이코노미", url: "https://www.mk.co.kr/rss/30100041/", category: "Economy" },
+    { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스" },
+    { name: "동아일보", url: "https://rss.donga.com/total.xml", category: "뉴스" },
+    { name: "SBS 뉴스", url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", category: "뉴스" },
+    { name: "한국경제", url: "https://www.hankyung.com/feed/economy", category: "경제" },
+    { name: "한국경제 IT", url: "https://www.hankyung.com/feed/it", category: "IT" },
+    { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제" },
+    { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제" },
 ];
 
 async function fetchRSSArticles() {

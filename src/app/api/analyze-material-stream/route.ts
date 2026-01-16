@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
 import crypto from "crypto";
 import { extractAndAnalyzeImages, formatImageAnalysis } from "@/lib/pdf-image-extractor";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 // Route segment config for large file uploads
 export const maxDuration = 300; // 5 minutes for Vercel Pro
@@ -27,7 +28,7 @@ const supabase = createClient(
 
 // Model Configuration
 const MINI_MODEL = "gpt-5-mini-2025-08-07";      // Intelligent chunking
-const ADVANCED_MODEL = "gpt-5.1-2025-11-13";    // High-quality conversion
+const ADVANCED_MODEL = "gpt-5.2-2025-12-11";    // High-quality conversion
 
 /**
  * SMART HYBRID PIPELINE (2025-12-04)
@@ -421,6 +422,19 @@ ${normalizedText}
         });
 
         let converted = conversionResponse.choices[0].message.content!.trim();
+
+        // Log usage for conversion
+        const conversionUsage = conversionResponse.usage;
+        if (conversionUsage) {
+          await logOpenAIUsage(
+            session.user!.email!,
+            ADVANCED_MODEL,
+            "analyze-material-stream/convert",
+            conversionUsage.prompt_tokens,
+            conversionUsage.completion_tokens
+          );
+        }
+
         console.log(`[GPT-5.1] Chunk ${i + 1} converted: ${converted.length} chars`);
 
         // 잘못된 LaTeX 쉼표 표기법 수정 (1{,}894 → 1,894)
@@ -469,6 +483,19 @@ ${converted}
           });
 
           converted = mathFixResponse.choices[0].message.content!.trim();
+
+          // Log usage for math fix
+          const mathFixUsage = mathFixResponse.usage;
+          if (mathFixUsage) {
+            await logOpenAIUsage(
+              session.user!.email!,
+              MINI_MODEL,
+              "analyze-material-stream/math-fix",
+              mathFixUsage.prompt_tokens,
+              mathFixUsage.completion_tokens
+            );
+          }
+
           console.log(`[MATH-FIX] Chunk ${i + 1} math fixed`);
         }
 
@@ -501,6 +528,18 @@ ${converted}`;
         });
 
         let enhanced = miniResponse.choices[0].message.content!.trim();
+
+        // Log usage for enhancement
+        const enhanceUsage = miniResponse.usage;
+        if (enhanceUsage) {
+          await logOpenAIUsage(
+            session.user!.email!,
+            MINI_MODEL,
+            "analyze-material-stream/enhance",
+            enhanceUsage.prompt_tokens,
+            enhanceUsage.completion_tokens
+          );
+        }
 
         // 백틱 코드 블록 제거
         enhanced = enhanced
@@ -655,6 +694,18 @@ ${fullContent.substring(0, 30000)}
             .replace(/^```[a-z]*\n/gm, '')
             .replace(/\n```$/gm, '')
             .trim();
+
+          // Log usage for concepts
+          const conceptsUsage = conceptsResponse.usage;
+          if (conceptsUsage) {
+            await logOpenAIUsage(
+              session.user!.email!,
+              MINI_MODEL,
+              "analyze-material-stream/concepts",
+              conceptsUsage.prompt_tokens,
+              conceptsUsage.completion_tokens
+            );
+          }
 
           // Get current analysis first
           const { data: currentMaterial } = await supabase

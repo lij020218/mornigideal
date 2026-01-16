@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
+import { auth } from "@/auth";
+import { getUserByEmail } from "@/lib/users";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const youtube = google.youtube({
@@ -8,9 +10,53 @@ const youtube = google.youtube({
   auth: process.env.GEMINI_API_KEY // YouTube Data API v3 can use Gemini API key
 });
 
+interface UserProfileData {
+  userType?: string;
+  major?: string;
+  field?: string;
+  experience?: string;
+  goal?: string;
+  interests?: string[];
+  job?: string;
+  level?: string;
+}
+
 export async function POST(request: Request) {
   try {
-    const { job, goal, interests, exclude = [] } = await request.json();
+    let { job, goal, interests, exclude = [], excludeIds = [] } = await request.json();
+
+    // If profile data not provided, fetch from database
+    if (!job || !goal || !interests || interests.length === 0) {
+      const session = await auth();
+      if (session?.user?.email) {
+        try {
+          const user = await getUserByEmail(session.user.email);
+          if (user?.profile) {
+            const profile = user.profile as UserProfileData;
+
+            // Map interest IDs to readable labels for better search queries
+            const interestMap: Record<string, string> = {
+              ai: "artificial intelligence AI",
+              startup: "startup entrepreneurship",
+              marketing: "marketing branding",
+              development: "software development programming",
+              design: "UX design",
+              finance: "investing finance",
+              selfdev: "self improvement productivity",
+              health: "fitness health",
+            };
+
+            job = job || profile.job || profile.field || "professional";
+            goal = goal || profile.goal || "self improvement";
+            interests = interests?.length > 0 ? interests : (profile.interests || []).map((i: string) => interestMap[i] || i);
+
+            console.log("[Recommendations] Loaded profile from DB:", { job, goal, interests });
+          }
+        } catch (error) {
+          console.error("[Recommendations] Failed to load profile:", error);
+        }
+      }
+    }
 
     // 1. Generate Search Queries using Gemini
     const model = genAI.getGenerativeModel({
@@ -81,12 +127,15 @@ export async function POST(request: Request) {
     const videos = [];
     const selectedVideoIds = new Set<string>(); // Track selected video IDs to prevent duplicates
 
+    // Add previously shown video IDs to exclusion set
+    const excludedVideoIds = new Set<string>(excludeIds);
+
     for (const q of queries.slice(0, 3)) {
       try {
-        // Calculate date 6 months ago for recency boost
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const publishedAfter = sixMonthsAgo.toISOString();
+        // Calculate date 3 months ago for recency (changed from 6 months)
+        const threeMonthsAgo = new Date();
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+        const publishedAfter = threeMonthsAgo.toISOString();
 
         // Get more results to filter by view count
         const searchRes = await youtube.search.list({
@@ -120,8 +169,11 @@ export async function POST(request: Request) {
           const title = video.snippet?.title || "";
           const videoId = video.id!;
 
-          // Filter out videos we've already shown (from exclude list)
-          const alreadyShown = exclude.some((excludedTitle: string) =>
+          // Filter out videos we've already shown (by ID - primary method)
+          const alreadyShownById = excludedVideoIds.has(videoId);
+
+          // Filter out videos we've already shown (by title - fallback method)
+          const alreadyShownByTitle = exclude.some((excludedTitle: string) =>
             title.toLowerCase().includes(excludedTitle.toLowerCase()) ||
             excludedTitle.toLowerCase().includes(title.toLowerCase())
           );
@@ -129,7 +181,7 @@ export async function POST(request: Request) {
           // Filter out already selected videos in this session
           const alreadySelected = selectedVideoIds.has(videoId);
 
-          return viewCount >= MIN_VIEW_COUNT && !alreadyShown && !alreadySelected;
+          return viewCount >= MIN_VIEW_COUNT && !alreadyShownById && !alreadyShownByTitle && !alreadySelected;
         });
 
         // Sort by recency-weighted popularity score

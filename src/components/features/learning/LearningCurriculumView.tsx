@@ -11,21 +11,54 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
-// Time Picker Modal Component
-interface TimePickerModalProps {
+// Date & Time Picker Modal Component
+interface DateTimePickerModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (startTime: string) => void;
+    onConfirm: (date: string, startTime: string) => void;
     dayTitle: string;
     estimatedMinutes: number;
 }
 
-function TimePickerModal({ isOpen, onClose, onConfirm, dayTitle, estimatedMinutes }: TimePickerModalProps) {
+function DateTimePickerModal({ isOpen, onClose, onConfirm, dayTitle, estimatedMinutes }: DateTimePickerModalProps) {
+    const [step, setStep] = useState<'date' | 'time'>('date');
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedHour, setSelectedHour] = useState(9);
     const [selectedMinute, setSelectedMinute] = useState(0);
 
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const minutes = [0, 15, 30, 45];
+
+    // Generate next 14 days for date selection
+    const getNext14Days = () => {
+        const days: Date[] = [];
+        const today = new Date();
+        for (let i = 0; i < 14; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() + i);
+            days.push(date);
+        }
+        return days;
+    };
+
+    const next14Days = getNext14Days();
+
+    const formatDateDisplay = (date: Date) => {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+
+        if (date.toDateString() === today.toDateString()) {
+            return '오늘';
+        } else if (date.toDateString() === tomorrow.toDateString()) {
+            return '내일';
+        } else {
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const weekday = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+            return `${month}/${day} (${weekday})`;
+        }
+    };
 
     const formatTime = (h: number, m: number) => {
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
@@ -37,6 +70,22 @@ function TimePickerModal({ isOpen, onClose, onConfirm, dayTitle, estimatedMinute
         const endMinute = totalMinutes % 60;
         return formatTime(endHour, endMinute);
     };
+
+    const formatDateString = (date: Date) => {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+
+    const handleConfirm = () => {
+        onConfirm(formatDateString(selectedDate), formatTime(selectedHour, selectedMinute));
+    };
+
+    // Reset step when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setStep('date');
+            setSelectedDate(new Date());
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -57,73 +106,130 @@ function TimePickerModal({ isOpen, onClose, onConfirm, dayTitle, estimatedMinute
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold">학습 시간 선택</h3>
+                        <h3 className="text-lg font-bold">
+                            {step === 'date' ? '학습 날짜 선택' : '학습 시간 선택'}
+                        </h3>
                         <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
 
                     <p className="text-sm text-muted-foreground mb-4">
-                        "{dayTitle}" 학습 일정을 언제 시작할까요?
+                        "{dayTitle}" 학습 일정을 {step === 'date' ? '언제' : '몇 시에'} 시작할까요?
                     </p>
 
-                    {/* Time Selector */}
-                    <div className="flex items-center justify-center gap-4 mb-6">
-                        {/* Hour */}
-                        <div className="flex flex-col items-center">
-                            <span className="text-xs text-muted-foreground mb-2">시</span>
-                            <div className="h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-muted rounded-lg bg-muted/30 p-2">
-                                {hours.map((h) => (
-                                    <button
-                                        key={h}
-                                        onClick={() => setSelectedHour(h)}
-                                        className={cn(
-                                            "w-12 py-2 rounded-lg text-center transition-colors",
-                                            selectedHour === h
-                                                ? "bg-purple-500 text-white font-bold"
-                                                : "hover:bg-muted"
-                                        )}
-                                    >
-                                        {h.toString().padStart(2, '0')}
-                                    </button>
-                                ))}
-                            </div>
+                    {/* Step indicator */}
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                        <div className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
+                            step === 'date' ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
+                        )}>
+                            1
                         </div>
-
-                        <span className="text-2xl font-bold">:</span>
-
-                        {/* Minute */}
-                        <div className="flex flex-col items-center">
-                            <span className="text-xs text-muted-foreground mb-2">분</span>
-                            <div className="flex flex-col gap-1">
-                                {minutes.map((m) => (
-                                    <button
-                                        key={m}
-                                        onClick={() => setSelectedMinute(m)}
-                                        className={cn(
-                                            "w-12 py-2 rounded-lg text-center transition-colors",
-                                            selectedMinute === m
-                                                ? "bg-purple-500 text-white font-bold"
-                                                : "hover:bg-muted bg-muted/30"
-                                        )}
-                                    >
-                                        {m.toString().padStart(2, '0')}
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="w-8 h-0.5 bg-muted" />
+                        <div className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
+                            step === 'time' ? "bg-purple-500 text-white" : "bg-muted text-muted-foreground"
+                        )}>
+                            2
                         </div>
                     </div>
+
+                    {step === 'date' ? (
+                        /* Date Selector */
+                        <div className="mb-6">
+                            <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-1">
+                                {next14Days.map((date, index) => (
+                                    <button
+                                        key={index}
+                                        onClick={() => setSelectedDate(date)}
+                                        className={cn(
+                                            "p-3 rounded-xl text-center transition-all",
+                                            selectedDate.toDateString() === date.toDateString()
+                                                ? "bg-purple-500 text-white font-bold"
+                                                : "bg-muted/30 hover:bg-muted"
+                                        )}
+                                    >
+                                        <div className="text-xs opacity-70">
+                                            {['일', '월', '화', '수', '목', '금', '토'][date.getDay()]}
+                                        </div>
+                                        <div className="text-lg font-bold">{date.getDate()}</div>
+                                        <div className="text-xs opacity-70">
+                                            {date.getMonth() + 1}월
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        /* Time Selector */
+                        <div className="flex items-center justify-center gap-4 mb-6">
+                            {/* Hour */}
+                            <div className="flex flex-col items-center">
+                                <span className="text-xs text-muted-foreground mb-2">시</span>
+                                <div className="h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-muted rounded-lg bg-muted/30 p-2">
+                                    {hours.map((h) => (
+                                        <button
+                                            key={h}
+                                            onClick={() => setSelectedHour(h)}
+                                            className={cn(
+                                                "w-12 py-2 rounded-lg text-center transition-colors",
+                                                selectedHour === h
+                                                    ? "bg-purple-500 text-white font-bold"
+                                                    : "hover:bg-muted"
+                                            )}
+                                        >
+                                            {h.toString().padStart(2, '0')}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <span className="text-2xl font-bold">:</span>
+
+                            {/* Minute */}
+                            <div className="flex flex-col items-center">
+                                <span className="text-xs text-muted-foreground mb-2">분</span>
+                                <div className="flex flex-col gap-1">
+                                    {minutes.map((m) => (
+                                        <button
+                                            key={m}
+                                            onClick={() => setSelectedMinute(m)}
+                                            className={cn(
+                                                "w-12 py-2 rounded-lg text-center transition-colors",
+                                                selectedMinute === m
+                                                    ? "bg-purple-500 text-white font-bold"
+                                                    : "hover:bg-muted bg-muted/30"
+                                            )}
+                                        >
+                                            {m.toString().padStart(2, '0')}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Preview */}
                     <div className="bg-purple-500/10 rounded-xl p-4 mb-6 border border-purple-500/20">
                         <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">시작</span>
-                            <span className="font-bold text-purple-400">{formatTime(selectedHour, selectedMinute)}</span>
+                            <span className="text-muted-foreground">날짜</span>
+                            <span className={cn("font-bold", step === 'date' ? "text-purple-400" : "")}>
+                                {formatDateDisplay(selectedDate)}
+                            </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm mt-2">
-                            <span className="text-muted-foreground">종료 (예상)</span>
-                            <span className="font-medium">{getEndTime()}</span>
-                        </div>
+                        {step === 'time' && (
+                            <>
+                                <div className="flex items-center justify-between text-sm mt-2">
+                                    <span className="text-muted-foreground">시작</span>
+                                    <span className="font-bold text-purple-400">{formatTime(selectedHour, selectedMinute)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm mt-2">
+                                    <span className="text-muted-foreground">종료 (예상)</span>
+                                    <span className="font-medium">{getEndTime()}</span>
+                                </div>
+                            </>
+                        )}
                         <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-purple-500/20">
                             <span className="text-muted-foreground">예상 소요시간</span>
                             <span>{estimatedMinutes}분</span>
@@ -132,16 +238,33 @@ function TimePickerModal({ isOpen, onClose, onConfirm, dayTitle, estimatedMinute
 
                     {/* Buttons */}
                     <div className="flex gap-3">
-                        <Button variant="outline" onClick={onClose} className="flex-1">
-                            취소
-                        </Button>
-                        <Button
-                            onClick={() => onConfirm(formatTime(selectedHour, selectedMinute))}
-                            className="flex-1 bg-purple-500 hover:bg-purple-600"
-                        >
-                            <CalendarPlus className="w-4 h-4 mr-2" />
-                            일정 추가
-                        </Button>
+                        {step === 'date' ? (
+                            <>
+                                <Button variant="outline" onClick={onClose} className="flex-1">
+                                    취소
+                                </Button>
+                                <Button
+                                    onClick={() => setStep('time')}
+                                    className="flex-1 bg-purple-500 hover:bg-purple-600"
+                                >
+                                    다음
+                                    <ChevronRight className="w-4 h-4 ml-1" />
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="outline" onClick={() => setStep('date')} className="flex-1">
+                                    이전
+                                </Button>
+                                <Button
+                                    onClick={handleConfirm}
+                                    className="flex-1 bg-purple-500 hover:bg-purple-600"
+                                >
+                                    <CalendarPlus className="w-4 h-4 mr-2" />
+                                    일정 추가
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </motion.div>
             </motion.div>
@@ -272,8 +395,8 @@ export function LearningCurriculumView({
         setTimePickerOpen(true);
     };
 
-    // 스탠다드/프로 플랜: 일정에 학습 주제 추가 (시간 선택 후)
-    const handleAddToSchedule = async (startTime: string) => {
+    // 스탠다드/프로 플랜: 일정에 학습 주제 추가 (날짜 & 시간 선택 후)
+    const handleAddToSchedule = async (selectedDateStr: string, startTime: string) => {
         if (!selectedDay) return;
         const day = selectedDay;
 
@@ -305,6 +428,10 @@ export function LearningCurriculumView({
                 objectives: day.objectives,
             };
 
+            // 선택한 날짜의 요일 계산
+            const selectedDate = new Date(selectedDateStr);
+            const selectedDayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
             // 새 학습 일정 추가
             const newSchedule = {
                 id: `learning-${curriculum.id}-day${day.day}-${Date.now()}`,
@@ -316,12 +443,14 @@ export function LearningCurriculumView({
                 notificationEnabled: true,
                 isLearning: true,
                 learningData,
+                specificDate: selectedDateStr, // 선택한 날짜
+                daysOfWeek: [selectedDayOfWeek], // 선택한 날짜의 요일 (호환성)
             };
 
             const updatedGoals = [...currentGoals, newSchedule];
 
             // 프로필 업데이트
-            await fetch('/api/user/profile', {
+            const updateRes = await fetch('/api/user/profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -329,6 +458,14 @@ export function LearningCurriculumView({
                     customGoals: updatedGoals,
                 }),
             });
+
+            if (!updateRes.ok) {
+                throw new Error('Failed to update profile');
+            }
+
+            // Notify other components about schedule update
+            window.dispatchEvent(new CustomEvent('schedule-updated'));
+            window.dispatchEvent(new Event('profile-updated'));
 
             // 추가된 상태 업데이트
             setAddedToSchedule(prev => new Set([...prev, day.day]));
@@ -651,8 +788,8 @@ export function LearningCurriculumView({
                 </motion.div>
             )}
 
-            {/* Time Picker Modal */}
-            <TimePickerModal
+            {/* Date & Time Picker Modal */}
+            <DateTimePickerModal
                 isOpen={timePickerOpen}
                 onClose={() => {
                     setTimePickerOpen(false);

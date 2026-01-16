@@ -212,3 +212,47 @@ export async function GET() {
         return NextResponse.json({ error: "Failed to fetch curriculums" }, { status: 500 });
     }
 }
+
+// DELETE endpoint to remove a curriculum
+export async function DELETE(request: Request) {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const curriculumId = searchParams.get("id");
+
+        if (!curriculumId) {
+            return NextResponse.json({ error: "Curriculum ID required" }, { status: 400 });
+        }
+
+        const { data: userData } = await supabase
+            .from("users")
+            .select("id")
+            .eq("email", session.user.email)
+            .single();
+
+        if (!userData) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        // Delete the curriculum (only if it belongs to the user)
+        const { error } = await supabase
+            .from("user_learning_curriculums")
+            .delete()
+            .eq("id", curriculumId)
+            .eq("user_id", userData.id);
+
+        if (error) {
+            console.error("[AI Learning Curriculum] DELETE Error:", error);
+            return NextResponse.json({ error: "Failed to delete curriculum" }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("[AI Learning Curriculum] DELETE Error:", error);
+        return NextResponse.json({ error: "Failed to delete curriculum" }, { status: 500 });
+    }
+}

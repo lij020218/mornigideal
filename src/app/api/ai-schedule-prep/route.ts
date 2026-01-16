@@ -30,54 +30,125 @@ export async function POST(request: Request) {
 `;
         }
 
-        const prompt = `당신은 Fi.eri 앱의 조용한 비서 AI입니다. ${timeUntil}분 후 "${schedule.text}" 일정이 시작됩니다.
-${userContext}
+        // 일정 유형 판별
+        const scheduleName = schedule.text.toLowerCase();
+        const isMealTime = /식사|점심|저녁|아침|밥|브런치|런치|디너|야식|간식/.test(scheduleName);
+        const isRestTime = /휴식|쉬는|낮잠|수면|취침|잠|기상|일어나/.test(scheduleName);
+        const isLeisure = /게임|영화|드라마|유튜브|넷플릭스|독서|음악|산책/.test(scheduleName);
+        const isExercise = /운동|헬스|요가|필라테스|러닝|조깅|수영|등산/.test(scheduleName);
+        const isWork = /업무|출근|퇴근|회의|미팅|프레젠테이션|발표|면접/.test(scheduleName);
+        const isStudy = /공부|학습|강의|수업|시험|과제/.test(scheduleName);
 
-**역할: 조용한 비서 (Quiet Assistant)**
-당신의 임무는 사용자가 업무에 집중할 수 있도록 **최소한의 준비만 도와주는 것**입니다.
+        let prompt: string;
 
-**핵심 원칙:**
-1. **짧고 간결하게**: 2-3개 항목만. 리마인더 수준.
-2. **물리적 준비 위주**: 환경, 도구, 기기 상태 확인
-3. **인사이트 금지**: 전략, 아이디어, 브레인스토밍 제안 절대 금지
-4. **방해 최소화**: "~해보세요", "~하면 좋아요" 같은 제안 금지
-5. **체크 항목만**: 단순 확인 리스트
+        if (isMealTime) {
+            // 식사 - 간단한 응원만
+            const mealEmojis: Record<string, string> = {
+                '아침': '🍳',
+                '점심': '🍚',
+                '저녁': '🍽️',
+                '야식': '🌙',
+                '브런치': '🥐',
+                '간식': '🍪'
+            };
+            let emoji = '🍽️';
+            for (const [key, val] of Object.entries(mealEmojis)) {
+                if (scheduleName.includes(key)) {
+                    emoji = val;
+                    break;
+                }
+            }
+            const mealMessages = ['맛있게 드세요!', '든든하게 드세요!', '맛있는 식사 되세요!'];
+            const randomMsg = mealMessages[Math.floor(Math.random() * mealMessages.length)];
+            return NextResponse.json({
+                advice: `${timeUntil}분 후 "${schedule.text}" 시간이에요 ${emoji}\n\n${randomMsg}`
+            });
+        }
 
-**좋은 예시 (업무 시작):**
-"10분 후 "업무 시작" 시간이에요 🕐
+        if (isRestTime) {
+            // 휴식/취침 - 간단한 응원만
+            const restMessages: Record<string, { emoji: string; msg: string }> = {
+                '취침': { emoji: '🌙', msg: '좋은 꿈 꾸세요!' },
+                '잠': { emoji: '😴', msg: '푹 주무세요!' },
+                '기상': { emoji: '☀️', msg: '상쾌한 아침 되세요!' },
+                '일어나': { emoji: '🌅', msg: '좋은 아침이에요!' },
+                '휴식': { emoji: '☕', msg: '편하게 쉬세요!' },
+                '낮잠': { emoji: '😌', msg: '달콤한 낮잠 되세요!' },
+            };
+            let emoji = '☕';
+            let msg = '편하게 쉬세요!';
+            for (const [key, val] of Object.entries(restMessages)) {
+                if (scheduleName.includes(key)) {
+                    emoji = val.emoji;
+                    msg = val.msg;
+                    break;
+                }
+            }
+            return NextResponse.json({
+                advice: `${timeUntil}분 후 "${schedule.text}" 시간이에요 ${emoji}\n\n${msg}`
+            });
+        }
 
-준비 체크:
-• 노트북 충전 확인
-• 필요한 창/파일 열어두기
-• 방해 요소 제거 (알림 끄기 등)"
+        if (isLeisure) {
+            // 여가 활동 - 간단한 응원만
+            const leisureMessages: Record<string, { emoji: string; msg: string }> = {
+                '게임': { emoji: '🎮', msg: '즐거운 시간 보내세요!' },
+                '영화': { emoji: '🎬', msg: '재미있게 보세요!' },
+                '드라마': { emoji: '📺', msg: '재미있게 보세요!' },
+                '유튜브': { emoji: '📱', msg: '즐거운 시청 되세요!' },
+                '넷플릭스': { emoji: '🍿', msg: '재미있게 보세요!' },
+                '독서': { emoji: '📚', msg: '즐거운 독서 시간 되세요!' },
+                '음악': { emoji: '🎵', msg: '좋은 음악과 함께하세요!' },
+                '산책': { emoji: '🚶', msg: '상쾌한 산책 되세요!' },
+            };
+            let emoji = '🎉';
+            let msg = '즐거운 시간 보내세요!';
+            for (const [key, val] of Object.entries(leisureMessages)) {
+                if (scheduleName.includes(key)) {
+                    emoji = val.emoji;
+                    msg = val.msg;
+                    break;
+                }
+            }
+            return NextResponse.json({
+                advice: `${timeUntil}분 후 "${schedule.text}" 시간이에요 ${emoji}\n\n${msg}`
+            });
+        }
 
-**좋은 예시 (운동):**
-"10분 후 "운동" 시간이에요 🏃
+        // 운동, 업무, 공부 등 준비가 필요한 일정은 AI로 처리
+        prompt = `${timeUntil}분 후 "${schedule.text}" 일정이 시작됩니다.
+
+일정 유형: ${isExercise ? '운동' : isWork ? '업무/회의' : isStudy ? '공부' : '활동'}
+
+**규칙:**
+1. 첫 줄: "${timeUntil}분 후 "${schedule.text}" 시간이에요 [적절한 이모지]"
+2. 빈 줄
+3. "준비 체크:" + 2-3개 체크 항목 (해당 일정에 맞는 것만)
+
+**일정별 예시:**
+
+운동:
+"${timeUntil}분 후 "헬스" 시간이에요 💪
 
 준비 체크:
 • 운동복 착용
-• 물병 챙기기
-• 타이머 설정"
+• 물병 챙기기"
 
-**좋은 예시 (회의):**
-"10분 후 "팀 회의" 시간이에요 💼
+업무/회의:
+"${timeUntil}분 후 "팀 회의" 시간이에요 💼
 
 준비 체크:
-• 회의 링크 확인
-• 자료 준비됐는지 체크
-• 조용한 장소 확보"
+• 회의 링크/장소 확인
+• 필요한 자료 준비"
 
-**나쁜 예시 (과잉 개입):**
-❌ "오늘 해야 할 업무를 3가지 뽑아보세요"
-❌ "SK하이닉스 최신 뉴스를 확인하고 인사이트를 메모하세요"
-❌ "각 섹션마다 비즈니스 기회를 생각해보세요"
-👉 이런 건 나중에! 지금은 준비만.
+공부:
+"${timeUntil}분 후 "영어 공부" 시간이에요 📖
 
-**중요:**
-- 일정 이름("${schedule.text}")에 맞는 물리적 준비만 제안
-- 사용자 정보는 **준비 항목 추론**에만 사용 (명시적 언급 금지)
-- 전략/인사이트는 업무 시작 후에 제공될 예정이므로 여기선 절대 금지
-- 2-3줄로 끝내기`;
+준비 체크:
+• 교재/노트 준비
+• 조용한 환경 확보"
+
+**중요:** 일정 이름에 맞는 실용적인 준비 항목만 작성. 불필요한 조언 금지.`;
 
         // Use gpt-4o-mini for simple, quick preparation tips (cost-effective)
         const modelName = "gpt-4o-mini-2024-07-18";
@@ -86,14 +157,14 @@ ${userContext}
             messages: [
                 {
                     role: "system",
-                    content: "당신은 조용한 비서 AI입니다. 일정 시작 전 최소한의 물리적 준비만 간단히 리마인드하세요. 인사이트나 전략 제안은 하지 마세요."
+                    content: "당신은 일정 알림 비서입니다. 주어진 형식 그대로 따라하세요. 일정 시간 알림 + 준비 체크리스트 2-3개만 작성. 추가 조언이나 응원 문구 금지."
                 },
                 {
                     role: "user",
                     content: prompt,
                 },
             ],
-            temperature: 0.7,
+            temperature: 0.5,
         });
 
         const advice = completion.choices[0]?.message?.content || `${timeUntil}분 후 "${schedule.text}" 시간이에요! 준비하세요 🕐`;

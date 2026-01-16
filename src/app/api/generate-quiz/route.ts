@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -19,7 +20,7 @@ const supabase = createClient(
 );
 
 const MINI_MODEL = "gpt-5-mini-2025-08-07";
-const FINAL_MODEL = "gpt-5.1-2025-11-13";
+const FINAL_MODEL = "gpt-5.2-2025-12-11";
 
 // Increase timeout for quiz generation
 export const maxDuration = 60; // 60 seconds
@@ -73,6 +74,19 @@ ${context}
 
     const data = JSON.parse(response.choices[0].message.content || "{}");
     const quiz = (data.quiz || []).slice(0, 10);
+
+    // Log usage for onboarding quiz
+    const usage = response.usage;
+    if (usage) {
+      // Note: No session available here, use system email
+      await logOpenAIUsage(
+        "system@onboarding-quiz",
+        MINI_MODEL,
+        "generate-quiz/onboarding",
+        usage.prompt_tokens,
+        usage.completion_tokens
+      );
+    }
 
     console.log(`[ONBOARDING QUIZ] Generated ${quiz.length} questions`);
 
@@ -248,6 +262,35 @@ ${allContent}
     const tfData = JSON.parse(tfResult.choices[0].message.content || "{}");
     const mcData = JSON.parse(mcResult.choices[0].message.content || "{}");
     const essayData = JSON.parse(essayResult.choices[0].message.content || "{}");
+
+    // Log usage for all three quiz generations
+    if (tfResult.usage) {
+      await logOpenAIUsage(
+        session.user.email,
+        MINI_MODEL,
+        "generate-quiz/tf",
+        tfResult.usage.prompt_tokens,
+        tfResult.usage.completion_tokens
+      );
+    }
+    if (mcResult.usage) {
+      await logOpenAIUsage(
+        session.user.email,
+        MINI_MODEL,
+        "generate-quiz/mc",
+        mcResult.usage.prompt_tokens,
+        mcResult.usage.completion_tokens
+      );
+    }
+    if (essayResult.usage) {
+      await logOpenAIUsage(
+        session.user.email,
+        FINAL_MODEL,
+        "generate-quiz/essay",
+        essayResult.usage.prompt_tokens,
+        essayResult.usage.completion_tokens
+      );
+    }
 
     const quiz = {
       trueFalse: (tfData.questions || []).slice(0, 5),

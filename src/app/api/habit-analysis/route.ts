@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { supabase } from '@/lib/supabase';
 import OpenAI from 'openai';
+import { logOpenAIUsage } from '@/lib/openai-usage';
 
 export const revalidate = 21600; // Cache for 6 hours
 
@@ -144,6 +145,18 @@ export async function GET() {
         });
 
         const content = response.choices[0]?.message?.content || '';
+
+        // Log usage
+        const usage = response.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                email,
+                'gpt-5-mini-2025-08-07',
+                'habit-analysis',
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
 
         try {
             // Parse JSON response

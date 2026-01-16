@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import Parser from 'rss-parser';
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,30 +18,42 @@ const parser = new Parser();
 const MINI_MODEL = "gpt-5-mini-2025-08-07";
 const BATCH_SIZE = 10; // 10개씩 병렬 처리
 
-// RSS Feed URLs (기존 코드에서 가져옴)
+// RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
 const RSS_FEEDS = [
   // International Sources - News & Business
-  { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business", interests: ["비즈니스", "경제"] },
-  { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology", interests: ["기술", "IT"] },
-  { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News", interests: ["뉴스"] },
+  // Reuters/AP 피드가 막혀서 대체 소스 사용
+  { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "Business", interests: ["비즈니스", "경제"] },
+  { name: "Financial Times", url: "https://www.ft.com/?format=rss", category: "Business", interests: ["비즈니스", "경제", "금융"] },
+  { name: "Economist", url: "https://www.economist.com/business/rss.xml", category: "Business", interests: ["비즈니스", "경제"] },
   { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business", interests: ["비즈니스", "경제"] },
   { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology", interests: ["기술", "IT"] },
   { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories", interests: ["뉴스"] },
   { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Tech", interests: ["기술", "스타트업", "AI"] },
+  { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Tech", interests: ["기술", "IT", "AI"] },
+  { name: "Wired", url: "https://www.wired.com/feed/rss", category: "Tech", interests: ["기술", "과학", "AI"] },
+  { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: "Tech", interests: ["기술", "IT"] },
+  { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Tech", interests: ["기술", "스타트업", "개발"] },
   { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business", interests: ["금융", "투자", "비즈니스"] },
   { name: "Bloomberg Economics", url: "https://feeds.bloomberg.com/economics/news.rss", category: "Economics", interests: ["경제", "금융정책"] },
   { name: "WSJ World News", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", category: "Business", interests: ["비즈니스", "경제", "금융"] },
   { name: "New York Times Economy", url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", category: "Economics", interests: ["경제"] },
   { name: "New York Times AI", url: "https://www.nytimes.com/svc/collections/v1/publish/spotlight/artificial-intelligence/rss.xml", category: "AI", interests: ["AI", "기술"] },
+  // Sports
   { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports", interests: ["스포츠"] },
+  { name: "ESPN Soccer", url: "https://www.espn.com/espn/rss/soccer/news", category: "Sports", interests: ["스포츠", "축구"] },
   { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", category: "Sports", interests: ["스포츠"] },
-  { name: "Reuters Sports", url: "http://feeds.reuters.com/reuters/worldOfSport", category: "Sports", interests: ["스포츠"] },
   { name: "Sky Sports", url: "https://www.skysports.com/rss/11095", category: "Sports", interests: ["스포츠"] },
+  // 한국 뉴스
+  { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스", interests: ["뉴스", "시사"] },
+  { name: "동아일보", url: "https://rss.donga.com/total.xml", category: "뉴스", interests: ["뉴스", "시사"] },
+  { name: "SBS 뉴스", url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", category: "뉴스", interests: ["뉴스"] },
   { name: "한국경제", url: "https://www.hankyung.com/feed/economy", category: "경제", interests: ["경제", "비즈니스"] },
   { name: "한국경제 IT", url: "https://www.hankyung.com/feed/it", category: "IT", interests: ["IT", "기술"] },
   { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제", interests: ["경제"] },
   { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제", interests: ["경제", "비즈니스"] },
   { name: "매일경제 증권", url: "https://www.mk.co.kr/rss/50200011/", category: "증권", interests: ["금융", "투자", "주식"] },
+  // Google News (한국어)
+  { name: "Google News 비즈니스", url: "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB?hl=ko&gl=KR&ceid=KR:ko", category: "Business", interests: ["비즈니스", "경제"] },
 ];
 
 interface RSSArticle {
@@ -135,6 +148,18 @@ async function summarizeArticlesBatch(articles: RSSArticle[], batchId: string) {
         });
 
         const result = JSON.parse(completion.choices[0].message.content || "{}");
+
+        // Log usage (batch job - no user email, use system)
+        const usage = completion.usage;
+        if (usage) {
+          await logOpenAIUsage(
+            "system@batch-news",
+            MINI_MODEL,
+            "batch-news",
+            usage.prompt_tokens,
+            usage.completion_tokens
+          );
+        }
 
         return {
           ...result,

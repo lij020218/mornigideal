@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -21,6 +21,55 @@ export default function InsightsPage() {
             router.push("/login");
         }
     }, [status, router]);
+
+    // Save profile to database
+    const saveProfileToSupabase = useCallback(async (profile: any) => {
+        try {
+            await fetch('/api/user/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile }),
+            });
+            console.log('[Insights] Profile saved to Supabase');
+        } catch (error) {
+            console.error('[Insights] Failed to save profile to Supabase:', error);
+        }
+    }, []);
+
+    // Handle adding interest
+    const handleAddInterest = useCallback((interest: string) => {
+        if (!userProfile) return;
+
+        const currentInterests = userProfile.interests || [];
+        if (currentInterests.includes(interest)) {
+            console.log('[Insights] Interest already exists:', interest);
+            return;
+        }
+
+        const updatedInterests = [...currentInterests, interest];
+        const updatedProfile = { ...userProfile, interests: updatedInterests };
+
+        setUserProfile(updatedProfile);
+        localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
+        saveProfileToSupabase(updatedProfile);
+
+        console.log('[Insights] Interest added:', interest);
+    }, [userProfile, saveProfileToSupabase]);
+
+    // Handle removing interest
+    const handleRemoveInterest = useCallback((interest: string) => {
+        if (!userProfile) return;
+
+        const currentInterests = userProfile.interests || [];
+        const updatedInterests = currentInterests.filter((i: string) => i !== interest);
+        const updatedProfile = { ...userProfile, interests: updatedInterests };
+
+        setUserProfile(updatedProfile);
+        localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
+        saveProfileToSupabase(updatedProfile);
+
+        console.log('[Insights] Interest removed:', interest);
+    }, [userProfile, saveProfileToSupabase]);
 
     // Fetch user profile and trend briefings
     useEffect(() => {
@@ -82,6 +131,8 @@ export default function InsightsPage() {
                         goal={userProfile.goal}
                         interests={userProfile.interests || []}
                         onSelectBriefing={(briefing) => setSelectedBriefing(briefing)}
+                        onAddInterest={handleAddInterest}
+                        onRemoveInterest={handleRemoveInterest}
                     />
                 )}
 

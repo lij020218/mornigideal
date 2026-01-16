@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
 interface ChatAction {
-    type: "add_schedule" | "open_link" | "open_curriculum";
+    type: "add_schedule" | "open_link" | "open_curriculum" | "web_search";
     label: string;
     data: Record<string, any>;
 }
@@ -36,13 +37,68 @@ export async function POST(request: Request) {
             const user = await getUserByEmail(session.user.email);
             if (user?.profile) {
                 const p = user.profile;
+
+                // Map interest IDs to readable labels
+                const interestMap: Record<string, string> = {
+                    ai: "AI/인공지능",
+                    startup: "스타트업/창업",
+                    marketing: "마케팅/브랜딩",
+                    development: "개발/프로그래밍",
+                    design: "디자인/UX",
+                    finance: "재테크/투자",
+                    selfdev: "자기계발",
+                    health: "건강/운동",
+                };
+
+                // Map experience levels to readable labels
+                const experienceMap: Record<string, string> = {
+                    student: "학생/취준생",
+                    junior: "1-3년차 (주니어)",
+                    mid: "4-7년차 (미들)",
+                    senior: "8년차 이상 (시니어)",
+                    beginner: "입문자",
+                    intermediate: "중급자",
+                };
+
+                const interestLabels = (p.interests || []).map((i: string) => interestMap[i] || i);
+                const experienceLabel = experienceMap[p.experience || p.level || ""] || p.experience || p.level || "미설정";
+
+                // 장기 목표 정보 추가
+                let longTermGoalsContext = "";
+                if (p.longTermGoals) {
+                    const ltg = p.longTermGoals;
+                    const activeWeekly = (ltg.weekly || []).filter((g: any) => !g.completed);
+                    const activeMonthly = (ltg.monthly || []).filter((g: any) => !g.completed);
+                    const activeYearly = (ltg.yearly || []).filter((g: any) => !g.completed);
+
+                    if (activeWeekly.length > 0 || activeMonthly.length > 0 || activeYearly.length > 0) {
+                        longTermGoalsContext = `
+📌 **사용자의 장기 목표:**
+${activeWeekly.length > 0 ? `[주간 목표]\n${activeWeekly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+${activeMonthly.length > 0 ? `[월간 목표]\n${activeMonthly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+${activeYearly.length > 0 ? `[연간 목표]\n${activeYearly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+
+**목표 관련 지침:**
+- 사용자가 설정한 장기 목표를 기억하고, 관련된 조언이나 격려를 해주세요.
+- 일정 추가 시 이 목표들과 연관지어 제안하면 좋습니다.
+- 예: "이 일정이 '${activeWeekly[0]?.title || activeMonthly[0]?.title || activeYearly[0]?.title || '목표'}' 달성에 도움이 될 거예요!"
+`;
+                    }
+                }
+
                 userContext = `
 사용자 정보:
 - 이름: ${user.name}
-- 직업: ${p.job || "미설정"}
+- 직업/분야: ${p.job || p.field || "미설정"}
+${p.major ? `- 전공: ${p.major}` : ""}
+- 경력: ${experienceLabel}
 - 목표: ${p.goal || "미설정"}
-- 레벨: ${p.level || "intermediate"}
-- 관심 분야: ${(p.interests || []).join(", ") || "미설정"}
+- 관심 분야: ${interestLabels.join(", ") || "미설정"}
+${longTermGoalsContext}
+**맞춤형 응답 지침:**
+- 사용자의 목표(${p.goal || "미설정"})와 관련된 조언이나 일정을 우선 추천하세요.
+- 사용자의 경력 수준(${experienceLabel})에 맞는 난이도의 콘텐츠를 추천하세요.
+- 사용자의 관심사(${interestLabels.join(", ") || "미설정"})와 연관된 활동을 제안하세요.
 `;
                 // Use schedules from context if provided, otherwise fetch from profile
                 if (context?.schedules && context.schedules.length > 0) {
@@ -118,10 +174,20 @@ ${briefings.map((t: any, i: number) => `${i + 1}. [ID: ${t.id}] [${t.category ||
             const weekdayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
             const weekday = weekdayNames[dateObj.getDay()];
 
+            // Parse current time for time-of-day context
+            const [currentHour] = context.currentTime.split(':').map(Number);
+            const timeOfDayKorean = currentHour < 12 ? '오전' : currentHour < 18 ? '오후' : '저녁';
+
             currentDateContext = `
 현재 날짜: ${year}년 ${month}월 ${day}일 ${weekday}
-현재 시간: ${context.currentTime}
+현재 시간: ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)
 현재 연도: ${year}년
+
+🚨 **시간 관련 절대 규칙**:
+- 현재 시간은 ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)입니다.
+- 일정이나 활동을 추천할 때는 반드시 ${context.currentTime} 이후 시간만 추천하세요.
+- 예: 현재 15:00이면 → 15:00 이후만 추천 (06:00, 09:00, 12:00 등 과거 시간 절대 금지!)
+- ${timeOfDayKorean}이라고 말했으면 ${timeOfDayKorean} 시간대(${currentHour}시 이후)만 추천하세요.
 
 중요: 사용자가 "오늘" 또는 "today"라고 하면 ${year}년 ${month}월 ${day}일을 의미합니다.
 `;
@@ -152,7 +218,12 @@ ${pendingScheduleContext}
 2. **간결함**: 2-3문장으로 핵심만 전달. 불필요한 격식 제거.
 3. **불릿 포인트 최소화**: 3개 이상 나열할 때만 사용. 대신 자연스러운 문장으로 표현.
 4. **이모지 활용**: 문장 끝에 적절한 이모지 1-2개로 친근함 표현 (과하지 않게).
-5. **시간 추천 시 절대 규칙**: 현재 시간(${context.currentTime}) 이후만 추천. 과거 시간 절대 금지.
+5. **🚨 시간 추천 시 절대 규칙 (매우 중요!)**:
+   - 현재 시간: ${context?.currentTime || '알 수 없음'}
+   - 일정/활동 추천 시 반드시 현재 시간 이후만 추천!
+   - ❌ 틀린 예: 현재 15:00인데 "06:00에 스트레칭 추천" → 절대 금지!
+   - ✅ 맞는 예: 현재 15:00이면 "15:30에 스트레칭 추천" → OK
+   - "오후"라고 말하면서 오전 시간(06:00, 09:00 등) 추천하면 논리 오류!
 
 **나쁜 예시 (딱딱함):**
 "알겠습니다. 오늘(2026-01-12) 오후 4시 28분부터 7시까지 '업무 일정'으로 등록해드릴까요? 장소나 메모도 같이 기록할까요?"
@@ -162,26 +233,28 @@ ${pendingScheduleContext}
 
 **기능별 지침:**
 - **일정 추가**:
-  - **즉시 등록 조건** (다음 중 하나라도 해당하면 바로 add_schedule action 포함):
-    1. **최우선**: 사용자 메시지에 "바로 등록", "바로 추가", "즉시 등록", "그냥 등록" 같은 키워드가 포함되면 무조건 즉시 등록
-    2. 사용자가 "필요 없어", "없어", "세부사항 필요 없어" 등 거부 의사 표현
-    3. 사용자가 이미 장소를 제공함 (예: "장소는 집", "집에서")
-    4. 이전 대화에서 이미 세부사항 질문을 했고 사용자가 답변함
+  - **🚨 기본 원칙: 사용자가 일정 추가를 요청하면 즉시 등록!**
+    * "추가해줘", "잡아줘", "등록해줘", "넣어줘" 등의 요청은 **즉시 actions에 add_schedule 포함**
+    * 장소나 메모는 선택사항이므로 없어도 바로 등록
+    * ❌ 절대 하지 말 것: "장소 있으세요?", "메모 추가할까요?" 같은 질문 후 대기
+    * ✅ 해야 할 것: 바로 등록하고 "장소나 메모 추가하려면 말씀해주세요" 라고 안내
   - **즉시 등록 예시** (반드시 actions 배열에 add_schedule 포함):
-    * 사용자: "오늘 7시 반에 저녁 식사 잡아줘. 장소는 집이고 바로 등록해"
-    * 응답: {"message": "좋아요! 오늘 7시 반에 저녁 식사 일정(장소: 집) 바로 등록할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
-    * 사용자: "오늘 7시 반에 저녁 식사 잡아줘. 장소는 집"
-    * 응답: {"message": "좋아요! 오늘 7시 반에 저녁 식사 일정(장소: 집) 등록할게요. 메모 추가할 내용 있으면 알려주세요 😊", "actions": []}
-    * 사용자: "없어"
-    * 응답: {"message": "알겠어요! 바로 등록할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
-    * 사용자: "오늘 3시에 운동 일정 잡아줘"
-    * 응답: {"message": "3시에 운동 일정 추가할게요! 어디서 하시는지 장소 알려주시면 같이 적을게요 😊", "actions": []}
-    * 사용자: "헬스장"
-    * 응답: {"message": "헬스장에서 운동하시는군요! 바로 등록할게요 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
-  - **물어보기 조건**: 위 조건에 해당하지 않고, 사용자가 처음으로 일정만 요청한 경우에만 자연스럽게 물어봄.
-    * 예시: "4시 28분부터 7시까지 '업무 일정' 추가할게요! 장소나 메모 있으면 알려주세요 😊" (자연스러운 느낌 ✅)
-    * 이 경우 actions는 빈 배열 []로 응답
-  - **시간 제안 시**: 사용자에게 빈 시간을 제안할 때는 현재 시간(${context.currentTime}) 이후의 시간만 제안합니다. 현재 시간보다 이전 시간은 절대 제안하지 마세요.
+    * 사용자: "오후 9시에 게임 일정 추가해줘"
+    * 응답: {"message": "오후 9시에 게임 일정 추가했어요! 🎮", "actions": [{"type": "add_schedule", "label": "게임 추가", "data": {"text": "게임", "startTime": "21:00", "endTime": "22:00", "specificDate": "2026-01-14", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}
+    * 사용자: "오늘 7시 반에 저녁 식사 잡아줘"
+    * 응답: {"message": "오늘 저녁 7시 반에 저녁 식사 일정 추가했어요! 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-14", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}
+    * 사용자: "내일 오전 10시에 회의 등록해줘"
+    * 응답: {"message": "내일 오전 10시에 회의 일정 추가했어요! 📅", "actions": [{"type": "add_schedule", "label": "회의 추가", "data": {"text": "회의", "startTime": "10:00", "endTime": "11:00", "specificDate": "2026-01-15", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}
+  - **추가 정보가 있는 경우**:
+    * 사용자: "오후 3시에 헬스장에서 운동 잡아줘"
+    * 응답: {"message": "오후 3시에 헬스장에서 운동 일정 추가했어요! 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "2026-01-14", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
+  - **시간 제안 시**: 사용자에게 빈 시간을 제안할 때는 현재 시간(${context?.currentTime || '알 수 없음'}) 이후의 시간만 제안합니다. 현재 시간보다 이전 시간은 절대 제안하지 마세요.
+  - **시간 표시 규칙 (매우 중요!)**:
+    * 사용자에게 시간을 말할 때는 **반드시 오전/오후를 명시**하세요. "6시"가 아니라 "오후 6시" 또는 "저녁 6시"로 말하세요.
+    * 예시: "오후 3시에 운동 어떠세요?", "저녁 7시에 저녁 식사 일정 추가할게요", "오전 9시부터 업무 시작이네요"
+    * JSON의 startTime/endTime은 24시간 형식(예: "18:00")을 사용하지만, 메시지에서는 "오후 6시"처럼 자연스럽게 표현하세요.
+    * ❌ 나쁜 예: "6시에 운동 추천드려요" (오전인지 오후인지 모호함)
+    * ✅ 좋은 예: "오후 6시에 운동 추천드려요" (명확함)
   - **일정 이름 정규화** (절대적으로 중요! 캘린더에 정의된 정확한 이름 사용):
     **규칙**: 사용자가 말한 키워드를 아래 **정확한 일정 이름**으로 변환하세요. 캘린더에 미리 정의된 이름과 일치해야 아이콘과 색상이 제대로 표시됩니다.
 
@@ -239,13 +312,19 @@ ${pendingScheduleContext}
     * specificDate는 반복 일정이면 null, 특정 날짜면 "YYYY-MM-DD"
   - 장소(location), 메모(memo) 정보가 있으면 data에 포함, 없으면 빈 문자열로.
 - **트렌드 브리핑**: 컨텍스트 참고하여 요약하고 actions에 open_briefing 포함.
+- **자료/정보 검색 요청**: 사용자가 자료, 정보, 검색, 찾아줘 등을 요청하면:
+  * actions에 web_search를 포함하여 Gemini 웹 검색 트리거
+  * data에 query(검색어)와 activity(관련 일정/활동) 포함
+  * 예: 사용자가 "회의 자료 좀 찾아줘" → {"type": "web_search", "label": "자료 검색", "data": {"query": "회의 준비 자료", "activity": "회의"}}
+  * 예: 사용자가 "운동 루틴 알려줘" → {"type": "web_search", "label": "검색하기", "data": {"query": "홈트레이닝 운동 루틴", "activity": "운동"}}
+  * 검색 키워드: "검색", "찾아", "알려줘", "정보", "자료", "추천", "방법", "how to", "뭐가 좋아"
 
 **JSON 응답 형식 (엄수):**
 {
   "message": "사용자에게 보여줄 메시지 (존댓말)",
   "actions": [
     {
-      "type": "add_schedule" | "open_briefing",
+      "type": "add_schedule" | "open_briefing" | "web_search",
       "label": "버튼 텍스트",
       "data": {
         // add_schedule: { text, startTime, endTime, specificDate, daysOfWeek, color: 'primary', location, memo }
@@ -253,6 +332,7 @@ ${pendingScheduleContext}
         // - daysOfWeek: 반복 요일 배열 [0-6] 또는 null (0=일, 1=월, ..., 6=토)
         // - specificDate: 특정 날짜 "YYYY-MM-DD" 또는 null (반복 일정이면 null)
         // open_briefing: { briefingId, title }
+        // web_search: { query, activity }
       }
     }
   ]
@@ -263,11 +343,21 @@ ${pendingScheduleContext}
 - message만 보내고 actions를 빈 배열로 보내면 일정이 등록되지 않습니다!
 - "등록해드렸어요", "추가할게요" 같은 메시지를 보낼 때는 **반드시** actions에 실제 동작을 포함해야 합니다.
 
+**CRITICAL: 일정 등록 후 추가 추천 금지!**
+- 일정을 등록하는 응답에서는 등록 확인 메시지만 보내세요.
+- ❌ 절대 하지 말 것: "오후에 일정이 없네요! 다음 활동을 추천드려요..." 같은 추가 추천
+- ❌ 절대 하지 말 것: "추천: **스트레칭** (30분), 시작 시간: 06:00" 같은 새로운 일정 제안
+- ✅ 해야 할 것: "좋아요! 일정 추가할게요 😊" 같이 간결하게 확인만
+- 리소스 추천은 시스템이 자동으로 제공하므로 AI가 직접 추천하지 마세요.
+
 **좋은 예 (올바른 즉시 등록):**
 {"message": "좋아요! 오늘 7시 반에 저녁 식사 일정 추가할게요 🍽️", "actions": [{"type": "add_schedule", "label": "저녁 식사 추가", "data": {"text": "저녁 식사", "startTime": "19:30", "endTime": "20:30", "specificDate": "2026-01-12", "daysOfWeek": null, "color": "primary", "location": "집", "memo": ""}}]}
 
 **나쁜 예 (말만 하고 등록 안 됨):**
-{"message": "좋아요! 등록해드렸어요", "actions": []} ❌❌❌`;
+{"message": "좋아요! 등록해드렸어요", "actions": []} ❌❌❌
+
+**나쁜 예 (불필요한 추가 추천):**
+{"message": "기상 일정 추가할게요! 오후에 일정이 없네요. 추천: 스트레칭 06:00", "actions": [...]} ❌❌❌`;
 
         const modelName = "gpt-5-mini-2025-08-07";
         const completion = await openai.chat.completions.create({
@@ -281,6 +371,18 @@ ${pendingScheduleContext}
         });
 
         const responseContent = completion.choices[0]?.message?.content || '{"message": "죄송합니다. 응답을 생성하지 못했습니다."}';
+
+        // Log usage
+        const usage = completion.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                session.user.email,
+                modelName,
+                "ai-chat",
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
 
         // Debug logging
         console.log('[AI Chat] Raw AI Response:', responseContent);
@@ -304,8 +406,26 @@ ${pendingScheduleContext}
         }
     } catch (error: any) {
         console.error("[AI Chat] Error:", error);
+        console.error("[AI Chat] Error message:", error?.message);
+        console.error("[AI Chat] Error response:", error?.response?.data);
+
+        // Check for specific OpenAI errors
+        if (error?.code === 'invalid_api_key' || error?.message?.includes('API key')) {
+            return NextResponse.json(
+                { error: "OpenAI API 키가 유효하지 않습니다.", message: "설정을 확인해주세요." },
+                { status: 401 }
+            );
+        }
+
+        if (error?.code === 'model_not_found' || error?.message?.includes('model')) {
+            return NextResponse.json(
+                { error: "AI 모델을 찾을 수 없습니다.", message: "잠시 후 다시 시도해주세요." },
+                { status: 500 }
+            );
+        }
+
         return NextResponse.json(
-            { error: "Failed to generate response" },
+            { error: "Failed to generate response", message: error?.message || "알 수 없는 오류가 발생했습니다." },
             { status: 500 }
         );
     }

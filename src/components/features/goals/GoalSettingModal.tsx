@@ -81,7 +81,7 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
     const [scheduleTip, setScheduleTip] = useState("");
     const [selectedSchedules, setSelectedSchedules] = useState<Set<number>>(new Set());
     const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
-    const [addedGoalInfo, setAddedGoalInfo] = useState<{ title: string; type: string } | null>(null);
+    const [addedGoalInfo, setAddedGoalInfo] = useState<{ id: string; title: string; type: "weekly" | "monthly" | "yearly" } | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -126,8 +126,15 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                 const data = await res.json();
                 setGoals(data.goals);
 
-                // Fetch schedule recommendations
-                setAddedGoalInfo({ title: newGoal.title, type: activeTab });
+                // Find the newly added goal (last one in the list)
+                const newlyAddedGoal = data.goals[activeTab]?.[data.goals[activeTab].length - 1];
+
+                // Fetch schedule recommendations with goal ID
+                setAddedGoalInfo({
+                    id: newlyAddedGoal?.id || `goal-${Date.now()}`,
+                    title: newGoal.title,
+                    type: activeTab
+                });
                 await fetchScheduleRecommendations();
 
                 setNewGoal({ title: "", description: "", category: "general" });
@@ -139,9 +146,12 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
         }
     };
 
+    const [scheduleError, setScheduleError] = useState<string | null>(null);
+
     const fetchScheduleRecommendations = async () => {
         setIsLoadingSchedules(true);
         setShowScheduleRecommendation(true);
+        setScheduleError(null);
 
         try {
             const res = await fetch("/api/ai-goal-schedule", {
@@ -163,9 +173,14 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                 setScheduleTip(data.tip || "");
                 // Select all by default
                 setSelectedSchedules(new Set(data.schedules?.map((_: any, i: number) => i) || []));
+            } else {
+                const errorData = await res.json().catch(() => ({}));
+                console.error("[GoalSettingModal] API error:", res.status, errorData);
+                setScheduleError(errorData.error || `서버 오류 (${res.status})`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to fetch schedule recommendations:", error);
+            setScheduleError(error?.message || "네트워크 오류가 발생했습니다");
         } finally {
             setIsLoadingSchedules(false);
         }
@@ -188,12 +203,16 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                 color: schedule.color,
                 daysOfWeek: schedule.daysOfWeek,
                 notificationEnabled: true,
+                // Link schedule to the goal for progress tracking
+                linkedGoalId: addedGoalInfo?.id,
+                linkedGoalType: addedGoalInfo?.type,
             }));
 
         onScheduleAdd(schedulesToAdd);
         setShowScheduleRecommendation(false);
         setScheduleRecommendations([]);
         setSelectedSchedules(new Set());
+        setAddedGoalInfo(null);
     };
 
     const handleDeleteGoal = async (goalId: string, type: "weekly" | "monthly" | "yearly") => {
@@ -217,47 +236,8 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
         }
     };
 
-    const handleCompleteGoal = async (goalId: string, type: "weekly" | "monthly" | "yearly") => {
-        try {
-            const res = await fetch("/api/user/long-term-goals", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "complete",
-                    goal: { id: goalId, type },
-                }),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                setGoals(data.goals);
-                onGoalsUpdated?.();
-            }
-        } catch (error) {
-            console.error("Failed to complete goal:", error);
-        }
-    };
-
-    const handleUpdateProgress = async (goalId: string, type: "weekly" | "monthly" | "yearly", progress: number) => {
-        try {
-            const res = await fetch("/api/user/long-term-goals", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "updateProgress",
-                    goal: { id: goalId, type, progress },
-                }),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                setGoals(data.goals);
-                onGoalsUpdated?.();
-            }
-        } catch (error) {
-            console.error("Failed to update progress:", error);
-        }
-    };
+    // Note: Manual complete and progress update removed
+    // Progress is now automatically updated when linked schedules are completed
 
     const getCategoryInfo = (categoryId: string) => {
         return GOAL_CATEGORIES.find((c) => c.id === categoryId) || GOAL_CATEGORIES[GOAL_CATEGORIES.length - 1];
@@ -397,6 +377,11 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                                     <p className="text-sm text-muted-foreground">
                                         일정 추천을 불러오지 못했어요
                                     </p>
+                                    {scheduleError && (
+                                        <p className="text-xs text-red-400 mt-2">
+                                            오류: {scheduleError}
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -537,7 +522,7 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                                                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{goal.description}</p>
                                                     )}
 
-                                                    {/* Progress Bar */}
+                                                    {/* Progress Bar - Read only, updated via schedule completion */}
                                                     {!goal.completed && (
                                                         <div className="mt-2">
                                                             <div className="flex items-center gap-2">
@@ -549,36 +534,15 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                                                                 </div>
                                                                 <span className="text-xs text-muted-foreground w-8">{goal.progress}%</span>
                                                             </div>
-                                                            <div className="flex gap-1 mt-1.5">
-                                                                {[25, 50, 75, 100].map((p) => (
-                                                                    <button
-                                                                        key={p}
-                                                                        onClick={() => handleUpdateProgress(goal.id, activeTab, p)}
-                                                                        className={cn(
-                                                                            "flex-1 py-1 text-[10px] rounded transition-all",
-                                                                            goal.progress >= p
-                                                                                ? "bg-primary/20 text-primary"
-                                                                                : "bg-white/5 text-muted-foreground hover:bg-white/10"
-                                                                        )}
-                                                                    >
-                                                                        {p}%
-                                                                    </button>
-                                                                ))}
-                                                            </div>
+                                                            <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                                                                연결된 일정을 완료하면 진행률이 올라갑니다
+                                                            </p>
                                                         </div>
                                                     )}
                                                 </div>
 
                                                 <div className="flex items-center gap-0.5">
-                                                    {!goal.completed && (
-                                                        <button
-                                                            onClick={() => handleCompleteGoal(goal.id, activeTab)}
-                                                            className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-400 transition-colors"
-                                                            title="완료"
-                                                        >
-                                                            <CheckCircle2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                    {/* Removed manual complete button - progress is now tied to schedule completion */}
                                                     <button
                                                         onClick={() => handleDeleteGoal(goal.id, activeTab)}
                                                         className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"

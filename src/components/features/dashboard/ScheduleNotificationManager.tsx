@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { CustomGoal } from "./SchedulePopup";
 import { showNotification, requestNotificationPermission, getTodayDateString } from "@/lib/scheduleNotifications";
+import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
 
 interface ScheduleNotificationManagerProps {
     goals: CustomGoal[];
@@ -11,6 +12,7 @@ interface ScheduleNotificationManagerProps {
 export function ScheduleNotificationManager({ goals }: ScheduleNotificationManagerProps) {
     const lastCheckTime = useRef<string>("");
     const notifiedGoals = useRef<Set<string>>(new Set());
+    const { setShowSleepPrompt, isSleepMode, setShowFocusPrompt, isFocusMode } = useFocusSleepMode();
 
     // Request permission on mount
     useEffect(() => {
@@ -62,6 +64,54 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                 const notificationKey = `${goal.id}_${getTodayDateString()}_${currentTime}`;
 
                 if (!notifiedGoals.current.has(notificationKey)) {
+                    // Check if this is a sleep schedule (취침)
+                    const isSleepSchedule = goal.text.includes('취침') ||
+                        goal.text.toLowerCase().includes('sleep') ||
+                        goal.text.includes('잠') ||
+                        goal.text.includes('수면');
+
+                    if (isSleepSchedule && !isSleepMode) {
+                        // Check if user dismissed the prompt today
+                        const todayStr = getTodayDateString();
+                        const dismissed = localStorage.getItem(`sleep_prompt_dismissed_${todayStr}`);
+
+                        if (!dismissed) {
+                            setShowSleepPrompt(true);
+                        }
+                    }
+
+                    // Check if this is a work END schedule (업무 종료, 퇴근 등) - should NOT trigger focus mode
+                    const isWorkEndSchedule = goal.text.includes('종료') ||
+                        goal.text.includes('퇴근') ||
+                        goal.text.includes('마무리') ||
+                        goal.text.includes('끝') ||
+                        goal.text.toLowerCase().includes('end') ||
+                        goal.text.toLowerCase().includes('finish') ||
+                        goal.text.toLowerCase().includes('done');
+
+                    // Check if this is a work/focus schedule (업무, 공부, 작업, 집중 등)
+                    const isWorkSchedule = goal.text.includes('업무') ||
+                        goal.text.includes('공부') ||
+                        goal.text.includes('작업') ||
+                        goal.text.includes('집중') ||
+                        goal.text.includes('미팅') ||
+                        goal.text.includes('회의') ||
+                        goal.text.toLowerCase().includes('work') ||
+                        goal.text.toLowerCase().includes('study') ||
+                        goal.text.toLowerCase().includes('focus') ||
+                        goal.text.toLowerCase().includes('meeting');
+
+                    // Only show focus prompt for work START schedules, not END schedules
+                    if (isWorkSchedule && !isWorkEndSchedule && !isFocusMode && !isSleepMode) {
+                        // Check if user dismissed the focus prompt today
+                        const todayStr = getTodayDateString();
+                        const dismissed = localStorage.getItem(`focus_prompt_dismissed_${todayStr}`);
+
+                        if (!dismissed) {
+                            setShowFocusPrompt(true);
+                        }
+                    }
+
                     showNotification(goal);
                     notifiedGoals.current.add(notificationKey);
                 }
@@ -75,7 +125,7 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
         checkSchedules();
 
         return () => clearInterval(intervalId);
-    }, [goals]);
+    }, [goals, isSleepMode, isFocusMode, setShowSleepPrompt, setShowFocusPrompt]);
 
     return null; // This component doesn't render anything visible
 }

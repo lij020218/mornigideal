@@ -694,6 +694,23 @@ export function Dashboard({
         return () => clearInterval(interval);
     }, [lastCheckedDate]);
 
+    // Listen for briefing read events to update dailyGoals in real-time
+    useEffect(() => {
+        const handleBriefingRead = (event: CustomEvent<{ briefingId: string; readCount: number }>) => {
+            console.log('[Dashboard] Briefing read event:', event.detail);
+            setDailyGoals(prev => ({
+                ...prev,
+                trendBriefing: event.detail.readCount
+            }));
+        };
+
+        window.addEventListener('briefing-read', handleBriefingRead as EventListener);
+
+        return () => {
+            window.removeEventListener('briefing-read', handleBriefingRead as EventListener);
+        };
+    }, []);
+
     // Initialize daily goals from localStorage
     useEffect(() => {
         const savedGoals = getDailyGoals();
@@ -1555,60 +1572,12 @@ export function Dashboard({
                 username={username}
             />
 
-            {/* Schedule Notification Manager */}
-            {
-                userProfile && (
-                    <ScheduleNotificationManager
-                        goals={[
-                            // Add basic schedule as custom goals for notifications
-                            ...(userProfile.schedule ? [
-                                {
-                                    id: 'wake-up',
-                                    text: '기상',
-                                    time: 'morning' as const,
-                                    startTime: userProfile.schedule.wakeUp,
-                                    endTime: userProfile.schedule.wakeUp,
-                                    color: 'yellow',
-                                    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                    notificationEnabled: true,
-                                },
-                                {
-                                    id: 'work-start',
-                                    text: '업무 시작',
-                                    time: 'morning' as const,
-                                    startTime: userProfile.schedule.workStart,
-                                    endTime: userProfile.schedule.workStart,
-                                    color: 'purple',
-                                    daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                    notificationEnabled: true,
-                                },
-                                {
-                                    id: 'work-end',
-                                    text: '업무 종료',
-                                    time: 'evening' as const,
-                                    startTime: userProfile.schedule.workEnd,
-                                    endTime: userProfile.schedule.workEnd,
-                                    color: 'green',
-                                    daysOfWeek: [1, 2, 3, 4, 5], // Weekdays
-                                    notificationEnabled: true,
-                                },
-                                {
-                                    id: 'sleep',
-                                    text: '취침',
-                                    time: 'evening' as const,
-                                    startTime: userProfile.schedule.sleep,
-                                    endTime: userProfile.schedule.sleep,
-                                    color: 'blue',
-                                    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-                                    notificationEnabled: true,
-                                },
-                            ] : []),
-                            // Add custom goals
-                            ...(userProfile.customGoals || []),
-                        ]}
-                    />
-                )
-            }
+            {/* Schedule Notification Manager - Only use user's custom goals, not hardcoded defaults */}
+            {userProfile && (
+                <ScheduleNotificationManager
+                    goals={userProfile.customGoals || []}
+                />
+            )}
         </div>
     );
 }

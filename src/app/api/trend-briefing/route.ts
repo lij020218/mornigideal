@@ -6,16 +6,21 @@ import Parser from 'rss-parser';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
 
-// RSS Feed URLs for top priority sources
+// RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
 const RSS_FEEDS = [
     // International Sources - News & Business
-    { name: "Reuters", url: "https://www.reuters.com/rssFeed/businessNews", category: "Business" },
-    { name: "Reuters Tech", url: "https://www.reuters.com/rssFeed/technologyNews", category: "Technology" },
-    { name: "AP News", url: "https://rsshub.app/apnews/topics/apf-topnews", category: "Top News" },
-    { name: "BB Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
+    // Reuters/AP 피드가 막혀서 대체 소스 사용
+    { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "Business" },
+    { name: "Financial Times", url: "https://www.ft.com/?format=rss", category: "Business" },
+    { name: "Economist", url: "https://www.economist.com/business/rss.xml", category: "Business" },
+    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
     { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
     { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories" },
     { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Tech" },
+    { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Tech" },
+    { name: "Wired", url: "https://www.wired.com/feed/rss", category: "Tech" },
+    { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: "Tech" },
+    { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Tech" },
 
     // Premium Business Sources
     { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business" },
@@ -26,16 +31,20 @@ const RSS_FEEDS = [
 
     // International Sources - Sports
     { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports" },
+    { name: "ESPN Soccer", url: "https://www.espn.com/espn/rss/soccer/news", category: "Sports" },
     { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", category: "Sports" },
-    { name: "Reuters Sports", url: "http://feeds.reuters.com/reuters/worldOfSport", category: "Sports" },
     { name: "Sky Sports", url: "https://www.skysports.com/rss/11095", category: "Sports" },
 
     // Korean Sources
+    { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스" },
+    { name: "동아일보", url: "https://rss.donga.com/total.xml", category: "뉴스" },
+    { name: "SBS 뉴스", url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", category: "뉴스" },
     { name: "한국경제", url: "https://www.hankyung.com/feed/economy", category: "경제" },
     { name: "한국경제 IT", url: "https://www.hankyung.com/feed/it", category: "IT" },
     { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제" },
     { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제" },
     { name: "매일경제 증권", url: "https://www.mk.co.kr/rss/50200011/", category: "증권" },
+    { name: "Google News 비즈니스", url: "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB?hl=ko&gl=KR&ceid=KR:ko", category: "Business" },
 ];
 
 interface RSSArticle {

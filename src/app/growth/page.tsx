@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Loader2, BookOpen, LineChart, Target, Plus, GraduationCap, Crown, Star, Zap } from "lucide-react";
+import { Loader2, BookOpen, LineChart, Target, Plus, GraduationCap, Crown, Star, Zap, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { SmartInsightsWidget } from "@/components/features/dashboard/SmartInsightsWidget";
@@ -166,6 +166,10 @@ export default function GrowthPage() {
             });
 
             console.log('[Growth] Added goal-based schedules:', newSchedules);
+
+            // Notify other components (chat page, dashboard, calendar)
+            window.dispatchEvent(new CustomEvent('schedule-updated'));
+            window.dispatchEvent(new Event('profile-updated'));
         } catch (error) {
             console.error('[Growth] Failed to add schedules:', error);
         }
@@ -196,6 +200,39 @@ export default function GrowthPage() {
     const handleSlideComplete = () => {
         setSlideViewerData(null);
         // Refresh curriculum view to show updated progress
+    };
+
+    const handleDeleteCurriculum = async (curriculumId: string, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent card click
+
+        if (!confirm("이 커리큘럼을 삭제하시겠습니까?")) return;
+
+        try {
+            // Delete from server
+            const res = await fetch(`/api/ai-learning-curriculum?id=${curriculumId}`, {
+                method: 'DELETE',
+            });
+
+            if (res.ok) {
+                // Update local state
+                const updatedCurriculums = curriculums.filter(c => c.id !== curriculumId);
+                setCurriculums(updatedCurriculums);
+
+                // Update localStorage backup
+                localStorage.setItem('learning_curriculums_backup', JSON.stringify(updatedCurriculums));
+
+                // Clear selection if deleted curriculum was selected
+                if (selectedCurriculum?.id === curriculumId) {
+                    setSelectedCurriculum(null);
+                }
+
+                console.log('[Growth] Curriculum deleted:', curriculumId);
+            } else {
+                console.error('[Growth] Failed to delete curriculum from server');
+            }
+        } catch (error) {
+            console.error('[Growth] Error deleting curriculum:', error);
+        }
     };
 
     if (status === "loading") {
@@ -317,37 +354,49 @@ export default function GrowthPage() {
                                 ) : (
                                     <div className="grid gap-4">
                                         {curriculums.map((curriculum) => (
-                                            <button
+                                            <div
                                                 key={curriculum.id}
-                                                onClick={() => setSelectedCurriculum(curriculum)}
-                                                className="p-5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] transition-all text-left border border-transparent hover:border-purple-500/30"
+                                                className="relative group"
                                             >
-                                                <div className="flex items-start gap-4">
-                                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center flex-shrink-0">
-                                                        <GraduationCap className="w-6 h-6 text-purple-400" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <h3 className="font-semibold">{curriculum.topic}</h3>
-                                                            {curriculum.hasSlides && (
-                                                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs flex items-center gap-1">
-                                                                    <Crown className="w-3 h-3" />
-                                                                    슬라이드
+                                                <button
+                                                    onClick={() => setSelectedCurriculum(curriculum)}
+                                                    className="w-full p-5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] transition-all text-left border border-transparent hover:border-purple-500/30"
+                                                >
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center flex-shrink-0">
+                                                            <GraduationCap className="w-6 h-6 text-purple-400" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <h3 className="font-semibold">{curriculum.topic}</h3>
+                                                                {curriculum.hasSlides && (
+                                                                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs flex items-center gap-1">
+                                                                        <Crown className="w-3 h-3" />
+                                                                        슬라이드
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
+                                                                {curriculum.reason}
+                                                            </p>
+                                                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                                <span>
+                                                                    {LEVEL_LABELS[curriculum.currentLevel]} → {LEVEL_LABELS[curriculum.targetLevel]}
                                                                 </span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
-                                                            {curriculum.reason}
-                                                        </p>
-                                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                                            <span>
-                                                                {LEVEL_LABELS[curriculum.currentLevel]} → {LEVEL_LABELS[curriculum.targetLevel]}
-                                                            </span>
-                                                            <span>{curriculum.duration}일 과정</span>
+                                                                <span>{curriculum.duration}일 과정</span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </button>
+                                                </button>
+                                                {/* Delete button */}
+                                                <button
+                                                    onClick={(e) => handleDeleteCurriculum(curriculum.id, e)}
+                                                    className="absolute top-3 right-3 p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="삭제"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         ))}
                                     </div>
                                 )}

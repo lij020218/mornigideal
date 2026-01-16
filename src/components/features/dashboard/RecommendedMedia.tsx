@@ -63,8 +63,10 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
 
         // 2. Fetch New Data (with exclusion)
         try {
-            // Load history to exclude
+            // Load history to exclude (both titles and IDs)
+            const historyIdsKey = `rec_history_ids_${job}`;
             const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+            const historyIds = JSON.parse(localStorage.getItem(historyIdsKey) || "[]");
 
             const response = await fetch("/api/recommendations/generate", {
                 method: "POST",
@@ -73,7 +75,8 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
                     job,
                     goal,
                     interests,
-                    exclude: history.slice(-50) // Send last 50 items to avoid huge payload
+                    exclude: history.slice(-50), // Send last 50 titles to avoid huge payload
+                    excludeIds: historyIds.slice(-100) // Send last 100 video IDs
                 })
             });
 
@@ -96,6 +99,12 @@ export function RecommendedMedia({ job, goal, interests }: RecommendedMediaProps
                 const updatedHistory = [...history, ...newTitles];
                 // Keep history reasonable size (e.g. last 200)
                 localStorage.setItem(historyKey, JSON.stringify(updatedHistory.slice(-200)));
+
+                // Update ID History (Add new video IDs)
+                const newIds = newItems.map((item: MediaItem) => item.id);
+                const updatedHistoryIds = [...historyIds, ...newIds];
+                // Keep ID history reasonable size (e.g. last 300)
+                localStorage.setItem(historyIdsKey, JSON.stringify(updatedHistoryIds.slice(-300)));
             }
         } catch (err) {
             console.error("Error fetching recommendations:", err);

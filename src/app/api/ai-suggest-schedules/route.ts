@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { generateUserContext } from "@/lib/user-context-service";
 import { detectDailyState, getStressReliefSuggestions, getEnergyBoostSuggestions } from "@/lib/stress-detector";
 import { analyzeWorkRestBalance, getRecommendationsByType } from "@/lib/work-rest-analyzer";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -334,6 +335,18 @@ ${addedSchedulesText}
 
         console.log("[AI Suggest Schedules] OpenAI 응답 성공");
         const responseText = completion.choices[0]?.message?.content || "{}";
+
+        // Log usage
+        const usage = completion.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                session.user.email,
+                "gpt-4o-mini",
+                "ai-suggest-schedules",
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
 
         let parsedResponse;
         try {
