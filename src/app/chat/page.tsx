@@ -1573,14 +1573,15 @@ export default function ChatPage() {
                                 console.log('[Chat] Deleted schedules count:', deletedCount);
 
                                 if (deletedCount > 0) {
-                                    // Update profile with remaining schedules
+                                    // Update profile with remaining schedules - API expects { profile: {...} } format
+                                    const updatedProfile = {
+                                        ...profileData.profile,
+                                        customGoals: schedulesToKeep,
+                                    };
                                     await fetch('/api/user/profile', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            ...profileData.profile,
-                                            customGoals: schedulesToKeep,
-                                        }),
+                                        body: JSON.stringify({ profile: updatedProfile }),
                                     });
 
                                     // Dispatch events to update other components

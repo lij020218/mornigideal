@@ -449,19 +449,25 @@ export function LearningCurriculumView({
 
             const updatedGoals = [...currentGoals, newSchedule];
 
-            // 프로필 업데이트
+            // 프로필 업데이트 - API는 { profile: {...} } 형태를 기대
+            const updatedProfile = {
+                ...profile,
+                customGoals: updatedGoals,
+            };
+
             const updateRes = await fetch('/api/user/profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...profile,
-                    customGoals: updatedGoals,
-                }),
+                body: JSON.stringify({ profile: updatedProfile }),
             });
 
             if (!updateRes.ok) {
+                const errorData = await updateRes.json().catch(() => ({}));
+                console.error('[Learning] Profile update failed:', errorData);
                 throw new Error('Failed to update profile');
             }
+
+            console.log('[Learning] Profile updated successfully with', updatedGoals.length, 'goals');
 
             // Notify other components about schedule update
             window.dispatchEvent(new CustomEvent('schedule-updated'));

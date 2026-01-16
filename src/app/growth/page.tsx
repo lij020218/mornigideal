@@ -156,13 +156,16 @@ export default function GrowthPage() {
             // Add new schedules
             const updatedGoals = [...currentGoals, ...newSchedules];
 
-            // Save to profile
+            // Save to profile - API expects { profile: {...} } format
+            const updatedProfile = {
+                ...profile,
+                customGoals: updatedGoals,
+            };
+
             await fetch('/api/user/profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    customGoals: updatedGoals,
-                }),
+                body: JSON.stringify({ profile: updatedProfile }),
             });
 
             console.log('[Growth] Added goal-based schedules:', newSchedules);
