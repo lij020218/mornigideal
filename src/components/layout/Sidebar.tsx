@@ -2,11 +2,17 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X } from "lucide-react";
+import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X, Focus, ChevronDown, ChevronUp, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
+
+interface ChatHistoryItem {
+    date: string;
+    title: string;
+}
 
 // Fieri Logo SVG Component - 소용돌이 로고
 const FieriLogo = ({ className = "" }: { className?: string }) => (
@@ -66,7 +72,12 @@ const BOTTOM_ITEMS = [
 export function Sidebar() {
     const [isOpen, setIsOpen] = useState(true); // 기본값을 true로 (데스크톱에서 열림)
     const [isMobile, setIsMobile] = useState(false);
+    const [showChatHistory, setShowChatHistory] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false); // 채팅 히스토리 확장 상태
+    const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
     const pathname = usePathname();
+    const router = useRouter();
+    const { isFocusMode, startFocusMode, endFocusMode } = useFocusSleepMode();
 
     // Detect mobile/desktop and set initial state
     useEffect(() => {
@@ -85,6 +96,73 @@ export function Sidebar() {
         window.addEventListener('resize', checkMobile);
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
+
+    // Load chat history
+    useEffect(() => {
+        const loadChatHistory = async () => {
+            try {
+                // DB에서 채팅 목록 가져오기
+                const response = await fetch('/api/user/chat-history?list=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    setChatHistory(data.chatList || []);
+                } else {
+                    // DB 실패 시 localStorage에서 가져오기
+                    const allKeys = Object.keys(localStorage);
+                    const today = new Date().toISOString().split('T')[0];
+                    const chatDates = allKeys
+                        .filter(key => key.startsWith('chat_messages_'))
+                        .map(key => key.replace('chat_messages_', ''))
+                        .filter(date => date !== today)
+                        .sort((a, b) => b.localeCompare(a));
+
+                    const history = chatDates.map(date => {
+                        const messages = localStorage.getItem(`chat_messages_${date}`);
+                        let title = formatDate(date);
+                        try {
+                            const parsed = JSON.parse(messages || '[]');
+                            const firstUserMsg = parsed.find((m: any) => m.role === 'user');
+                            if (firstUserMsg?.content) {
+                                title = firstUserMsg.content.substring(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
+                            }
+                        } catch (e) { }
+                        return { date, title };
+                    });
+
+                    setChatHistory(history);
+                }
+            } catch (error) {
+                console.error('[Sidebar] Failed to load chat history:', error);
+            }
+        };
+
+        loadChatHistory();
+    }, []);
+
+    // Format date for display
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (dateStr === today.toISOString().split('T')[0]) {
+            return '오늘';
+        } else if (dateStr === yesterday.toISOString().split('T')[0]) {
+            return '어제';
+        } else {
+            return `${date.getMonth() + 1}/${date.getDate()}`;
+        }
+    };
+
+    // Navigate to chat with date
+    const handleChatHistoryClick = (date: string) => {
+        // 해당 날짜 채팅으로 이동
+        localStorage.setItem('selected_chat_date', date);
+        window.dispatchEvent(new CustomEvent('load-chat-date', { detail: { date } }));
+        router.push('/');
+        if (isMobile) setIsOpen(false);
+    };
 
     // Hide sidebar on certain pages
     const hiddenPages = ["/login", "/signup", "/onboarding", "/reset"];
@@ -137,6 +215,7 @@ export function Sidebar() {
                 initial={false}
                 animate={{
                     x: isMobile && !isOpen ? "-100%" : 0,
+                    width: !isMobile && isExpanded ? 280 : (isMobile ? 224 : 80),
                 }}
                 transition={{
                     type: "spring",
@@ -144,8 +223,7 @@ export function Sidebar() {
                     damping: 30,
                 }}
                 className={cn(
-                    "fixed left-0 h-screen bg-card border-r border-border flex flex-col z-50",
-                    "w-56 md:w-20",
+                    "fixed left-0 h-screen bg-card border-r border-border flex flex-col z-50 overflow-x-hidden",
                     isMobile ? "top-16 py-4" : "top-0 py-6"
                 )}
             >
@@ -157,57 +235,288 @@ export function Sidebar() {
                 )}
 
                 {/* Main Navigation */}
-                <nav className="flex-1 flex flex-col gap-2 w-full px-3">
-                    {NAV_ITEMS.map((item) => {
+                <nav className="flex-1 flex flex-col gap-2 w-full px-3 overflow-y-auto">
+                    {NAV_ITEMS.map((item, index) => {
                         const Icon = item.icon;
                         const isActive = pathname === item.href;
+                        const isChatItem = item.href === '/';
 
                         return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className="relative group"
-                                onClick={() => isMobile && setIsOpen(false)}
-                            >
-                                <motion.div
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    className={cn(
-                                        "rounded-xl flex items-center transition-colors relative",
-                                        "md:w-14 md:h-14 md:justify-center",
-                                        "w-full h-12 px-4 gap-3",
-                                        isActive
-                                            ? "bg-foreground text-white"
-                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    )}
-                                >
-                                    <Icon className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" />
-                                    <span className="md:hidden text-sm font-medium">{item.label}</span>
-                                    {isActive && (
+                            <div key={item.href}>
+                                {isChatItem ? (
+                                    // 채팅 아이콘 - 클릭하면 확장
+                                    <button
+                                        onClick={() => {
+                                            if (!isMobile) {
+                                                setIsExpanded(!isExpanded);
+                                            } else {
+                                                router.push('/');
+                                                setIsOpen(false);
+                                            }
+                                        }}
+                                        className="relative group w-full"
+                                    >
                                         <motion.div
-                                            layoutId="sidebar-indicator"
-                                            className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-foreground rounded-r-full"
-                                            style={{ left: -12 }}
-                                            transition={{
-                                                type: "spring",
-                                                stiffness: 500,
-                                                damping: 30,
-                                            }}
-                                        />
-                                    )}
-                                </motion.div>
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            className={cn(
+                                                "rounded-xl flex items-center transition-colors relative",
+                                                isExpanded ? "w-full h-12 px-4 gap-3 justify-start" : "md:w-14 md:h-14 md:justify-center",
+                                                "w-full h-12 px-4 gap-3",
+                                                isActive
+                                                    ? "bg-foreground text-white"
+                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            )}
+                                        >
+                                            <Icon className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" />
+                                            <span className={cn(
+                                                "text-sm font-medium",
+                                                !isMobile && !isExpanded && "hidden"
+                                            )}>{item.label}</span>
+                                            {!isMobile && chatHistory.length > 0 && (
+                                                <ChevronDown className={cn(
+                                                    "w-4 h-4 ml-auto transition-transform",
+                                                    isExpanded && "rotate-180",
+                                                    !isExpanded && "hidden"
+                                                )} />
+                                            )}
+                                            {isActive && (
+                                                <motion.div
+                                                    layoutId="sidebar-indicator"
+                                                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-foreground rounded-r-full"
+                                                    style={{ left: -12 }}
+                                                    transition={{
+                                                        type: "spring",
+                                                        stiffness: 500,
+                                                        damping: 30,
+                                                    }}
+                                                />
+                                            )}
+                                        </motion.div>
 
-                                {/* Tooltip - Desktop only */}
-                                <div className="hidden md:block absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-                                    <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
-                                        <p className="font-medium">{item.label}</p>
-                                        <p className="text-xs text-white/70">{item.description}</p>
-                                    </div>
-                                </div>
-                            </Link>
+                                        {/* Tooltip - Desktop only (when not expanded) */}
+                                        {!isExpanded && (
+                                            <div className="hidden md:block absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                                <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
+                                                    <p className="font-medium">{item.label}</p>
+                                                    <p className="text-xs text-white/70">클릭하여 채팅 기록 보기</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </button>
+                                ) : (
+                                    <Link
+                                        href={item.href}
+                                        className="relative group"
+                                        onClick={() => {
+                                            if (isMobile) setIsOpen(false);
+                                            if (!isMobile && isExpanded) setIsExpanded(false);
+                                        }}
+                                    >
+                                        <motion.div
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            className={cn(
+                                                "rounded-xl flex items-center transition-colors relative",
+                                                isExpanded ? "w-full h-12 px-4 gap-3 justify-start" : "md:w-14 md:h-14 md:justify-center",
+                                                "w-full h-12 px-4 gap-3",
+                                                isActive
+                                                    ? "bg-foreground text-white"
+                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            )}
+                                        >
+                                            <Icon className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" />
+                                            <span className={cn(
+                                                "text-sm font-medium",
+                                                !isMobile && !isExpanded && "hidden"
+                                            )}>{item.label}</span>
+                                            {isActive && (
+                                                <motion.div
+                                                    layoutId="sidebar-indicator"
+                                                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-foreground rounded-r-full"
+                                                    style={{ left: -12 }}
+                                                    transition={{
+                                                        type: "spring",
+                                                        stiffness: 500,
+                                                        damping: 30,
+                                                    }}
+                                                />
+                                            )}
+                                        </motion.div>
+
+                                        {/* Tooltip - Desktop only (when not expanded) */}
+                                        {!isExpanded && (
+                                            <div className="hidden md:block absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                                <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
+                                                    <p className="font-medium">{item.label}</p>
+                                                    <p className="text-xs text-white/70">{item.description}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </Link>
+                                )}
+
+                                {/* Chat History - 채팅 아이콘 아래 (확장 시) */}
+                                {isChatItem && (
+                                    <>
+                                        {/* Mobile: Expandable list */}
+                                        {isMobile && chatHistory.length > 0 && (
+                                            <div className="mt-1 ml-2">
+                                                <button
+                                                    onClick={() => setShowChatHistory(!showChatHistory)}
+                                                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1 w-full"
+                                                >
+                                                    <History className="w-3 h-3" />
+                                                    <span>지난 대화</span>
+                                                    {showChatHistory ? (
+                                                        <ChevronUp className="w-3 h-3 ml-auto" />
+                                                    ) : (
+                                                        <ChevronDown className="w-3 h-3 ml-auto" />
+                                                    )}
+                                                </button>
+
+                                                <AnimatePresence>
+                                                    {showChatHistory && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: 'auto', opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            className="overflow-hidden"
+                                                        >
+                                                            <div className="flex flex-col gap-1 py-1 max-h-60 overflow-y-auto">
+                                                                {chatHistory.slice(0, 15).map((chat) => (
+                                                                    <button
+                                                                        key={chat.date}
+                                                                        onClick={() => handleChatHistoryClick(chat.date)}
+                                                                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted px-3 py-1.5 rounded-lg text-left"
+                                                                    >
+                                                                        <span className="text-[10px] text-muted-foreground/70 w-10 flex-shrink-0">
+                                                                            {formatDate(chat.date)}
+                                                                        </span>
+                                                                        <span className="truncate">{chat.title}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        )}
+
+                                        {/* Desktop: 확장 시 채팅 히스토리 목록 */}
+                                        {!isMobile && isExpanded && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="mt-2 space-y-1"
+                                            >
+                                                {/* 오늘 채팅 (새 채팅) */}
+                                                <button
+                                                    onClick={() => {
+                                                        router.push('/');
+                                                        // 오늘 날짜로 새 채팅 시작
+                                                        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+                                                        localStorage.setItem('selected_chat_date', today);
+                                                        window.dispatchEvent(new CustomEvent('load-chat-date', { detail: { date: today } }));
+                                                    }}
+                                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                                >
+                                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                    <span className="text-sm font-medium">오늘</span>
+                                                    <span className="text-xs text-muted-foreground ml-auto">
+                                                        {new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                                                    </span>
+                                                </button>
+
+                                                {/* 이전 채팅 목록 */}
+                                                {chatHistory.length > 0 && (
+                                                    <div className="pt-2 border-t border-border/50">
+                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 mb-1">지난 대화</p>
+                                                        <div className="flex flex-col gap-0.5 max-h-[calc(100vh-400px)] overflow-y-auto">
+                                                            {chatHistory.slice(0, 20).map((chat) => (
+                                                                <button
+                                                                    key={chat.date}
+                                                                    onClick={() => handleChatHistoryClick(chat.date)}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-muted transition-colors group"
+                                                                >
+                                                                    <MessageSquare className="w-4 h-4 text-muted-foreground group-hover:text-foreground flex-shrink-0" />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm text-foreground truncate">{chat.title}</p>
+                                                                        <p className="text-[10px] text-muted-foreground">{formatDate(chat.date)}</p>
+                                                                    </div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {chatHistory.length === 0 && (
+                                                    <p className="text-xs text-muted-foreground text-center py-4">
+                                                        아직 채팅 기록이 없습니다
+                                                    </p>
+                                                )}
+                                            </motion.div>
+                                        )}
+
+                                        {/* Desktop: 축소 상태에서 채팅 개수 표시 */}
+                                        {!isMobile && !isExpanded && chatHistory.length > 0 && (
+                                            <div className="flex justify-center gap-0.5 mt-1">
+                                                {chatHistory.slice(0, 3).map((_, i) => (
+                                                    <div key={i} className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         );
                     })}
                 </nav>
+
+                {/* Focus Mode Button */}
+                <div className="px-3 mb-4">
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                            if (isFocusMode) {
+                                endFocusMode();
+                            } else {
+                                startFocusMode(25); // 25분 기본 집중 시간
+                            }
+                            if (isMobile) setIsOpen(false);
+                        }}
+                        className={cn(
+                            "rounded-xl flex items-center transition-colors w-full",
+                            isExpanded ? "h-12 px-4 gap-3 justify-start" : "md:w-14 md:h-14 md:justify-center",
+                            "h-12 px-4 gap-3",
+                            isFocusMode
+                                ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30"
+                                : "bg-gradient-to-r from-orange-400 to-amber-400 text-white hover:from-orange-500 hover:to-amber-500"
+                        )}
+                    >
+                        <Focus className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0" />
+                        <span className={cn(
+                            "text-sm font-medium",
+                            !isMobile && !isExpanded && "hidden"
+                        )}>
+                            {isFocusMode ? "집중 종료" : "집중 모드"}
+                        </span>
+                    </motion.button>
+
+                    {/* Tooltip - Desktop only (when not expanded) */}
+                    {!isExpanded && (
+                        <div className="hidden md:block relative group">
+                            <div className="absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity -mt-7">
+                                <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
+                                    <p className="font-medium">{isFocusMode ? "집중 종료" : "집중 모드"}</p>
+                                    <p className="text-xs text-white/70">25분 집중 타이머</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* Bottom Navigation */}
                 <div className="flex flex-col gap-2 w-full px-3">
@@ -220,14 +529,17 @@ export function Sidebar() {
                                 key={item.href}
                                 href={item.href}
                                 className="relative group"
-                                onClick={() => isMobile && setIsOpen(false)}
+                                onClick={() => {
+                                    if (isMobile) setIsOpen(false);
+                                    if (!isMobile && isExpanded) setIsExpanded(false);
+                                }}
                             >
                                 <motion.div
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
                                     className={cn(
                                         "rounded-xl flex items-center transition-colors",
-                                        "md:w-14 md:h-14 md:justify-center",
+                                        isExpanded ? "w-full h-12 px-4 gap-3 justify-start" : "md:w-14 md:h-14 md:justify-center",
                                         "w-full h-12 px-4 gap-3",
                                         isActive
                                             ? "bg-foreground text-white"
@@ -235,15 +547,20 @@ export function Sidebar() {
                                     )}
                                 >
                                     <Icon className="w-5 h-5 flex-shrink-0" />
-                                    <span className="md:hidden text-sm font-medium">{item.label}</span>
+                                    <span className={cn(
+                                        "text-sm font-medium",
+                                        !isMobile && !isExpanded && "hidden"
+                                    )}>{item.label}</span>
                                 </motion.div>
 
-                                {/* Tooltip - Desktop only */}
-                                <div className="hidden md:block absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-                                    <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
-                                        {item.label}
+                                {/* Tooltip - Desktop only (when not expanded) */}
+                                {!isExpanded && (
+                                    <div className="hidden md:block absolute left-full ml-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                        <div className="bg-foreground text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
+                                            {item.label}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </Link>
                         );
                     })}
