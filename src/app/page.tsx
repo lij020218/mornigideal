@@ -108,19 +108,20 @@ export default function HomePage() {
     const isFetchingRecommendations = useRef(false);
     const hasFetchedRecommendations = useRef(false);
 
-    // Helper function to get chat date (5am cutoff)
+    // Helper function to get chat date (5am cutoff, KST timezone)
     const getChatDate = () => {
         const now = new Date();
-        const hour = now.getHours();
+        // Convert to KST (UTC+9) for consistent date handling
+        const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const hour = kstDate.getHours();
 
-        // If before 5am, use previous day
+        // If before 5am KST, use previous day
         if (hour < 5) {
-            const yesterday = new Date(now);
-            yesterday.setDate(yesterday.getDate() - 1);
-            return yesterday.toISOString().split('T')[0];
+            kstDate.setDate(kstDate.getDate() - 1);
         }
 
-        return now.toISOString().split('T')[0];
+        // Return YYYY-MM-DD format in KST
+        return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
     };
 
     // Load messages from localStorage on mount
@@ -184,9 +185,11 @@ export default function HomePage() {
                 const response = await fetch('/api/user/profile');
                 if (response.ok) {
                     const data = await response.json();
-                    const today = new Date().toISOString().split('T')[0];
-                    const now = new Date();
-                    const currentDay = now.getDay();
+                    // IMPORTANT: Use getChatDate() for KST timezone, not UTC-based toISOString()
+                    const today = getChatDate();
+                    // Calculate day of week from the date string to ensure consistency with KST
+                    const todayDateObj = new Date(today + 'T12:00:00');
+                    const currentDay = todayDateObj.getDay();
 
                     console.log('[Home] Fetched profile data:', data);
                     console.log('[Home] Custom goals:', data.profile?.customGoals);
@@ -194,13 +197,25 @@ export default function HomePage() {
                     // Store user profile for AI context
                     setUserProfile(data.profile);
 
-                    // Include both specific date schedules AND recurring schedules for today
-                    const todayGoals = data.profile?.customGoals?.filter((g: any) => {
-                        const isSpecificDate = g.specificDate === today;
-                        const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                        console.log(`[Home] Checking goal "${g.text}": specificDate=${g.specificDate}, daysOfWeek=${g.daysOfWeek}, matches=${isSpecificDate || isRecurringToday}`);
-                        return isSpecificDate || isRecurringToday;
-                    }) || [];
+                    // Include both specific date schedules AND recurring schedules for today - 중복 제거
+                    const allGoals = data.profile?.customGoals || [];
+
+                    // 특정 날짜 일정 (우선순위 높음)
+                    const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
+
+                    // 반복 일정 (중복 제거)
+                    const recurringGoals = allGoals.filter((g: any) => {
+                        if (g.specificDate) return false;
+                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                        // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 제외
+                        const hasDuplicate = specificDateGoals.some((sg: any) =>
+                            sg.text === g.text && sg.startTime === g.startTime
+                        );
+                        return !hasDuplicate;
+                    });
+
+                    const todayGoals = [...specificDateGoals, ...recurringGoals];
+                    console.log(`[Home] Total ${todayGoals.length} goals for today (specific: ${specificDateGoals.length}, recurring: ${recurringGoals.length})`);
 
                     // Load completion status from localStorage
                     const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
@@ -278,7 +293,7 @@ export default function HomePage() {
         const checkAndSendScheduleMessages = () => {
             const now = new Date();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
-            const today = now.toISOString().split('T')[0];
+            const today = getChatDate(); // Use KST timezone
             const hour = now.getHours();
 
             console.log('[AutoMessage] Checking schedules:', {
@@ -289,17 +304,24 @@ export default function HomePage() {
             });
 
             // 0. 아침 인사 메시지 (5-12시 사이 한 번만) - AI 기반
-            const morningGreetingKey = `morning_greeting_${today}`;
-            const alreadySentMorning = localStorage.getItem(morningGreetingKey);
+            // Use separate keys for rich AI greeting vs basic greeting
+            const richGreetingKey = `rich_morning_greeting_${today}`;
+            const legacyKey = `morning_greeting_${today}`;
+            const alreadySentRichMorning = localStorage.getItem(richGreetingKey);
+            const hasLegacyGreeting = localStorage.getItem(legacyKey);
+
             console.log('[AutoMessage] Morning greeting check:', {
                 hour,
                 inTimeRange: hour >= 5 && hour < 12,
-                alreadySent: !!alreadySentMorning,
-                key: morningGreetingKey
+                alreadySentRich: !!alreadySentRichMorning,
+                hasLegacy: !!hasLegacyGreeting,
+                key: richGreetingKey
             });
 
-            if (hour >= 5 && hour < 12 && !alreadySentMorning) {
-                localStorage.setItem(morningGreetingKey, 'true');
+            // Send AI greeting if: morning time AND rich greeting not sent yet
+            // (legacy key is ignored for new rich greeting)
+            if (hour >= 5 && hour < 12 && !alreadySentRichMorning) {
+                localStorage.setItem(richGreetingKey, 'true');
                 console.log('[AutoMessage] ✅ Sending AI morning greeting');
 
                 // AI에게 아침 인사 + 일정 추천 요청
@@ -324,18 +346,35 @@ export default function HomePage() {
                             content: data.greeting || '좋은 아침이에요! ☀️',
                             timestamp: now,
                         };
-                        setMessages(prev => [...prev, message]);
+                        // Replace existing basic greeting if present, otherwise add new
+                        setMessages(prev => {
+                            // If first message is a basic greeting (short and starts with greeting text), replace it
+                            if (prev.length > 0 && prev[0].role === 'assistant' &&
+                                (prev[0].content.includes('좋은 아침이에요') || prev[0].content.includes('좋은 오후') ||
+                                 prev[0].content.includes('좋은 저녁') || prev[0].content.includes('아직 깨어')) &&
+                                prev[0].content.length < 200) { // Basic greetings are short
+                                console.log('[AutoMessage] Replacing basic greeting with AI greeting');
+                                return [message, ...prev.slice(1)];
+                            }
+                            return [...prev, message];
+                        });
                     })
                     .catch(err => {
                         console.error('[AutoMessage] Failed to fetch AI morning greeting:', err);
-                        // Fallback
-                        const message: Message = {
-                            id: `auto-morning-${Date.now()}`,
-                            role: 'assistant',
-                            content: '좋은 아침이에요! ☀️\n\n활기찬 하루 보내세요! 💪',
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
+                        // Fallback - don't add if there's already a greeting
+                        setMessages(prev => {
+                            if (prev.length > 0 && prev[0].role === 'assistant') {
+                                console.log('[AutoMessage] Fallback skipped - greeting already exists');
+                                return prev;
+                            }
+                            const message: Message = {
+                                id: `auto-morning-${Date.now()}`,
+                                role: 'assistant',
+                                content: '좋은 아침이에요! ☀️\n\n활기찬 하루 보내세요! 💪',
+                                timestamp: now,
+                            };
+                            return [...prev, message];
+                        });
                     });
             }
 
@@ -425,11 +464,81 @@ export default function HomePage() {
                     console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
                     localStorage.setItem(sentStartKey, 'true');
 
-                    // 조용한 시작 알림 (AI 호출 없음)
+                    // 일정 특성에 맞는 시작 메시지 생성
+                    const getScheduleStartMessage = (scheduleName: string) => {
+                        const name = scheduleName.toLowerCase();
+
+                        // 식사
+                        if (/식사|점심|저녁|아침|밥|브런치|런치|디너|야식|간식/.test(name)) {
+                            const mealEmojis: Record<string, string> = {
+                                '아침': '🍳', '점심': '🍚', '저녁': '🍽️', '야식': '🌙', '브런치': '🥐', '간식': '🍪'
+                            };
+                            let emoji = '🍽️';
+                            for (const [key, val] of Object.entries(mealEmojis)) {
+                                if (name.includes(key)) { emoji = val; break; }
+                            }
+                            const msgs = ['맛있게 드세요!', '든든하게 드세요!', '맛있는 식사 되세요!'];
+                            return { emoji, msg: msgs[Math.floor(Math.random() * msgs.length)] };
+                        }
+
+                        // 휴식/취침
+                        if (/휴식|쉬는|낮잠|수면|취침|잠|기상|일어나/.test(name)) {
+                            const restMsgs: Record<string, { emoji: string; msg: string }> = {
+                                '취침': { emoji: '🌙', msg: '좋은 꿈 꾸세요!' },
+                                '잠': { emoji: '😴', msg: '푹 주무세요!' },
+                                '기상': { emoji: '☀️', msg: '상쾌한 아침 되세요!' },
+                                '일어나': { emoji: '🌅', msg: '좋은 아침이에요!' },
+                                '휴식': { emoji: '☕', msg: '편하게 쉬세요!' },
+                                '낮잠': { emoji: '😌', msg: '달콤한 낮잠 되세요!' },
+                            };
+                            for (const [key, val] of Object.entries(restMsgs)) {
+                                if (name.includes(key)) return val;
+                            }
+                            return { emoji: '☕', msg: '편하게 쉬세요!' };
+                        }
+
+                        // 여가
+                        if (/게임|영화|드라마|유튜브|넷플릭스|독서|음악|산책/.test(name)) {
+                            const leisureMsgs: Record<string, { emoji: string; msg: string }> = {
+                                '게임': { emoji: '🎮', msg: '즐거운 시간 보내세요!' },
+                                '영화': { emoji: '🎬', msg: '재미있게 보세요!' },
+                                '드라마': { emoji: '📺', msg: '재미있게 보세요!' },
+                                '유튜브': { emoji: '📱', msg: '즐거운 시청 되세요!' },
+                                '넷플릭스': { emoji: '🍿', msg: '재미있게 보세요!' },
+                                '독서': { emoji: '📚', msg: '즐거운 독서 시간 되세요!' },
+                                '음악': { emoji: '🎵', msg: '좋은 음악과 함께하세요!' },
+                                '산책': { emoji: '🚶', msg: '상쾌한 산책 되세요!' },
+                            };
+                            for (const [key, val] of Object.entries(leisureMsgs)) {
+                                if (name.includes(key)) return val;
+                            }
+                            return { emoji: '🎉', msg: '즐거운 시간 보내세요!' };
+                        }
+
+                        // 운동
+                        if (/운동|헬스|요가|필라테스|러닝|조깅|수영|등산/.test(name)) {
+                            return { emoji: '💪', msg: '오늘도 화이팅!' };
+                        }
+
+                        // 업무/회의
+                        if (/업무|출근|회의|미팅|프레젠테이션|발표|면접/.test(name)) {
+                            return { emoji: '💼', msg: '화이팅!' };
+                        }
+
+                        // 공부
+                        if (/공부|학습|강의|수업|시험|과제/.test(name)) {
+                            return { emoji: '📖', msg: '집중해서 화이팅!' };
+                        }
+
+                        // 기본
+                        return { emoji: '🕐', msg: '화이팅!' };
+                    };
+
+                    const { emoji, msg } = getScheduleStartMessage(schedule.text);
                     const message: Message = {
                         id: `auto-start-${Date.now()}`,
                         role: 'assistant',
-                        content: `"${schedule.text}" 시간이에요 🕐\n\n집중해서 시작해보세요!`,
+                        content: `"${schedule.text}" 시간이에요 ${emoji}\n\n${msg}`,
                         timestamp: new Date(),
                     };
                     setMessages(prev => [...prev, message]);
@@ -1120,13 +1229,22 @@ export default function HomePage() {
                         const profileRes = await fetch('/api/user/profile');
                         if (profileRes.ok) {
                             const profileData = await profileRes.json();
-                            const today = new Date().toISOString().split('T')[0];
-                            const currentDay = new Date().getDay();
-                            const todayGoals = profileData.profile?.customGoals?.filter((g: any) => {
-                                const isSpecificDate = g.specificDate === today;
-                                const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                                return isSpecificDate || isRecurringToday;
-                            }) || [];
+                            const today = getChatDate(); // Use KST timezone
+                            const todayDateObj = new Date(today + 'T12:00:00');
+                            const currentDay = todayDateObj.getDay();
+                            const allGoals = profileData.profile?.customGoals || [];
+
+                            // 중복 제거: 특정 날짜 일정 우선
+                            const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
+                            const recurringGoals = allGoals.filter((g: any) => {
+                                if (g.specificDate) return false;
+                                if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                const hasDuplicate = specificDateGoals.some((sg: any) =>
+                                    sg.text === g.text && sg.startTime === g.startTime
+                                );
+                                return !hasDuplicate;
+                            });
+                            const todayGoals = [...specificDateGoals, ...recurringGoals];
 
                             const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
                             const schedulesWithStatus = todayGoals.map((g: any) => ({
@@ -1616,10 +1734,10 @@ export default function HomePage() {
                                                                             s.id === schedule.id ? { ...s, completed: true, skipped: false } : s
                                                                         ));
                                                                         // Save to localStorage
-                                                                        const today = new Date().toISOString().split('T')[0];
-                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                                                        const todayKST = getChatDate(); // Use KST timezone
+                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${todayKST}`) || '{}');
                                                                         completions[schedule.id] = { completed: true, skipped: false };
-                                                                        localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+                                                                        localStorage.setItem(`schedule_completions_${todayKST}`, JSON.stringify(completions));
 
                                                                         // Save to server
                                                                         try {
@@ -1652,10 +1770,10 @@ export default function HomePage() {
                                                                             s.id === schedule.id ? { ...s, skipped: true, completed: false } : s
                                                                         ));
                                                                         // Save to localStorage
-                                                                        const today = new Date().toISOString().split('T')[0];
-                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                                                        const todayKST = getChatDate(); // Use KST timezone
+                                                                        const completions = JSON.parse(localStorage.getItem(`schedule_completions_${todayKST}`) || '{}');
                                                                         completions[schedule.id] = { completed: false, skipped: true };
-                                                                        localStorage.setItem(`schedule_completions_${today}`, JSON.stringify(completions));
+                                                                        localStorage.setItem(`schedule_completions_${todayKST}`, JSON.stringify(completions));
 
                                                                         // Save to server
                                                                         try {

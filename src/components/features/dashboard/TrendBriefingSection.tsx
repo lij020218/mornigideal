@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles } from "lucide-react";
+import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -45,8 +45,51 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [newInterest, setNewInterest] = useState("");
     const [isInterestOpen, setIsInterestOpen] = useState(false);
     const [viewedTitles, setViewedTitles] = useState<string[]>([]); // 이미 본 뉴스 제목 추적
+    const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set()); // 읽은 브리핑 ID 추적
 
     const lastFetchParamsRef = useRef<string>("");
+
+    // Load read briefings from localStorage on mount
+    useEffect(() => {
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const storedReadKey = `read_briefings_${today}`;
+        const storedRead = localStorage.getItem(storedReadKey);
+        if (storedRead) {
+            try {
+                const readIds = JSON.parse(storedRead);
+                setReadBriefings(new Set(readIds));
+            } catch (e) {
+                console.error('[TrendBriefing] Failed to parse read briefings:', e);
+            }
+        }
+
+        // Clean up old read data (older than today)
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('read_briefings_') && key !== storedReadKey) {
+                localStorage.removeItem(key);
+            }
+        });
+    }, []);
+
+    // Mark briefing as read
+    const markAsRead = (briefingId: string) => {
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const storedReadKey = `read_briefings_${today}`;
+
+        setReadBriefings(prev => {
+            const newSet = new Set(prev);
+            newSet.add(briefingId);
+            // Save to localStorage
+            localStorage.setItem(storedReadKey, JSON.stringify([...newSet]));
+            return newSet;
+        });
+    };
+
+    // Handle briefing click - mark as read and call onSelectBriefing
+    const handleBriefingClick = (briefing: TrendBriefing) => {
+        markAsRead(briefing.id);
+        onSelectBriefing(briefing);
+    };
 
     const fetchBriefings = async (forceRefresh = false) => {
         try {
@@ -344,41 +387,78 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {briefings.map((briefing) => (
-                        <motion.div
-                            key={briefing.id}
-                            layoutId={briefing.id}
-                            onClick={() => onSelectBriefing(briefing)}
-                            whileHover={{ y: -4 }}
-                            className="group cursor-pointer relative flex flex-col justify-between h-full bg-card border border-border rounded-xl p-5 transition-all duration-300 hover:shadow-lg"
-                        >
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-start">
-                                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border", getCategoryColor(briefing.category))}>
-                                        {getPrimaryCategory(briefing.category)}
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-full">{briefing.time}</span>
-                                </div>
-                                <h3 className="font-bold text-base md:text-lg leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                                    {briefing.title}
-                                </h3>
-                                <p className="text-sm text-foreground/80 leading-relaxed font-medium">
-                                    {briefing.summary}
-                                </p>
-                            </div>
+                    {briefings.map((briefing) => {
+                        const isRead = readBriefings.has(briefing.id);
+                        return (
+                            <motion.div
+                                key={briefing.id}
+                                layoutId={briefing.id}
+                                onClick={() => handleBriefingClick(briefing)}
+                                whileHover={{ y: -4 }}
+                                className={cn(
+                                    "group cursor-pointer relative flex flex-col justify-between h-full rounded-xl p-5 transition-all duration-300 hover:shadow-lg",
+                                    isRead
+                                        ? "bg-muted/50 border border-border/50"
+                                        : "bg-card border border-border"
+                                )}
+                            >
+                                {/* 읽음 표시 배지 */}
+                                {isRead && (
+                                    <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-medium">
+                                        <Check className="w-3 h-3" />
+                                        읽음
+                                    </div>
+                                )}
 
-                            <div className="mt-5 pt-4 border-t border-border flex justify-between items-center">
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                    {briefing.source}
+                                {/* 안읽음 표시 (파란 점) */}
+                                {!isRead && (
+                                    <div className="absolute top-3 right-3">
+                                        <span className="relative flex h-2.5 w-2.5">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-start pr-12">
+                                        <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border", getCategoryColor(briefing.category))}>
+                                            {getPrimaryCategory(briefing.category)}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-full">{briefing.time}</span>
+                                    </div>
+                                    <h3 className={cn(
+                                        "font-bold text-base md:text-lg leading-snug transition-colors line-clamp-2",
+                                        isRead
+                                            ? "text-muted-foreground group-hover:text-foreground"
+                                            : "text-foreground group-hover:text-primary"
+                                    )}>
+                                        {briefing.title}
+                                    </h3>
+                                    <p className={cn(
+                                        "text-sm leading-relaxed font-medium",
+                                        isRead ? "text-muted-foreground/70" : "text-foreground/80"
+                                    )}>
+                                        {briefing.summary}
+                                        {!briefing.summary?.includes('확인하세요') && (
+                                            <span className="text-primary font-semibold"> 확인하세요!</span>
+                                        )}
+                                    </p>
                                 </div>
-                                <div className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
-                                    <span>Read More</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
+
+                                <div className="mt-5 pt-4 border-t border-border flex justify-between items-center">
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <span className={cn("w-1.5 h-1.5 rounded-full", isRead ? "bg-green-500" : "bg-blue-500")} />
+                                        {briefing.source}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
+                                        <span>{isRead ? "다시 보기" : "Read More"}</span>
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </div>
                                 </div>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        );
+                    })}
                 </div>
             )}
             {/* Recommended Media Section */}

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import OpenAI from "openai";
 import { generateUserContext } from "@/lib/user-context-service";
 import db from "@/lib/db";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -14,6 +15,9 @@ const openai = new OpenAI({
  * 매일 오전 5시 반 이후 앱을 처음 열었을 때 호출
  * - 오늘의 날씨 정보
  * - 5개의 AI 추천 일정
+ * - 오늘의 목표 설정 유도
+ * - 책 추천 1권
+ * - 노래 추천 1곡
  * - 개인화된 아침 인사 메시지
  */
 export async function POST(request: NextRequest) {
@@ -116,10 +120,18 @@ ${addedSchedulesText}
 
 5. **아침 시간대 적합**: 아침에 시작하기 좋은 활동 우선
 
-**요청**: 정확히 5개의 일정을 추천하세요.
+**요청**:
+1. 정확히 5개의 일정 추천
+2. 오늘의 목표 제안 (1~2문장, 사용자 목표에 맞춤)
+3. 책 추천 1권 (사용자 직업/목표 관련, 실제 존재하는 책)
+4. 노래 추천 1곡 (아침에 듣기 좋은 곡, 실제 존재하는 곡)
 
 **JSON 형식으로 응답** (마크다운 없이):
 {
+  "todayGoal": {
+    "text": "오늘 꼭 달성하고 싶은 목표 1~2문장",
+    "motivation": "왜 이 목표가 중요한지 짧은 동기부여"
+  },
   "suggestions": [
     {
       "title": "구체적 활동 제목",
@@ -130,11 +142,23 @@ ${addedSchedulesText}
       "priority": "high|medium|low",
       "icon": "이모지"
     }
-  ]
+  ],
+  "bookRecommendation": {
+    "title": "책 제목",
+    "author": "저자명",
+    "reason": "추천 이유 (사용자 맞춤, 20자 이내)",
+    "quote": "책에서 인상적인 문구 하나"
+  },
+  "songRecommendation": {
+    "title": "노래 제목",
+    "artist": "아티스트명",
+    "reason": "추천 이유 (아침에 듣기 좋은 이유, 15자 이내)",
+    "mood": "energetic|calm|motivating|peaceful"
+  }
 }`;
 
         const aiResponse = await openai.chat.completions.create({
-            model: "gpt-5.1-2025-11-13",
+            model: "gpt-5.2-2025-12-11",
             messages: [
                 {
                     role: "system",
@@ -150,6 +174,19 @@ ${addedSchedulesText}
         });
 
         const responseText = aiResponse.choices[0]?.message?.content || "{}";
+
+        // Log usage
+        const usage = aiResponse.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                userEmail,
+                "gpt-5.2-2025-12-11",
+                "morning-briefing",
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
+
         let parsedResponse;
         try {
             parsedResponse = JSON.parse(responseText);
@@ -159,7 +196,14 @@ ${addedSchedulesText}
         }
 
         const suggestions = parsedResponse.suggestions || [];
+        const todayGoal = parsedResponse.todayGoal || { text: "오늘의 목표를 세워보세요!", motivation: "작은 목표가 큰 성취로 이어집니다." };
+        const bookRecommendation = parsedResponse.bookRecommendation || null;
+        const songRecommendation = parsedResponse.songRecommendation || null;
+
         console.log("[Morning Briefing] 생성된 일정 추천:", suggestions.length);
+        console.log("[Morning Briefing] 오늘의 목표:", todayGoal.text);
+        console.log("[Morning Briefing] 책 추천:", bookRecommendation?.title);
+        console.log("[Morning Briefing] 노래 추천:", songRecommendation?.title);
 
         // 4. 날씨 이모지 선택
         const weatherEmoji =
@@ -168,20 +212,42 @@ ${addedSchedulesText}
                     weatherInfo.condition === 'rain' ? '🌧️' :
                         weatherInfo.condition === 'snow' ? '❄️' : '🌤️';
 
-        // 5. 아침 인사 메시지 생성
+        // 5. 아침 인사 메시지 생성 (더 풍부하게)
         const morningMessage = `좋은 아침입니다! ${weatherEmoji}
 
 **오늘의 날씨**
 ${weatherInfo.description}, 기온 ${weatherInfo.temp}°C
 
-오늘 하루를 의미있게 시작해보세요! 제가 당신의 목표와 생활 패턴을 고려해 오늘 꼭 하면 좋을 활동 5가지를 준비했어요.
+---
+
+🎯 **오늘의 목표**
+${todayGoal.text}
+_${todayGoal.motivation}_
+
+---
+
+📋 **오늘 추천 활동 5가지**
+5개 모두 달성하면 성취도 100%! 일정에 추가하고 하나씩 완료해보세요.
 
 ${suggestions.map((s: any, i: number) => `${i + 1}. ${s.icon} **${s.title}** (${s.estimatedTime})
    ${s.description}`).join('\n\n')}
 
-이 활동들을 일정에 추가하고 하나씩 실행해보세요. 작은 실천이 모여 큰 성장을 만듭니다! 💪
+---
 
-오늘도 멋진 하루 보내세요! 🌟`;
+${bookRecommendation ? `📚 **오늘의 책 추천**
+"${bookRecommendation.title}" - ${bookRecommendation.author}
+${bookRecommendation.reason}
+> "${bookRecommendation.quote}"
+
+---
+
+` : ''}${songRecommendation ? `🎵 **오늘의 노래 추천**
+"${songRecommendation.title}" - ${songRecommendation.artist}
+${songRecommendation.reason}
+
+---
+
+` : ''}오늘 하루도 당신의 성장을 응원합니다! 작은 실천이 모여 큰 변화를 만듭니다 💪🌟`;
 
         console.log("[Morning Briefing] 아침 인사 메시지 생성 완료");
 
@@ -190,6 +256,9 @@ ${suggestions.map((s: any, i: number) => `${i + 1}. ${s.icon} **${s.title}** (${
             message: morningMessage,
             weather: weatherInfo,
             suggestions: suggestions,
+            todayGoal: todayGoal,
+            bookRecommendation: bookRecommendation,
+            songRecommendation: songRecommendation,
         });
 
     } catch (error: any) {

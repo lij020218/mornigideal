@@ -106,11 +106,7 @@ export async function generateDailyBriefings() {
                - Note: If data is empty, it means they didn't record activity.
             
             2. TODAY'S SCHEDULE (${dateStr}):
-               ${todayEvents.length > 0 ? `- Today's Events:\n${todayEvents.map((e: any) => `  ${e.startTime || '시간 미정'}: ${e.text}`).join('\n')}` : '- No specific events scheduled for today'}
-               - Default Routine (only mention if no custom events):
-                 * Wake Up: ${userSchedule.wakeUp || "07:00"}
-                 * Work: ${userSchedule.workStart || "09:00"} - ${userSchedule.workEnd || "18:00"}
-                 * Sleep: ${userSchedule.sleep || "23:00"}
+               ${todayEvents.length > 0 ? `- USER'S ACTUAL SCHEDULED EVENTS (MUST USE THESE):\n${todayEvents.map((e: any) => `  • ${e.startTime || '시간 미정'} ~ ${e.endTime || ''}: ${e.text}`).join('\n')}` : '- No specific events scheduled for today'}
 
             3. TRENDS FOR YOU (${finalTrends.length} personalized articles):
 ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
@@ -124,18 +120,18 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
             - greeting: Warm morning greeting emphasizing ${job} role.
             - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
             - yesterday_score: integer 0-100 (estimate based on activity).
-            - today_schedule_summary: **CRITICAL - USE ONLY THE ACTUAL SCHEDULE DATA FROM "TODAY'S SCHEDULE" SECTION ABOVE**
+            - today_schedule_summary: **CRITICAL - FOLLOW THESE EXACT RULES:**
               ${todayEvents.length > 0 ? `
-              * PRIORITY: Mention these SPECIFIC custom events from the user's calendar:
-                ${todayEvents.map((e: any) => `"${e.text}" at ${e.startTime}`).join(', ')}
-              * Format: List each event with its exact time and title
-              * Do NOT mention default routine (wake/work/sleep) if there are custom events
-              * Example: "${todayEvents[0]?.startTime || '09:00'}에 "${todayEvents[0]?.text || '일정'}" 일정이 있습니다.${todayEvents.length > 1 ? ` ${todayEvents[1].startTime}에는 "${todayEvents[1].text}" 일정이 예정되어 있습니다.` : ''}"
+              *** YOU MUST USE ONLY THE USER'S SCHEDULED EVENTS LISTED ABOVE ***
+              * Events to mention: ${todayEvents.map((e: any) => `"${e.text}" (${e.startTime}~${e.endTime || ''})`).join(', ')}
+              * Format each event naturally in Korean, e.g.: "오늘은 ${todayEvents[0]?.startTime || ''}에 ${todayEvents[0]?.text || ''} 일정이 있습니다."
+              * List ALL events from the schedule
+              * DO NOT mention wake up, work, or sleep times - ONLY mention the events listed above
+              * DO NOT invent or assume any times not in the data
               ` : `
-              * NO custom events today - use default routine times ONLY
-              * Format: "${userSchedule.wakeUp || '07:00'}에 기상하여 ${userSchedule.workStart || '09:00'}부터 ${userSchedule.workEnd || '18:00'}까지 근무 예정입니다. ${userSchedule.sleep || '23:00'}에 취침하세요."
+              * No custom events today
+              * Say: "오늘은 특별히 예정된 일정이 없습니다. 여유롭게 하루를 계획해보세요!"
               `}
-              * NEVER use generic fake times that don't match the provided data
             - trend_summary: **ONLY list the article TITLES** from the ${finalTrends.length} trend articles provided above. ***CRITICAL REQUIREMENTS:***
               1. Use double line breaks (\\n\\n) to separate each article
               2. Start EACH article with a bullet point (•)

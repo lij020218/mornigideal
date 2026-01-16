@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sunrise, Calendar, CheckCircle, TrendingUp, Sparkles, ChevronRight, Moon, Smartphone, AlertTriangle, ThumbsUp } from "lucide-react";
+import { X, Sunrise, Calendar, CheckCircle, TrendingUp, Sparkles, ChevronRight, Moon, Smartphone, AlertTriangle, ThumbsUp, Target, BookOpen, Music, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
@@ -15,6 +15,32 @@ interface DailyBriefingContent {
     today_schedule_summary: string;
     trend_summary: string;
     cheering_message: string;
+    // New morning briefing fields
+    todayGoal?: {
+        text: string;
+        motivation: string;
+    };
+    suggestions?: Array<{
+        title: string;
+        description: string;
+        action: string;
+        category: string;
+        estimatedTime: string;
+        priority: string;
+        icon: string;
+    }>;
+    bookRecommendation?: {
+        title: string;
+        author: string;
+        reason: string;
+        quote: string;
+    };
+    songRecommendation?: {
+        title: string;
+        artist: string;
+        reason: string;
+        mood: string;
+    };
 }
 
 interface DailyBriefingPopupProps {
@@ -218,7 +244,165 @@ export function DailyBriefingPopup({ isOpen, onClose, data, username }: { isOpen
                 </div>
             )
         }] : []),
-        // Step 3: Today's Schedule
+        // Step: Today's Goal (if available)
+        ...(data.todayGoal ? [{
+            title: "Today's Goal",
+            content: (
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-4">
+                            <Target className="w-10 h-10 text-orange-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">오늘의 목표</h3>
+                        <p className="text-sm text-gray-600">Set Your Intention</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 backdrop-blur-sm p-6 rounded-2xl border border-orange-200/60 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                        <div className="relative z-10 text-center">
+                            <p className="text-xl font-bold text-orange-800 leading-relaxed mb-3">
+                                {data.todayGoal.text}
+                            </p>
+                            <p className="text-sm text-orange-600/80 italic">
+                                "{data.todayGoal.motivation}"
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                        <Target className="w-3 h-3" />
+                        <span>목표가 있는 하루는 다릅니다</span>
+                    </div>
+                </div>
+            )
+        }] : []),
+        // Step: Suggested Activities (if available)
+        ...(data.suggestions && data.suggestions.length > 0 ? [{
+            title: "Suggested Activities",
+            content: (
+                <div className="space-y-5">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-3">
+                            <Plus className="w-8 h-8 text-blue-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-1">오늘 추천 활동</h3>
+                        <p className="text-sm text-gray-600">5개 모두 달성하면 성취도 100%!</p>
+                    </div>
+
+                    <div className="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar">
+                        {data.suggestions.map((suggestion, index) => (
+                            <div
+                                key={index}
+                                className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-white/40 flex items-center gap-3 hover:bg-white/90 transition-all"
+                            >
+                                <div className="w-10 h-10 rounded-full bg-blue-100/80 flex items-center justify-center text-lg shrink-0">
+                                    {suggestion.icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-gray-800 text-sm truncate">{suggestion.title}</p>
+                                    <p className="text-xs text-gray-500">{suggestion.description} • {suggestion.estimatedTime}</p>
+                                </div>
+                                <span className={cn(
+                                    "px-2 py-1 rounded-full text-[10px] font-medium shrink-0",
+                                    suggestion.priority === 'high' ? "bg-red-100 text-red-700" :
+                                    suggestion.priority === 'medium' ? "bg-yellow-100 text-yellow-700" :
+                                    "bg-green-100 text-green-700"
+                                )}>
+                                    {suggestion.priority === 'high' ? '높음' : suggestion.priority === 'medium' ? '보통' : '낮음'}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <p className="text-center text-xs text-gray-500">
+                        일정에 추가해서 하나씩 달성해보세요!
+                    </p>
+                </div>
+            )
+        }] : []),
+        // Step: Book Recommendation (if available)
+        ...(data.bookRecommendation ? [{
+            title: "Book of the Day",
+            content: (
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-4">
+                            <BookOpen className="w-10 h-10 text-emerald-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">오늘의 책 추천</h3>
+                        <p className="text-sm text-gray-600">Book Recommendation</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 backdrop-blur-sm p-6 rounded-2xl border border-emerald-200/60 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                        <div className="relative z-10 space-y-4">
+                            <div className="text-center">
+                                <p className="text-xl font-bold text-emerald-800">"{data.bookRecommendation.title}"</p>
+                                <p className="text-sm text-emerald-600">{data.bookRecommendation.author}</p>
+                            </div>
+                            <p className="text-sm text-gray-700 text-center">{data.bookRecommendation.reason}</p>
+                            <div className="bg-white/60 p-3 rounded-xl">
+                                <p className="text-sm text-emerald-700 italic text-center leading-relaxed">
+                                    "{data.bookRecommendation.quote}"
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                        <BookOpen className="w-3 h-3" />
+                        <span>책 한 권이 인생을 바꿀 수 있습니다</span>
+                    </div>
+                </div>
+            )
+        }] : []),
+        // Step: Song Recommendation (if available)
+        ...(data.songRecommendation ? [{
+            title: "Song of the Day",
+            content: (
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm border border-white/40 mb-4">
+                            <Music className="w-10 h-10 text-violet-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">오늘의 노래 추천</h3>
+                        <p className="text-sm text-gray-600">Song Recommendation</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-violet-50 to-purple-50 backdrop-blur-sm p-6 rounded-2xl border border-violet-200/60 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                        <div className="relative z-10 space-y-4 text-center">
+                            <div className="w-16 h-16 mx-auto rounded-full bg-violet-100 flex items-center justify-center">
+                                <span className="text-3xl">🎵</span>
+                            </div>
+                            <div>
+                                <p className="text-xl font-bold text-violet-800">"{data.songRecommendation.title}"</p>
+                                <p className="text-sm text-violet-600">{data.songRecommendation.artist}</p>
+                            </div>
+                            <p className="text-sm text-gray-700">{data.songRecommendation.reason}</p>
+                            <div className={cn(
+                                "inline-flex px-3 py-1 rounded-full text-xs font-medium",
+                                data.songRecommendation.mood === 'energetic' ? "bg-red-100 text-red-700" :
+                                data.songRecommendation.mood === 'calm' ? "bg-blue-100 text-blue-700" :
+                                data.songRecommendation.mood === 'motivating' ? "bg-orange-100 text-orange-700" :
+                                "bg-green-100 text-green-700"
+                            )}>
+                                {data.songRecommendation.mood === 'energetic' ? '🔥 에너제틱' :
+                                 data.songRecommendation.mood === 'calm' ? '🌊 차분함' :
+                                 data.songRecommendation.mood === 'motivating' ? '💪 동기부여' :
+                                 '🌿 평화로움'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                        <Music className="w-3 h-3" />
+                        <span>좋은 음악으로 하루를 시작하세요</span>
+                    </div>
+                </div>
+            )
+        }] : []),
+        // Step: Today's Schedule
         {
             title: "Today's Schedule",
             content: (

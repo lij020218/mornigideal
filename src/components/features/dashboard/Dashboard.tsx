@@ -21,6 +21,8 @@ import { DailyBriefingPopup } from "./DailyBriefingPopup";
 import { AppUsageTracker } from "./AppUsageTracker";
 import { SmartInsightsWidget } from "./SmartInsightsWidget";
 import { AIGreeting } from "./AIGreeting";
+import { GoalSettingModal } from "../goals/GoalSettingModal";
+import { WeeklyGoalsSummary } from "./WeeklyGoalsSummary";
 
 
 interface DashboardProps {
@@ -92,6 +94,7 @@ export function Dashboard({
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+    const [showGoalModal, setShowGoalModal] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
 
     // Get icon for schedule based on text
@@ -666,6 +669,31 @@ export function Dashboard({
         return () => clearInterval(timer);
     }, []);
 
+    // 날짜 변경 감지 (자정 또는 새벽 5시 기준)
+    const [lastCheckedDate, setLastCheckedDate] = useState<string>('');
+    useEffect(() => {
+        const getTodayStr = () => {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        };
+
+        const checkDateChange = () => {
+            const todayStr = getTodayStr();
+            if (lastCheckedDate && lastCheckedDate !== todayStr) {
+                console.log('[Dashboard] Date changed from', lastCheckedDate, 'to', todayStr, '- refreshing page');
+                window.location.reload();
+            }
+            setLastCheckedDate(todayStr);
+        };
+
+        // 초기 날짜 설정
+        setLastCheckedDate(getTodayStr());
+
+        // 10초마다 날짜 변경 체크
+        const interval = setInterval(checkDateChange, 10000);
+        return () => clearInterval(interval);
+    }, [lastCheckedDate]);
+
     // Initialize daily goals from localStorage
     useEffect(() => {
         const savedGoals = getDailyGoals();
@@ -888,14 +916,24 @@ export function Dashboard({
                         <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                             <Clock className="w-6 h-6 text-primary" /> Daily Flow
                         </h2>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:text-white gap-2"
-                            onClick={() => setShowSchedulePopup(true)}
-                        >
-                            <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:text-white gap-2"
+                                onClick={() => setShowGoalModal(true)}
+                            >
+                                <Target className="w-4 h-4" /> <span className="hidden md:inline">목표 설정</span>
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:text-white gap-2"
+                                onClick={() => setShowSchedulePopup(true)}
+                            >
+                                <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Mobile Layout: Goals -> Timeline -> Insights */}
@@ -911,9 +949,15 @@ export function Dashboard({
 
                                 const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
-                                // Only show events with specificDate matching today (calendar events only)
+                                // Show events with specificDate matching today OR recurring schedules for today's day
+                                // IMPORTANT: If specificDate exists, ONLY show on that exact date (not as recurring)
                                 const customItems = userProfile?.customGoals?.filter(g => {
-                                    return g.specificDate === todayStr;
+                                    if (g.specificDate) {
+                                        // Specific date events only show on that exact date
+                                        return g.specificDate === todayStr;
+                                    }
+                                    // Recurring events (no specificDate) show on matching days of week
+                                    return g.daysOfWeek?.includes(currentDay);
                                 }).map(g => ({
                                     id: g.id,
                                     text: g.text,
@@ -1159,10 +1203,14 @@ export function Dashboard({
                                                 const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
                                                 // Show events that either match today's date OR recurring events for today's day of week
+                                                // IMPORTANT: If specificDate exists, ONLY show on that exact date (not as recurring)
                                                 const customItems = userProfile?.customGoals?.filter(g => {
-                                                    const isSpecificDate = g.specificDate === todayStr;
-                                                    const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                                                    return isSpecificDate || isRecurringToday;
+                                                    if (g.specificDate) {
+                                                        // Specific date events only show on that exact date
+                                                        return g.specificDate === todayStr;
+                                                    }
+                                                    // Recurring events (no specificDate) show on matching days of week
+                                                    return g.daysOfWeek?.includes(currentDay);
                                                 }).map(g => ({
                                                     id: g.id,
                                                     text: g.text,
@@ -1453,6 +1501,11 @@ export function Dashboard({
                         </CardContent>
                     </Card>
                 </motion.section>
+
+                {/* Weekly Goals Section */}
+                <motion.section variants={itemVariants} className="mt-6">
+                    <WeeklyGoalsSummary />
+                </motion.section>
             </motion.div>
 
             <SchedulePopup
@@ -1461,6 +1514,20 @@ export function Dashboard({
                 initialSchedule={userProfile?.schedule}
                 initialCustomGoals={userProfile?.customGoals}
                 onSave={handleSaveSchedule}
+            />
+
+            {/* Goal Setting Modal */}
+            <GoalSettingModal
+                isOpen={showGoalModal}
+                onClose={() => setShowGoalModal(false)}
+                onGoalsUpdated={() => {
+                    console.log("[Dashboard] Goals updated");
+                }}
+                onScheduleAdd={(newSchedules) => {
+                    console.log("[Dashboard] Adding goal-based schedules:", newSchedules);
+                    const currentGoals = userProfile?.customGoals || [];
+                    handleSaveSchedule(userProfile?.schedule || {}, [...currentGoals, ...newSchedules]);
+                }}
             />
 
             {/* Trend Briefing Detail Modal */}
@@ -1584,15 +1651,32 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             const currentMinute = now.getMinutes();
             const currentTimeValue = currentHour * 60 + currentMinute;
 
-            // Build timeline to find active index
+            // Build timeline to find active index - 중복 제거 포함
+            const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+            // 특정 날짜 일정 (우선순위 높음)
+            const specificDateGoals = customGoals?.filter((g: any) => g.specificDate === todayStr && g.startTime) || [];
+
+            // 반복 일정 (중복 제거)
+            const recurringGoals = customGoals?.filter((g: any) => {
+                if (g.specificDate) return false;
+                if (!g.daysOfWeek?.includes(currentDayOfWeek)) return false;
+                if (!g.startTime) return false;
+                // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 제외
+                const hasDuplicate = specificDateGoals.some((sg: any) =>
+                    sg.text === g.text && sg.startTime === g.startTime
+                );
+                return !hasDuplicate;
+            }) || [];
+
+            const allGoals = [...specificDateGoals, ...recurringGoals];
+
             const timelineItemsForScroll: Array<{ time: string; endTime?: string | undefined }> = [
                 ...(schedule?.wakeUp ? [{ time: schedule.wakeUp, endTime: undefined }] : []),
                 ...(schedule?.workStart ? [{ time: schedule.workStart, endTime: undefined }] : []),
                 ...(schedule?.workEnd ? [{ time: schedule.workEnd, endTime: undefined }] : []),
                 ...(schedule?.sleep ? [{ time: schedule.sleep, endTime: undefined }] : []),
-                ...(customGoals?.filter((g: any) => g.daysOfWeek?.includes(currentDayOfWeek))
-                    .filter((g: any) => g.startTime)
-                    .map((g: any) => ({ time: g.startTime!, endTime: g.endTime || undefined })) || [])
+                ...allGoals.map((g: any) => ({ time: g.startTime!, endTime: g.endTime || undefined }))
             ].sort((a, b) => {
                 const [aH, aM] = a.time.split(':').map(Number);
                 const [bH, bM] = b.time.split(':').map(Number);
@@ -1728,11 +1812,13 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     const todayStr = currentDate.getFullYear() + '-' + String(currentDate.getMonth() + 1).padStart(2, '0') + '-' + String(currentDate.getDate()).padStart(2, '0');
 
     const todaysGoals = customGoals?.filter(goal => {
-        // Include goals that match today's specific date
-        const isSpecificDate = goal.specificDate === todayStr;
-        // Include recurring goals for today's day of week
-        const isRecurringToday = goal.daysOfWeek?.includes(currentDayOfWeek);
-        return isSpecificDate || isRecurringToday;
+        // IMPORTANT: If specificDate exists, ONLY show on that exact date (not as recurring)
+        if (goal.specificDate) {
+            // Specific date events only show on that exact date
+            return goal.specificDate === todayStr;
+        }
+        // Recurring events (no specificDate) show on matching days of week
+        return goal.daysOfWeek?.includes(currentDayOfWeek);
     }) || [];
 
     // Build timeline items

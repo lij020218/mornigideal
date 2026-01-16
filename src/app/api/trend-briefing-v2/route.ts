@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { generateTrendId } from "@/lib/newsCache";
+import { logOpenAIUsage } from "@/lib/openai-usage";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -117,6 +118,18 @@ ${JSON.stringify(newsForPrompt, null, 2)}
     const result = JSON.parse(completion.choices[0].message.content || "{}");
     const selectedIds = (result.selectedArticles || []).map((a: any) => a.id);
 
+    // Log usage (no user session in GET, use anonymous)
+    const usage = completion.usage;
+    if (usage) {
+      await logOpenAIUsage(
+        "anonymous@trend-briefing",
+        MINI_MODEL,
+        "trend-briefing-v2/filter",
+        usage.prompt_tokens,
+        usage.completion_tokens
+      );
+    }
+
     console.log(`[API V2] Selected ${selectedIds.length} articles:`, selectedIds);
 
     // Step 3: 선택된 뉴스 매핑
@@ -207,6 +220,18 @@ URL: ${originalUrl}
     });
 
     const detail = JSON.parse(completion.choices[0].message.content || "{}");
+
+    // Log usage for briefing detail
+    const usage = completion.usage;
+    if (usage) {
+      await logOpenAIUsage(
+        "anonymous@trend-briefing",
+        MINI_MODEL,
+        "trend-briefing-v2/detail",
+        usage.prompt_tokens,
+        usage.completion_tokens
+      );
+    }
 
     return NextResponse.json({
       detail: { ...detail, originalUrl: originalUrl || "" },

@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
 
 interface Schedule {
     id: string;
@@ -73,6 +74,7 @@ const PLACEHOLDER_ROTATION = [
 export default function ChatPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
+    const { setShowFocusPrompt, setShowSleepPrompt, isFocusMode, isSleepMode } = useFocusSleepMode();
 
     // Redirect if not authenticated
     useEffect(() => {
@@ -95,23 +97,31 @@ export default function ChatPage() {
     const [showSidebar, setShowSidebar] = useState(false);
     const [todayTrends, setTodayTrends] = useState<TrendBriefing[]>([]);
     const [readTrendIds, setReadTrendIds] = useState<string[]>([]);
+    const [learningTips, setLearningTips] = useState<{
+        greeting: string;
+        tips: { emoji: string; title: string; content: string }[];
+        encouragement: string;
+        scheduleId: string;
+    } | null>(null);
+    const [isLoadingLearningTips, setIsLoadingLearningTips] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Helper function to get chat date (5am cutoff)
+    // Helper function to get chat date (5am cutoff, KST timezone)
     const getChatDate = () => {
         const now = new Date();
-        const hour = now.getHours();
+        // Convert to KST (UTC+9) for consistent date handling
+        const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const hour = kstDate.getHours();
 
-        // If before 5am, use previous day
+        // If before 5am KST, use previous day
         if (hour < 5) {
-            const yesterday = new Date(now);
-            yesterday.setDate(yesterday.getDate() - 1);
-            return yesterday.toISOString().split('T')[0];
+            kstDate.setDate(kstDate.getDate() - 1);
         }
 
-        return now.toISOString().split('T')[0];
+        // Return YYYY-MM-DD format in KST
+        return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
     };
 
     // Initialize currentDate with 5am cutoff
@@ -161,76 +171,262 @@ export default function ChatPage() {
             });
 
         setChatHistory(history);
+
+        // 30일 지난 채팅 삭제 (localStorage)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+        chatDates.forEach(date => {
+            if (date < cutoffDate) {
+                localStorage.removeItem(`chat_messages_${date}`);
+                localStorage.removeItem(`greeting_sent_${date}`);
+                console.log('[Chat] Deleted old chat:', date);
+            }
+        });
+
+        // DB에서도 30일 지난 채팅 삭제
+        fetch('/api/user/chat-history?cleanup=true', { method: 'DELETE' })
+            .catch(err => console.error('[Chat] Failed to cleanup old chats in DB:', err));
+
+        // Check for pending learning tip (from Learning page)
+        const pendingTip = localStorage.getItem('pending_learning_tip');
+        if (pendingTip) {
+            try {
+                const tipData = JSON.parse(pendingTip);
+                console.log('[Chat] Found pending learning tip:', tipData);
+
+                // 학습 팁을 채팅 메시지로 추가
+                const tipMessage: Message = {
+                    id: `learning-tip-${Date.now()}`,
+                    role: 'assistant',
+                    content: `📚 **${tipData.topic}: ${tipData.dayTitle}** 학습이 일정에 추가되었어요!\n\n${tipData.greeting}\n\n${tipData.tips?.map((t: any) => `${t.emoji} **${t.title}**\n${t.content}`).join('\n\n') || ''}\n\n💪 ${tipData.encouragement || '오늘도 화이팅!'}`,
+                    timestamp: new Date(),
+                };
+
+                setMessages(prev => [...prev, tipMessage]);
+
+                // 사용 후 삭제
+                localStorage.removeItem('pending_learning_tip');
+            } catch (error) {
+                console.error('[Chat] Failed to parse pending learning tip:', error);
+                localStorage.removeItem('pending_learning_tip');
+            }
+        }
+    }, []);
+
+    // Listen for load-chat-date event from Sidebar
+    useEffect(() => {
+        const handleLoadChatDate = async (event: CustomEvent<{ date: string }>) => {
+            const { date } = event.detail;
+            console.log('[Chat] Loading chat for date:', date);
+            setCurrentDate(date);
+
+            // localStorage에서 먼저 시도
+            const savedMessages = localStorage.getItem(`chat_messages_${date}`);
+            if (savedMessages) {
+                try {
+                    const parsed = JSON.parse(savedMessages);
+                    const messagesWithDates = parsed.map((m: any) => ({
+                        ...m,
+                        timestamp: new Date(m.timestamp)
+                    }));
+                    setMessages(messagesWithDates);
+                    console.log('[Chat] Loaded from localStorage:', messagesWithDates.length);
+                    return;
+                } catch (error) {
+                    console.error('[Chat] Failed to parse saved messages:', error);
+                }
+            }
+
+            // DB에서 시도
+            try {
+                const response = await fetch(`/api/user/chat-history?date=${date}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.chat?.messages) {
+                        const messagesWithDates = data.chat.messages.map((m: any) => ({
+                            ...m,
+                            timestamp: new Date(m.timestamp)
+                        }));
+                        setMessages(messagesWithDates);
+                        // localStorage에도 저장
+                        localStorage.setItem(`chat_messages_${date}`, JSON.stringify(data.chat.messages));
+                        console.log('[Chat] Loaded from DB:', messagesWithDates.length);
+                    } else {
+                        setMessages([]);
+                    }
+                }
+            } catch (error) {
+                console.error('[Chat] Failed to load from DB:', error);
+                setMessages([]);
+            }
+        };
+
+        window.addEventListener('load-chat-date', handleLoadChatDate as EventListener);
+        return () => window.removeEventListener('load-chat-date', handleLoadChatDate as EventListener);
     }, []);
 
     // Send initial greeting message with AI recommendations if no messages exist
+    // Or upgrade to rich greeting in morning hours
     useEffect(() => {
-        // Only send greeting if:
-        // 1. No messages in the current chat
-        // 2. Session is loaded
-        // 3. Not already loading
-        // 4. Schedules are loaded
-        if (messages.length === 0 && session?.user && !isLoading && todaySchedules.length >= 0) {
+        const now = new Date();
+        const hour = now.getHours();
+        const today = getChatDate();
+        const isMorning = hour >= 5 && hour < 12;
+        const richGreetingKey = `rich_greeting_sent_${today}`;
+        const hasRichGreeting = localStorage.getItem(richGreetingKey);
+
+        // Allow greeting if:
+        // 1. No messages in the current chat, OR
+        // 2. Morning hours AND rich greeting not sent yet (to upgrade basic greeting)
+        const shouldAttemptGreeting = messages.length === 0 || (isMorning && !hasRichGreeting && messages.length <= 1);
+
+        if (shouldAttemptGreeting && session?.user && !isLoading && todaySchedules.length >= 0) {
             const sendGreeting = async () => {
                 try {
                     const now = new Date();
                     const hour = now.getHours();
                     const today = getChatDate();
 
-                    // Check if we already sent greeting today
-                    const greetingSentKey = `greeting_sent_${today}`;
-                    if (localStorage.getItem(greetingSentKey)) {
-                        console.log('[Chat] Greeting already sent today');
+                    // Check if we already sent RICH greeting today
+                    // We use a separate key for rich vs basic greetings
+                    const richGreetingKey = `rich_greeting_sent_${today}`;
+                    const basicGreetingKey = `basic_greeting_sent_${today}`;
+                    const oldGreetingKey = `greeting_sent_${today}`; // legacy key for migration
+
+                    // If rich greeting was already sent, don't resend
+                    if (localStorage.getItem(richGreetingKey)) {
+                        console.log('[Chat] Rich greeting already sent today');
                         return;
                     }
 
-                    console.log('[Chat] Sending initial greeting message with recommendations');
+                    // 아침 시간대에는 basic greeting이 보내졌어도 rich greeting 시도
+                    // 아침이 아닌 시간대에는 basic greeting이 있으면 skip
+                    const hasBasicGreeting = localStorage.getItem(basicGreetingKey) || localStorage.getItem(oldGreetingKey);
+                    if (hasBasicGreeting && !(hour >= 5 && hour < 12)) {
+                        console.log('[Chat] Basic greeting already sent (non-morning hours)');
+                        return;
+                    }
 
-                    // Generate greeting based on time of day
-                    let greeting = '안녕하세요!';
-                    if (hour >= 5 && hour < 12) greeting = '좋은 아침이에요!';
-                    else if (hour >= 12 && hour < 18) greeting = '좋은 오후에요!';
-                    else if (hour >= 18 && hour < 22) greeting = '좋은 저녁이에요!';
-                    else greeting = '아직도 깨어 계시네요!';
+                    console.log('[Chat] Sending initial greeting message with recommendations (hasBasic:', !!hasBasicGreeting, ')');
 
-                    // Fetch AI recommendations
-                    let recommendationsText = '';
-                    try {
-                        const currentHour = now.getHours();
-                        const response = await fetch('/api/ai-suggest-schedules', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                requestCount: 5,
-                                currentHour: currentHour
-                            }),
-                        });
+                    // 아침 시간대 (5am - 12pm)에는 Morning Briefing API 호출
+                    if (hour >= 5 && hour < 12) {
+                        try {
+                            console.log('[Chat] Fetching morning briefing...');
+                            const briefingRes = await fetch('/api/morning-briefing', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                            });
 
-                        if (response.ok) {
-                            const data = await response.json();
-                            if (data.suggestions && data.suggestions.length > 0) {
-                                recommendationsText = '\n\n오늘 이런 활동은 어떠세요?\n\n';
-                                data.suggestions.forEach((s: any, idx: number) => {
-                                    recommendationsText += `${idx + 1}. ${s.icon} **${s.title}**\n   ${s.description} (약 ${s.estimatedTime})\n\n`;
-                                });
-                                recommendationsText += '원하시는 활동이 있으면 말씀해주세요. 일정에 추가해드릴게요!';
+                            if (briefingRes.ok) {
+                                const briefingData = await briefingRes.json();
+                                if (briefingData.success) {
+                                    // 풍부한 아침 인사 메시지 생성
+                                    let richGreeting = `좋은 아침이에요! ☀️\n\n`;
+
+                                    // 날씨 정보
+                                    if (briefingData.weather) {
+                                        richGreeting += `**오늘의 날씨**: ${briefingData.weather.description}, ${briefingData.weather.temp}°C\n\n`;
+                                    }
+
+                                    // 오늘의 목표
+                                    if (briefingData.todayGoal) {
+                                        richGreeting += `🎯 **오늘의 목표**\n${briefingData.todayGoal.text}\n_${briefingData.todayGoal.motivation}_\n\n`;
+                                    }
+
+                                    // 추천 활동 5가지
+                                    if (briefingData.suggestions && briefingData.suggestions.length > 0) {
+                                        richGreeting += `📋 **오늘 추천 활동** (5개 달성시 성취도 100%!)\n`;
+                                        briefingData.suggestions.forEach((s: any, i: number) => {
+                                            richGreeting += `${i + 1}. ${s.icon} ${s.title} (${s.estimatedTime})\n`;
+                                        });
+                                        richGreeting += `\n`;
+                                    }
+
+                                    // 책 추천
+                                    if (briefingData.bookRecommendation) {
+                                        richGreeting += `📚 **오늘의 책**: "${briefingData.bookRecommendation.title}" - ${briefingData.bookRecommendation.author}\n`;
+                                        richGreeting += `> "${briefingData.bookRecommendation.quote}"\n\n`;
+                                    }
+
+                                    // 노래 추천
+                                    if (briefingData.songRecommendation) {
+                                        richGreeting += `🎵 **오늘의 노래**: "${briefingData.songRecommendation.title}" - ${briefingData.songRecommendation.artist}\n\n`;
+                                    }
+
+                                    richGreeting += `오늘도 멋진 하루 보내세요! 💪`;
+
+                                    const greetingMessage: Message = {
+                                        id: `assistant-greeting-${Date.now()}`,
+                                        role: 'assistant',
+                                        content: richGreeting,
+                                        timestamp: new Date(),
+                                    };
+
+                                    setMessages([greetingMessage]);
+                                    localStorage.setItem(richGreetingKey, 'true');
+                                    console.log('[Chat] Rich morning greeting sent successfully');
+                                    return;
+                                }
+                            }
+                        } catch (briefingError) {
+                            console.error('[Chat] Morning briefing failed, using fallback:', briefingError);
+                        }
+                    }
+
+                    // Fallback: 기본 인사 (아침 API 실패시 또는 아침이 아닐 때)
+                    let greeting = '';
+                    let callToAction = '';
+
+                    if (hour >= 5 && hour < 12) {
+                        // 아침 (5am - 12pm) - fallback
+                        greeting = '좋은 아침이에요! ☀️';
+                        callToAction = '\n\n오늘 하루를 어떻게 보내실 건가요? 일정을 추가하거나 오늘의 목표를 세워보세요!';
+                    } else if (hour >= 12 && hour < 18) {
+                        // 오후 (12pm - 6pm)
+                        greeting = '좋은 오후에요! 🌤️';
+                        callToAction = '\n\n오후 일정은 어떻게 되시나요? 남은 시간을 계획해볼까요?';
+                    } else if (hour >= 18 && hour < 22) {
+                        // 저녁 (6pm - 10pm)
+                        greeting = '좋은 저녁이에요! 🌙';
+                        callToAction = '\n\n오늘 하루 수고하셨어요. 내일 일정을 미리 계획해볼까요?';
+                    } else {
+                        // 심야 (10pm - 5am)
+                        greeting = '아직 깨어 계시네요! 🌃';
+                        callToAction = '\n\n늦은 시간이에요. 푹 쉬시고 내일 일정이 궁금하시면 말씀해주세요.';
+                    }
+
+                    // 오늘 일정 요약
+                    let schedulesSummary = '';
+                    if (todaySchedules.length > 0) {
+                        const pendingSchedules = todaySchedules.filter((s: Schedule) => !s.completed && !s.skipped);
+                        if (pendingSchedules.length > 0) {
+                            schedulesSummary = `\n\n📋 **오늘 일정 (${pendingSchedules.length}개)**\n`;
+                            pendingSchedules.slice(0, 3).forEach((s: Schedule) => {
+                                schedulesSummary += `• ${s.startTime} - ${s.text}\n`;
+                            });
+                            if (pendingSchedules.length > 3) {
+                                schedulesSummary += `...외 ${pendingSchedules.length - 3}개`;
                             }
                         }
-                    } catch (error) {
-                        console.error('[Chat] Failed to fetch recommendations:', error);
+                    } else if (hour >= 5 && hour < 18) {
+                        schedulesSummary = '\n\n아직 오늘 일정이 없네요. "오후 3시에 회의 추가해줘" 처럼 말씀해주시면 바로 추가해드릴게요!';
                     }
 
                     const greetingMessage: Message = {
                         id: `assistant-greeting-${Date.now()}`,
                         role: 'assistant',
-                        content: `${greeting} 오늘 하루 어떻게 보내실 계획이신가요?\n\n저는 당신의 일정 관리와 성장을 돕는 AI 어시스턴트예요.${recommendationsText}\n\n궁금한 점이나 도움이 필요하신 것이 있으면 언제든 말씀해주세요! 😊`,
+                        content: `${greeting}${schedulesSummary}${callToAction}`,
                         timestamp: new Date(),
                     };
 
                     setMessages([greetingMessage]);
 
-                    // Mark greeting as sent
-                    localStorage.setItem(greetingSentKey, 'true');
+                    // Mark basic greeting as sent (but rich greeting can still be sent later if user refreshes during morning)
+                    localStorage.setItem(basicGreetingKey, 'true');
+                    console.log('[Chat] Basic greeting sent (fallback)');
                 } catch (error) {
                     console.error('[Chat] Failed to send greeting:', error);
                 }
@@ -240,22 +436,46 @@ export default function ChatPage() {
             const timer = setTimeout(sendGreeting, 1000);
             return () => clearTimeout(timer);
         }
-    }, [messages.length, session, isLoading, todaySchedules]);
+    }, [messages.length, session, isLoading, todaySchedules, currentDate]);
 
-    // Save messages to localStorage whenever they change
+    // Save messages to localStorage and DB whenever they change
     useEffect(() => {
         if (messages.length > 0) {
+            // localStorage 저장 (빠른 접근용)
             localStorage.setItem(`chat_messages_${currentDate}`, JSON.stringify(messages));
             console.log('[Chat] Saved messages to localStorage:', messages.length);
+
+            // DB 저장 (지속성 및 동기화)
+            const saveToDb = async () => {
+                try {
+                    await fetch('/api/user/chat-history', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            date: currentDate,
+                            messages: messages.map(m => ({
+                                ...m,
+                                timestamp: m.timestamp.toISOString()
+                            }))
+                        })
+                    });
+                } catch (error) {
+                    console.error('[Chat] Failed to save to DB:', error);
+                }
+            };
+
+            // 디바운스: 마지막 메시지 이후 2초 뒤에 저장
+            const timer = setTimeout(saveToDb, 2000);
+            return () => clearTimeout(timer);
         }
     }, [messages, currentDate]);
 
     // Check if date changed (5am cutoff detection)
     useEffect(() => {
-        const checkDate = setInterval(() => {
+        const handleDateChange = () => {
             const today = getChatDate();
             if (today !== currentDate) {
-                console.log('[Chat] Date changed (5am cutoff), starting new chat');
+                console.log('[Chat] Date changed (5am cutoff), starting new chat for:', today);
                 setCurrentDate(today);
                 setMessages([]);
 
@@ -284,7 +504,13 @@ export default function ChatPage() {
 
                 setChatHistory(history);
             }
-        }, 60000); // 1분마다 체크
+        };
+
+        // 즉시 체크 (페이지 로드 시)
+        handleDateChange();
+
+        // 10초마다 체크 (자정/5am 감지용)
+        const checkDate = setInterval(handleDateChange, 10000);
 
         return () => clearInterval(checkDate);
     }, [currentDate]);
@@ -311,20 +537,43 @@ export default function ChatPage() {
                 const response = await fetch('/api/user/profile');
                 if (response.ok) {
                     const data = await response.json();
-                    const today = getChatDate(); // Use 5am cutoff
-                    const now = new Date();
-                    const currentDay = now.getDay();
+                    // IMPORTANT: Always use getChatDate() for fresh date calculation
+                    // This ensures we always get today's date, not a stale currentDate state
+                    const today = getChatDate();
+                    // Calculate day of week from the date string to ensure consistency
+                    const todayDateObj = new Date(today + 'T12:00:00'); // Use noon to avoid timezone issues
+                    const currentDay = todayDateObj.getDay();
+
+                    console.log('[Chat] Current date state:', currentDate, 'Fresh getChatDate():', today);
 
                     console.log('[Chat] Fetching schedules for date:', today, 'day:', currentDay);
-                    console.log('[Chat] Custom goals:', data.profile?.customGoals);
+                    console.log('[Chat] All custom goals count:', data.profile?.customGoals?.length);
 
-                    // Include both specific date schedules AND recurring schedules for today
-                    const todayGoals = data.profile?.customGoals?.filter((g: any) => {
-                        const isSpecificDate = g.specificDate === today;
-                        const isRecurringToday = g.daysOfWeek?.includes(currentDay);
-                        console.log(`[Chat] Checking goal "${g.text}": specificDate=${g.specificDate}, daysOfWeek=${g.daysOfWeek}, matches=${isSpecificDate || isRecurringToday}`);
-                        return isSpecificDate || isRecurringToday;
-                    }) || [];
+                    // Include both specific date schedules AND recurring schedules for today - 중복 제거
+                    const allGoals = data.profile?.customGoals || [];
+
+                    // 특정 날짜 일정 (우선순위 높음)
+                    const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
+                    console.log('[Chat] Specific date goals for', today, ':', specificDateGoals.map((g: any) => ({ text: g.text, specificDate: g.specificDate })));
+
+                    // 반복 일정 (중복 제거) - specificDate가 있는 일정은 제외!
+                    const recurringGoals = allGoals.filter((g: any) => {
+                        // specificDate가 있으면 반복 일정이 아님 - 무조건 제외
+                        if (g.specificDate) {
+                            console.log('[Chat] Excluding goal with specificDate:', g.text, g.specificDate, '(not matching today:', today, ')');
+                            return false;
+                        }
+                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                        // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 제외
+                        const hasDuplicate = specificDateGoals.some((sg: any) =>
+                            sg.text === g.text && sg.startTime === g.startTime
+                        );
+                        return !hasDuplicate;
+                    });
+                    console.log('[Chat] Recurring goals for day', currentDay, ':', recurringGoals.map((g: any) => ({ text: g.text, daysOfWeek: g.daysOfWeek })));
+
+                    const todayGoals = [...specificDateGoals, ...recurringGoals];
+                    console.log(`[Chat] Total ${todayGoals.length} goals for today (specific: ${specificDateGoals.length}, recurring: ${recurringGoals.length})`);
 
                     // Load completion status from localStorage
                     const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
@@ -343,7 +592,7 @@ export default function ChatPage() {
         };
 
         fetchSchedules();
-    }, [session]);
+    }, [session, currentDate]);
 
     // Fetch today's trend briefings
     useEffect(() => {
@@ -377,6 +626,52 @@ export default function ChatPage() {
 
         fetchTrends();
     }, [session]);
+
+    // Fetch learning tips when there's a learning schedule
+    useEffect(() => {
+        if (!session?.user?.email || todaySchedules.length === 0) return;
+
+        const fetchLearningTips = async () => {
+            // 학습 일정 찾기 (isLearning: true 또는 learningData가 있는 일정)
+            const learningSchedule = todaySchedules.find(
+                (s: any) => s.isLearning && s.learningData && !s.completed && !s.skipped
+            );
+
+            if (!learningSchedule || learningTips?.scheduleId === learningSchedule.id) {
+                return;
+            }
+
+            const learningData = (learningSchedule as any).learningData;
+            if (!learningData) return;
+
+            setIsLoadingLearningTips(true);
+            try {
+                const res = await fetch('/api/ai-learning-tip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        learningData,
+                        userLevel: 'intermediate',
+                    }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setLearningTips({
+                        ...data,
+                        scheduleId: learningSchedule.id,
+                    });
+                    console.log('[Chat] Loaded learning tips for:', learningData.dayTitle);
+                }
+            } catch (error) {
+                console.error('[Chat] Failed to fetch learning tips:', error);
+            } finally {
+                setIsLoadingLearningTips(false);
+            }
+        };
+
+        fetchLearningTips();
+    }, [session, todaySchedules, learningTips?.scheduleId]);
 
     // Auto-send schedule-based messages
     useEffect(() => {
@@ -473,67 +768,339 @@ export default function ChatPage() {
                     console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
                     localStorage.setItem(sentStartKey, 'true');
 
-                    // AI 리소스 추천 요청
+                    // Check if this is a sleep schedule (취침)
+                    const isSleepSchedule = schedule.text.includes('취침') ||
+                        schedule.text.toLowerCase().includes('sleep') ||
+                        schedule.text.includes('잠') ||
+                        schedule.text.includes('수면');
+
+                    if (isSleepSchedule && !isSleepMode) {
+                        // Check if user dismissed the prompt today
+                        const dismissed = localStorage.getItem(`sleep_prompt_dismissed_${today}`);
+                        if (!dismissed) {
+                            setShowSleepPrompt(true);
+                        }
+                    }
+
+                    // Check if this is a work/focus schedule (업무, 공부, 작업, 집중 등)
+                    const isWorkSchedule = schedule.text.includes('업무') ||
+                        schedule.text.includes('공부') ||
+                        schedule.text.includes('작업') ||
+                        schedule.text.includes('집중') ||
+                        schedule.text.includes('일') ||
+                        schedule.text.includes('미팅') ||
+                        schedule.text.includes('회의') ||
+                        schedule.text.toLowerCase().includes('work') ||
+                        schedule.text.toLowerCase().includes('study') ||
+                        schedule.text.toLowerCase().includes('focus') ||
+                        schedule.text.toLowerCase().includes('meeting');
+
+                    if (isWorkSchedule && !isFocusMode && !isSleepMode) {
+                        // Check if user dismissed the focus prompt today
+                        const dismissed = localStorage.getItem(`focus_prompt_dismissed_${today}`);
+                        if (!dismissed) {
+                            setShowFocusPrompt(true);
+                        }
+                    }
+
+                    // 일정 특성에 맞는 시작 메시지 생성
+                    const getScheduleStartMessage = (scheduleName: string) => {
+                        const name = scheduleName.toLowerCase();
+
+                        // 식사
+                        if (/식사|점심|저녁|아침|밥|브런치|런치|디너|야식|간식/.test(name)) {
+                            const mealEmojis: Record<string, string> = {
+                                '아침': '🍳', '점심': '🍚', '저녁': '🍽️', '야식': '🌙', '브런치': '🥐', '간식': '🍪'
+                            };
+                            let emoji = '🍽️';
+                            for (const [key, val] of Object.entries(mealEmojis)) {
+                                if (name.includes(key)) { emoji = val; break; }
+                            }
+                            const msgs = ['맛있게 드세요!', '든든하게 드세요!', '맛있는 식사 되세요!'];
+                            return { emoji, msg: msgs[Math.floor(Math.random() * msgs.length)], needsAI: false };
+                        }
+
+                        // 휴식/취침
+                        if (/휴식|쉬는|낮잠|수면|취침|잠|기상|일어나/.test(name)) {
+                            const restMsgs: Record<string, { emoji: string; msg: string }> = {
+                                '취침': { emoji: '🌙', msg: '좋은 꿈 꾸세요!' },
+                                '잠': { emoji: '😴', msg: '푹 주무세요!' },
+                                '기상': { emoji: '☀️', msg: '상쾌한 아침 되세요!' },
+                                '일어나': { emoji: '🌅', msg: '좋은 아침이에요!' },
+                                '휴식': { emoji: '☕', msg: '편하게 쉬세요!' },
+                                '낮잠': { emoji: '😌', msg: '달콤한 낮잠 되세요!' },
+                            };
+                            for (const [key, val] of Object.entries(restMsgs)) {
+                                if (name.includes(key)) return { ...val, needsAI: false };
+                            }
+                            return { emoji: '☕', msg: '편하게 쉬세요!', needsAI: false };
+                        }
+
+                        // 여가
+                        if (/게임|영화|드라마|유튜브|넷플릭스|독서|음악|산책/.test(name)) {
+                            const leisureMsgs: Record<string, { emoji: string; msg: string }> = {
+                                '게임': { emoji: '🎮', msg: '즐거운 시간 보내세요!' },
+                                '영화': { emoji: '🎬', msg: '재미있게 보세요!' },
+                                '드라마': { emoji: '📺', msg: '재미있게 보세요!' },
+                                '유튜브': { emoji: '📱', msg: '즐거운 시청 되세요!' },
+                                '넷플릭스': { emoji: '🍿', msg: '재미있게 보세요!' },
+                                '독서': { emoji: '📚', msg: '즐거운 독서 시간 되세요!' },
+                                '음악': { emoji: '🎵', msg: '좋은 음악과 함께하세요!' },
+                                '산책': { emoji: '🚶', msg: '상쾌한 산책 되세요!' },
+                            };
+                            for (const [key, val] of Object.entries(leisureMsgs)) {
+                                if (name.includes(key)) return { ...val, needsAI: false };
+                            }
+                            return { emoji: '🎉', msg: '즐거운 시간 보내세요!', needsAI: false };
+                        }
+
+                        // 운동
+                        if (/운동|헬스|요가|필라테스|러닝|조깅|수영|등산/.test(name)) {
+                            return { emoji: '💪', msg: '오늘도 화이팅!', needsAI: false };
+                        }
+
+                        // 업무/회의/공부 - AI 추천 사용
+                        if (/업무|출근|회의|미팅|프레젠테이션|발표|면접/.test(name)) {
+                            return { emoji: '💼', msg: '', needsAI: true };
+                        }
+
+                        if (/공부|학습|강의|수업|시험|과제/.test(name)) {
+                            return { emoji: '📖', msg: '', needsAI: true };
+                        }
+
+                        // 기본
+                        return { emoji: '🕐', msg: '화이팅!', needsAI: false };
+                    };
+
+                    const { emoji, msg, needsAI } = getScheduleStartMessage(schedule.text);
+
+                    if (needsAI) {
+                        // 업무/공부 일정만 AI 리소스 추천 요청
+                        fetch('/api/ai-resource-recommend', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                activityName: schedule.text,
+                                context: 'schedule_start'
+                            }),
+                        }).then(res => res.json()).then(data => {
+                            console.log('[AutoMessage] Received AI resource:', data);
+                            const recommendation = data.recommendation || "화이팅!";
+                            const message: Message = {
+                                id: `auto-start-${Date.now()}`,
+                                role: 'assistant',
+                                content: `"${schedule.text}" 시간이에요 ${emoji}\n\n${recommendation}`,
+                                timestamp: new Date(),
+                            };
+                            setMessages(prev => [...prev, message]);
+                        }).catch(err => {
+                            console.error('[AutoMessage] Failed to fetch AI resource:', err);
+                            // 실패 시 기본 메시지
+                            const message: Message = {
+                                id: `auto-start-${Date.now()}`,
+                                role: 'assistant',
+                                content: `"${schedule.text}" 시간이에요 ${emoji}\n\n화이팅!`,
+                                timestamp: new Date(),
+                            };
+                            setMessages(prev => [...prev, message]);
+                        });
+                    } else {
+                        // 간단한 메시지 바로 표시
+                        const message: Message = {
+                            id: `auto-start-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 시간이에요 ${emoji}\n\n${msg}`,
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }
+                }
+
+                // 3. 업무/공부 시작 30분 후 체크인 메시지
+                const isWorkOrStudySchedule = schedule.text.includes('업무') ||
+                    schedule.text.includes('공부') ||
+                    schedule.text.includes('작업') ||
+                    schedule.text.includes('집중') ||
+                    schedule.text.includes('미팅') ||
+                    schedule.text.includes('회의') ||
+                    schedule.text.toLowerCase().includes('work') ||
+                    schedule.text.toLowerCase().includes('study') ||
+                    schedule.text.toLowerCase().includes('focus') ||
+                    schedule.text.toLowerCase().includes('meeting');
+
+                if (isWorkOrStudySchedule) {
+                    const checkInMinutes = startMinutes + 30; // 시작 30분 후
+                    const sentCheckInKey = `schedule_checkin_${schedule.id}_${today}`;
+                    const alreadySentCheckIn = !!localStorage.getItem(sentCheckInKey);
+
+                    // 30분 후 ~ 35분 후 사이에 체크인 (일정이 아직 진행 중일 때만)
+                    if (currentMinutes >= checkInMinutes && currentMinutes < checkInMinutes + 5 && !alreadySentCheckIn && currentMinutes < endMinutes) {
+                        console.log('[AutoMessage] ✅ Sending 30분 체크인 for:', schedule.text);
+                        localStorage.setItem(sentCheckInKey, 'true');
+
+                        // AI에게 진행 중 체크인 메시지 요청
+                        fetch('/api/ai-resource-recommend', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                activityName: schedule.text,
+                                context: 'in_progress'
+                            }),
+                        }).then(res => res.json()).then(data => {
+                            console.log('[AutoMessage] Received AI check-in:', data);
+                            const checkInMessage = data.recommendation || `${schedule.text} 30분째 진행 중이시네요! 잘 되어가고 있나요? 필요한 자료가 있으면 말씀해주세요 💪`;
+                            const message: Message = {
+                                id: `auto-checkin-${Date.now()}`,
+                                role: 'assistant',
+                                content: checkInMessage,
+                                timestamp: new Date(),
+                            };
+                            setMessages(prev => [...prev, message]);
+                        }).catch(err => {
+                            console.error('[AutoMessage] Failed to fetch AI check-in:', err);
+                            // Fallback
+                            const message: Message = {
+                                id: `auto-checkin-${Date.now()}`,
+                                role: 'assistant',
+                                content: `${schedule.text} 30분째 진행 중이시네요! 잘 되어가고 있나요? 필요한 자료가 있으면 말씀해주세요 💪`,
+                                timestamp: new Date(),
+                            };
+                            setMessages(prev => [...prev, message]);
+                        });
+                    }
+                }
+
+                // 4. 일정 종료 후 메시지
+                const sentAfterKey = `schedule_after_${schedule.id}_${today}`;
+                if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
+                    localStorage.setItem(sentAfterKey, 'true');
+
+                    // AI에게 일정 종료 후 맞춤형 피드백 요청
                     fetch('/api/ai-resource-recommend', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             activityName: schedule.text,
-                            context: 'schedule_start'
+                            context: 'schedule_completed'
                         }),
                     }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI resource:', data);
-                        const recommendation = data.recommendation || "활기차게 시작해볼까요? 화이팅!";
+                        console.log('[AutoMessage] Received AI completion feedback:', data);
+                        const feedback = data.recommendation || `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?`;
                         const message: Message = {
-                            id: `auto-start-${Date.now()}`,
+                            id: `auto-after-${Date.now()}`,
                             role: 'assistant',
-                            content: `"${schedule.text}" 시간이네요!\n\n${recommendation}`,
+                            content: feedback,
                             timestamp: new Date(),
                         };
                         setMessages(prev => [...prev, message]);
                     }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI resource:', err);
+                        console.error('[AutoMessage] Failed to fetch AI completion feedback:', err);
+                        // Fallback
+                        const message: Message = {
+                            id: `auto-after-${Date.now()}`,
+                            role: 'assistant',
+                            content: `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?`,
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, message]);
                     });
-                }
-
-                // 3. 일정 종료 후 메시지
-                const sentAfterKey = `schedule_after_${schedule.id}_${today}`;
-                if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
-                    localStorage.setItem(sentAfterKey, 'true');
-
-                    const message: Message = {
-                        id: `auto-after-${Date.now()}`,
-                        role: 'assistant',
-                        content: `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?\n• 추가 일정이 필요하신가요?`,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
                 }
             });
 
-            // 4. 빈 시간 감지 (다음 일정까지 30분 이상 남았을 때)
+            // 4. 빈 시간 감지 (다음 일정까지 30분 이상 남았을 때) - 유튜브 영상 추천
             const nextSchedule = todaySchedules
                 .filter(s => !s.completed && !s.skipped)
                 .find(s => timeToMinutes(s.startTime) > currentMinutes);
 
-            if (nextSchedule) {
+            // 현재 진행 중인 일정이 있는지 확인
+            const currentlyInProgress = todaySchedules.some(s => {
+                const start = timeToMinutes(s.startTime);
+                const end = s.endTime ? timeToMinutes(s.endTime) : start + 60;
+                return currentMinutes >= start && currentMinutes < end && !s.completed && !s.skipped;
+            });
+
+            if (nextSchedule && !currentlyInProgress) {
                 const timeUntilNext = timeToMinutes(nextSchedule.startTime) - currentMinutes;
                 const sentGapKey = `schedule_gap_${nextSchedule.id}_${today}`;
 
-                if (timeUntilNext >= 30 && timeUntilNext <= 40 && !localStorage.getItem(sentGapKey)) {
+                if (timeUntilNext >= 20 && timeUntilNext <= 30 && !localStorage.getItem(sentGapKey)) {
                     localStorage.setItem(sentGapKey, 'true');
 
-                    const message: Message = {
-                        id: `auto-gap-${Date.now()}`,
-                        role: 'assistant',
-                        content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
+                    // 유튜브 추천 영상 가져오기
+                    fetch('/api/recommendations/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    }).then(res => res.json()).then(data => {
+                        const videos = data.recommendations || [];
+                        let videoRecommendation = '';
+
+                        if (videos.length > 0) {
+                            const video = videos[0]; // 첫 번째 추천 영상
+                            videoRecommendation = `\n\n📺 **추천 영상**\n[${video.title}](https://youtube.com/watch?v=${video.id})\n${video.channel} · ${video.duration}`;
+                        }
+
+                        const message: Message = {
+                            id: `auto-gap-${Date.now()}`,
+                            role: 'assistant',
+                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 영상 보기${videoRecommendation}\n\n무엇을 하시겠어요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch YouTube recommendations:', err);
+                        // Fallback without video
+                        const message: Message = {
+                            id: `auto-gap-${Date.now()}`,
+                            role: 'assistant',
+                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                            timestamp: now,
+                        };
+                        setMessages(prev => [...prev, message]);
+                    });
                 }
             }
 
-            // 5. 하루 마무리 (마지막 일정 종료 후)
+            // 5. 일정이 전혀 없을 때 (또는 모든 일정 완료 후) 여유 시간 추천
+            const hasNoUpcomingSchedules = !todaySchedules.some(s => {
+                const start = timeToMinutes(s.startTime);
+                return start > currentMinutes && !s.completed && !s.skipped;
+            });
+
+            const allCompleted = todaySchedules.length > 0 && todaySchedules.every(s => s.completed || s.skipped);
+            const sentFreeTimeKey = `free_time_recommendation_${today}_${Math.floor(currentMinutes / 60)}`; // 매 시간마다 한 번씩
+
+            if ((hasNoUpcomingSchedules || allCompleted) && !currentlyInProgress && !localStorage.getItem(sentFreeTimeKey)) {
+                // 오전 9시 ~ 오후 10시 사이에만 추천
+                const currentHour = Math.floor(currentMinutes / 60);
+                if (currentHour >= 9 && currentHour <= 22) {
+                    localStorage.setItem(sentFreeTimeKey, 'true');
+
+                    // 유튜브 추천 영상 가져오기
+                    fetch('/api/recommendations/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    }).then(res => res.json()).then(data => {
+                        const videos = data.recommendations || [];
+
+                        if (videos.length > 0) {
+                            const video = videos[0];
+                            const message: Message = {
+                                id: `auto-freetime-${Date.now()}`,
+                                role: 'assistant',
+                                content: `지금 여유 시간이신 것 같아요! 📺\n\n당신을 위한 추천 영상이에요:\n\n**${video.title}**\n${video.channel} · ${video.duration}\n\n👉 [영상 보기](https://youtube.com/watch?v=${video.id})\n\n다른 추천이 필요하시면 말씀해주세요!`,
+                                timestamp: now,
+                            };
+                            setMessages(prev => [...prev, message]);
+                        }
+                    }).catch(err => {
+                        console.error('[AutoMessage] Failed to fetch free time recommendations:', err);
+                    });
+                }
+            }
+
+            // 6. 하루 마무리 (마지막 일정 종료 후)
             const lastSchedule = todaySchedules
                 .filter(s => s.endTime)
                 .sort((a, b) => timeToMinutes(b.endTime!) - timeToMinutes(a.endTime!))[0];
@@ -555,6 +1122,45 @@ export default function ChatPage() {
                         timestamp: now,
                     };
                     setMessages(prev => [...prev, message]);
+                }
+            }
+
+            // 7. 4시간마다 뉴스 알림 (9시, 13시, 17시, 21시)
+            const currentHour = Math.floor(currentMinutes / 60);
+            const newsAlertHours = [9, 13, 17, 21]; // 4시간 간격
+
+            if (newsAlertHours.includes(currentHour)) {
+                const newsAlertKey = `news_alert_${today}_${currentHour}`;
+
+                if (!localStorage.getItem(newsAlertKey)) {
+                    // 해당 시간대의 처음 5분 동안만 알림 (예: 9:00~9:04)
+                    const minutesInHour = currentMinutes % 60;
+
+                    if (minutesInHour < 5) {
+                        localStorage.setItem(newsAlertKey, 'true');
+
+                        // AI 뉴스 알림 API 호출
+                        fetch('/api/ai-news-alert', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({})
+                        }).then(res => res.json()).then(data => {
+                            if (data.hasNews) {
+                                const message: Message = {
+                                    id: `auto-news-${Date.now()}`,
+                                    role: 'assistant',
+                                    content: `📰 **${data.headline}**\n\n${data.content}\n\n_출처: ${data.source}_\n\n💡 ${data.relevance}`,
+                                    timestamp: now,
+                                };
+                                setMessages(prev => [...prev, message]);
+                                console.log('[AutoMessage] ✅ News alert sent:', data.headline);
+                            } else {
+                                console.log('[AutoMessage] No relevant news found at this time');
+                            }
+                        }).catch(err => {
+                            console.error('[AutoMessage] Failed to fetch news alert:', err);
+                        });
+                    }
                 }
             }
         };
@@ -603,6 +1209,81 @@ export default function ChatPage() {
 
         return () => clearTimeout(timeout);
     }, [session, todayTrends, readTrendIds]);
+
+    // 목표 관련 동기부여 메시지 (하루 2번: 오전 10시, 오후 3시)
+    useEffect(() => {
+        if (!session?.user) return;
+
+        const checkAndSendGoalReminder = async () => {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const today = getChatDate();
+
+            // 오전 10시 또는 오후 3시에만 알림
+            const reminderHours = [10, 15];
+            if (!reminderHours.includes(currentHour)) return;
+
+            const goalReminderKey = `goal_reminder_${today}_${currentHour}`;
+            if (localStorage.getItem(goalReminderKey)) return;
+
+            // 시간대 처음 5분에만 알림
+            const currentMinutes = now.getMinutes();
+            if (currentMinutes >= 5) return;
+
+            try {
+                const res = await fetch('/api/user/long-term-goals');
+                if (!res.ok) return;
+
+                const data = await res.json();
+                const goals = data.goals;
+
+                // 활성 목표 찾기
+                const activeGoals = [
+                    ...((goals.weekly || []).filter((g: any) => !g.completed)),
+                    ...((goals.monthly || []).filter((g: any) => !g.completed)),
+                    ...((goals.yearly || []).filter((g: any) => !g.completed)),
+                ];
+
+                if (activeGoals.length === 0) return;
+
+                localStorage.setItem(goalReminderKey, 'true');
+
+                // 랜덤하게 하나 선택
+                const randomGoal = activeGoals[Math.floor(Math.random() * activeGoals.length)];
+                const goalType = randomGoal.type === 'weekly' ? '주간' : randomGoal.type === 'monthly' ? '월간' : '연간';
+
+                // 진행률에 따른 메시지 생성
+                let motivationalMessage = '';
+                if (randomGoal.progress === 0) {
+                    motivationalMessage = `아직 시작하지 않으셨네요! 오늘 작은 첫 걸음을 내딛어보는 건 어떨까요?`;
+                } else if (randomGoal.progress < 30) {
+                    motivationalMessage = `시작이 반이에요! 조금씩 진행하고 계시네요. 오늘도 한 발짝 나아가볼까요?`;
+                } else if (randomGoal.progress < 70) {
+                    motivationalMessage = `절반 이상 달성하셨어요! 이대로만 하시면 곧 목표를 이루실 수 있어요 💪`;
+                } else {
+                    motivationalMessage = `거의 다 왔어요! 조금만 더 힘내시면 목표 달성이에요! 🎉`;
+                }
+
+                const message: Message = {
+                    id: `auto-goal-${Date.now()}`,
+                    role: 'assistant',
+                    content: `🎯 **${goalType} 목표 리마인더**\n\n"${randomGoal.title}"\n\n📊 현재 진행률: ${randomGoal.progress}%\n\n${motivationalMessage}\n\n목표 달성을 위해 도움이 필요하시면 언제든 말씀해주세요!`,
+                    timestamp: now,
+                };
+                setMessages(prev => [...prev, message]);
+                console.log('[AutoMessage] ✅ Goal reminder sent:', randomGoal.title);
+            } catch (error) {
+                console.error('[AutoMessage] Failed to fetch goals for reminder:', error);
+            }
+        };
+
+        // 1분마다 체크
+        const interval = setInterval(checkAndSendGoalReminder, 60000);
+        // 초기 실행
+        checkAndSendGoalReminder();
+
+        return () => clearInterval(interval);
+    }, [session]);
 
     // Fetch AI recommendations (when idle)
     useEffect(() => {
@@ -750,13 +1431,132 @@ export default function ChatPage() {
                 }),
             });
 
-            if (!res.ok) throw new Error("Failed to get response");
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                console.error('[Chat] API error response:', errorData);
+                throw new Error(errorData.message || errorData.error || `API 오류 (${res.status})`);
+            }
 
             const data = await res.json();
+            console.log('[Chat] API response:', data);
+
+            if (data.error) {
+                throw new Error(data.message || data.error);
+            }
+
+            let finalMessage = data.message;
+
+            // Process AI actions (add_schedule, web_search, etc.)
+            if (data.actions && Array.isArray(data.actions)) {
+                for (const action of data.actions) {
+                    if (action.type === 'add_schedule' && action.data) {
+                        console.log('[Chat] Processing add_schedule action:', action.data);
+                        try {
+                            // Add the schedule
+                            const scheduleRes = await fetch("/api/user/schedule/add", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    text: action.data.text,
+                                    startTime: action.data.startTime,
+                                    endTime: action.data.endTime,
+                                    specificDate: action.data.specificDate,
+                                    daysOfWeek: action.data.daysOfWeek,
+                                    color: action.data.color || 'primary',
+                                    location: action.data.location || '',
+                                    memo: action.data.memo || '',
+                                }),
+                            });
+
+                            if (scheduleRes.ok) {
+                                console.log('[Chat] Schedule added successfully');
+                                // Dispatch event for other components
+                                window.dispatchEvent(new CustomEvent('schedule-added'));
+
+                                // Add follow-up question for productive activities (like a real assistant)
+                                const activityText = action.data.text.toLowerCase();
+                                const productiveActivities = ['업무', '공부', '학습', '회의', '프로젝트', '과제', '발표', '준비'];
+                                const isProductiveActivity = productiveActivities.some(
+                                    activity => activityText.includes(activity)
+                                );
+
+                                if (isProductiveActivity) {
+                                    finalMessage += `\n\n이 일정을 위해 준비할 자료나 필요한 것이 있으시면 말씀해주세요! 📋`;
+                                }
+
+                                // Refresh schedules
+                                const refreshRes = await fetch('/api/user/profile');
+                                if (refreshRes.ok) {
+                                    const refreshData = await refreshRes.json();
+                                    const today = getChatDate();
+                                    const currentDay = new Date().getDay();
+                                    const allGoals = refreshData.profile?.customGoals || [];
+
+                                    // 중복 제거: 특정 날짜 일정 우선
+                                    const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
+                                    const recurringGoals = allGoals.filter((g: any) => {
+                                        if (g.specificDate) return false;
+                                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                        const hasDuplicate = specificDateGoals.some((sg: any) =>
+                                            sg.text === g.text && sg.startTime === g.startTime
+                                        );
+                                        return !hasDuplicate;
+                                    });
+                                    const todayGoals = [...specificDateGoals, ...recurringGoals];
+
+                                    // Load completion status
+                                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                                    const schedulesWithStatus = todayGoals.map((g: any) => ({
+                                        ...g,
+                                        completed: completions[g.id]?.completed || false,
+                                        skipped: completions[g.id]?.skipped || false
+                                    }));
+
+                                    setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
+                                    console.log('[Chat] Schedules refreshed:', schedulesWithStatus.length);
+                                }
+                            } else {
+                                console.error('[Chat] Failed to add schedule:', await scheduleRes.text());
+                            }
+                        } catch (scheduleError) {
+                            console.error('[Chat] Error adding schedule:', scheduleError);
+                        }
+                    } else if (action.type === 'web_search' && action.data) {
+                        // Handle web search using Gemini
+                        console.log('[Chat] Processing web_search action:', action.data);
+                        try {
+                            const searchRes = await fetch("/api/ai-web-search", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    query: action.data.query,
+                                    activity: action.data.activity,
+                                    context: 'schedule_material',
+                                }),
+                            });
+
+                            if (searchRes.ok) {
+                                const searchData = await searchRes.json();
+                                console.log('[Chat] Web search result:', searchData);
+                                if (searchData.result) {
+                                    finalMessage += `\n\n🔍 **검색 결과:**\n${searchData.result}`;
+                                }
+                            } else {
+                                console.error('[Chat] Web search failed:', await searchRes.text());
+                                finalMessage += `\n\n검색 중 문제가 발생했습니다. 다시 시도해주세요.`;
+                            }
+                        } catch (searchError) {
+                            console.error('[Chat] Error in web search:', searchError);
+                            finalMessage += `\n\n검색 중 오류가 발생했습니다.`;
+                        }
+                    }
+                }
+            }
+
             const assistantMessage: Message = {
                 id: `assistant-${Date.now()}`,
                 role: "assistant",
-                content: data.message,
+                content: finalMessage,
                 timestamp: new Date(),
             };
 
@@ -768,14 +1568,15 @@ export default function ChatPage() {
                 // Do NOT show recommendations automatically - user must click button
             }, 1000);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Chat error:", error);
+            const errorMessage = error?.message || "알 수 없는 오류";
             setMessages((prev) => [
                 ...prev,
                 {
                     id: `error-${Date.now()}`,
                     role: "assistant",
-                    content: "죄송합니다. 응답을 가져오는데 실패했습니다.",
+                    content: `죄송합니다. 응답을 가져오는데 실패했습니다. (${errorMessage})\n\n다시 시도해주세요.`,
                     timestamp: new Date(),
                 },
             ]);
@@ -885,7 +1686,21 @@ export default function ChatPage() {
                 if (scheduleRes.ok) {
                     const data = await scheduleRes.json();
                     const today = new Date().toISOString().split('T')[0];
-                    const todayGoals = data.customGoals?.filter((g: any) => g.specificDate === today) || [];
+                    const currentDay = new Date().getDay();
+                    const allGoals = data.customGoals || [];
+
+                    // 중복 제거: 특정 날짜 일정 우선
+                    const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
+                    const recurringGoals = allGoals.filter((g: any) => {
+                        if (g.specificDate) return false;
+                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                        const hasDuplicate = specificDateGoals.some((sg: any) =>
+                            sg.text === g.text && sg.startTime === g.startTime
+                        );
+                        return !hasDuplicate;
+                    });
+                    const todayGoals = [...specificDateGoals, ...recurringGoals];
+
                     setTodaySchedules(todayGoals.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
                 }
 
@@ -1256,6 +2071,67 @@ export default function ChatPage() {
                             <p className="text-xs text-muted-foreground">
                                 일정, 학습, 목표에 대해 무엇이든 물어보세요
                             </p>
+                        </div>
+                    )}
+
+                    {/* Learning Tips Card - 학습 일정이 있을 때 표시 */}
+                    <AnimatePresence>
+                        {learningTips && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="relative bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4"
+                            >
+                                <div className="flex items-start gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xl">📚</span>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-1">오늘의 학습 꿀팁</h3>
+                                        <p className="text-sm text-blue-700 dark:text-blue-300">{learningTips.greeting}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {learningTips.tips.map((tip, index) => (
+                                        <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: index * 0.1 }}
+                                            className="flex items-start gap-3 bg-white/60 dark:bg-white/5 rounded-xl p-3"
+                                        >
+                                            <span className="text-lg flex-shrink-0">{tip.emoji}</span>
+                                            <div>
+                                                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{tip.title}</p>
+                                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{tip.content}</p>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-4 pt-3 border-t border-blue-200/30 dark:border-blue-800/30">
+                                    <p className="text-xs text-center text-blue-600 dark:text-blue-400 font-medium">
+                                        {learningTips.encouragement}
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={() => setLearningTips(null)}
+                                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                                >
+                                    <CloseIcon className="w-4 h-4" />
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Loading Learning Tips */}
+                    {isLoadingLearningTips && (
+                        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4 flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                            <span className="text-sm text-blue-600 dark:text-blue-400">학습 팁을 준비하고 있어요...</span>
                         </div>
                     )}
 
