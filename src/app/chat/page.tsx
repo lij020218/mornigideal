@@ -1,8 +1,5 @@
 "use client";
 
-// Force dynamic rendering to ensure providers are available
-export const dynamic = 'force-dynamic';
-
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronUp, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Menu, X as CloseIcon, MessageSquare, MapPin } from "lucide-react";

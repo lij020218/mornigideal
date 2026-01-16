@@ -359,10 +359,36 @@ export function FocusSleepModeProvider({ children }: { children: React.ReactNode
     );
 }
 
+// Default values for when provider is not available (e.g., during SSR/prerendering)
+const defaultContextValue: FocusSleepModeState = {
+    isFocusMode: false,
+    isFocusPaused: false,
+    focusStartTime: null,
+    focusDuration: 0,
+    focusTarget: 25,
+    focusInterruptCount: 0,
+    focusPausedDuration: 0,
+    isSleepMode: false,
+    sleepStartTime: null,
+    showSleepPrompt: false,
+    setShowSleepPrompt: () => {},
+    showFocusPrompt: false,
+    setShowFocusPrompt: () => {},
+    showFocusWarning: false,
+    setShowFocusWarning: () => {},
+    startFocusMode: () => {},
+    pauseFocusMode: () => {},
+    resumeFocusMode: () => {},
+    endFocusMode: () => {},
+    startSleepMode: () => {},
+    endSleepMode: () => {},
+};
+
 export function useFocusSleepMode() {
     const context = useContext(FocusSleepModeContext);
+    // Return default values if provider is not available (during SSR/prerendering)
     if (context === undefined) {
-        throw new Error('useFocusSleepMode must be used within a FocusSleepModeProvider');
+        return defaultContextValue;
     }
     return context;
 }
