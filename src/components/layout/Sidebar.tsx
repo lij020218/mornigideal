@@ -480,9 +480,12 @@ export function Sidebar() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => {
+                            console.log('[Sidebar] Focus button clicked, isFocusMode:', isFocusMode);
                             if (isFocusMode) {
+                                console.log('[Sidebar] Ending focus mode');
                                 endFocusMode();
                             } else {
+                                console.log('[Sidebar] Starting focus mode');
                                 startFocusMode(25); // 25분 기본 집중 시간
                             }
                             if (isMobile) setIsOpen(false);

@@ -185,19 +185,23 @@ export function FocusSleepModeProvider({ children }: { children: React.ReactNode
 
     // Start Focus Mode
     const startFocusMode = useCallback((targetMinutes: number = 25) => {
+        console.log('[FocusSleepMode] startFocusMode called with targetMinutes:', targetMinutes);
         const now = new Date();
         setIsFocusMode(true);
         setFocusStartTime(now);
         setFocusDuration(0);
         setFocusTarget(targetMinutes);
         setFocusInterruptCount(0);
+        setFocusPausedDuration(0);
 
         localStorage.setItem('focus_mode_active', 'true');
         localStorage.setItem('focus_mode_start', now.toISOString());
         localStorage.setItem('focus_mode_target', targetMinutes.toString());
         localStorage.setItem('focus_interrupt_count', '0');
+        localStorage.removeItem('focus_paused_duration');
 
         logModeEvent('focus_start', { targetMinutes });
+        console.log('[FocusSleepMode] Focus mode started successfully');
     }, []);
 
     // Pause Focus Mode
@@ -388,6 +392,7 @@ export function useFocusSleepMode() {
     const context = useContext(FocusSleepModeContext);
     // Return default values if provider is not available (during SSR/prerendering)
     if (context === undefined) {
+        console.warn('[FocusSleepMode] Provider not found, using default values');
         return defaultContextValue;
     }
     return context;

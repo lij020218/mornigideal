@@ -4,6 +4,7 @@ import "./globals.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { cn } from "@/lib/utils";
+import { AppProviders } from "@/components/providers/AppProviders";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -35,11 +36,6 @@ export const viewport = {
   themeColor: '#000000',
 };
 
-import { Header } from "@/components/layout/Header";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { SessionProvider } from "@/components/providers/SessionProvider";
-import { AppUsageInitializer } from "@/components/AppUsageInitializer";
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -53,12 +49,9 @@ export default function RootLayout({
           "antialiased bg-background text-foreground min-h-screen font-sans"
         )}
       >
-        <SessionProvider>
-          <AppUsageInitializer />
-          <Sidebar />
-          <Header />
+        <AppProviders>
           {children}
-        </SessionProvider>
+        </AppProviders>
       </body>
     </html>
   );

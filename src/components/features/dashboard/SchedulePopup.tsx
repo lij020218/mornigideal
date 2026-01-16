@@ -229,7 +229,20 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             : calculateEndTime(selectedTimeSlot, 0.5); // 30 minutes default for core activities
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
-        if (viewMode === 'weekly' || isRecurring) {
+        if (isRecurring) {
+            // Determine the day of week for recurring schedule
+            // In weekly view: use selectedDayOfWeek
+            // In daily-detail view: use the selected date's day of week
+            const targetDayOfWeek = viewMode === 'weekly'
+                ? selectedDayOfWeek
+                : (selectedDate?.getDay() ?? new Date().getDay());
+
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, undefined, targetDayOfWeek)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
+            }
+
             // Recurring: Add template with daysOfWeek only (rendering will apply to all matching days)
             const templateGoal: CustomGoal = {
                 id: Date.now().toString(),
@@ -238,7 +251,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 startTime: selectedTimeSlot,
                 endTime: endTime,
                 color: selectedActivity.color,
-                daysOfWeek: [selectedDayOfWeek],
+                daysOfWeek: [targetDayOfWeek],
                 notificationEnabled: notificationEnabled,
             };
 
@@ -252,6 +265,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 // Fallback for other cases, though daily-detail should be the primary path here
                 const today = new Date();
                 targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            }
+
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, targetDate)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
             }
 
             const newGoal: CustomGoal = {
@@ -285,6 +304,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
         if (viewMode === 'weekly') {
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, undefined, selectedDayOfWeek)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
+            }
+
             // Add as recurring goal for this day of week
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
@@ -298,6 +323,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             };
             setCustomGoals([...customGoals, newGoal]);
         } else if (viewMode === 'daily-detail' && selectedDate) {
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
+            }
+
             // Add as one-time goal for specific date
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
@@ -322,6 +353,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const endTime = calculateEndTime(selectedTimeSlot, duration);
 
         if (viewMode === 'weekly') {
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, undefined, selectedDayOfWeek)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
+            }
+
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: customActivityText,
@@ -334,6 +371,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             };
             setCustomGoals([...customGoals, newGoal]);
         } else if (viewMode === 'daily-detail' && selectedDate) {
+            // Check for time conflict
+            if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
+                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                return;
+            }
+
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: customActivityText,
@@ -351,41 +394,81 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         resetPickers();
     };
 
-    const handleDeleteActivity = () => {
-        if (!selectedTimeSlot) return;
+    // Check if the selected activity is a recurring schedule
+    const isSelectedActivityRecurring = (): boolean => {
+        if (!selectedActivityId) return false;
+        const activity = customGoals.find(g => g.id === selectedActivityId);
+        return !!(activity?.daysOfWeek && activity.daysOfWeek.length > 0 && !activity.specificDate);
+    };
+
+    const handleDeleteActivity = (deleteAllRecurring: boolean = true) => {
+        // ID 기반 삭제를 우선 시도 (시간 미정 일정도 삭제 가능)
+        if (!selectedActivityId && !selectedTimeSlot) return;
 
         // Find the activity being deleted to notify TodaySuggestions
         let deletedActivityText: string | null = null;
-        const activityToDelete = customGoals.find(g => {
-            if (viewMode === 'weekly') {
-                return g.startTime === selectedTimeSlot && g.daysOfWeek?.length && g.daysOfWeek.includes(selectedDayOfWeek);
-            } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
-                const isSpecificDateMatch = g.specificDate === formatDate(selectedDate);
-                const isRecurringMatch = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
-                return g.startTime === selectedTimeSlot && (isSpecificDateMatch || isRecurringMatch);
-            }
-            return false;
-        });
+        let activityToDelete: CustomGoal | undefined;
+
+        // ID로 먼저 찾기
+        if (selectedActivityId) {
+            activityToDelete = customGoals.find(g => g.id === selectedActivityId);
+        }
+
+        // ID로 못 찾으면 시간 기반으로 찾기 (범위 포함)
+        if (!activityToDelete && selectedTimeSlot) {
+            activityToDelete = customGoals.find(g => {
+                if (viewMode === 'weekly') {
+                    if (!g.daysOfWeek?.includes(selectedDayOfWeek)) return false;
+                    // Check both exact start time and time within range
+                    if (g.startTime === selectedTimeSlot) return true;
+                    if (g.startTime && g.endTime && isTimeInRange(selectedTimeSlot, g.startTime, g.endTime)) return true;
+                    return false;
+                } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
+                    const isSpecificDateMatch = g.specificDate === formatDate(selectedDate);
+                    const isRecurringMatch = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
+                    if (!isSpecificDateMatch && !isRecurringMatch) return false;
+                    // Check both exact start time and time within range
+                    if (g.startTime === selectedTimeSlot) return true;
+                    if (g.startTime && g.endTime && isTimeInRange(selectedTimeSlot, g.startTime, g.endTime)) return true;
+                    return false;
+                }
+                return false;
+            });
+        }
 
         if (activityToDelete) {
             deletedActivityText = activityToDelete.text;
+            console.log('[SchedulePopup] Deleting activity:', activityToDelete.id, activityToDelete.text, 'deleteAllRecurring:', deleteAllRecurring);
+        } else {
+            console.log('[SchedulePopup] No activity found to delete. selectedActivityId:', selectedActivityId, 'selectedTimeSlot:', selectedTimeSlot);
+            return;
         }
 
-        // Delete activity from customGoals (all activities are now stored there)
-        setCustomGoals(customGoals.filter(g => {
-            if (viewMode === 'weekly') {
-                // When deleting from weekly view, remove the entire recurring goal (all days)
-                // This ensures it's deleted from both weekly view AND calendar view
-                return !(g.startTime === selectedTimeSlot && g.daysOfWeek?.length && g.daysOfWeek.includes(selectedDayOfWeek));
-            } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
-                // When deleting from calendar view or daily detail view
-                const isSpecificDateMatch = g.specificDate === formatDate(selectedDate);
-                const isRecurringMatch = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
+        const isRecurring = activityToDelete.daysOfWeek && activityToDelete.daysOfWeek.length > 0 && !activityToDelete.specificDate;
 
-                return !(g.startTime === selectedTimeSlot && (isSpecificDateMatch || isRecurringMatch));
+        if (isRecurring && !deleteAllRecurring && selectedDate) {
+            // "이 날만 삭제" - 해당 날짜에 대한 예외 일정 생성 (빈 일정으로 덮어쓰기 대신 반복에서 제외)
+            // 간단한 방법: 해당 요일을 daysOfWeek에서 제거
+            const dayOfWeek = selectedDate.getDay();
+            const updatedDaysOfWeek = activityToDelete.daysOfWeek?.filter(d => d !== dayOfWeek) || [];
+
+            if (updatedDaysOfWeek.length === 0) {
+                // 모든 요일이 제거되면 일정 자체를 삭제
+                setCustomGoals(prevGoals => prevGoals.filter(g => g.id !== activityToDelete!.id));
+            } else {
+                // 해당 요일만 제거
+                setCustomGoals(prevGoals => prevGoals.map(g => {
+                    if (g.id === activityToDelete!.id) {
+                        return { ...g, daysOfWeek: updatedDaysOfWeek };
+                    }
+                    return g;
+                }));
             }
-            return true;
-        }));
+        } else {
+            // 전체 삭제 (일회성 일정이거나 모든 반복 삭제)
+            const activityIdToDelete = activityToDelete.id;
+            setCustomGoals(prevGoals => prevGoals.filter(g => g.id !== activityIdToDelete));
+        }
 
         // Clean up localStorage and notify TodaySuggestions if this was an AI-suggested schedule
         if (deletedActivityText) {
@@ -461,6 +544,45 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         return timeValue >= startValue && timeValue < endValue;
     };
 
+    // Check if a time slot conflicts with existing schedules
+    const hasTimeConflict = (startTime: string, endTime: string, targetDate?: Date, targetDayOfWeek?: number): boolean => {
+        for (const goal of customGoals) {
+            if (!goal.startTime || !goal.endTime) continue;
+
+            // Check if this goal applies to the target context
+            let isApplicable = false;
+
+            if (viewMode === 'weekly' && targetDayOfWeek !== undefined) {
+                // Weekly view: check if goal exists on this day of week
+                isApplicable = goal.daysOfWeek?.includes(targetDayOfWeek) ?? false;
+            } else if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && targetDate) {
+                // Daily view: check if goal exists on this specific date
+                const isSpecificDate = goal.specificDate === formatDate(targetDate);
+                const isRecurringOnThisDay = (goal.daysOfWeek?.includes(targetDate.getDay()) ?? false) && !goal.specificDate;
+                isApplicable = isSpecificDate || isRecurringOnThisDay;
+            }
+
+            if (!isApplicable) continue;
+
+            // Check for time overlap
+            const [newStart, newEnd] = [startTime, endTime].map(t => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m;
+            });
+            const [existingStart, existingEnd] = [goal.startTime, goal.endTime].map(t => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m;
+            });
+
+            // Two time ranges overlap if one starts before the other ends
+            const hasOverlap = newStart < existingEnd && newEnd > existingStart;
+            if (hasOverlap) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     const formatDate = (date: Date) => {
         return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
     };
@@ -500,12 +622,16 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         resetPickers();
     };
 
-    // Get the actual goal object at a specific time
+    // Get the actual goal object at a specific time (including goals that span this time)
     const getGoalAtTime = (time: string): CustomGoal | null => {
         for (const goal of customGoals) {
             // Weekly view: show goals for selected day of week
             if (viewMode === 'weekly' && goal.daysOfWeek?.includes(selectedDayOfWeek)) {
+                // Check if time is at start OR within the time range
                 if (goal.startTime === time) {
+                    return goal;
+                }
+                if (goal.startTime && goal.endTime && isTimeInRange(time, goal.startTime, goal.endTime)) {
                     return goal;
                 }
             }
@@ -515,8 +641,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 const isSpecificDate = goal.specificDate === formatDate(selectedDate);
                 const isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay()) && !goal.specificDate;
 
-                if ((isSpecificDate || isRecurringOnThisDay) && goal.startTime === time) {
-                    return goal;
+                if (isSpecificDate || isRecurringOnThisDay) {
+                    // Check if time is at start OR within the time range
+                    if (goal.startTime === time) {
+                        return goal;
+                    }
+                    if (goal.startTime && goal.endTime && isTimeInRange(time, goal.startTime, goal.endTime)) {
+                        return goal;
+                    }
                 }
             }
         }
@@ -647,14 +779,38 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         <Edit3 className="w-4 h-4 mr-2" />
                         수정하기
                     </Button>
-                    <Button
-                        variant="outline"
-                        className="w-full justify-start text-red-400 hover:text-red-400 hover:bg-red-500/10 border-red-500/30"
-                        onClick={handleDeleteActivity}
-                    >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        삭제하기
-                    </Button>
+
+                    {/* 반복 일정인 경우 삭제 옵션 제공 */}
+                    {isSelectedActivityRecurring() && viewMode === 'daily-detail' ? (
+                        <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">이 일정은 반복 일정입니다</p>
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start text-orange-500 hover:text-orange-500 hover:bg-orange-500/10 border-orange-500/30"
+                                onClick={() => handleDeleteActivity(false)}
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                이 요일만 삭제
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start text-red-400 hover:text-red-400 hover:bg-red-500/10 border-red-500/30"
+                                onClick={() => handleDeleteActivity(true)}
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                모든 반복 삭제
+                            </Button>
+                        </div>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            className="w-full justify-start text-red-400 hover:text-red-400 hover:bg-red-500/10 border-red-500/30"
+                            onClick={() => handleDeleteActivity(true)}
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            삭제하기
+                        </Button>
+                    )}
                 </motion.div>
             )}
 
@@ -1154,12 +1310,28 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                     {/* Main Content */}
                                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white">
                                         {(() => {
-                                            // Get goals for selected date
-                                            const dateGoals = customGoals.filter(g => {
-                                                const isSpecificDate = g.specificDate === formatDate(selectedDate);
-                                                const isRecurringOnThisDay = g.daysOfWeek?.includes(selectedDate.getDay()) && !g.specificDate;
-                                                return isSpecificDate || isRecurringOnThisDay;
-                                            }).sort((a, b) => {
+                                            // Get goals for selected date - 중복 제거 로직 포함
+                                            const dateStr = formatDate(selectedDate);
+                                            const dayOfWeek = selectedDate.getDay();
+
+                                            // 먼저 특정 날짜 일정 수집 (우선순위 높음)
+                                            const specificDateGoals = customGoals.filter(g => g.specificDate === dateStr);
+
+                                            // 반복 일정 수집 (특정 날짜 일정과 중복되지 않는 것만)
+                                            const recurringGoals = customGoals.filter(g => {
+                                                // specificDate가 있으면 반복 일정이 아님
+                                                if (g.specificDate) return false;
+                                                // 이 요일에 해당하는 반복 일정인지 확인
+                                                if (!g.daysOfWeek?.includes(dayOfWeek)) return false;
+
+                                                // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 중복이므로 제외
+                                                const hasDuplicate = specificDateGoals.some(sg =>
+                                                    sg.text === g.text && sg.startTime === g.startTime
+                                                );
+                                                return !hasDuplicate;
+                                            });
+
+                                            const dateGoals = [...specificDateGoals, ...recurringGoals].sort((a, b) => {
                                                 const [aH, aM] = (a.startTime || "00:00").split(':').map(Number);
                                                 const [bH, bM] = (b.startTime || "00:00").split(':').map(Number);
                                                 return (aH * 60 + aM) - (bH * 60 + bM);
@@ -1328,14 +1500,36 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                                 {/* Actions */}
                                                 <div className="pt-4 border-t border-border space-y-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
-                                                        onClick={handleDeleteActivity}
-                                                    >
-                                                        <Trash2 className="w-4 h-4 mr-2" />
-                                                        일정 삭제
-                                                    </Button>
+                                                    {isSelectedActivityRecurring() ? (
+                                                        <>
+                                                            <p className="text-xs text-muted-foreground">이 일정은 반복 일정입니다</p>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full justify-start text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                                                                onClick={() => handleDeleteActivity(false)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                                이 요일만 삭제
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                                onClick={() => handleDeleteActivity(true)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                                모든 반복 삭제
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                            onClick={() => handleDeleteActivity(true)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" />
+                                                            일정 삭제
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         ) : showTimePicker ? (
@@ -1722,15 +1916,37 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 </div>
 
                                                 {/* Delete Button */}
-                                                <div className="pt-4 border-t border-border">
-                                                    <Button
-                                                        variant="outline"
-                                                        className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
-                                                        onClick={handleDeleteActivity}
-                                                    >
-                                                        <Trash2 className="w-4 h-4 mr-2" />
-                                                        일정 삭제
-                                                    </Button>
+                                                <div className="pt-4 border-t border-border space-y-2">
+                                                    {isSelectedActivityRecurring() ? (
+                                                        <>
+                                                            <p className="text-xs text-muted-foreground">이 일정은 반복 일정입니다</p>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full justify-start text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                                                                onClick={() => handleDeleteActivity(false)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                                이 요일만 삭제
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                                onClick={() => handleDeleteActivity(true)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                                모든 반복 삭제
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                            onClick={() => handleDeleteActivity(true)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" />
+                                                            일정 삭제
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         ) : showTimePicker ? (
