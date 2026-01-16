@@ -108,23 +108,17 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Helper function to get chat date (5am cutoff, KST timezone)
+    // Helper function to get chat date (midnight cutoff, KST timezone)
     const getChatDate = () => {
         const now = new Date();
         // Convert to KST (UTC+9) for consistent date handling
         const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-        const hour = kstDate.getHours();
 
-        // If before 5am KST, use previous day
-        if (hour < 5) {
-            kstDate.setDate(kstDate.getDate() - 1);
-        }
-
-        // Return YYYY-MM-DD format in KST
+        // Return YYYY-MM-DD format in KST (changes at midnight)
         return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
     };
 
-    // Initialize currentDate with 5am cutoff
+    // Initialize currentDate with midnight cutoff
     const [currentDate, setCurrentDate] = useState<string>(getChatDate());
 
     // Load messages from localStorage on mount
@@ -470,12 +464,12 @@ export default function ChatPage() {
         }
     }, [messages, currentDate]);
 
-    // Check if date changed (5am cutoff detection)
+    // Check if date changed (midnight detection - KST)
     useEffect(() => {
         const handleDateChange = () => {
             const today = getChatDate();
             if (today !== currentDate) {
-                console.log('[Chat] Date changed (5am cutoff), starting new chat for:', today);
+                console.log('[Chat] Date changed (midnight), starting new chat for:', today);
                 setCurrentDate(today);
                 setMessages([]);
 
@@ -509,8 +503,8 @@ export default function ChatPage() {
         // 즉시 체크 (페이지 로드 시)
         handleDateChange();
 
-        // 10초마다 체크 (자정/5am 감지용)
-        const checkDate = setInterval(handleDateChange, 10000);
+        // 1분마다 체크 (자정 감지용)
+        const checkDate = setInterval(handleDateChange, 60000);
 
         return () => clearInterval(checkDate);
     }, [currentDate]);
@@ -1614,10 +1608,27 @@ export default function ChatPage() {
 
     // Format date for display
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
+        const date = new Date(dateString + 'T12:00:00'); // Use noon to avoid timezone issues
+        const today = new Date();
+        const todayStr = getChatDate();
+
+        // Calculate days difference
+        const diffTime = today.getTime() - date.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
         const month = date.getMonth() + 1;
         const day = date.getDate();
-        return `${month}월 ${day}일`;
+        const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+
+        if (dateString === todayStr) {
+            return '오늘';
+        } else if (diffDays === 1) {
+            return '어제';
+        } else if (diffDays < 7) {
+            return `${diffDays}일 전 (${dayOfWeek})`;
+        } else {
+            return `${month}월 ${day}일 (${dayOfWeek})`;
+        }
     };
 
     // Handle recommendation card click
@@ -1762,21 +1773,32 @@ export default function ChatPage() {
                                 {/* Today */}
                                 <button
                                     onClick={() => {
-                                        const today = new Date().toISOString().split('T')[0];
+                                        const today = getChatDate();
                                         if (currentDate !== today) {
-                                            loadChatHistory(today);
+                                            // 오늘 날짜의 채팅 로드 (없으면 새로 시작)
+                                            const savedMessages = localStorage.getItem(`chat_messages_${today}`);
+                                            if (savedMessages) {
+                                                loadChatHistory(today);
+                                            } else {
+                                                setCurrentDate(today);
+                                                setMessages([]);
+                                                setShowSidebar(false);
+                                            }
                                         } else {
                                             setShowSidebar(false);
                                         }
                                     }}
                                     className={cn(
                                         "w-full text-left p-3 rounded-lg hover:bg-muted transition-colors",
-                                        currentDate === new Date().toISOString().split('T')[0] && "bg-primary/10 border border-primary/20"
+                                        currentDate === getChatDate() && "bg-primary/10 border border-primary/20"
                                     )}
                                 >
-                                    <div className="font-semibold text-sm mb-1">오늘</div>
+                                    <div className="font-semibold text-sm mb-1 flex items-center gap-2">
+                                        오늘
+                                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                    </div>
                                     <div className="text-xs text-muted-foreground">
-                                        {new Date().toLocaleDateString('ko-KR')}
+                                        {new Date(getChatDate() + 'T12:00:00').toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
                                     </div>
                                 </button>
 
