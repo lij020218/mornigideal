@@ -136,44 +136,81 @@ export default function HomePage() {
         return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
     };
 
-    // Load messages from localStorage on mount
+    // Load messages from server on mount
     useEffect(() => {
-        const today = getChatDate();
-        const savedMessages = localStorage.getItem(`chat_messages_${today}`);
+        if (!session?.user?.email) return;
 
-        if (savedMessages) {
-            try {
-                const parsed = JSON.parse(savedMessages);
-                // Convert timestamp strings back to Date objects
-                const messagesWithDates = parsed.map((m: any) => ({
-                    ...m,
-                    timestamp: new Date(m.timestamp)
-                }));
-                setMessages(messagesWithDates);
-                console.log('[Home] Loaded messages from localStorage:', messagesWithDates.length);
-            } catch (error) {
-                console.error('[Home] Failed to parse saved messages:', error);
-            }
-        }
-
-        // Clean up old messages (older than today)
-        const allKeys = Object.keys(localStorage);
-        allKeys.forEach(key => {
-            if (key.startsWith('chat_messages_') && key !== `chat_messages_${today}`) {
-                localStorage.removeItem(key);
-                console.log('[Home] Removed old messages:', key);
-            }
-        });
-    }, []);
-
-    // Save messages to localStorage whenever they change
-    useEffect(() => {
-        if (messages.length > 0) {
+        const loadMessages = async () => {
             const today = getChatDate();
-            localStorage.setItem(`chat_messages_${today}`, JSON.stringify(messages));
-            console.log('[Home] Saved messages to localStorage:', messages.length);
-        }
-    }, [messages]);
+            try {
+                // 서버에서 채팅 기록 불러오기
+                const res = await fetch(`/api/user/chat-history?date=${today}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.chat?.messages && data.chat.messages.length > 0) {
+                        const messagesWithDates = data.chat.messages.map((m: any) => ({
+                            ...m,
+                            timestamp: new Date(m.timestamp)
+                        }));
+                        setMessages(messagesWithDates);
+                        console.log('[Home] Loaded messages from server:', messagesWithDates.length);
+                        return;
+                    }
+                }
+
+                // 서버에 없으면 localStorage fallback (마이그레이션)
+                const savedMessages = localStorage.getItem(`chat_messages_${today}`);
+                if (savedMessages) {
+                    const parsed = JSON.parse(savedMessages);
+                    const messagesWithDates = parsed.map((m: any) => ({
+                        ...m,
+                        timestamp: new Date(m.timestamp)
+                    }));
+                    setMessages(messagesWithDates);
+                    console.log('[Home] Loaded messages from localStorage (migration):', messagesWithDates.length);
+                }
+            } catch (error) {
+                console.error('[Home] Failed to load messages:', error);
+            }
+        };
+
+        loadMessages();
+    }, [session]);
+
+    // Save messages to server whenever they change
+    useEffect(() => {
+        if (!session?.user?.email || messages.length === 0) return;
+
+        const saveMessages = async () => {
+            const today = getChatDate();
+            try {
+                // 서버에 채팅 기록 저장
+                await fetch('/api/user/chat-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        date: today,
+                        messages: messages.map(m => ({
+                            ...m,
+                            timestamp: m.timestamp.toISOString()
+                        }))
+                    })
+                });
+                console.log('[Home] Saved messages to server:', messages.length);
+
+                // localStorage도 백업으로 저장
+                localStorage.setItem(`chat_messages_${today}`, JSON.stringify(messages));
+            } catch (error) {
+                console.error('[Home] Failed to save messages to server:', error);
+                // 서버 실패시 localStorage에라도 저장
+                localStorage.setItem(`chat_messages_${today}`, JSON.stringify(messages));
+            }
+        };
+
+        // Debounce: 500ms 후에 저장 (빠른 연속 저장 방지)
+        const timeoutId = setTimeout(saveMessages, 500);
+        return () => clearTimeout(timeoutId);
+    }, [messages, session]);
 
     // Rotate placeholder every 4 seconds
     useEffect(() => {
@@ -229,16 +266,16 @@ export default function HomePage() {
                     const todayGoals = [...specificDateGoals, ...recurringGoals];
                     console.log(`[Home] Total ${todayGoals.length} goals for today (specific: ${specificDateGoals.length}, recurring: ${recurringGoals.length})`);
 
-                    // Load completion status from localStorage
-                    const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                    // 서버에 저장된 completed/skipped 상태 사용 (디바이스 간 동기화)
+                    // 일정 자체에 completed/skipped가 저장되어 있음
                     const schedulesWithStatus = todayGoals.map((g: any) => ({
                         ...g,
-                        completed: completions[g.id]?.completed || false,
-                        skipped: completions[g.id]?.skipped || false
+                        completed: g.completed || false,
+                        skipped: g.skipped || false
                     }));
 
                     setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
-                    console.log('[Home] Loaded schedules:', schedulesWithStatus.length, schedulesWithStatus);
+                    console.log('[Home] Loaded schedules from server:', schedulesWithStatus.length);
                 }
             } catch (error) {
                 console.error('[Home] Failed to fetch schedules:', error);
@@ -1306,11 +1343,11 @@ export default function HomePage() {
                             });
                             const todayGoals = [...specificDateGoals, ...recurringGoals];
 
-                            const completions = JSON.parse(localStorage.getItem(`schedule_completions_${today}`) || '{}');
+                            // 서버에 저장된 completed/skipped 상태 사용
                             const schedulesWithStatus = todayGoals.map((g: any) => ({
                                 ...g,
-                                completed: completions[g.id]?.completed || false,
-                                skipped: completions[g.id]?.skipped || false
+                                completed: g.completed || false,
+                                skipped: g.skipped || false
                             }));
 
                             setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) =>
