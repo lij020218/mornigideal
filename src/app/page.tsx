@@ -920,15 +920,29 @@ export default function HomePage() {
 
                 // work_mode가 있으면 그것을 우선 사용, 없으면 일정 이름으로 추론
                 let shouldSendInsight = false;
+                const workKeywords = ['업무', '회의', '학습', '공부', '프로젝트', '작업', '개발', '코딩', '미팅', '수업', '강의', '시작'];
+
                 if (schedule.workMode) {
                     // 'focus' 모드는 인사이트 제공 안 함 (집중 중)
                     shouldSendInsight = schedule.workMode !== 'focus';
                 } else {
-                    // 기존 로직: 업무 관련 일정에만 인사이트 제공
-                    shouldSendInsight = ['업무 시작', '업무', '회의', '학습', '공부', '프로젝트', '작업'].some(keyword =>
+                    // 업무/학습 관련 일정에 인사이트 제공
+                    shouldSendInsight = workKeywords.some(keyword =>
                         schedule.text.includes(keyword)
                     );
                 }
+
+                // 디버그 로그 추가
+                console.log('[AutoMessage] T+30 체크:', {
+                    scheduleText: schedule.text,
+                    startMinutes,
+                    thirtyMinutesAfterStart,
+                    currentMinutes,
+                    shouldSendInsight,
+                    inTimeRange: currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5,
+                    alreadySentInsight,
+                    key: sentInsightKey
+                });
 
                 if (shouldSendInsight && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
                     console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);

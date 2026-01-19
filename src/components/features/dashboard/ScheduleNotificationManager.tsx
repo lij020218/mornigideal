@@ -9,6 +9,29 @@ interface ScheduleNotificationManagerProps {
     goals: CustomGoal[];
 }
 
+// Check if a goal is work/study related
+function isWorkOrStudyGoal(goalText: string): boolean {
+    const lowerText = goalText.toLowerCase();
+    return goalText.includes('업무') ||
+        goalText.includes('공부') ||
+        goalText.includes('작업') ||
+        goalText.includes('집중') ||
+        goalText.includes('미팅') ||
+        goalText.includes('회의') ||
+        goalText.includes('개발') ||
+        goalText.includes('코딩') ||
+        goalText.includes('학습') ||
+        goalText.includes('수업') ||
+        goalText.includes('강의') ||
+        goalText.includes('프로젝트') ||
+        lowerText.includes('work') ||
+        lowerText.includes('study') ||
+        lowerText.includes('focus') ||
+        lowerText.includes('meeting') ||
+        lowerText.includes('coding') ||
+        lowerText.includes('develop');
+}
+
 export function ScheduleNotificationManager({ goals }: ScheduleNotificationManagerProps) {
     const lastCheckTime = useRef<string>("");
     const notifiedGoals = useRef<Set<string>>(new Set());
@@ -98,16 +121,7 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                         goal.text.toLowerCase().includes('done');
 
                     // Check if this is a work/focus schedule (업무, 공부, 작업, 집중 등)
-                    const isWorkSchedule = goal.text.includes('업무') ||
-                        goal.text.includes('공부') ||
-                        goal.text.includes('작업') ||
-                        goal.text.includes('집중') ||
-                        goal.text.includes('미팅') ||
-                        goal.text.includes('회의') ||
-                        goal.text.toLowerCase().includes('work') ||
-                        goal.text.toLowerCase().includes('study') ||
-                        goal.text.toLowerCase().includes('focus') ||
-                        goal.text.toLowerCase().includes('meeting');
+                    const isWorkSchedule = isWorkOrStudyGoal(goal.text);
 
                     // Only show focus prompt for work START schedules, not END schedules
                     if (isWorkSchedule && !isWorkEndSchedule && !isFocusMode && !isSleepMode) {
