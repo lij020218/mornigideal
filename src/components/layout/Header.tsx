@@ -93,7 +93,8 @@ export function Header() {
 
     return (
         <>
-            <header className="fixed top-0 left-20 right-0 z-40 flex justify-between items-center px-4 md:px-6 py-3 glass rounded-none border-t-0 border-x-0">
+            {/* Desktop only - on mobile, notification/profile are in Sidebar top bar */}
+            <header className="hidden md:flex fixed top-0 left-20 right-0 z-40 justify-between items-center px-4 md:px-6 py-3 glass rounded-none border-t-0 border-x-0">
                 <Link href="/dashboard" className="text-lg font-bold text-foreground">
                     Fi.eri
                 </Link>
@@ -193,8 +194,8 @@ export function Header() {
                     </div>
                 </div>
             </header>
-            {/* Spacer for fixed header */}
-            <div className="h-16" />
+            {/* Spacer for fixed header - desktop only */}
+            <div className="hidden md:block h-16" />
         </>
     );
 }

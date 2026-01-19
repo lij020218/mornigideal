@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X, Focus, ChevronDown, ChevronUp, History, BarChart3 } from "lucide-react";
+import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X, Focus, ChevronDown, ChevronUp, History, BarChart3, Bell, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
+import { NotificationDropdown } from "@/components/features/dashboard/NotificationDropdown";
+import { signOut } from "next-auth/react";
 
 interface ChatHistoryItem {
     date: string;
@@ -85,6 +87,11 @@ export function Sidebar() {
     const router = useRouter();
     const { isFocusMode, startFocusMode, endFocusMode } = useFocusSleepMode();
 
+    // Mobile header states for notification and profile
+    const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [userProfile, setUserProfile] = useState<{ customGoals?: any[]; schedule?: any; job?: string } | null>(null);
+
     // Detect mobile/desktop and set initial state
     useEffect(() => {
         const checkMobile = () => {
@@ -143,6 +150,42 @@ export function Sidebar() {
 
     useEffect(() => {
         loadChatHistory();
+    }, []);
+
+    // Load user profile for mobile header
+    useEffect(() => {
+        const loadProfile = async () => {
+            const savedProfile = localStorage.getItem("user_profile");
+            if (savedProfile) {
+                setUserProfile(JSON.parse(savedProfile));
+            }
+
+            try {
+                const response = await fetch("/api/user/profile");
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.profile) {
+                        setUserProfile(data.profile);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch profile:", error);
+            }
+        };
+
+        loadProfile();
+
+        const handleProfileUpdate = () => {
+            const savedProfile = localStorage.getItem("user_profile");
+            if (savedProfile) {
+                setUserProfile(JSON.parse(savedProfile));
+            }
+        };
+
+        window.addEventListener('profile-updated', handleProfileUpdate);
+        return () => {
+            window.removeEventListener('profile-updated', handleProfileUpdate);
+        };
     }, []);
 
     // Listen for date change event to refresh chat history
@@ -232,8 +275,102 @@ export function Sidebar() {
                         <FieriLogo className="w-16 h-16" />
                     </Link>
 
-                    {/* Empty space for balance */}
-                    <div className="w-10"></div>
+                    {/* Notification and Profile */}
+                    <div className="flex items-center gap-2">
+                        {/* Notification Bell */}
+                        <div className="relative">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-full hover:bg-muted transition-colors relative"
+                                onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                            >
+                                <Bell className="w-5 h-5" />
+                                {(userProfile?.schedule || (userProfile?.customGoals && userProfile.customGoals.some(g =>
+                                    g.daysOfWeek?.includes(new Date().getDay()) && g.notificationEnabled
+                                ))) && (
+                                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
+                                )}
+                            </Button>
+                            {userProfile && (
+                                <NotificationDropdown
+                                    goals={userProfile.customGoals || []}
+                                    isOpen={showNotificationDropdown}
+                                    onClose={() => setShowNotificationDropdown(false)}
+                                />
+                            )}
+                        </div>
+
+                        {/* Profile Menu */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                                className="w-8 h-8 rounded-full bg-foreground cursor-pointer hover:ring-2 hover:ring-foreground/30 transition-all shadow-md"
+                            />
+                            <AnimatePresence>
+                                {showProfileMenu && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() => setShowProfileMenu(false)}
+                                        />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                            className="absolute right-0 top-12 w-56 bg-white border border-border rounded-xl shadow-lg z-50 py-2"
+                                        >
+                                            <div className="px-4 py-3 border-b border-border mb-2">
+                                                <p className="text-sm font-medium text-foreground">User</p>
+                                                <p className="text-xs text-muted-foreground truncate">{userProfile?.job || "User"}</p>
+                                            </div>
+
+                                            <button
+                                                onClick={() => {
+                                                    window.dispatchEvent(new CustomEvent('open-daily-briefing'));
+                                                    setShowProfileMenu(false);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground flex items-center gap-3"
+                                            >
+                                                <Sparkles className="w-4 h-4" />
+                                                일일 브리핑
+                                            </button>
+
+                                            <Link
+                                                href="/mypage"
+                                                className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground"
+                                                onClick={() => setShowProfileMenu(false)}
+                                            >
+                                                <User className="w-4 h-4" />
+                                                마이페이지
+                                            </Link>
+                                            <Link
+                                                href="/settings"
+                                                className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors text-foreground"
+                                                onClick={() => setShowProfileMenu(false)}
+                                            >
+                                                <Settings className="w-4 h-4" />
+                                                설정
+                                            </Link>
+
+                                            <div className="border-t border-border my-2" />
+
+                                            <button
+                                                onClick={async () => {
+                                                    localStorage.clear();
+                                                    await signOut({ callbackUrl: '/login' });
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 transition-colors text-red-600 flex items-center gap-3"
+                                            >
+                                                <LogOut className="w-4 h-4" />
+                                                로그아웃
+                                            </button>
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </div>
                 </div>
             )}
 
