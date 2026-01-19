@@ -6,6 +6,7 @@ import { FocusSleepModeProvider } from "@/contexts/FocusSleepModeContext";
 import { ChatNotificationProvider } from "@/contexts/ChatNotificationContext";
 import { AppUsageInitializer } from "@/components/AppUsageInitializer";
 import { FocusModeOverlay, SleepModeIndicator, SleepModePrompt, FocusModePrompt, FocusWarningToast } from "@/components/features/modes";
+import { ScheduleFeedbackPrompt } from "@/components/features/modes/ScheduleFeedbackPrompt";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { GlobalScheduleRecommender } from "@/components/GlobalScheduleRecommender";
@@ -28,6 +29,7 @@ export function AppProviders({ children }: AppProvidersProps) {
                     <SleepModePrompt />
                     <FocusModePrompt />
                     <FocusWarningToast />
+                    <ScheduleFeedbackPrompt />
                     <Sidebar />
                     <Header />
                     {children}

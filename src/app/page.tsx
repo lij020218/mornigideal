@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import { TrendBriefingDetail } from "@/components/features/dashboard/TrendBriefingDetail";
 import { markScheduleCompletion } from "@/lib/scheduleNotifications";
 import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
+import { SlideViewer } from "@/components/features/learning/SlideViewer";
 
 interface Schedule {
     id: string;
@@ -42,7 +43,7 @@ interface Schedule {
 }
 
 interface ChatAction {
-    type: "add_schedule" | "open_briefing";
+    type: "add_schedule" | "open_briefing" | "add_weekly_goal";
     label: string;
     data: Record<string, any>;
 }
@@ -117,6 +118,19 @@ export default function HomePage() {
         dayTitle?: string;
     } | null>(null);
     const [isLoadingLearningTips, setIsLoadingLearningTips] = useState(false);
+
+    // 슬라이드 뷰어 상태
+    const [slideViewerData, setSlideViewerData] = useState<{
+        isOpen: boolean;
+        curriculumId: string;
+        dayNumber: number;
+        dayTitle: string;
+        dayDescription: string;
+        objectives: string[];
+        topic: string;
+        currentLevel: string;
+        targetLevel: string;
+    } | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -948,28 +962,14 @@ export default function HomePage() {
                     console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);
                     localStorage.setItem(sentInsightKey, 'true');
 
-                    // AI 인사이트 요청 (업무 진행 중 도움)
-                    fetch('/api/ai-resource-recommend', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            activityName: schedule.text,
-                            context: 'in_progress',
-                            userProfile: userProfile
-                        }),
-                    }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI insight:', data);
-                        const recommendation = data.recommendation || "잘 하고 계시네요! 화이팅입니다 💪";
-                        const message: Message = {
-                            id: `auto-insight-${Date.now()}`,
-                            role: 'assistant',
-                            content: `"${schedule.text}" 진행 중이시네요!\n\n${recommendation}\n\n필요하면 언제든 물어보세요 😊`,
-                            timestamp: new Date(),
-                        };
-                        setMessages(prev => [...prev, message]);
-                    }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI insight:', err);
-                    });
+                    // 직접적으로 진행 상황을 묻는 메시지
+                    const message: Message = {
+                        id: `auto-insight-${Date.now()}`,
+                        role: 'assistant',
+                        content: `"${schedule.text}" 시작한 지 30분이 지났네요!\n\n잠깐, 어떻게 진행되고 있는지 여쭤봐도 될까요?\n\n• 현재 어떻게 진행되고 있나요?\n• 혹시 막히는 부분이 있으신가요?\n• 필요한 자료나 정보가 있으면 말씀해주세요!\n\n도움이 필요하시면 언제든 말씀해주세요 😊`,
+                        timestamp: new Date(),
+                    };
+                    setMessages(prev => [...prev, message]);
                 }
 
                 // 3. 일정 종료 후 메시지
@@ -1692,12 +1692,14 @@ export default function HomePage() {
                 },
             ]);
 
-            // Auto-execute add_schedule actions immediately (for "바로 등록해" case)
+            // Auto-execute add_schedule and add_weekly_goal actions immediately
             // Other actions (like open_briefing) will still show as buttons
             if (data.actions && data.actions.length > 0) {
-                const scheduleActions = data.actions.filter((a: any) => a.type === 'add_schedule');
-                if (scheduleActions.length > 0) {
-                    await handleMessageActions(scheduleActions);
+                const autoExecuteActions = data.actions.filter((a: any) =>
+                    a.type === 'add_schedule' || a.type === 'add_weekly_goal'
+                );
+                if (autoExecuteActions.length > 0) {
+                    await handleMessageActions(autoExecuteActions);
                 }
             }
 
@@ -1774,6 +1776,31 @@ export default function HomePage() {
                     }
                 } catch (error) {
                     console.error('[Home] Failed to add schedule from AI:', error);
+                }
+            }
+            // Handle add_weekly_goal action
+            if (action.type === 'add_weekly_goal' && action.data) {
+                try {
+                    const goalRes = await fetch("/api/user/long-term-goals", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "add",
+                            goal: {
+                                type: "weekly",
+                                title: action.data.title,
+                                category: action.data.category || "other",
+                            },
+                        }),
+                    });
+
+                    if (goalRes.ok) {
+                        console.log('[Home] Weekly goal added successfully:', action.data.title);
+                        // Trigger goal update event
+                        window.dispatchEvent(new CustomEvent('goals-updated', { detail: { source: 'ai-chat' } }));
+                    }
+                } catch (error) {
+                    console.error('[Home] Failed to add weekly goal from AI:', error);
                 }
             }
         }
@@ -2268,9 +2295,36 @@ export default function HomePage() {
                                                         const currentMinutes = now.getHours() * 60 + now.getMinutes();
                                                         const scheduleStartMinutes = timeToMinutes(schedule.startTime);
                                                         const canComplete = currentMinutes >= scheduleStartMinutes;
+                                                        const scheduleWithLearning = schedule as any;
+                                                        const isLearningSchedule = scheduleWithLearning.isLearning && scheduleWithLearning.learningData;
 
                                                         return (
                                                             <div className="flex gap-2">
+                                                                {/* 학습 일정인 경우 슬라이드 보기 버튼 추가 */}
+                                                                {isLearningSchedule && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => {
+                                                                            const ld = scheduleWithLearning.learningData;
+                                                                            setSlideViewerData({
+                                                                                isOpen: true,
+                                                                                curriculumId: ld.curriculumId,
+                                                                                dayNumber: ld.dayNumber,
+                                                                                dayTitle: ld.dayTitle || '',
+                                                                                dayDescription: ld.description || '',
+                                                                                objectives: ld.objectives || [],
+                                                                                topic: ld.curriculumTopic || '',
+                                                                                currentLevel: 'intermediate',
+                                                                                targetLevel: 'advanced',
+                                                                            });
+                                                                        }}
+                                                                        className="h-9 border border-purple-500 bg-purple-500/20 hover:bg-purple-500/30 text-purple-700 font-medium"
+                                                                    >
+                                                                        <FileText className="w-4 h-4 mr-1.5" />
+                                                                        슬라이드
+                                                                    </Button>
+                                                                )}
                                                                 <Button
                                                                     size="sm"
                                                                     disabled={!canComplete}
@@ -2765,6 +2819,26 @@ export default function HomePage() {
                 userLevel={userProfile?.level || 'intermediate'}
                 userJob={userProfile?.job || ''}
             />
+
+            {/* Slide Viewer for Learning Schedules */}
+            {slideViewerData?.isOpen && (
+                <SlideViewer
+                    curriculumId={slideViewerData.curriculumId}
+                    dayNumber={slideViewerData.dayNumber}
+                    dayTitle={slideViewerData.dayTitle}
+                    dayDescription={slideViewerData.dayDescription}
+                    objectives={slideViewerData.objectives}
+                    topic={slideViewerData.topic}
+                    currentLevel={slideViewerData.currentLevel}
+                    targetLevel={slideViewerData.targetLevel}
+                    onClose={() => setSlideViewerData(null)}
+                    onComplete={() => {
+                        // 슬라이드 완료 시 처리
+                        console.log('[Home] Slide viewing completed');
+                        setSlideViewerData(null);
+                    }}
+                />
+            )}
         </div>
     );
 }

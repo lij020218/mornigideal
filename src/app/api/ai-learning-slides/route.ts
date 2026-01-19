@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import OpenAI from "openai";
 import { supabase } from "@/lib/supabase";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { isMaxPlan } from "@/lib/user-plan";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -44,23 +45,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Check if user has Max plan
+        // Check if user has Max plan (from user_subscriptions table)
+        const hasMaxPlan = await isMaxPlan(session.user.email);
+        if (!hasMaxPlan) {
+            return NextResponse.json(
+                { error: "Slide generation is only available for Max plan users" },
+                { status: 403 }
+            );
+        }
+
+        // Get user ID for later use
         const { data: userData } = await supabase
             .from("users")
-            .select("id, profile")
+            .select("id")
             .eq("email", session.user.email)
             .single();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
-        const userPlan = userData.profile?.plan || "standard";
-        if (userPlan !== "max") {
-            return NextResponse.json(
-                { error: "Slide generation is only available for Max plan users" },
-                { status: 403 }
-            );
         }
 
         const {
@@ -78,76 +80,114 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // Check if slides already exist
+        // Check if slides already exist for this user
         const { data: existingSlides } = await supabase
             .from("learning_slides")
             .select("*")
             .eq("curriculum_id", curriculumId)
             .eq("day_number", dayNumber)
+            .eq("user_id", userData.id)
             .single();
 
         if (existingSlides) {
+            console.log("[AI Learning Slides] Returning existing slides for user:", userData.id);
             return NextResponse.json({ slides: existingSlides.slides_data });
         }
 
         const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
         const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
 
-        const prompt = `당신은 전문 교육 콘텐츠 제작자입니다. 다음 학습 내용에 대한 15쪽 분량의 교육용 슬라이드를 만들어주세요.
+        const prompt = `"${dayTitle}" 주제로 교육용 슬라이드 12-15장을 만들어주세요.
 
 **학습 정보:**
-- 주제: ${topic}
-- 일차: Day ${dayNumber}
-- 제목: ${dayTitle}
+- 대주제: ${topic}
+- Day ${dayNumber}: ${dayTitle}
 - 설명: ${dayDescription}
 - 학습 목표: ${objectives.join(", ")}
-- 학습자 현재 수준: ${currentLevelLabel}
-- 목표 수준: ${targetLevelLabel}
+- 수준: ${currentLevelLabel} → ${targetLevelLabel}
 
-**슬라이드 구성 규칙:**
-1. 총 15장의 슬라이드를 만드세요
-2. 슬라이드 1: 표지 (제목, 일차, 학습 목표 요약)
-3. 슬라이드 2: 오늘의 학습 개요
-4. 슬라이드 3-12: 본문 내용 (개념 설명, 예시, 실습 가이드 등)
-5. 슬라이드 13: 핵심 정리
-6. 슬라이드 14: 실습 과제/퀴즈
-7. 슬라이드 15: 다음 학습 예고 및 마무리
+**🚨 핵심 규칙:**
+- 각 슬라이드는 content 2-3개
+- 각 content는 2-3문장으로 충실하게 설명
+- 핵심 개념 소개 시: "**핵심 개념** 용어: 정의" 형식 사용
+- 예시, 비유, 실제 상황을 적극 활용
 
-**각 슬라이드 작성 규칙:**
-- 제목은 명확하고 간결하게
-- 내용은 3-5개의 핵심 포인트로 구성
-- 학습자 수준(${currentLevelLabel})에 맞는 용어와 설명 사용
-- 실제 예시와 사례를 포함
-- 시각 자료 제안(차트, 다이어그램, 이미지 등)도 포함
+**슬라이드 구성 (총 12-15장):**
 
-**JSON 형식으로 응답** (다른 텍스트 없이 JSON만):
+📌 **슬라이드 1: 복습 & 오늘의 연결**
+- 지난 시간에 배운 핵심 내용 1-2줄 요약
+- 그것이 오늘 배울 내용과 어떻게 연결되는지 설명
+- "지난 시간에는 ~를 배웠습니다. 오늘은 이를 바탕으로 ~를 알아봅니다."
+
+📌 **슬라이드 2: 오늘의 학습 목표**
+- 오늘 배울 핵심 내용 3가지를 명확하게 제시
+- 학습 후 할 수 있게 될 것을 구체적으로 설명
+
+📌 **슬라이드 3-5: 핵심 개념 1 심층 설명** (각 2-3 content)
+📌 **슬라이드 6-8: 핵심 개념 2 심층 설명** (각 2-3 content)
+📌 **슬라이드 9-10: 실전 적용 & 예시** (각 2-3 content)
+📌 **슬라이드 11: 흔한 실수 & 프로 팁** (2-3 content)
+📌 **슬라이드 12: 핵심 정리** (2-3 content)
+
+📌 **슬라이드 13-15: 퀴즈 (3문제)**
+- 각 슬라이드에 퀴즈 1문제씩
+- type: "quiz" 로 표시
+- 4지선다 객관식
+- 정답과 해설 포함
+
+**퀴즈 슬라이드 형식:**
+{
+    "slideNumber": 13,
+    "title": "퀴즈 1",
+    "type": "quiz",
+    "content": ["오늘 배운 내용을 확인해볼까요?"],
+    "quiz": {
+        "question": "이동평균선이 주가 위에 있을 때 의미하는 것은?",
+        "options": ["상승 추세", "하락 추세", "횡보 추세", "변동성 증가"],
+        "answer": 1,
+        "explanation": "이동평균선이 주가 아래에 있으면 상승 추세, 위에 있으면 하락 추세를 의미합니다."
+    }
+}
+
+**JSON 형식으로 응답:**
 {
     "slides": [
         {
             "slideNumber": 1,
             "title": "슬라이드 제목",
-            "content": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
-            "notes": "발표자 노트 또는 추가 설명",
-            "visualSuggestion": "이 슬라이드에 어울리는 시각 자료 제안"
-        },
-        ... (총 15개)
+            "content": ["2-3문장의 설명"],
+            "notes": "강사 노트",
+            "visualSuggestion": "시각 자료 제안"
+        }
     ]
 }`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-2024-11-20",
+            model: "gpt-5.2-2025-12-11",
             messages: [
                 {
                     role: "system",
-                    content: "당신은 교육 콘텐츠 전문가입니다. 학습자가 쉽게 이해할 수 있는 체계적인 슬라이드를 만들어주세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
+                    content: `교육 콘텐츠 전문가입니다. 깊이 있으면서도 읽기 쉬운 슬라이드를 작성합니다.
+
+**핵심 원칙:**
+- 각 content는 2-3문장으로 충실하게 설명
+- 슬라이드당 content 2-3개 (많아야 3개)
+- 핵심 개념: "**핵심 개념** 용어: 정의" 형식
+- 예시, 비유, 실제 상황으로 이해를 도움
+
+**금지사항:**
+- "1. 2. 3." 같은 단순 나열
+- 한 content에 5문장 이상
+- 같은 내용 반복
+
+반드시 유효한 JSON으로만 응답하세요.`,
                 },
                 {
                     role: "user",
                     content: prompt,
                 },
             ],
-            temperature: 0.7,
-            max_tokens: 8000,
+            temperature: 1,
             response_format: { type: "json_object" },
         });
 
@@ -166,7 +206,7 @@ export async function POST(request: Request) {
         if (usage) {
             await logOpenAIUsage(
                 session.user.email,
-                "gpt-4o-2024-11-20",
+                "gpt-5.2-2025-12-11",
                 "ai-learning-slides",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -174,7 +214,7 @@ export async function POST(request: Request) {
         }
 
         // Save slides to database
-        await supabase
+        const { error: insertError } = await supabase
             .from("learning_slides")
             .insert({
                 curriculum_id: curriculumId,
@@ -184,6 +224,17 @@ export async function POST(request: Request) {
                 slides_data: parsed.slides || [],
                 created_at: new Date().toISOString(),
             });
+
+        if (insertError) {
+            console.error("[AI Learning Slides] Insert error:", insertError);
+        } else {
+            console.log("[AI Learning Slides] Saved slides:", {
+                curriculumId,
+                dayNumber,
+                userId: userData.id,
+                slidesCount: parsed.slides?.length || 0
+            });
+        }
 
         return NextResponse.json({
             slides: parsed.slides || [],
@@ -205,6 +256,17 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        // Get user ID
+        const { data: userData } = await supabase
+            .from("users")
+            .select("id")
+            .eq("email", session.user.email)
+            .single();
+
+        if (!userData) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
         const { searchParams } = new URL(request.url);
         const curriculumId = searchParams.get("curriculumId");
         const dayNumber = searchParams.get("dayNumber");
@@ -213,12 +275,21 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Missing curriculumId or dayNumber" }, { status: 400 });
         }
 
-        const { data: slides } = await supabase
+        const { data: slides, error: slidesError } = await supabase
             .from("learning_slides")
             .select("*")
             .eq("curriculum_id", curriculumId)
             .eq("day_number", parseInt(dayNumber))
+            .eq("user_id", userData.id)
             .single();
+
+        console.log("[AI Learning Slides] GET Query:", {
+            curriculumId,
+            dayNumber: parseInt(dayNumber),
+            userId: userData.id,
+            found: !!slides,
+            error: slidesError?.message
+        });
 
         if (!slides) {
             return NextResponse.json({ slides: null });

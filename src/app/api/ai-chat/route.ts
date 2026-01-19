@@ -8,7 +8,7 @@ const openai = new OpenAI({
 });
 
 interface ChatAction {
-    type: "add_schedule" | "delete_schedule" | "open_link" | "open_curriculum" | "web_search";
+    type: "add_schedule" | "delete_schedule" | "open_link" | "open_curriculum" | "web_search" | "add_weekly_goal";
     label: string;
     data: Record<string, any>;
 }
@@ -342,13 +342,26 @@ ${pendingScheduleContext}
   * 예: 사용자가 "회의 자료 좀 찾아줘" → {"type": "web_search", "label": "자료 검색", "data": {"query": "회의 준비 자료", "activity": "회의"}}
   * 예: 사용자가 "운동 루틴 알려줘" → {"type": "web_search", "label": "검색하기", "data": {"query": "홈트레이닝 운동 루틴", "activity": "운동"}}
   * 검색 키워드: "검색", "찾아", "알려줘", "정보", "자료", "추천", "방법", "how to", "뭐가 좋아"
+- **주간 목표 설정**:
+  - 사용자가 "이번 주 목표", "주간 목표", "이번주 목표 설정", "~를 목표로", "~하기 목표" 등을 말하면 주간 목표로 추가
+  - **자동 카테고리 분류**:
+    * "영어", "공부", "학습", "독서", "코딩", "자격증", "강의" → category: "study" (📚 학습)
+    * "회의", "업무", "일", "프로젝트", "보고서", "미팅" → category: "work" (💼 업무)
+    * "운동", "헬스", "러닝", "요가", "산책", "수영" → category: "exercise" (🏃 운동)
+    * "명상", "휴식", "수면", "힐링", "취미" → category: "wellness" (🧘 웰빙)
+    * 그 외 → category: "other" (✨ 기타)
+  - **예시**:
+    * 사용자: "영어 공부하기 주간 목표로 설정해줘"
+    * 응답: {"message": "이번 주 목표로 '영어 공부하기' 추가했어요! 📚 화이팅!", "actions": [{"type": "add_weekly_goal", "label": "주간 목표 추가", "data": {"title": "영어 공부하기", "category": "study"}}]}
+    * 사용자: "이번 주 목표: 매일 30분 운동"
+    * 응답: {"message": "주간 목표 '매일 30분 운동' 설정했어요! 🏃 꾸준히 해봐요!", "actions": [{"type": "add_weekly_goal", "label": "주간 목표 추가", "data": {"title": "매일 30분 운동", "category": "exercise"}}]}
 
 **JSON 응답 형식 (엄수):**
 {
   "message": "사용자에게 보여줄 메시지 (존댓말)",
   "actions": [
     {
-      "type": "add_schedule" | "delete_schedule" | "open_briefing" | "web_search",
+      "type": "add_schedule" | "delete_schedule" | "open_briefing" | "web_search" | "add_weekly_goal",
       "label": "버튼 텍스트",
       "data": {
         // add_schedule: { text, startTime, endTime, specificDate, daysOfWeek, color: 'primary', location, memo }
@@ -362,6 +375,7 @@ ${pendingScheduleContext}
         // - specificDate: 특정 날짜만 삭제할 경우
         // open_briefing: { briefingId, title }
         // web_search: { query, activity }
+        // add_weekly_goal: { title, category } - category: "work"|"study"|"exercise"|"wellness"|"other"
       }
     }
   ]

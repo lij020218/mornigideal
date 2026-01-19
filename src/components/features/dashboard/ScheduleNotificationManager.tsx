@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { CustomGoal } from "./SchedulePopup";
-import { showNotification, requestNotificationPermission, getTodayDateString } from "@/lib/scheduleNotifications";
-import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
+import { showNotification, requestNotificationPermission, getTodayDateString, isScheduleCompleted } from "@/lib/scheduleNotifications";
+import { useFocusSleepMode, ScheduleFeedbackData } from "@/contexts/FocusSleepModeContext";
 
 interface ScheduleNotificationManagerProps {
     goals: CustomGoal[];
@@ -35,7 +35,8 @@ function isWorkOrStudyGoal(goalText: string): boolean {
 export function ScheduleNotificationManager({ goals }: ScheduleNotificationManagerProps) {
     const lastCheckTime = useRef<string>("");
     const notifiedGoals = useRef<Set<string>>(new Set());
-    const { setShowSleepPrompt, isSleepMode, setShowFocusPrompt, isFocusMode } = useFocusSleepMode();
+    const feedbackShownGoals = useRef<Set<string>>(new Set()); // Track which goals have shown feedback
+    const { setShowSleepPrompt, isSleepMode, setShowFocusPrompt, isFocusMode, setShowScheduleFeedback } = useFocusSleepMode();
 
     // Request permission on mount
     useEffect(() => {
@@ -49,6 +50,7 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
 
         if (lastDate !== today) {
             notifiedGoals.current.clear();
+            feedbackShownGoals.current.clear();
             localStorage.setItem("notification_last_date", today);
         }
     }, []);
@@ -138,6 +140,64 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                     notifiedGoals.current.add(notificationKey);
                 }
             });
+
+            // Check for schedules that END at this time (for feedback prompt)
+            const endingGoals = goals.filter(goal => {
+                // Check if today matches
+                const todayStr = getTodayDateString();
+                const isDateMatch = goal.specificDate === todayStr;
+
+                let isDayMatch = goal.daysOfWeek?.includes(currentDay);
+                if (isDayMatch && goal.startDate && todayStr < goal.startDate) {
+                    isDayMatch = false;
+                }
+                if (isDayMatch && goal.endDate && todayStr > goal.endDate) {
+                    isDayMatch = false;
+                }
+
+                if (!isDayMatch && !isDateMatch) return false;
+
+                // Check if it's the exact end time
+                if (goal.endTime === currentTime) return true;
+
+                return false;
+            });
+
+            // Show feedback prompt for ending schedules
+            endingGoals.forEach(goal => {
+                const feedbackKey = `feedback_${goal.id}_${getTodayDateString()}`;
+
+                // Skip if already shown feedback or already completed
+                if (feedbackShownGoals.current.has(feedbackKey)) return;
+                if (isScheduleCompleted(goal.id)) return;
+
+                // Skip sleep schedules
+                const isSleepSchedule = goal.text.includes('취침') ||
+                    goal.text.toLowerCase().includes('sleep') ||
+                    goal.text.includes('잠') ||
+                    goal.text.includes('수면');
+                if (isSleepSchedule) return;
+
+                // Show feedback prompt
+                const feedbackData: ScheduleFeedbackData = {
+                    goalId: goal.id,
+                    goalText: goal.text,
+                    startTime: goal.startTime || '',
+                    endTime: goal.endTime || '',
+                };
+
+                setShowScheduleFeedback(true, feedbackData);
+                feedbackShownGoals.current.add(feedbackKey);
+
+                // Send browser notification
+                if (Notification.permission === 'granted') {
+                    new Notification(`일정 종료: ${goal.text}`, {
+                        body: '일정이 어떻게 진행되었는지 알려주세요!',
+                        icon: '/icon.png',
+                        tag: `feedback_${goal.id}`,
+                    });
+                }
+            });
         };
 
         // Check every 5 seconds to ensure we catch the minute change
@@ -147,7 +207,7 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
         checkSchedules();
 
         return () => clearInterval(intervalId);
-    }, [goals, isSleepMode, isFocusMode, setShowSleepPrompt, setShowFocusPrompt]);
+    }, [goals, isSleepMode, isFocusMode, setShowSleepPrompt, setShowFocusPrompt, setShowScheduleFeedback]);
 
     return null; // This component doesn't render anything visible
 }

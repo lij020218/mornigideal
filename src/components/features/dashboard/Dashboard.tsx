@@ -2477,7 +2477,7 @@ function PeerInsightsCard({ job, level }: { job: string; level: string }) {
 
     useEffect(() => {
         const fetchAchievements = async () => {
-            const cacheKey = `peer_achievements_${job}_${level}`;
+            const cacheKey = `peer_achievements_v2_${job}_${level}`;
             const cached = localStorage.getItem(cacheKey);
 
             if (cached) {

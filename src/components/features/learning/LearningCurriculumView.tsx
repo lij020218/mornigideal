@@ -736,17 +736,40 @@ export function LearningCurriculumView({
                                                         </div>
 
                                                         <div className="flex items-center gap-2">
-                                                            {/* Max 플랜: 슬라이드 버튼 */}
+                                                            {/* Max 플랜: 슬라이드 버튼 + 일정 추가 버튼 */}
                                                             {userPlan === "max" && !isLocked && (
-                                                                <Button
-                                                                    onClick={() => onStartDay(day, true)}
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="gap-1 rounded-lg text-xs h-8"
-                                                                >
-                                                                    <FileText className="w-3 h-3" />
-                                                                    슬라이드
-                                                                </Button>
+                                                                <>
+                                                                    <Button
+                                                                        onClick={() => onStartDay(day, true)}
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="gap-1 rounded-lg text-xs h-8"
+                                                                    >
+                                                                        <FileText className="w-3 h-3" />
+                                                                        슬라이드
+                                                                    </Button>
+                                                                    {!isCompleted && !addedToSchedule.has(day.day) && (
+                                                                        <Button
+                                                                            onClick={() => {
+                                                                                setSelectedDay(day);
+                                                                                setTimePickerOpen(true);
+                                                                            }}
+                                                                            disabled={isAddingSchedule}
+                                                                            size="sm"
+                                                                            className={cn(
+                                                                                "gap-1 rounded-lg text-xs h-8",
+                                                                                isCurrent && "bg-purple-500 hover:bg-purple-600"
+                                                                            )}
+                                                                        >
+                                                                            {isAddingSchedule && selectedDay?.day === day.day ? (
+                                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                                            ) : (
+                                                                                <CalendarPlus className="w-3 h-3" />
+                                                                            )}
+                                                                            일정 추가
+                                                                        </Button>
+                                                                    )}
+                                                                </>
                                                             )}
                                                             {/* 스탠다드/프로 플랜: 일정에 추가 버튼 */}
                                                             {userPlan !== "max" && !isCompleted && !isLocked && !addedToSchedule.has(day.day) && (

@@ -439,9 +439,9 @@ export function LearningCurriculumWizard({
                                         autoFocus
                                     />
 
-                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                                        <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                                        <p className="text-xs text-amber-200">
+                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                                        <Lightbulb className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                                        <p className="text-xs text-amber-700">
                                             구체적으로 작성할수록 더 맞춤화된 커리큘럼을 받을 수 있어요
                                         </p>
                                     </div>

@@ -2,6 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
+// Schedule feedback data for when a schedule ends
+export interface ScheduleFeedbackData {
+    goalId: string;
+    goalText: string;
+    startTime: string;
+    endTime: string;
+}
+
 interface FocusSleepModeState {
     // Focus Mode
     isFocusMode: boolean;
@@ -27,6 +35,11 @@ interface FocusSleepModeState {
     // Focus Warning
     showFocusWarning: boolean;
     setShowFocusWarning: (show: boolean) => void;
+
+    // Schedule Feedback Prompt (when schedule ends)
+    showScheduleFeedback: boolean;
+    scheduleFeedbackData: ScheduleFeedbackData | null;
+    setShowScheduleFeedback: (show: boolean, data?: ScheduleFeedbackData | null) => void;
 
     // Actions
     startFocusMode: (targetMinutes?: number) => void;
@@ -56,6 +69,20 @@ export function FocusSleepModeProvider({ children }: { children: React.ReactNode
     const [sleepStartTime, setSleepStartTime] = useState<Date | null>(null);
     const [showSleepPrompt, setShowSleepPrompt] = useState(false);
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
+
+    // Schedule Feedback State
+    const [showScheduleFeedback, setShowScheduleFeedbackState] = useState(false);
+    const [scheduleFeedbackData, setScheduleFeedbackData] = useState<ScheduleFeedbackData | null>(null);
+
+    const setShowScheduleFeedback = useCallback((show: boolean, data?: ScheduleFeedbackData | null) => {
+        setShowScheduleFeedbackState(show);
+        if (data !== undefined) {
+            setScheduleFeedbackData(data);
+        }
+        if (!show) {
+            setScheduleFeedbackData(null);
+        }
+    }, []);
 
     // Refs for visibility handling
     const wasHiddenRef = useRef(false);
@@ -349,6 +376,11 @@ export function FocusSleepModeProvider({ children }: { children: React.ReactNode
                 showFocusWarning,
                 setShowFocusWarning,
 
+                // Schedule Feedback
+                showScheduleFeedback,
+                scheduleFeedbackData,
+                setShowScheduleFeedback,
+
                 // Actions
                 startFocusMode,
                 pauseFocusMode,
@@ -380,6 +412,9 @@ const defaultContextValue: FocusSleepModeState = {
     setShowFocusPrompt: () => {},
     showFocusWarning: false,
     setShowFocusWarning: () => {},
+    showScheduleFeedback: false,
+    scheduleFeedbackData: null,
+    setShowScheduleFeedback: () => {},
     startFocusMode: () => {},
     pauseFocusMode: () => {},
     resumeFocusMode: () => {},
