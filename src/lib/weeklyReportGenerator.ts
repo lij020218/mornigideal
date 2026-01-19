@@ -69,17 +69,71 @@ export interface WeeklyReportData {
 }
 
 /**
+ * 가장 최근 완료된 주간(월~일)의 시작일과 종료일을 계산
+ * 예: 현재가 1월 20일(월)이면 -> 1월 13일(월) ~ 1월 19일(일) 반환
+ * 예: 현재가 1월 19일(일)이면 -> 1월 6일(월) ~ 1월 12일(일) 반환 (아직 이번 주가 끝나지 않았으므로 지지난 주)
+ */
+function getLastCompletedWeek(date: Date): { start: Date; end: Date; weekNumber: number } {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+
+    const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ...
+
+    // 현재 주의 월요일 계산
+    // dayOfWeek가 0(일요일)이면 6일 전, 1(월요일)이면 0일 전, 2(화요일)이면 1일 전...
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisMonday = new Date(d);
+    thisMonday.setDate(d.getDate() - daysToSubtract);
+
+    // 지난 주의 월요일과 일요일
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+
+    const lastSunday = new Date(lastMonday);
+    lastSunday.setDate(lastMonday.getDate() + 6);
+    lastSunday.setHours(23, 59, 59, 999);
+
+    // 주차 계산 (ISO 8601 기준)
+    const startOfYear = new Date(lastMonday.getFullYear(), 0, 1);
+    const days = Math.floor((lastMonday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+
+    return { start: lastMonday, end: lastSunday, weekNumber };
+}
+
+/**
+ * 특정 주간의 이전 주 계산 (비교용)
+ */
+function getPreviousWeek(weekStart: Date): { start: Date; end: Date } {
+    const prevMonday = new Date(weekStart);
+    prevMonday.setDate(weekStart.getDate() - 7);
+
+    const prevSunday = new Date(prevMonday);
+    prevSunday.setDate(prevMonday.getDate() + 6);
+    prevSunday.setHours(23, 59, 59, 999);
+
+    return { start: prevMonday, end: prevSunday };
+}
+
+/**
  * 주간 리포트 생성
+ * 항상 가장 최근 완료된 주간(월~일)의 데이터를 분석
  */
 export async function generateWeeklyReport(userEmail: string): Promise<WeeklyReportData> {
     console.log(`[Weekly Report] Generating report for ${userEmail}`);
 
+    // 가장 최근 완료된 주간 (월~일) 계산
     const now = new Date();
-    const oneWeekAgo = new Date(now);
-    oneWeekAgo.setDate(now.getDate() - 7);
+    const lastWeek = getLastCompletedWeek(now);
+    const oneWeekAgo = lastWeek.start;
+    const weekEnd = lastWeek.end;
 
-    const twoWeeksAgo = new Date(now);
-    twoWeeksAgo.setDate(now.getDate() - 14);
+    // 비교용 지지난 주
+    const prevWeek = getPreviousWeek(lastWeek.start);
+    const twoWeeksAgo = prevWeek.start;
+    const twoWeeksAgoEnd = prevWeek.end;
+
+    console.log(`[Weekly Report] Period: ${oneWeekAgo.toISOString().split('T')[0]} ~ ${weekEnd.toISOString().split('T')[0]} (Week ${lastWeek.weekNumber})`);
 
     // Get user profile
     const supabase = db.client;
@@ -92,17 +146,17 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const profile = userData?.profile || {};
     const customGoals = profile.customGoals || [];
 
-    // 1. Schedule Analysis (지난 1주일 일정 분석)
+    // 1. Schedule Analysis (지난 주간 월~일 일정 분석)
     const lastWeekSchedules = customGoals.filter((goal: any) => {
         if (!goal.specificDate) return false;
         const goalDate = new Date(goal.specificDate);
-        return goalDate >= oneWeekAgo && goalDate <= now;
+        return goalDate >= oneWeekAgo && goalDate <= weekEnd;
     });
 
     const previousWeekSchedules = customGoals.filter((goal: any) => {
         if (!goal.specificDate) return false;
         const goalDate = new Date(goal.specificDate);
-        return goalDate >= twoWeeksAgo && goalDate < oneWeekAgo;
+        return goalDate >= twoWeeksAgo && goalDate <= twoWeeksAgoEnd;
     });
 
     const totalSchedules = lastWeekSchedules.length;
@@ -153,7 +207,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .eq('user_email', userEmail)
         .eq('event_type', 'trend_briefing_read')
         .gte('start_at', oneWeekAgo.toISOString())
-        .lte('start_at', now.toISOString());
+        .lte('start_at', weekEnd.toISOString());
 
     const totalRead = readingEvents?.length || 0;
     const avgReadPerDay = totalRead / 7;
@@ -183,7 +237,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .eq('email', userEmail)
         .in('event_type', ['focus_start', 'focus_end', 'focus_interrupted'])
         .gte('created_at', oneWeekAgo.toISOString())
-        .lte('created_at', now.toISOString());
+        .lte('created_at', weekEnd.toISOString());
 
     let totalFocusMinutes = 0;
     let focusSessions = 0;
@@ -215,7 +269,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .eq('email', userEmail)
         .in('event_type', ['sleep_start', 'sleep_end'])
         .gte('created_at', oneWeekAgo.toISOString())
-        .lte('created_at', now.toISOString());
+        .lte('created_at', weekEnd.toISOString());
 
     let totalSleepMinutes = 0;
     let sleepSessions = 0;
@@ -259,7 +313,8 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .from('user_events')
         .select('*')
         .eq('user_email', userEmail)
-        .gte('start_at', oneWeekAgo.toISOString());
+        .gte('start_at', oneWeekAgo.toISOString())
+        .lte('start_at', weekEnd.toISOString());
 
     const workoutEvents = allEvents?.filter((e: any) => e.event_type === 'workout_completed') || [];
     const learningEvents = allEvents?.filter((e: any) => e.event_type === 'learning_completed') || [];
@@ -369,7 +424,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .eq('user_email', userEmail)
         .eq('event_type', 'trend_briefing_read')
         .gte('start_at', twoWeeksAgo.toISOString())
-        .lt('start_at', oneWeekAgo.toISOString());
+        .lte('start_at', twoWeeksAgoEnd.toISOString());
 
     const previousRead = previousReadingEvents?.length || 0;
 
@@ -377,13 +432,11 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const completionRateChange = previousCompletionRate > 0 ? completionRate - previousCompletionRate : 0;
     const readingChange = previousRead > 0 ? ((totalRead - previousRead) / previousRead) * 100 : 0;
 
-    const weekNumber = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
-
     return {
         period: {
             start: oneWeekAgo.toISOString().split('T')[0],
-            end: now.toISOString().split('T')[0],
-            weekNumber,
+            end: weekEnd.toISOString().split('T')[0],
+            weekNumber: lastWeek.weekNumber,
         },
         scheduleAnalysis: {
             totalSchedules,

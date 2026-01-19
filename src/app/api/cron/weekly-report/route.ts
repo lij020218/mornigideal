@@ -41,19 +41,47 @@ export async function GET(request: NextRequest) {
         // Generate report for each user
         for (const user of users) {
             try {
-                console.log(`[Cron Weekly Report] Generating report for ${user.email}`);
+                console.log(`[Cron Weekly Report] Processing report for ${user.email}`);
 
                 const reportData = await generateWeeklyReport(user.email);
+                const targetWeekNumber = reportData.period.weekNumber;
+
+                // 해당 주차의 리포트가 이미 존재하는지 확인
+                const { data: existingReport } = await supabase
+                    .from('user_events')
+                    .select('id')
+                    .eq('user_email', user.email)
+                    .eq('event_type', 'weekly_report_generated')
+                    .eq('metadata->>week_number', targetWeekNumber.toString())
+                    .limit(1)
+                    .maybeSingle();
+
+                if (existingReport) {
+                    console.log(`[Cron Weekly Report] Report already exists for ${user.email} week ${targetWeekNumber}, skipping`);
+                    results.push({
+                        email: user.email,
+                        success: true,
+                        week: targetWeekNumber,
+                        skipped: true,
+                    });
+                    successCount++;
+                    continue;
+                }
+
+                console.log(`[Cron Weekly Report] Generating new report for ${user.email} week ${targetWeekNumber}`);
+
                 const narrative = await generateWeeklyReportNarrative(reportData, user.profile || {});
 
                 // Save report to user_events
                 await supabase.from('user_events').insert({
-                    id: `weekly-report-${user.email}-${Date.now()}`,
+                    id: `weekly-report-${user.email}-week${targetWeekNumber}-${Date.now()}`,
                     user_email: user.email,
                     event_type: 'weekly_report_generated',
                     start_at: new Date().toISOString(),
                     metadata: {
-                        week_number: reportData.period.weekNumber,
+                        week_number: targetWeekNumber,
+                        period_start: reportData.period.start,
+                        period_end: reportData.period.end,
                         completion_rate: reportData.scheduleAnalysis.completionRate,
                         total_read: reportData.trendBriefingAnalysis.totalRead,
                         narrative,
@@ -64,7 +92,8 @@ export async function GET(request: NextRequest) {
                 results.push({
                     email: user.email,
                     success: true,
-                    week: reportData.period.weekNumber,
+                    week: targetWeekNumber,
+                    skipped: false,
                 });
 
                 successCount++;
