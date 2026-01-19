@@ -881,7 +881,7 @@ export function FloatingAIAssistant({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        className="fixed sm:relative inset-4 sm:inset-auto sm:w-[380px] sm:h-[500px] bg-white border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden"
+                        className="fixed sm:relative top-16 left-4 right-4 bottom-4 sm:inset-auto sm:top-auto sm:left-auto sm:right-auto sm:bottom-auto sm:w-[380px] sm:h-[500px] bg-white border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden z-50"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-border bg-muted">
