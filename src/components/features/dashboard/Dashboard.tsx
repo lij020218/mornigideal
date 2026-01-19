@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera, Utensils, Home, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileCode, Hospital, Lightbulb } from "lucide-react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera, Utensils, Home, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileCode, Hospital, Lightbulb, MapPin } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -1865,6 +1865,16 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         return goal.daysOfWeek?.includes(currentDayOfWeek);
     }) || [];
 
+    // State for schedule detail popup
+    const [selectedSchedule, setSelectedSchedule] = useState<{
+        time: string;
+        label: string;
+        endTime?: string;
+        location?: string;
+        memo?: string;
+        color: string;
+    } | null>(null);
+
     // Build timeline items
     const baseTimelineItems: Array<{
         time: string;
@@ -1873,6 +1883,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         color: string;
         goalId: string;
         endTime?: string;
+        location?: string;
+        memo?: string;
     }> = [];
 
     // Note: Base schedule items (schedule.wakeUp, etc.) are no longer added here.
@@ -1903,6 +1915,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 color: goal.color || 'purple',
                 goalId: goal.id,
                 endTime: goal.endTime,
+                location: goal.location,
+                memo: goal.memo,
             });
         }
     });
@@ -2088,8 +2102,16 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: index * 0.05 }}
-                                className="snap-center shrink-0"
+                                className="snap-center shrink-0 cursor-pointer"
                                 data-timeline-item
+                                onClick={() => setSelectedSchedule({
+                                    time: item.time,
+                                    label: item.label,
+                                    endTime: item.endTime,
+                                    location: item.location,
+                                    memo: item.memo,
+                                    color: item.color,
+                                })}
                             >
                                 <div className={cn(
                                     "relative w-[140px] p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center gap-3",
@@ -2240,7 +2262,15 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: index * 0.05 }}
-                                className="relative flex items-center gap-4 group"
+                                className="relative flex items-center gap-4 group cursor-pointer"
+                                onClick={() => setSelectedSchedule({
+                                    time: item.time,
+                                    label: item.label,
+                                    endTime: item.endTime,
+                                    location: item.location,
+                                    memo: item.memo,
+                                    color: item.color,
+                                })}
                             >
                                 {/* Enhanced Timeline dot with glow effect */}
                                 <div className={cn(
@@ -2340,6 +2370,89 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                     })}
                 </div>
             )}
+
+            {/* Schedule Detail Popup */}
+            <AnimatePresence>
+                {selectedSchedule && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => setSelectedSchedule(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header with color indicator */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className={cn(
+                                    "w-3 h-3 rounded-full",
+                                    selectedSchedule.color === 'yellow' && "bg-yellow-500",
+                                    selectedSchedule.color === 'blue' && "bg-blue-500",
+                                    selectedSchedule.color === 'purple' && "bg-purple-500",
+                                    selectedSchedule.color === 'green' && "bg-green-500",
+                                    selectedSchedule.color === 'red' && "bg-red-500",
+                                    selectedSchedule.color === 'orange' && "bg-orange-500",
+                                    selectedSchedule.color === 'pink' && "bg-pink-500",
+                                    selectedSchedule.color === 'amber' && "bg-amber-500",
+                                    selectedSchedule.color === 'indigo' && "bg-indigo-500",
+                                    selectedSchedule.color === 'cyan' && "bg-cyan-500",
+                                    (!selectedSchedule.color || selectedSchedule.color === 'primary') && "bg-purple-500"
+                                )} />
+                                <h3 className="text-lg font-bold text-gray-900 flex-1">{selectedSchedule.label}</h3>
+                                <button
+                                    onClick={() => setSelectedSchedule(null)}
+                                    className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                                >
+                                    <XCircle className="w-5 h-5 text-gray-400" />
+                                </button>
+                            </div>
+
+                            {/* Time */}
+                            <div className="flex items-center gap-2 text-gray-600 mb-3">
+                                <Clock className="w-4 h-4" />
+                                <span className="text-sm font-mono">
+                                    {selectedSchedule.time}
+                                    {selectedSchedule.endTime && ` - ${selectedSchedule.endTime}`}
+                                </span>
+                            </div>
+
+                            {/* Location */}
+                            {selectedSchedule.location && (
+                                <div className="flex items-center gap-2 text-gray-600 mb-3">
+                                    <MapPin className="w-4 h-4" />
+                                    <span className="text-sm">{selectedSchedule.location}</span>
+                                </div>
+                            )}
+
+                            {/* Memo/Description */}
+                            {selectedSchedule.memo && (
+                                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                                        <FileText className="w-3 h-3" />
+                                        <span>세부사항</span>
+                                    </div>
+                                    <p className="text-sm text-gray-700">{selectedSchedule.memo}</p>
+                                </div>
+                            )}
+
+                            {/* Close button */}
+                            <Button
+                                className="w-full mt-4"
+                                variant="outline"
+                                onClick={() => setSelectedSchedule(null)}
+                            >
+                                닫기
+                            </Button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

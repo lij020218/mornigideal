@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import {
     ArrowLeft, Bell, Trash2, Save, RefreshCw, Sun, Dumbbell, Target, Mail, Check, X,
     User, AlertTriangle, Eye, EyeOff, MapPin, Crown, Settings, Palette, Shield,
@@ -65,7 +64,6 @@ interface AISettings {
     responseStyle: "concise" | "detailed" | "balanced";
     learningDifficulty: "easy" | "moderate" | "challenging";
     autoSuggestions: boolean;
-    voiceEnabled: boolean;
     proactiveInsights: boolean;
 }
 
@@ -194,7 +192,6 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
         responseStyle: "balanced",
         learningDifficulty: "moderate",
         autoSuggestions: true,
-        voiceEnabled: false,
         proactiveInsights: true,
     });
 
@@ -688,13 +685,14 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                 <div className="space-y-4">
                                     <Label>일정 시작 전 알림 (분)</Label>
                                     <div className="flex items-center gap-4">
-                                        <Slider
-                                            value={[notifications.reminderMinutes]}
-                                            onValueChange={(value) => setNotifications({ ...notifications, reminderMinutes: value[0] })}
+                                        <input
+                                            type="range"
+                                            value={notifications.reminderMinutes}
+                                            onChange={(e) => setNotifications({ ...notifications, reminderMinutes: parseInt(e.target.value) })}
                                             max={60}
                                             min={5}
                                             step={5}
-                                            className="flex-1"
+                                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
                                         />
                                         <span className="w-16 text-center font-medium">{notifications.reminderMinutes}분</span>
                                     </div>
@@ -714,23 +712,29 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div className="space-y-3">
-                                    <Label>테마</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label>테마</Label>
+                                        <Badge variant="secondary" className="text-xs">준비 중</Badge>
+                                    </div>
                                     <div className="flex gap-2">
                                         {[
-                                            { id: "system", label: "시스템", icon: Monitor },
-                                            { id: "light", label: "라이트", icon: Sun },
-                                            { id: "dark", label: "다크", icon: Moon },
+                                            { id: "system", label: "시스템", icon: Monitor, disabled: true },
+                                            { id: "light", label: "라이트", icon: Sun, disabled: false },
+                                            { id: "dark", label: "다크", icon: Moon, disabled: true },
                                         ].map((theme) => {
                                             const Icon = theme.icon;
                                             return (
                                                 <button
                                                     key={theme.id}
-                                                    onClick={() => setAppearance({ ...appearance, theme: theme.id as AppearanceSettings["theme"] })}
+                                                    onClick={() => !theme.disabled && setAppearance({ ...appearance, theme: theme.id as AppearanceSettings["theme"] })}
+                                                    disabled={theme.disabled}
                                                     className={cn(
                                                         "flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-all border",
                                                         appearance.theme === theme.id
                                                             ? "bg-primary/10 border-primary"
-                                                            : "bg-muted/50 border-transparent hover:bg-muted"
+                                                            : theme.disabled
+                                                                ? "bg-muted/30 border-transparent opacity-50 cursor-not-allowed"
+                                                                : "bg-muted/50 border-transparent hover:bg-muted"
                                                     )}
                                                 >
                                                     <Icon className={cn("w-6 h-6", appearance.theme === theme.id ? "text-primary" : "text-muted-foreground")} />
@@ -739,6 +743,7 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                             );
                                         })}
                                     </div>
+                                    <p className="text-xs text-muted-foreground">다크 모드는 현재 개발 중입니다.</p>
                                 </div>
 
                                 <div className="space-y-3">
@@ -904,18 +909,6 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                     <Switch
                                         checked={aiSettings.proactiveInsights}
                                         onCheckedChange={(checked) => setAISettings({ ...aiSettings, proactiveInsights: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="음성 기능"
-                                    description="음성으로 AI와 대화합니다"
-                                    badge="준비중"
-                                >
-                                    <Switch
-                                        checked={aiSettings.voiceEnabled}
-                                        onCheckedChange={(checked) => setAISettings({ ...aiSettings, voiceEnabled: checked })}
-                                        disabled
                                     />
                                 </SettingsRow>
                             </CardContent>

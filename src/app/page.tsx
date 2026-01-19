@@ -35,6 +35,7 @@ interface Schedule {
     skipped?: boolean;
     color?: string;
     location?: string;
+    memo?: string;  // 세부사항/설명
     workMode?: 'focus' | 'research' | 'brainstorm' | 'light' | null;
     linkedGoalId?: string;
     linkedGoalType?: "weekly" | "monthly" | "yearly";
@@ -2227,6 +2228,14 @@ export default function HomePage() {
                                                                 </p>
                                                             )}
                                                         </div>
+                                                        {/* 세부사항 표시 (오른쪽) */}
+                                                        {schedule.memo && !isCompleted && !isSkipped && (
+                                                            <div className="shrink-0 max-w-[120px] text-right">
+                                                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                    {schedule.memo}
+                                                                </p>
+                                                            </div>
+                                                        )}
                                                         {isCompleted && (
                                                             <div className="shrink-0 px-2.5 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-[11px] text-green-400 font-bold">
                                                                 완료

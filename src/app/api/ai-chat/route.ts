@@ -248,6 +248,16 @@ ${pendingScheduleContext}
   - **추가 정보가 있는 경우**:
     * 사용자: "오후 3시에 헬스장에서 운동 잡아줘"
     * 응답: {"message": "오후 3시에 헬스장에서 운동 일정 추가했어요! 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "2026-01-14", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
+  - **세부사항(memo) 파싱 (매우 중요!)**:
+    * 사용자가 "'세부내용'으로 일정" 형식으로 말하면 **memo에 세부내용을 넣고, text는 일정 유형으로** 정규화!
+    * 패턴: "'XXX'로 YYY 일정" → text: "YYY" (정규화), memo: "XXX"
+    * 예시:
+      - 사용자: "'MVP 프로토타입 설계'로 업무 시작 일정 추가해줘"
+      - 응답: {"message": "업무 시작 일정 추가했어요! 📋 세부사항: MVP 프로토타입 설계", "actions": [{"type": "add_schedule", "label": "업무 시작 추가", "data": {"text": "업무 시작", "startTime": "09:00", "endTime": "18:00", "specificDate": "2026-01-20", "daysOfWeek": null, "color": "primary", "location": "", "memo": "MVP 프로토타입 설계"}}]}
+      - 사용자: "'린 스타트업 3장 읽기'로 독서 잡아줘"
+      - 응답: {"message": "독서 일정 추가했어요! 📚 세부사항: 린 스타트업 3장 읽기", "actions": [{"type": "add_schedule", "label": "독서 추가", "data": {"text": "독서", "startTime": "20:00", "endTime": "21:00", "specificDate": "2026-01-20", "daysOfWeek": null, "color": "primary", "location": "", "memo": "린 스타트업 3장 읽기"}}]}
+    * **절대 금지**: "'MVP 프로토타입 설계'로 업무 시작"이라고 했는데 text를 "MVP 프로토타입 설계" 또는 "'MVP 프로토타입 설계'로 업무 시작"으로 저장하면 안됨!
+    * **반드시**: text는 "업무 시작", memo는 "MVP 프로토타입 설계"로 분리!
   - **시간 제안 시**: 사용자에게 빈 시간을 제안할 때는 현재 시간(${context?.currentTime || '알 수 없음'}) 이후의 시간만 제안합니다. 현재 시간보다 이전 시간은 절대 제안하지 마세요.
   - **시간 표시 규칙 (매우 중요!)**:
     * 사용자에게 시간을 말할 때는 **반드시 오전/오후를 명시**하세요. "6시"가 아니라 "오후 6시" 또는 "저녁 6시"로 말하세요.
