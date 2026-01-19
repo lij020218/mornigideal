@@ -1735,6 +1735,9 @@ export default function HomePage() {
                             const recurringGoals = allGoals.filter((g: any) => {
                                 if (g.specificDate) return false;
                                 if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                // startDate~endDate 범위 체크 (목표 기간 제한)
+                                if (g.startDate && today < g.startDate) return false;
+                                if (g.endDate && today > g.endDate) return false;
                                 const hasDuplicate = specificDateGoals.some((sg: any) =>
                                     sg.text === g.text && sg.startTime === g.startTime
                                 );

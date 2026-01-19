@@ -149,6 +149,9 @@ export function getSchedulesForNotification(goals: CustomGoal[]): CustomGoal[] {
             // Otherwise, check if today is in the selected days
             const isDayMatch = goal.daysOfWeek?.includes(currentDay);
             if (!isDayMatch) return false;
+            // startDate~endDate 범위 체크 (목표 기간 제한)
+            if (goal.startDate && todayStr < goal.startDate) return false;
+            if (goal.endDate && todayStr > goal.endDate) return false;
         }
 
         // Check if it's time for this schedule

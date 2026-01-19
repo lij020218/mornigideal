@@ -974,7 +974,12 @@ export function Dashboard({
                                         return g.specificDate === todayStr;
                                     }
                                     // Recurring events (no specificDate) show on matching days of week
-                                    return g.daysOfWeek?.includes(currentDay);
+                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                    // startDate가 있으면 해당 날짜 이후에만 표시
+                                    if (g.startDate && todayStr < g.startDate) return false;
+                                    // endDate가 있으면 해당 날짜까지만 표시 (목표 기간 제한)
+                                    if (g.endDate && todayStr > g.endDate) return false;
+                                    return true;
                                 }).map(g => ({
                                     id: g.id,
                                     text: g.text,
@@ -1086,7 +1091,10 @@ export function Dashboard({
                                     if (g.specificDate) {
                                         return g.specificDate === todayStr;
                                     }
-                                    return g.daysOfWeek?.includes(currentDay);
+                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                    if (g.startDate && todayStr < g.startDate) return false;
+                                    if (g.endDate && todayStr > g.endDate) return false;
+                                    return true;
                                 }) || [];
 
                                 const completions = getTodayCompletions();
@@ -1231,7 +1239,10 @@ export function Dashboard({
                                                     const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
                                                     const todaySchedules = userProfile?.customGoals?.filter(g => {
                                                         if (g.specificDate) return g.specificDate === todayStr;
-                                                        return g.daysOfWeek?.includes(currentDay);
+                                                        if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                                        if (g.startDate && todayStr < g.startDate) return false;
+                                                        if (g.endDate && todayStr > g.endDate) return false;
+                                                        return true;
                                                     }) || [];
                                                     const completions = getTodayCompletions();
                                                     const completedCount = todaySchedules.filter(s => completions[s.id]?.completed === true).length;
@@ -1263,7 +1274,10 @@ export function Dashboard({
                                                         return g.specificDate === todayStr;
                                                     }
                                                     // Recurring events (no specificDate) show on matching days of week
-                                                    return g.daysOfWeek?.includes(currentDay);
+                                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                                    if (g.startDate && todayStr < g.startDate) return false;
+                                                    if (g.endDate && todayStr > g.endDate) return false;
+                                                    return true;
                                                 }).map(g => ({
                                                     id: g.id,
                                                     text: g.text,
@@ -1481,7 +1495,10 @@ export function Dashboard({
                                                     if (g.specificDate) {
                                                         return g.specificDate === todayStr;
                                                     }
-                                                    return g.daysOfWeek?.includes(currentDay);
+                                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                                    if (g.startDate && todayStr < g.startDate) return false;
+                                                    if (g.endDate && todayStr > g.endDate) return false;
+                                                    return true;
                                                 }) || [];
 
                                                 const completions = getTodayCompletions();

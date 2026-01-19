@@ -30,6 +30,8 @@ interface ScheduleRecommendation {
     daysOfWeek: number[];
     color: string;
     reason: string;
+    startDate?: string;  // 목표 기간 시작일 (YYYY-MM-DD)
+    endDate?: string;    // 목표 기간 종료일 (YYYY-MM-DD)
 }
 
 interface GoalSettingModalProps {
@@ -206,6 +208,9 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                 // Link schedule to the goal for progress tracking
                 linkedGoalId: addedGoalInfo?.id,
                 linkedGoalType: addedGoalInfo?.type,
+                // 목표 기간 제한 - 이 기간 내에서만 일정이 표시됨
+                startDate: schedule.startDate,
+                endDate: schedule.endDate,
             }));
 
         onScheduleAdd(schedulesToAdd);
