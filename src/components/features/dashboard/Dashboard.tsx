@@ -1683,7 +1683,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
     // Note: This useEffect needs schedule-dependent variables, but must be here for hooks order
     // It will safely handle the case when schedule is undefined
     useEffect(() => {
-        if (!schedule || !isMobile || !scrollContainerRef.current || !currentTime) return;
+        // Allow scrolling even without schedule - customGoals alone is enough
+        if (!isMobile || !scrollContainerRef.current || !currentTime) return;
+        if (!schedule && (!customGoals || customGoals.length === 0)) return;
 
         // Use a timeout to ensure the DOM is fully rendered before scrolling
         const scrollToActive = () => {
@@ -1706,6 +1708,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 if (g.specificDate) return false;
                 if (!g.daysOfWeek?.includes(currentDayOfWeek)) return false;
                 if (!g.startTime) return false;
+                // Check date range constraints
+                if (g.startDate && todayStr < g.startDate) return false;
+                if (g.endDate && todayStr > g.endDate) return false;
                 // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 제외
                 const hasDuplicate = specificDateGoals.some((sg: any) =>
                     sg.text === g.text && sg.startTime === g.startTime
@@ -1715,17 +1720,14 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
 
             const allGoals = [...specificDateGoals, ...recurringGoals];
 
-            const timelineItemsForScroll: Array<{ time: string; endTime?: string | undefined }> = [
-                ...(schedule?.wakeUp ? [{ time: schedule.wakeUp, endTime: undefined }] : []),
-                ...(schedule?.workStart ? [{ time: schedule.workStart, endTime: undefined }] : []),
-                ...(schedule?.workEnd ? [{ time: schedule.workEnd, endTime: undefined }] : []),
-                ...(schedule?.sleep ? [{ time: schedule.sleep, endTime: undefined }] : []),
-                ...allGoals.map((g: any) => ({ time: g.startTime!, endTime: g.endTime || undefined }))
-            ].sort((a, b) => {
-                const [aH, aM] = a.time.split(':').map(Number);
-                const [bH, bM] = b.time.split(':').map(Number);
-                return (aH * 60 + aM) - (bH * 60 + bM);
-            });
+            // Only use customGoals for timeline - no longer using base schedule items
+            const timelineItemsForScroll: Array<{ time: string; endTime?: string | undefined }> = allGoals
+                .map((g: any) => ({ time: g.startTime!, endTime: g.endTime || undefined }))
+                .sort((a, b) => {
+                    const [aH, aM] = a.time.split(':').map(Number);
+                    const [bH, bM] = b.time.split(':').map(Number);
+                    return (aH * 60 + aM) - (bH * 60 + bM);
+                });
 
             let activeIndex = -1;
             let nextIndex = -1;
@@ -1760,11 +1762,13 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             });
 
             const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
-            console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex);
+            console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex, 'totalItems:', timelineItemsForScroll.length);
 
             if (targetIndex !== -1 && scrollContainerRef.current) {
                 // Get all timeline items
                 const items = scrollContainerRef.current.querySelectorAll('[data-timeline-item]');
+                console.log('[Timeline] Found', items.length, 'items in DOM, targeting index:', targetIndex);
+
                 if (items.length > targetIndex) {
                     const targetItem = items[targetIndex] as HTMLElement;
                     const container = scrollContainerRef.current;
@@ -1773,7 +1777,9 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                     const itemLeft = targetItem.offsetLeft;
                     const itemWidth = targetItem.offsetWidth;
                     const containerWidth = container.clientWidth;
-                    const scrollLeft = Math.max(0, itemLeft + (itemWidth / 2) - (containerWidth / 2));
+                    const scrollLeft = Math.max(0, itemLeft - (containerWidth / 2) + (itemWidth / 2));
+
+                    console.log('[Timeline] Scroll calculation: itemLeft=', itemLeft, 'itemWidth=', itemWidth, 'containerWidth=', containerWidth, 'scrollLeft=', scrollLeft);
 
                     container.scrollTo({
                         left: scrollLeft,
@@ -1784,11 +1790,12 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         };
 
         // Scroll with multiple attempts to ensure DOM is ready
-        scrollToActive();
-        const timer1 = setTimeout(scrollToActive, 100);
-        const timer2 = setTimeout(scrollToActive, 500);
+        const timer0 = setTimeout(scrollToActive, 50);
+        const timer1 = setTimeout(scrollToActive, 200);
+        const timer2 = setTimeout(scrollToActive, 600);
 
         return () => {
+            clearTimeout(timer0);
             clearTimeout(timer1);
             clearTimeout(timer2);
         };
