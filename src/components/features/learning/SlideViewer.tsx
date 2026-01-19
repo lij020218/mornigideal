@@ -231,9 +231,9 @@ export function SlideViewer({
     };
 
     // **bold** 텍스트 렌더링
-    const renderBoldText = (text: string, keyPrefix: string): JSX.Element => {
+    const renderBoldText = (text: string, keyPrefix: string): React.ReactElement => {
         const boldPattern = /\*\*([^*]+)\*\*/g;
-        const parts: (string | JSX.Element)[] = [];
+        const parts: (string | React.ReactElement)[] = [];
         let lastIndex = 0;
         let match;
 
