@@ -2,10 +2,248 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, ChevronLeft, Clock, Crown, Moon, Zap } from "lucide-react";
+import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, ChevronLeft, Clock, Crown, Moon, Zap, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+
+// Donut Chart Component
+function DonutChart({
+    percentage,
+    size = 120,
+    strokeWidth = 12,
+    color = "rgb(59, 130, 246)",
+    label,
+    sublabel
+}: {
+    percentage: number;
+    size?: number;
+    strokeWidth?: number;
+    color?: string;
+    label?: string;
+    sublabel?: string;
+}) {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const offset = circumference - (percentage / 100) * circumference;
+
+    return (
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            <svg width={size} height={size} className="transform -rotate-90">
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth={strokeWidth}
+                />
+                <motion.circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    initial={{ strokeDashoffset: circumference }}
+                    animate={{ strokeDashoffset: offset }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold">{percentage.toFixed(0)}%</span>
+                {label && <span className="text-xs text-muted-foreground">{label}</span>}
+            </div>
+        </div>
+    );
+}
+
+// Bar Chart Component for daily data
+function DailyBarChart({
+    data,
+    maxValue,
+    color = "rgb(59, 130, 246)"
+}: {
+    data: { day: string; value: number; label?: string }[];
+    maxValue: number;
+    color?: string;
+}) {
+    return (
+        <div className="flex items-end justify-between gap-1 h-32">
+            {data.map((item, index) => {
+                const height = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                return (
+                    <div key={index} className="flex flex-col items-center gap-1 flex-1">
+                        <span className="text-[10px] text-muted-foreground">{item.value}</span>
+                        <motion.div
+                            className="w-full rounded-t-sm min-h-[4px]"
+                            style={{ backgroundColor: color }}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${Math.max(height, 4)}%` }}
+                            transition={{ duration: 0.5, delay: index * 0.1 }}
+                        />
+                        <span className="text-[10px] font-medium text-muted-foreground">{item.day}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// Horizontal Progress Bar
+function HorizontalProgressBar({
+    label,
+    value,
+    maxValue,
+    color,
+    icon
+}: {
+    label: string;
+    value: number;
+    maxValue: number;
+    color: string;
+    icon?: string;
+}) {
+    const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
+    return (
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                    {icon && <span>{icon}</span>}
+                    {label}
+                </span>
+                <span className="font-semibold">{value}개</span>
+            </div>
+            <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: color }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${percentage}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// Weekly Trend Mini Chart
+function WeeklyTrendChart({
+    data
+}: {
+    data: { week: string; value: number }[]
+}) {
+    if (data.length < 2) return null;
+
+    const maxValue = Math.max(...data.map(d => d.value), 1);
+    const minValue = Math.min(...data.map(d => d.value));
+    const range = maxValue - minValue || 1;
+
+    const points = data.map((d, i) => {
+        const x = (i / (data.length - 1)) * 100;
+        const y = 100 - ((d.value - minValue) / range) * 80 - 10;
+        return `${x},${y}`;
+    }).join(' ');
+
+    return (
+        <div className="relative h-16 w-full">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+                <defs>
+                    <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgb(59, 130, 246)" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="rgb(59, 130, 246)" stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+                <motion.polyline
+                    fill="none"
+                    stroke="rgb(59, 130, 246)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    points={points}
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.5 }}
+                />
+                <motion.polygon
+                    fill="url(#trendGradient)"
+                    points={`0,100 ${points} 100,100`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5, delay: 1 }}
+                />
+            </svg>
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[10px] text-muted-foreground">
+                {data.map((d, i) => (
+                    <span key={i}>{d.week}</span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// Stat Card Component
+function StatCard({
+    icon,
+    iconBg,
+    iconColor,
+    title,
+    value,
+    unit,
+    change,
+    changeLabel,
+    children
+}: {
+    icon: React.ReactNode;
+    iconBg: string;
+    iconColor: string;
+    title: string;
+    value: string | number;
+    unit?: string;
+    change?: number;
+    changeLabel?: string;
+    children?: React.ReactNode;
+}) {
+    const getChangeIcon = (val: number) => {
+        if (val > 0) return <TrendingUp className="w-3 h-3 text-green-500" />;
+        if (val < 0) return <TrendingDown className="w-3 h-3 text-red-500" />;
+        return <Minus className="w-3 h-3 text-gray-400" />;
+    };
+
+    const getChangeColor = (val: number) => {
+        if (val > 0) return 'text-green-500';
+        if (val < 0) return 'text-red-500';
+        return 'text-gray-400';
+    };
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/5 rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-colors"
+        >
+            <div className="flex items-start justify-between mb-4">
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", iconBg)}>
+                    {icon}
+                </div>
+                {change !== undefined && (
+                    <div className={cn("flex items-center gap-1 text-sm", getChangeColor(change))}>
+                        {getChangeIcon(change)}
+                        <span>{Math.abs(change).toFixed(1)}{changeLabel || '%'}</span>
+                    </div>
+                )}
+            </div>
+            <h3 className="text-sm text-muted-foreground mb-1">{title}</h3>
+            <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold">{value}</span>
+                {unit && <span className="text-muted-foreground text-sm">{unit}</span>}
+            </div>
+            {children}
+        </motion.div>
+    );
+}
 
 // Fieri Logo SVG Component
 const FieriLogo = ({ className = "" }: { className?: string }) => (
@@ -270,135 +508,177 @@ export default function WeeklyReportsPage() {
                             </motion.div>
                         )}
 
-                        {/* Key Metrics */}
+                        {/* Key Metrics with Visual Charts */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                            {/* Schedule Completion */}
+                            {/* Schedule Completion with Donut Chart */}
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 }}
                                 className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/10"
                             >
-                                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                                <div className="flex items-center gap-2 sm:gap-3 mb-4">
                                     <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500/20 rounded-lg sm:rounded-xl flex items-center justify-center">
                                         <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
                                     </div>
-                                    <h3 className="font-semibold text-sm sm:text-base">일정 완료율</h3>
-                                </div>
-                                <div className="flex items-baseline gap-2 mb-1 sm:mb-2">
-                                    <span className="text-3xl sm:text-4xl font-bold">
-                                        {currentReport.scheduleAnalysis.completionRate.toFixed(0)}%
-                                    </span>
-                                    <div className="flex items-center gap-1">
-                                        {getChangeIcon(currentReport.comparisonWithLastWeek.completionRateChange)}
-                                        <span className={`text-xs sm:text-sm font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.completionRateChange)}`}>
-                                            {Math.abs(currentReport.comparisonWithLastWeek.completionRateChange).toFixed(1)}%p
-                                        </span>
+                                    <div>
+                                        <h3 className="font-semibold text-sm sm:text-base">일정 완료율</h3>
+                                        <div className="flex items-center gap-1">
+                                            {getChangeIcon(currentReport.comparisonWithLastWeek.completionRateChange)}
+                                            <span className={`text-xs font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.completionRateChange)}`}>
+                                                {Math.abs(currentReport.comparisonWithLastWeek.completionRateChange).toFixed(1)}%p
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
+                                <div className="flex justify-center mb-3">
+                                    <DonutChart
+                                        percentage={currentReport.scheduleAnalysis.completionRate}
+                                        size={100}
+                                        strokeWidth={10}
+                                        color="rgb(59, 130, 246)"
+                                    />
+                                </div>
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center">
                                     {currentReport.scheduleAnalysis.completedSchedules} / {currentReport.scheduleAnalysis.totalSchedules} 일정 완료
                                 </p>
                             </motion.div>
 
-                            {/* Reading */}
+                            {/* Reading with Fire Streak */}
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.2 }}
                                 className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/10"
                             >
-                                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                                <div className="flex items-center gap-2 sm:gap-3 mb-4">
                                     <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-500/20 rounded-lg sm:rounded-xl flex items-center justify-center">
                                         <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
                                     </div>
-                                    <h3 className="font-semibold text-sm sm:text-base">브리핑 읽기</h3>
-                                </div>
-                                <div className="flex items-baseline gap-2 mb-1 sm:mb-2">
-                                    <span className="text-3xl sm:text-4xl font-bold">
-                                        {currentReport.trendBriefingAnalysis.totalRead}개
-                                    </span>
-                                    <div className="flex items-center gap-1">
-                                        {getChangeIcon(currentReport.comparisonWithLastWeek.readingChange)}
-                                        <span className={`text-xs sm:text-sm font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.readingChange)}`}>
-                                            {Math.abs(currentReport.comparisonWithLastWeek.readingChange).toFixed(0)}%
-                                        </span>
+                                    <div>
+                                        <h3 className="font-semibold text-sm sm:text-base">브리핑 읽기</h3>
+                                        <div className="flex items-center gap-1">
+                                            {getChangeIcon(currentReport.comparisonWithLastWeek.readingChange)}
+                                            <span className={`text-xs font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.readingChange)}`}>
+                                                {Math.abs(currentReport.comparisonWithLastWeek.readingChange).toFixed(0)}%
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                    🔥 {currentReport.trendBriefingAnalysis.readingStreak}일 연속 학습
+                                <div className="flex items-center justify-center gap-6 mb-3">
+                                    <div className="text-center">
+                                        <span className="text-4xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</span>
+                                        <p className="text-xs text-muted-foreground">읽은 브리핑</p>
+                                    </div>
+                                    <div className="h-12 w-px bg-white/10" />
+                                    <div className="text-center">
+                                        <div className="flex items-center gap-1">
+                                            <Flame className="w-5 h-5 text-orange-500" />
+                                            <span className="text-2xl font-bold text-orange-500">
+                                                {currentReport.trendBriefingAnalysis.readingStreak}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">연속 학습</p>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground text-center">
+                                    하루 평균 {currentReport.trendBriefingAnalysis.avgReadPerDay.toFixed(1)}개 읽음
                                 </p>
                             </motion.div>
 
-                            {/* Consistency */}
+                            {/* Consistency with Visual Score */}
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.3 }}
                                 className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/10"
                             >
-                                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                                <div className="flex items-center gap-2 sm:gap-3 mb-4">
                                     <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-500/20 rounded-lg sm:rounded-xl flex items-center justify-center">
                                         <Award className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
                                     </div>
                                     <h3 className="font-semibold text-sm sm:text-base">일관성 점수</h3>
                                 </div>
-                                <div className="mb-1 sm:mb-2">
-                                    <span className="text-3xl sm:text-4xl font-bold">
-                                        {currentReport.growthMetrics.consistencyScore.toFixed(0)}
-                                    </span>
-                                    <span className="text-muted-foreground ml-1 text-sm">/ 100</span>
-                                </div>
-                                <div className="w-full bg-white/10 rounded-full h-1.5 sm:h-2">
-                                    <div
-                                        className="bg-gradient-to-r from-green-400 to-green-600 h-1.5 sm:h-2 rounded-full transition-all"
-                                        style={{ width: `${currentReport.growthMetrics.consistencyScore}%` }}
+                                <div className="flex justify-center mb-3">
+                                    <DonutChart
+                                        percentage={currentReport.growthMetrics.consistencyScore}
+                                        size={100}
+                                        strokeWidth={10}
+                                        color={
+                                            currentReport.growthMetrics.consistencyScore >= 70 ? "rgb(34, 197, 94)" :
+                                            currentReport.growthMetrics.consistencyScore >= 40 ? "rgb(234, 179, 8)" :
+                                            "rgb(239, 68, 68)"
+                                        }
                                     />
                                 </div>
+                                <p className="text-xs sm:text-sm text-muted-foreground text-center">
+                                    {currentReport.growthMetrics.consistencyScore >= 70 ? "훌륭해요! 꾸준히 성장하고 있어요" :
+                                     currentReport.growthMetrics.consistencyScore >= 40 ? "조금 더 꾸준히 해보세요" :
+                                     "규칙적인 습관을 만들어보세요"}
+                                </p>
                             </motion.div>
                         </div>
 
-                        {/* Category Breakdown */}
+                        {/* Category Breakdown - Visual Pie-style */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 }}
                             className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-white/10"
                         >
-                            <h3 className="font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                            <h3 className="font-semibold mb-4 sm:mb-6 flex items-center gap-2 text-sm sm:text-base">
                                 <span className="text-lg sm:text-xl">📊</span> 활동 카테고리 분석
                             </h3>
-                            <div className="space-y-3 sm:space-y-4">
-                                {Object.entries(currentReport.scheduleAnalysis.categoryBreakdown).map(([category, count]) => {
-                                    const total = currentReport.scheduleAnalysis.totalSchedules;
-                                    const percentage = total > 0 ? (count / total) * 100 : 0;
-                                    const colors: Record<string, string> = {
-                                        work: 'bg-blue-500',
-                                        learning: 'bg-purple-500',
-                                        exercise: 'bg-red-500',
-                                        wellness: 'bg-green-500',
-                                        other: 'bg-gray-500',
-                                    };
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                {/* Visual Horizontal Bars */}
+                                <div className="space-y-4">
+                                    {Object.entries(currentReport.scheduleAnalysis.categoryBreakdown).map(([category, count]) => {
+                                        const colorMap: Record<string, string> = {
+                                            work: 'rgb(59, 130, 246)',
+                                            learning: 'rgb(168, 85, 247)',
+                                            exercise: 'rgb(239, 68, 68)',
+                                            wellness: 'rgb(34, 197, 94)',
+                                            other: 'rgb(107, 114, 128)',
+                                        };
+                                        const iconMap: Record<string, string> = {
+                                            work: '💼',
+                                            learning: '📚',
+                                            exercise: '💪',
+                                            wellness: '🧘',
+                                            other: '🎯',
+                                        };
+                                        return (
+                                            <HorizontalProgressBar
+                                                key={category}
+                                                label={categoryLabels[category] || category}
+                                                value={count}
+                                                maxValue={currentReport.scheduleAnalysis.totalSchedules}
+                                                color={colorMap[category] || 'rgb(107, 114, 128)'}
+                                                icon={iconMap[category]}
+                                            />
+                                        );
+                                    })}
+                                </div>
 
-                                    return (
-                                        <div key={category}>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-xs sm:text-sm font-medium">
-                                                    {categoryLabels[category] || category}
-                                                </span>
-                                                <span className="text-xs sm:text-sm text-muted-foreground">
-                                                    {count}개 ({percentage.toFixed(0)}%)
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/10 rounded-full h-1.5 sm:h-2">
-                                                <div
-                                                    className={`${colors[category] || 'bg-gray-500'} h-1.5 sm:h-2 rounded-full transition-all`}
-                                                    style={{ width: `${percentage}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                {/* Summary Stats */}
+                                <div className="flex flex-col justify-center items-center gap-4 p-4 bg-white/5 rounded-xl">
+                                    <div className="text-center">
+                                        <p className="text-3xl font-bold">{currentReport.scheduleAnalysis.totalSchedules}</p>
+                                        <p className="text-sm text-muted-foreground">총 일정</p>
+                                    </div>
+                                    <div className="w-full h-px bg-white/10" />
+                                    <div className="text-center">
+                                        <p className="text-xl font-semibold">{currentReport.scheduleAnalysis.avgSchedulesPerDay.toFixed(1)}</p>
+                                        <p className="text-sm text-muted-foreground">일 평균 일정</p>
+                                    </div>
+                                    <div className="w-full h-px bg-white/10" />
+                                    <div className="text-center">
+                                        <p className="text-lg font-medium text-blue-400">
+                                            {currentReport.scheduleAnalysis.mostProductiveDay || '-'}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">가장 생산적인 날</p>
+                                    </div>
+                                </div>
                             </div>
                         </motion.div>
 
@@ -558,17 +838,46 @@ export default function WeeklyReportsPage() {
                             )}
                         </div>
 
-                        {/* Most Productive Day */}
+                        {/* Weekly Activity Overview */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.7 }}
-                            className="bg-white/5 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/10 text-center"
+                            className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
                         >
-                            <p className="text-muted-foreground mb-1 text-xs sm:text-sm">가장 생산적이었던 날</p>
-                            <p className="text-xl sm:text-2xl font-bold">
-                                {currentReport.scheduleAnalysis.mostProductiveDay || '데이터 없음'}
-                            </p>
+                            <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
+                                <span className="text-lg">📅</span> 이번 주 활동 요약
+                            </h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <Calendar className="w-5 h-5 text-blue-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completedSchedules}</p>
+                                    <p className="text-xs text-muted-foreground">완료한 일정</p>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <BookOpen className="w-5 h-5 text-purple-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
+                                    <p className="text-xs text-muted-foreground">읽은 브리핑</p>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <Award className="w-5 h-5 text-green-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{currentReport.growthMetrics.newHabitsFormed}</p>
+                                    <p className="text-xs text-muted-foreground">새로운 습관</p>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <Clock className="w-5 h-5 text-amber-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{Math.round(currentReport.growthMetrics.timeInvested / 60)}h</p>
+                                    <p className="text-xs text-muted-foreground">투자 시간</p>
+                                </div>
+                            </div>
                         </motion.div>
 
                         {/* Report History Section */}
