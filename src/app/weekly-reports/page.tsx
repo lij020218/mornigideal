@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, ChevronLeft, Clock, Crown, Moon, Zap, Flame } from "lucide-react";
+import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, ChevronLeft, Clock, Crown, Moon, Zap, Flame, Layers } from "lucide-react";
+import { WeeklyReportCards } from "@/components/features/dashboard/WeeklyReportCards";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
@@ -350,6 +351,7 @@ export default function WeeklyReportsPage() {
     const [loading, setLoading] = useState(true);
     const [historyLoading, setHistoryLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showCards, setShowCards] = useState(false);
 
     useEffect(() => {
         fetchReport();
@@ -473,16 +475,27 @@ export default function WeeklyReportsPage() {
                             )}
                         </div>
                         {!selectedHistoryReport && (
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => fetchReport(true)}
-                                disabled={refreshing}
-                                className="bg-white/20 hover:bg-white/30 text-white border-0 flex-shrink-0 px-2 sm:px-3"
-                            >
-                                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                                <span className="hidden sm:inline ml-2">새로고침</span>
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setShowCards(true)}
+                                    className="bg-white/20 hover:bg-white/30 text-white border-0 flex-shrink-0 px-2 sm:px-3"
+                                >
+                                    <Layers className="w-4 h-4" />
+                                    <span className="hidden sm:inline ml-2">카드뉴스</span>
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => fetchReport(true)}
+                                    disabled={refreshing}
+                                    className="bg-white/20 hover:bg-white/30 text-white border-0 flex-shrink-0 px-2 sm:px-3"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                    <span className="hidden sm:inline ml-2">새로고침</span>
+                                </Button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -984,6 +997,13 @@ export default function WeeklyReportsPage() {
                     </div>
                 )}
             </div>
+
+            {/* Card News Modal */}
+            <WeeklyReportCards
+                isOpen={showCards}
+                onClose={() => setShowCards(false)}
+                reportData={currentReport}
+            />
         </div>
     );
 }
