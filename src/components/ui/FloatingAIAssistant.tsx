@@ -881,7 +881,7 @@ export function FloatingAIAssistant({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        className="w-[380px] h-[500px] bg-white border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden"
+                        className="fixed sm:relative inset-4 sm:inset-auto sm:w-[380px] sm:h-[500px] bg-white border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-border bg-muted">
@@ -896,9 +896,9 @@ export function FloatingAIAssistant({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setIsOpen(false)}
-                                className="h-8 w-8 rounded-lg hover:bg-black/5"
+                                className="h-9 w-9 sm:h-8 sm:w-8 rounded-lg hover:bg-black/5"
                             >
-                                <Minimize2 className="w-4 h-4" />
+                                <X className="w-5 h-5 sm:w-4 sm:h-4" />
                             </Button>
                         </div>
 
@@ -988,7 +988,7 @@ export function FloatingAIAssistant({
                 )}
             </AnimatePresence>
 
-            {/* Floating Button */}
+            {/* Floating Button - Hidden on mobile when chat is open */}
             <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -998,7 +998,7 @@ export function FloatingAIAssistant({
                 className={cn(
                     "w-[72px] h-[72px] rounded-full shadow-lg flex items-center justify-center transition-all",
                     isOpen
-                        ? "bg-muted border border-border"
+                        ? "hidden sm:flex bg-muted border border-border"
                         : "bg-orange-400"
                 )}
             >

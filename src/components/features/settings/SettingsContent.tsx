@@ -42,14 +42,16 @@ interface UserSettings {
     location: string;
 }
 
+// Note: 현재 알림 설정은 각 일정별로 notificationEnabled 플래그로 관리됩니다.
+// 아래 인터페이스는 향후 기능 확장을 위해 유지합니다.
 interface NotificationSettings {
-    dailyReminder: boolean;
-    scheduleAlerts: boolean;
-    trendAlerts: boolean;
-    weeklyReport: boolean;
-    emailNotifications: boolean;
-    soundEnabled: boolean;
-    reminderMinutes: number;
+    dailyReminder: boolean;      // 준비 중
+    scheduleAlerts: boolean;     // 일정별 설정으로 대체됨
+    trendAlerts: boolean;        // 준비 중
+    weeklyReport: boolean;       // 자동 생성 (설정 불필요)
+    emailNotifications: boolean; // 준비 중
+    soundEnabled: boolean;       // 준비 중
+    reminderMinutes: number;     // 준비 중
 }
 
 interface AppearanceSettings {
@@ -606,97 +608,94 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <Bell className="w-5 h-5 text-primary" />
-                                    알림 설정
+                                    일정 알림
                                 </CardTitle>
-                                <CardDescription>알림 수신 방법을 설정하세요</CardDescription>
+                                <CardDescription>일정 시작 시 브라우저 알림을 받습니다</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-1">
+                            <CardContent className="space-y-4">
+                                <div className="p-4 bg-muted/50 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
+                                        일정 알림은 각 일정별로 설정됩니다. 일정을 추가하거나 수정할 때 알림 여부를 선택할 수 있습니다.
+                                    </p>
+                                </div>
                                 <SettingsRow
-                                    label="일일 학습 리마인더"
-                                    description="매일 아침 학습 알림을 받습니다"
+                                    label="브라우저 알림 권한"
+                                    description="일정 알림을 받으려면 브라우저 알림을 허용해야 합니다"
                                 >
-                                    <Switch
-                                        checked={notifications.dailyReminder}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, dailyReminder: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="일정 알림"
-                                    description="예정된 일정 시작 전 알림을 받습니다"
-                                >
-                                    <Switch
-                                        checked={notifications.scheduleAlerts}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, scheduleAlerts: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="트렌드 알림"
-                                    description="관심 분야의 새로운 트렌드 소식"
-                                >
-                                    <Switch
-                                        checked={notifications.trendAlerts}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, trendAlerts: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="주간 리포트"
-                                    description="매주 성장 리포트를 받습니다"
-                                >
-                                    <Switch
-                                        checked={notifications.weeklyReport}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, weeklyReport: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="이메일 알림"
-                                    description="중요한 알림을 이메일로도 받습니다"
-                                    badge="Pro"
-                                >
-                                    <Switch
-                                        checked={notifications.emailNotifications}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, emailNotifications: checked })}
-                                    />
-                                </SettingsRow>
-
-                                <SettingsRow
-                                    label="알림 소리"
-                                    description="알림 시 소리를 재생합니다"
-                                >
-                                    <Switch
-                                        checked={notifications.soundEnabled}
-                                        onCheckedChange={(checked) => setNotifications({ ...notifications, soundEnabled: checked })}
-                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={async () => {
+                                            if ("Notification" in window) {
+                                                const permission = await Notification.requestPermission();
+                                                if (permission === "granted") {
+                                                    new Notification("알림 테스트", {
+                                                        body: "알림이 정상적으로 작동합니다!",
+                                                    });
+                                                } else {
+                                                    alert("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        알림 권한 요청
+                                    </Button>
                                 </SettingsRow>
                             </CardContent>
                         </Card>
 
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Clock className="w-5 h-5 text-primary" />
-                                    알림 타이밍
+                                <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                                    <Clock className="w-5 h-5" />
+                                    추가 알림 기능
                                 </CardTitle>
+                                <CardDescription>아래 기능들은 준비 중입니다</CardDescription>
                             </CardHeader>
-                            <CardContent>
-                                <div className="space-y-4">
-                                    <Label>일정 시작 전 알림 (분)</Label>
-                                    <div className="flex items-center gap-4">
-                                        <input
-                                            type="range"
-                                            value={notifications.reminderMinutes}
-                                            onChange={(e) => setNotifications({ ...notifications, reminderMinutes: parseInt(e.target.value) })}
-                                            max={60}
-                                            min={5}
-                                            step={5}
-                                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
-                                        />
-                                        <span className="w-16 text-center font-medium">{notifications.reminderMinutes}분</span>
-                                    </div>
-                                </div>
+                            <CardContent className="space-y-1">
+                                <SettingsRow
+                                    label="일일 학습 리마인더"
+                                    description="매일 아침 학습 알림을 받습니다"
+                                    badge="준비 중"
+                                >
+                                    <Switch
+                                        checked={false}
+                                        disabled
+                                    />
+                                </SettingsRow>
+
+                                <SettingsRow
+                                    label="트렌드 알림"
+                                    description="관심 분야의 새로운 트렌드 소식"
+                                    badge="준비 중"
+                                >
+                                    <Switch
+                                        checked={false}
+                                        disabled
+                                    />
+                                </SettingsRow>
+
+                                <SettingsRow
+                                    label="이메일 알림"
+                                    description="중요한 알림을 이메일로도 받습니다"
+                                    badge="준비 중"
+                                >
+                                    <Switch
+                                        checked={false}
+                                        disabled
+                                    />
+                                </SettingsRow>
+
+                                <SettingsRow
+                                    label="알림 소리"
+                                    description="알림 시 소리를 재생합니다"
+                                    badge="준비 중"
+                                >
+                                    <Switch
+                                        checked={false}
+                                        disabled
+                                    />
+                                </SettingsRow>
                             </CardContent>
                         </Card>
                     </TabsContent>
