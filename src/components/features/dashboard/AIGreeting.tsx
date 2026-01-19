@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Target, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WeatherDisplay } from "./WeatherDisplay";
@@ -28,6 +29,19 @@ interface AIGreetingProps {
 }
 
 export function AIGreeting({ username, currentTime, userProfile, habitInsights }: AIGreetingProps) {
+    const [isCompact, setIsCompact] = useState(false);
+
+    // Track scroll position for compact mode
+    useEffect(() => {
+        const handleScroll = () => {
+            // Compact mode when scrolled more than 50px
+            setIsCompact(window.scrollY > 50);
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const hour = currentTime.getHours();
     const minute = currentTime.getMinutes();
     const currentMinutes = hour * 60 + minute; // Total minutes since midnight
@@ -284,16 +298,46 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="space-y-6"
+            className={cn(
+                "space-y-2 md:space-y-6 transition-all duration-300",
+                // Mobile: sticky header when scrolled
+                isCompact && "md:space-y-6"
+            )}
         >
-            {/* Minimal Header */}
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            {/* Sticky compact header on mobile when scrolled */}
+            <AnimatePresence>
+                {isCompact && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-lg border-b border-gray-100 px-4 py-2 md:hidden"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-900">
+                                    Good {greeting.period}, {username}
+                                </span>
+                            </div>
+                            <span className="font-mono text-sm text-gray-400">
+                                {currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Main Header - Smaller on mobile */}
+            <div className={cn(
+                "flex flex-col md:flex-row md:items-end md:justify-between gap-2 md:gap-4 transition-all duration-300",
+                isCompact && "opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto"
+            )}>
                 <div>
-                    <h1 className="text-3xl md:text-5xl font-bold tracking-tighter text-gray-900 pb-2">
+                    <h1 className="text-2xl md:text-5xl font-bold tracking-tighter text-gray-900 pb-1 md:pb-2">
                         Good {greeting.period}, <br className="md:hidden" />
                         <span className="font-light text-gray-500">{username}</span>
                     </h1>
-                    <p className="text-base md:text-lg text-muted-foreground mt-2 font-medium tracking-tight">
+                    <p className="text-sm md:text-lg text-muted-foreground mt-1 md:mt-2 font-medium tracking-tight line-clamp-2 md:line-clamp-none">
                         {greeting.korean}
                     </p>
                 </div>
@@ -313,8 +357,11 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                 </div>
             </div>
 
-            {/* AI Insights Strip - Horizontal Scroll on Mobile */}
-            <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide pt-2">
+            {/* AI Insights Strip - Horizontal Scroll on Mobile, hide when compact */}
+            <div className={cn(
+                "flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-4 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide pt-1 md:pt-2 transition-all duration-300",
+                isCompact && "opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto"
+            )}>
                 {/* Weather Chip - Mobile Only */}
                 <div className="md:hidden">
                     <WeatherDisplay compact />
@@ -326,12 +373,12 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
+                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
                     >
-                        <div className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-blue-600" />
+                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-blue-100/80 flex items-center justify-center">
+                            <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-blue-600" />
                         </div>
-                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
+                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
                             {habitInsights.insight}
                         </span>
                     </motion.div>
@@ -343,12 +390,12 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.3 }}
-                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
+                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
                     >
-                        <div className="w-8 h-8 rounded-full bg-purple-100/80 flex items-center justify-center">
-                            <Zap className="w-4 h-4 text-purple-600" />
+                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-purple-100/80 flex items-center justify-center">
+                            <Zap className="w-3 h-3 md:w-4 md:h-4 text-purple-600" />
                         </div>
-                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
+                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
                             {habitInsights.suggestion}
                         </span>
                     </motion.div>
@@ -360,17 +407,20 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.4 }}
-                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
+                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:bg-white/60 transition-all duration-300"
                     >
-                        <div className="w-8 h-8 rounded-full bg-amber-100/80 flex items-center justify-center">
-                            <Target className="w-4 h-4 text-amber-600" />
+                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-amber-100/80 flex items-center justify-center">
+                            <Target className="w-3 h-3 md:w-4 md:h-4 text-amber-600" />
                         </div>
-                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap max-w-[200px] truncate tracking-tight">
+                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap max-w-[150px] md:max-w-[200px] truncate tracking-tight">
                             {userProfile.goal}
                         </span>
                     </motion.div>
                 )}
             </div>
+
+            {/* Spacer for sticky header on mobile */}
+            {isCompact && <div className="h-10 md:hidden" />}
         </motion.div>
     );
 }

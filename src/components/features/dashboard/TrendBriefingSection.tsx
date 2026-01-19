@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles, Check } from "lucide-react";
+import { TrendingUp, RefreshCw, ExternalLink, Loader2, Newspaper, Target, Plus, X, Sparkles, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [isInterestOpen, setIsInterestOpen] = useState(false);
     const [viewedTitles, setViewedTitles] = useState<string[]>([]); // 이미 본 뉴스 제목 추적
     const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set()); // 읽은 브리핑 ID 추적
+    const [isContextExpanded, setIsContextExpanded] = useState(false); // 모바일에서 컨텍스트 카드 펼침 상태
 
     const lastFetchParamsRef = useRef<string>("");
 
@@ -308,8 +309,141 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                 </div>
             </div>
 
-            {/* Context Cards Section */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Context Cards Section - Compact on Mobile */}
+            {/* Mobile: Collapsible horizontal strip */}
+            <div className="md:hidden">
+                <button
+                    onClick={() => setIsContextExpanded(!isContextExpanded)}
+                    className="w-full bg-card border border-border rounded-xl p-3 flex items-center justify-between"
+                >
+                    <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="p-1 rounded-md bg-primary/10">
+                                <Target className="w-3.5 h-3.5 text-primary" />
+                            </div>
+                            <span className="text-sm font-medium truncate max-w-[120px]">{goal || "목표 설정"}</span>
+                        </div>
+                        <div className="h-4 w-px bg-border flex-shrink-0" />
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                            <Sparkles className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                            {interests.length > 0 ? (
+                                <div className="flex gap-1 overflow-hidden">
+                                    {interests.slice(0, 2).map((interest, idx) => (
+                                        <span key={idx} className="text-xs bg-muted px-2 py-0.5 rounded-full truncate max-w-[60px]">
+                                            {interest}
+                                        </span>
+                                    ))}
+                                    {interests.length > 2 && (
+                                        <span className="text-xs text-muted-foreground">+{interests.length - 2}</span>
+                                    )}
+                                </div>
+                            ) : (
+                                <span className="text-xs text-muted-foreground">관심사 추가</span>
+                            )}
+                        </div>
+                    </div>
+                    {isContextExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    ) : (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    )}
+                </button>
+
+                {/* Expanded content on mobile */}
+                <AnimatePresence>
+                    {isContextExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="pt-3 space-y-3">
+                                {/* Goal Card - Mobile */}
+                                <div className="bg-card border border-border rounded-xl p-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                                        <div className="p-1 rounded-md bg-primary/10 text-primary">
+                                            <Target className="w-3.5 h-3.5" />
+                                        </div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wider">My Goal</span>
+                                    </div>
+                                    <p className="font-semibold text-sm text-foreground">
+                                        {goal || "목표를 설정해주세요"}
+                                    </p>
+                                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                        <span className="w-1 h-1 rounded-full bg-primary/50"></span>
+                                        {job}
+                                    </div>
+                                </div>
+
+                                {/* Interests Card - Mobile */}
+                                <div className="bg-card border border-border rounded-xl p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <div className="p-1 rounded-md bg-purple-100 text-purple-600">
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                            </div>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">Interest Areas</span>
+                                        </div>
+                                        <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] bg-muted hover:bg-muted/80 border border-border rounded-full">
+                                                    <Plus className="w-3 h-3 mr-1" />
+                                                    추가
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-60 p-3 bg-white border-border shadow-lg">
+                                                <form onSubmit={handleAddInterestSubmit} className="space-y-2">
+                                                    <h4 className="font-medium text-sm text-foreground">관심 분야 추가</h4>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            value={newInterest}
+                                                            onChange={(e) => setNewInterest(e.target.value)}
+                                                            placeholder="예: 화장품, AI, 마케팅"
+                                                            className="h-8 text-sm bg-muted border-border"
+                                                            autoFocus
+                                                        />
+                                                        <Button type="submit" size="sm" className="h-8 px-3">
+                                                            <Plus className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </form>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {interests.length > 0 ? (
+                                            interests.map((interest, idx) => (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-muted border border-border text-foreground"
+                                                >
+                                                    {interest}
+                                                    {onRemoveInterest && (
+                                                        <button
+                                                            onClick={() => onRemoveInterest(interest)}
+                                                            className="text-muted-foreground hover:text-red-500 transition-all"
+                                                        >
+                                                            <X className="w-2.5 h-2.5" />
+                                                        </button>
+                                                    )}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground italic">관심 분야를 추가해보세요</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* Desktop: Original grid layout */}
+            <div className="hidden md:grid md:grid-cols-3 gap-4">
                 {/* Goal Card */}
                 <div className="md:col-span-1 bg-card border border-border rounded-xl p-5 flex flex-col justify-between group transition-all duration-300 hover:shadow-md">
                     <div className="flex items-center gap-2 text-muted-foreground mb-3">
