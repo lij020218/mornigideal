@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X, Focus, ChevronDown, ChevronUp, History } from "lucide-react";
+import { MessageSquare, CalendarDays, Lightbulb, TrendingUp, User, Settings, Menu, X, Focus, ChevronDown, ChevronUp, History, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
@@ -54,6 +54,12 @@ const NAV_ITEMS = [
         icon: TrendingUp,
         description: "학습 & 분석",
     },
+    {
+        label: "주간 리포트",
+        href: "/weekly-reports",
+        icon: BarChart3,
+        description: "주간 성장 분석",
+    },
 ];
 
 const BOTTOM_ITEMS = [
@@ -98,57 +104,91 @@ export function Sidebar() {
     }, []);
 
     // Load chat history
-    useEffect(() => {
-        const loadChatHistory = async () => {
-            try {
-                // DB에서 채팅 목록 가져오기
-                const response = await fetch('/api/user/chat-history?list=true');
-                if (response.ok) {
-                    const data = await response.json();
-                    setChatHistory(data.chatList || []);
-                } else {
-                    // DB 실패 시 localStorage에서 가져오기
-                    const allKeys = Object.keys(localStorage);
-                    const today = new Date().toISOString().split('T')[0];
-                    const chatDates = allKeys
-                        .filter(key => key.startsWith('chat_messages_'))
-                        .map(key => key.replace('chat_messages_', ''))
-                        .filter(date => date !== today)
-                        .sort((a, b) => b.localeCompare(a));
+    const loadChatHistory = async () => {
+        try {
+            // DB에서 채팅 목록 가져오기
+            const response = await fetch('/api/user/chat-history?list=true');
+            if (response.ok) {
+                const data = await response.json();
+                setChatHistory(data.chatList || []);
+            } else {
+                // DB 실패 시 localStorage에서 가져오기
+                const allKeys = Object.keys(localStorage);
+                const today = new Date().toISOString().split('T')[0];
+                const chatDates = allKeys
+                    .filter(key => key.startsWith('chat_messages_'))
+                    .map(key => key.replace('chat_messages_', ''))
+                    .filter(date => date !== today)
+                    .sort((a, b) => b.localeCompare(a));
 
-                    const history = chatDates.map(date => {
-                        const messages = localStorage.getItem(`chat_messages_${date}`);
-                        let title = formatDate(date);
-                        try {
-                            const parsed = JSON.parse(messages || '[]');
-                            const firstUserMsg = parsed.find((m: any) => m.role === 'user');
-                            if (firstUserMsg?.content) {
-                                title = firstUserMsg.content.substring(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
-                            }
-                        } catch (e) { }
-                        return { date, title };
-                    });
+                const history = chatDates.map(date => {
+                    const messages = localStorage.getItem(`chat_messages_${date}`);
+                    let title = formatDate(date);
+                    try {
+                        const parsed = JSON.parse(messages || '[]');
+                        const firstUserMsg = parsed.find((m: any) => m.role === 'user');
+                        if (firstUserMsg?.content) {
+                            title = firstUserMsg.content.substring(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
+                        }
+                    } catch (e) { }
+                    return { date, title };
+                });
 
-                    setChatHistory(history);
-                }
-            } catch (error) {
-                console.error('[Sidebar] Failed to load chat history:', error);
+                setChatHistory(history);
             }
-        };
+        } catch (error) {
+            console.error('[Sidebar] Failed to load chat history:', error);
+        }
+    };
 
+    useEffect(() => {
         loadChatHistory();
     }, []);
 
-    // Format date for display
-    const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
+    // Listen for date change event to refresh chat history
+    useEffect(() => {
+        const handleDateChange = (event: CustomEvent) => {
+            console.log('[Sidebar] Chat date changed:', event.detail);
+            // Reload chat history to include the newly saved chat
+            loadChatHistory();
+        };
 
-        if (dateStr === today.toISOString().split('T')[0]) {
+        window.addEventListener('chat-date-changed', handleDateChange as EventListener);
+        return () => {
+            window.removeEventListener('chat-date-changed', handleDateChange as EventListener);
+        };
+    }, []);
+
+    // Get today's date string (KST, actual date without cutoff for display)
+    const getTodayDateString = () => {
+        const now = new Date();
+        const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
+    };
+
+    // Format date for display - "오늘 - 1월 18일" or "1월 17일" format
+    const formatDateForDisplay = (dateStr: string, isToday: boolean = false) => {
+        const date = new Date(dateStr + 'T00:00:00');
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+
+        if (isToday) {
+            return `오늘 - ${month}월 ${day}일`;
+        }
+        return `${month}월 ${day}일`;
+    };
+
+    // Format date for display (short version for history list)
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr + 'T00:00:00');
+        const todayStr = getTodayDateString();
+        const yesterday = new Date(todayStr + 'T00:00:00');
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+        if (dateStr === todayStr) {
             return '오늘';
-        } else if (dateStr === yesterday.toISOString().split('T')[0]) {
+        } else if (dateStr === yesterdayStr) {
             return '어제';
         } else {
             return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -420,49 +460,43 @@ export function Sidebar() {
                                                 exit={{ height: 0, opacity: 0 }}
                                                 className="mt-2 space-y-1"
                                             >
-                                                {/* 오늘 채팅 (새 채팅) */}
+                                                {/* 오늘 채팅 - "오늘 - 1월 18일" 형식 */}
                                                 <button
                                                     onClick={() => {
                                                         router.push('/');
-                                                        // 오늘 날짜로 새 채팅 시작
-                                                        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+                                                        const today = getTodayDateString();
                                                         localStorage.setItem('selected_chat_date', today);
                                                         window.dispatchEvent(new CustomEvent('load-chat-date', { detail: { date: today } }));
+                                                        setIsExpanded(false);
                                                     }}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-foreground transition-colors"
                                                 >
-                                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                                    <span className="text-sm font-medium">오늘</span>
-                                                    <span className="text-xs text-muted-foreground ml-auto">
-                                                        {new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                                                    </span>
+                                                    <MessageSquare className="w-4 h-4 text-primary flex-shrink-0" />
+                                                    <span className="text-sm font-medium">{formatDateForDisplay(getTodayDateString(), true)}</span>
                                                 </button>
 
-                                                {/* 이전 채팅 목록 */}
+                                                {/* 이전 날짜별 채팅 목록 - "1월 17일", "1월 16일" 형식 */}
                                                 {chatHistory.length > 0 && (
-                                                    <div className="pt-2 border-t border-border/50">
-                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 mb-1">지난 대화</p>
-                                                        <div className="flex flex-col gap-0.5 max-h-[calc(100vh-400px)] overflow-y-auto">
-                                                            {chatHistory.slice(0, 20).map((chat) => (
+                                                    <div className="flex flex-col gap-0.5 max-h-[calc(100vh-400px)] overflow-y-auto">
+                                                        {chatHistory
+                                                            .filter(chat => chat.date !== getTodayDateString()) // 오늘 날짜 제외
+                                                            .slice(0, 20)
+                                                            .map((chat) => (
                                                                 <button
                                                                     key={chat.date}
                                                                     onClick={() => handleChatHistoryClick(chat.date)}
                                                                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-muted transition-colors group"
                                                                 >
                                                                     <MessageSquare className="w-4 h-4 text-muted-foreground group-hover:text-foreground flex-shrink-0" />
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-sm text-foreground truncate">{chat.title}</p>
-                                                                        <p className="text-[10px] text-muted-foreground">{formatDate(chat.date)}</p>
-                                                                    </div>
+                                                                    <span className="text-sm text-foreground">{formatDateForDisplay(chat.date)}</span>
                                                                 </button>
                                                             ))}
-                                                        </div>
                                                     </div>
                                                 )}
 
-                                                {chatHistory.length === 0 && (
+                                                {chatHistory.filter(chat => chat.date !== getTodayDateString()).length === 0 && (
                                                     <p className="text-xs text-muted-foreground text-center py-4">
-                                                        아직 채팅 기록이 없습니다
+                                                        아직 이전 채팅 기록이 없습니다
                                                     </p>
                                                 )}
                                             </motion.div>

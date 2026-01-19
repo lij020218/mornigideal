@@ -438,7 +438,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
  * AI를 사용하여 주간 리포트를 자연스러운 문장으로 변환
  */
 export async function generateWeeklyReportNarrative(reportData: WeeklyReportData, userProfile: any): Promise<string> {
-    const { scheduleAnalysis, trendBriefingAnalysis, growthMetrics, insights, comparisonWithLastWeek } = reportData;
+    const { scheduleAnalysis, trendBriefingAnalysis, focusAnalysis, sleepAnalysis, growthMetrics, insights, comparisonWithLastWeek } = reportData;
 
     const prompt = `당신은 사용자의 성장을 돕는 코치입니다. 다음 주간 데이터를 바탕으로 격려와 인사이트가 담긴 주간 리포트를 작성해주세요.
 
@@ -459,6 +459,20 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
 - 일평균: ${trendBriefingAnalysis.avgReadPerDay.toFixed(1)}개
 - 연속 학습: ${trendBriefingAnalysis.readingStreak}일
 - 관심 카테고리: ${trendBriefingAnalysis.topCategories.map(c => c.category).join(', ')}
+
+⚡ **집중 모드**
+- 총 집중 시간: ${Math.round(focusAnalysis.totalFocusMinutes / 60)}시간 ${focusAnalysis.totalFocusMinutes % 60}분
+- 집중 세션: ${focusAnalysis.focusSessions}회
+- 평균 세션 시간: ${focusAnalysis.avgSessionMinutes}분
+- 이탈 횟수: ${focusAnalysis.totalInterruptions}회
+- 가장 집중한 날: ${focusAnalysis.mostFocusedDay}
+
+😴 **수면 패턴**
+- 수면 기록: ${sleepAnalysis.sleepSessions}회
+- 평균 수면 시간: ${sleepAnalysis.avgSleepHours.toFixed(1)}시간
+- 가장 이른 취침: ${sleepAnalysis.earliestSleep}
+- 가장 늦은 취침: ${sleepAnalysis.latestSleep}
+- 수면 규칙성 점수: ${sleepAnalysis.sleepConsistencyScore.toFixed(0)}/100
 
 📈 **성장 지표**
 - 일관성 점수: ${growthMetrics.consistencyScore.toFixed(0)}/100
@@ -482,6 +496,7 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
 4. 다음 주를 위한 구체적인 액션 아이템 3개 제시
 5. 마크다운 형식으로 작성 (제목, 이모지, 리스트 활용)
 6. 전체 길이는 400-600자 정도로 간결하게
+7. **중요**: 개인화된 리포트이므로 "여러분" 사용 금지. 반드시 2인칭 단수 사용 (예: "이번 주도 수고하셨어요", "~해보세요", "~하셨네요")
 
 주간 리포트를 작성해주세요:`;
 

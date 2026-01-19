@@ -1075,30 +1075,52 @@ export function Dashboard({
                                 }
                             })()}
 
-                            {/* Learning Goal */}
-                            <div className={cn(
-                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
-                                dailyGoals.learning >= 2
-                                    ? "bg-purple-500/10 border-purple-500/30"
-                                    : "bg-white/5 border-white/10"
-                            )}>
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center",
-                                    dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
-                                )}>
-                                    <BookOpen className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <p className="font-semibold text-sm">학습 ({dailyGoals.learning}/2)</p>
-                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
-                                        <motion.div
-                                            className="h-full bg-purple-500"
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
-                                        />
+                            {/* Schedule Completion Goal */}
+                            {(() => {
+                                // Calculate today's schedule completion rate
+                                const now = currentTime || new Date();
+                                const currentDay = now.getDay();
+                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+                                const todaySchedules = userProfile?.customGoals?.filter(g => {
+                                    if (g.specificDate) {
+                                        return g.specificDate === todayStr;
+                                    }
+                                    return g.daysOfWeek?.includes(currentDay);
+                                }) || [];
+
+                                const completions = getTodayCompletions();
+                                const completedCount = todaySchedules.filter(s => completions[s.id]?.completed === true).length;
+                                const totalCount = todaySchedules.length;
+                                const completionRate = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+                                const isGoalMet = totalCount > 0 && completionRate >= 70;
+
+                                return (
+                                    <div className={cn(
+                                        "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
+                                        isGoalMet
+                                            ? "bg-purple-500/10 border-purple-500/30"
+                                            : "bg-white/5 border-white/10"
+                                    )}>
+                                        <div className={cn(
+                                            "w-8 h-8 rounded-full flex items-center justify-center",
+                                            isGoalMet ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
+                                        )}>
+                                            <CheckCircle2 className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-sm">달성 ({completedCount}/{totalCount})</p>
+                                            <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
+                                                <motion.div
+                                                    className="h-full bg-purple-500"
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: `${completionRate}%` }}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
+                                );
+                            })()}
 
                             {/* Trend Briefing Goal */}
                             <div className={cn(
@@ -1202,7 +1224,21 @@ export function Dashboard({
                                                 <Target className="w-5 h-5 text-red-500" /> 오늘의 핵심 목표
                                             </h3>
                                             <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                                                {[dailyGoals.wakeUp, dailyGoals.learning >= 2, dailyGoals.trendBriefing >= 6].filter(v => v === true).length}/3
+                                                {(() => {
+                                                    // Calculate schedule completion rate for counter
+                                                    const now = currentTime || new Date();
+                                                    const currentDay = now.getDay();
+                                                    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                                                    const todaySchedules = userProfile?.customGoals?.filter(g => {
+                                                        if (g.specificDate) return g.specificDate === todayStr;
+                                                        return g.daysOfWeek?.includes(currentDay);
+                                                    }) || [];
+                                                    const completions = getTodayCompletions();
+                                                    const completedCount = todaySchedules.filter(s => completions[s.id]?.completed === true).length;
+                                                    const totalCount = todaySchedules.length;
+                                                    const scheduleGoalMet = totalCount > 0 && (completedCount / totalCount) >= 0.7;
+                                                    return [dailyGoals.wakeUp, scheduleGoalMet, dailyGoals.trendBriefing >= 6].filter(v => v === true).length;
+                                                })()}/3
                                             </span>
                                         </div>
 
@@ -1434,31 +1470,53 @@ export function Dashboard({
                                                 }
                                             })()}
 
-                                            {/* Learning Goal */}
-                                            <div className={cn(
-                                                "p-5 rounded-lg border flex items-center gap-4",
-                                                dailyGoals.learning >= 2
-                                                    ? "bg-purple-500/10 border-purple-500/30"
-                                                    : "bg-white/5 border-white/5"
-                                            )}>
-                                                <div className={cn(
-                                                    "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
-                                                    dailyGoals.learning >= 2 ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
-                                                )}>
-                                                    <BookOpen className="w-6 h-6" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-base">학습 완료</p>
-                                                    <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
-                                                        <motion.div
-                                                            className="h-full bg-purple-500"
-                                                            initial={{ width: 0 }}
-                                                            animate={{ width: `${Math.min((dailyGoals.learning / 2) * 100, 100)}%` }}
-                                                        />
+                                            {/* Schedule Completion Rate */}
+                                            {(() => {
+                                                // Calculate today's schedule completion rate
+                                                const now = currentTime || new Date();
+                                                const currentDay = now.getDay();
+                                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+                                                const todaySchedules = userProfile?.customGoals?.filter(g => {
+                                                    if (g.specificDate) {
+                                                        return g.specificDate === todayStr;
+                                                    }
+                                                    return g.daysOfWeek?.includes(currentDay);
+                                                }) || [];
+
+                                                const completions = getTodayCompletions();
+                                                const completedCount = todaySchedules.filter(s => completions[s.id]?.completed === true).length;
+                                                const totalCount = todaySchedules.length;
+                                                const completionRate = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+                                                const isGoalMet = totalCount > 0 && completionRate >= 70;
+
+                                                return (
+                                                    <div className={cn(
+                                                        "p-5 rounded-lg border flex items-center gap-4",
+                                                        isGoalMet
+                                                            ? "bg-purple-500/10 border-purple-500/30"
+                                                            : "bg-white/5 border-white/5"
+                                                    )}>
+                                                        <div className={cn(
+                                                            "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+                                                            isGoalMet ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
+                                                        )}>
+                                                            <CheckCircle2 className="w-6 h-6" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-semibold text-base">일정 달성률</p>
+                                                            <div className="mt-2 h-2 w-24 bg-white/10 rounded-full overflow-hidden">
+                                                                <motion.div
+                                                                    className="h-full bg-purple-500"
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: `${completionRate}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-mono text-sm font-bold">{completedCount}/{totalCount}</span>
                                                     </div>
-                                                </div>
-                                                <span className="font-mono text-sm font-bold">{dailyGoals.learning}/2</span>
-                                            </div>
+                                                );
+                                            })()}
 
                                             {/* Trend Briefing Goal */}
                                             <div className={cn(

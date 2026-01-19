@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export interface ChatMessage {
     id: string;
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         const listOnly = searchParams.get('list') === 'true';
 
         // Get user ID
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", session.user.email)
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-            const { data: chatList, error } = await supabase
+            const { data: chatList, error } = await supabaseAdmin
                 .from("chat_history")
                 .select("id, date, title, created_at")
                 .eq("user_id", userData.id)
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
 
         if (date) {
             // 특정 날짜 채팅 조회
-            const { data: chatData, error } = await supabase
+            const { data: chatData, error } = await supabaseAdmin
                 .from("chat_history")
                 .select("*")
                 .eq("user_id", userData.id)
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
         }
 
         // Get user ID
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", session.user.email)
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         }
 
         // Upsert chat
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("chat_history")
             .upsert({
                 user_id: userData.id,
@@ -162,7 +162,7 @@ export async function DELETE(request: Request) {
         const cleanup = searchParams.get('cleanup') === 'true';
 
         // Get user ID
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", session.user.email)
@@ -177,7 +177,7 @@ export async function DELETE(request: Request) {
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-            const { error, count } = await supabase
+            const { error, count } = await supabaseAdmin
                 .from("chat_history")
                 .delete()
                 .eq("user_id", userData.id)
@@ -193,7 +193,7 @@ export async function DELETE(request: Request) {
 
         if (date) {
             // 특정 날짜 채팅 삭제
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from("chat_history")
                 .delete()
                 .eq("user_id", userData.id)

@@ -49,8 +49,16 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
 
                 // Check if today is in the selected days OR if it's the specific date
                 const todayStr = getTodayDateString();
-                const isDayMatch = goal.daysOfWeek?.includes(currentDay);
                 const isDateMatch = goal.specificDate === todayStr;
+
+                // 반복 일정: startDate~endDate 범위 내에서만 알림
+                let isDayMatch = goal.daysOfWeek?.includes(currentDay);
+                if (isDayMatch && goal.startDate && todayStr < goal.startDate) {
+                    isDayMatch = false;
+                }
+                if (isDayMatch && goal.endDate && todayStr > goal.endDate) {
+                    isDayMatch = false;
+                }
 
                 if (!isDayMatch && !isDateMatch) return false;
 

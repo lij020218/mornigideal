@@ -5,7 +5,7 @@ import db from "@/lib/db";
 /**
  * Weekly Report Cron Job
  *
- * Vercel Cron: 매주 일요일 저녁 8시 실행
+ * Vercel Cron: 매주 일요일 저녁 9시 KST 실행 (UTC 12시)
  * 수동 실행: GET /api/cron/weekly-report?secret=<CRON_SECRET>
  */
 

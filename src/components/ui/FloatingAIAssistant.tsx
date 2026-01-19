@@ -168,10 +168,16 @@ export function FloatingAIAssistant({
 
         // CARD 1: Schedule (Blue)
         const customGoals = userProfile?.customGoals || [];
-        const todayGoals = customGoals.filter((g: any) =>
-            g.specificDate === today ||
-            (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate)
-        ).sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || ''));
+        const todayGoals = customGoals.filter((g: any) => {
+            if (g.specificDate === today) return true;
+            // 반복 일정: startDate~endDate 범위 내에서만 표시
+            if (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate) {
+                if (g.startDate && today < g.startDate) return false;
+                if (g.endDate && today > g.endDate) return false;
+                return true;
+            }
+            return false;
+        }).sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || ''));
 
         const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         const upcomingGoal = todayGoals.find((g: any) => g.startTime && g.startTime > currentTimeStr);

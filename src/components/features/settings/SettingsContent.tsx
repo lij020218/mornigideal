@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Bell, Trash2, Save, RefreshCw, Sun, Dumbbell, Target, Mail, Check, X, User, AlertTriangle, Eye, EyeOff, MapPin } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, Save, RefreshCw, Sun, Dumbbell, Target, Mail, Check, X, User, AlertTriangle, Eye, EyeOff, MapPin, Crown } from "lucide-react";
+import { PlanSettings } from "./PlanSettings";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
@@ -254,17 +255,17 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
     };
 
     return (
-        <div className="p-6 pt-20 md:pt-6 max-w-2xl mx-auto space-y-8">
+        <div className="p-3 sm:p-6 pt-16 sm:pt-20 md:pt-6 max-w-2xl mx-auto space-y-4 sm:space-y-8">
             {/* Header */}
-            <header className="flex items-center gap-4">
+            <header className="flex items-center gap-3 sm:gap-4">
                 <Link href="/dashboard">
-                    <Button variant="ghost" size="icon" className="rounded-full">
-                        <ArrowLeft className="w-5 h-5" />
+                    <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10">
+                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                     </Button>
                 </Link>
                 <div>
-                    <h1 className="text-3xl font-bold">설정</h1>
-                    <p className="text-muted-foreground">앱 설정을 관리합니다</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold">설정</h1>
+                    <p className="text-muted-foreground text-sm sm:text-base">앱 설정을 관리합니다</p>
                 </div>
             </header>
 
@@ -326,6 +327,9 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Plan Settings */}
+            <PlanSettings />
 
             {/* Notification Settings */}
             <Card className="glass-card border-none">

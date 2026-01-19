@@ -129,6 +129,11 @@ export function ScheduleNotificationManager({ goals }: ScheduleNotificationManag
                 // Check if today is in the selected days
                 if (!goal.daysOfWeek?.includes(currentDay)) return false;
 
+                // startDate~endDate 범위 내에서만 알림
+                const todayStr = now.toISOString().split('T')[0];
+                if (goal.startDate && todayStr < goal.startDate) return false;
+                if (goal.endDate && todayStr > goal.endDate) return false;
+
                 // Check if it's time for this schedule (exact match required)
                 if (goal.startTime !== currentTime) return false;
 

@@ -140,6 +140,45 @@ export async function POST(request: Request) {
                 }
                 goalList[index].updatedAt = now;
             }
+        } else if (action === "resetWeekly") {
+            // 주간 목표 리셋 (일요일→월요일 전환 시)
+            // 기존 주간 목표를 아카이브에 저장하고 새로 시작
+            const archivedWeeklyGoals = user.profile?.archivedWeeklyGoals || [];
+
+            // 이번 주 목표가 있으면 아카이브에 추가
+            if (currentGoals.weekly.length > 0) {
+                const weekEndDate = new Date();
+                weekEndDate.setDate(weekEndDate.getDate() - 1); // 어제 (일요일)
+                const weekStartDate = new Date(weekEndDate);
+                weekStartDate.setDate(weekStartDate.getDate() - 6); // 지난 월요일
+
+                archivedWeeklyGoals.push({
+                    weekStart: weekStartDate.toISOString().split('T')[0],
+                    weekEnd: weekEndDate.toISOString().split('T')[0],
+                    goals: currentGoals.weekly,
+                    archivedAt: now,
+                });
+
+                // 최근 12주만 보관 (3개월)
+                if (archivedWeeklyGoals.length > 12) {
+                    archivedWeeklyGoals.shift();
+                }
+            }
+
+            // 주간 목표 초기화
+            currentGoals.weekly = [];
+
+            // 아카이브 저장
+            await updateUserProfile(session.user.email, {
+                longTermGoals: currentGoals,
+                archivedWeeklyGoals: archivedWeeklyGoals,
+            });
+
+            return NextResponse.json({
+                success: true,
+                goals: currentGoals,
+                archived: archivedWeeklyGoals.length > 0 ? archivedWeeklyGoals[archivedWeeklyGoals.length - 1] : null,
+            });
         }
 
         // 프로필 업데이트

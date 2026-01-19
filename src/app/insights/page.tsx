@@ -115,11 +115,11 @@ export default function InsightsPage() {
 
     return (
         <div className="min-h-screen bg-background md:ml-20">
-            <div className="max-w-7xl mx-auto px-6 pt-20 md:pt-8 pb-8 space-y-8">
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-16 sm:pt-20 md:pt-8 pb-6 sm:pb-8 space-y-4 sm:space-y-8">
                 {/* Header */}
                 <div>
-                    <h1 className="text-3xl font-bold mb-2">인사이트</h1>
-                    <p className="text-muted-foreground">
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">인사이트</h1>
+                    <p className="text-muted-foreground text-sm sm:text-base">
                         오늘의 트렌드와 중요한 이메일을 확인하세요
                     </p>
                 </div>

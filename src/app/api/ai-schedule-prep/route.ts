@@ -66,10 +66,29 @@ export async function POST(request: Request) {
         }
 
         if (isRestTime) {
-            // 휴식/취침 - 간단한 응원만
+            // 취침/수면 - 수면 준비 체크리스트 제공
+            const isSleepTime = /취침|잠|수면/.test(scheduleName);
+
+            if (isSleepTime) {
+                const sleepPrepTips = [
+                    '핸드폰 무음 모드로 전환하기',
+                    '방 조명 어둡게 하기',
+                    '알람 설정 확인하기',
+                    '내일 준비물 미리 챙겨두기',
+                    '가벼운 스트레칭하기',
+                    '따뜻한 물 한 잔 마시기',
+                ];
+                // 랜덤하게 2-3개 선택
+                const shuffled = sleepPrepTips.sort(() => Math.random() - 0.5);
+                const selectedTips = shuffled.slice(0, 3);
+
+                return NextResponse.json({
+                    advice: `${timeUntil}분 후 "${schedule.text}" 시간이에요 🌙\n\n수면 준비 체크:\n${selectedTips.map(tip => `• ${tip}`).join('\n')}\n\n좋은 꿈 꾸세요! 😴`
+                });
+            }
+
+            // 기상/휴식 - 간단한 응원
             const restMessages: Record<string, { emoji: string; msg: string }> = {
-                '취침': { emoji: '🌙', msg: '좋은 꿈 꾸세요!' },
-                '잠': { emoji: '😴', msg: '푹 주무세요!' },
                 '기상': { emoji: '☀️', msg: '상쾌한 아침 되세요!' },
                 '일어나': { emoji: '🌅', msg: '좋은 아침이에요!' },
                 '휴식': { emoji: '☕', msg: '편하게 쉬세요!' },

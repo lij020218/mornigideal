@@ -109,6 +109,10 @@ export function GlobalScheduleRecommender() {
                     }
                     // daysOfWeek가 있으면 해당 요일만
                     if (goal.daysOfWeek && goal.daysOfWeek.length > 0) {
+                        // startDate가 있으면 해당 날짜 이후에만 표시
+                        if (goal.startDate && today < goal.startDate) return false;
+                        // endDate가 있으면 해당 날짜까지만 표시
+                        if (goal.endDate && today > goal.endDate) return false;
                         return goal.daysOfWeek.includes(dayOfWeek);
                     }
                     return true; // 매일 반복
@@ -145,18 +149,19 @@ export function GlobalScheduleRecommender() {
 
                         if (suggestions.length > 0) {
                             // 추천 메시지 생성
-                            let messageContent = `📋 **일정 추천**\n\n`;
+                            let messageContent = `📋 일정 추천\n\n`;
                             messageContent += `현재 ${currentHour}시인데 ${pendingSchedules.length === 0 ? '남은 일정이 없네요' : '오늘 일정이 없네요'}!\n\n`;
                             messageContent += `오늘 이런 활동은 어떠세요?\n\n`;
 
                             suggestions.slice(0, 3).forEach((s: any, i: number) => {
-                                messageContent += `${i + 1}. **${s.title}** (${s.duration || '30분'})\n`;
+                                const time = s.estimatedTime || s.duration || '1시간';
+                                messageContent += `${i + 1}. ${s.icon || ''} ${s.title} (${time})\n`;
                                 if (s.description) {
                                     messageContent += `   ${s.description}\n`;
                                 }
                             });
 
-                            messageContent += `\n채팅에서 "일정 추가해줘"라고 말씀해주시면 바로 추가해드릴게요! ✨`;
+                            messageContent += `\n채팅에서 "일정 추가해줘"라고 말씀해주시면 바로 추가해드릴게요!`;
 
                             // 채팅 메시지 추가
                             addChatMessage(messageContent);

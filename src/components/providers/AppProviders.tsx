@@ -9,6 +9,7 @@ import { FocusModeOverlay, SleepModeIndicator, SleepModePrompt, FocusModePrompt,
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { GlobalScheduleRecommender } from "@/components/GlobalScheduleRecommender";
+import { GlobalScheduleNotificationManager } from "@/components/GlobalScheduleNotificationManager";
 
 interface AppProvidersProps {
     children: ReactNode;
@@ -21,6 +22,7 @@ export function AppProviders({ children }: AppProvidersProps) {
                 <ChatNotificationProvider>
                     <AppUsageInitializer />
                     <GlobalScheduleRecommender />
+                    <GlobalScheduleNotificationManager />
                     <FocusModeOverlay />
                     <SleepModeIndicator />
                     <SleepModePrompt />

@@ -24,6 +24,8 @@ export interface CustomGoal {
     daysOfWeek?: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     notificationEnabled?: boolean;
     specificDate?: string; // YYYY-MM-DD format for specific date goals
+    startDate?: string; // YYYY-MM-DD format - recurring schedules only appear from this date onwards
+    endDate?: string; // YYYY-MM-DD format - recurring schedules only appear until this date (for goal-linked schedules)
     memo?: string; // Memo for the activity
     location?: string; // Location of the activity
     detailedInfo?: string; // Additional details
@@ -321,6 +323,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 endTime: endTime,
                 color: selectedActivity.color,
                 daysOfWeek: [selectedDayOfWeek],
+                startDate: formatDate(new Date()), // 오늘부터 반복 시작
                 notificationEnabled: notificationEnabled,
             };
             setCustomGoals([...customGoals, newGoal]);
@@ -369,6 +372,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 endTime: endTime,
                 color: 'primary',
                 daysOfWeek: [selectedDayOfWeek],
+                startDate: formatDate(new Date()), // 오늘부터 반복 시작
                 notificationEnabled: notificationEnabled,
             };
             setCustomGoals([...customGoals, newGoal]);
@@ -640,8 +644,16 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Daily Detail view: show goals for selected date (both specific date and recurring)
             if ((viewMode === 'calendar-full' || viewMode === 'daily-detail') && selectedDate) {
-                const isSpecificDate = goal.specificDate === formatDate(selectedDate);
-                const isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay()) && !goal.specificDate;
+                const dateStr = formatDate(selectedDate);
+                const isSpecificDate = goal.specificDate === dateStr;
+                // 반복 일정: startDate~endDate 범위 내에서만 표시
+                let isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay()) && !goal.specificDate;
+                if (isRecurringOnThisDay && goal.startDate && dateStr < goal.startDate) {
+                    isRecurringOnThisDay = false;
+                }
+                if (isRecurringOnThisDay && goal.endDate && dateStr > goal.endDate) {
+                    isRecurringOnThisDay = false;
+                }
 
                 if (isSpecificDate || isRecurringOnThisDay) {
                     // Check if time is at start OR within the time range
@@ -679,8 +691,16 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             // Daily Detail view: show goals for selected date (both specific date and recurring)
             if (viewMode === 'daily-detail' && selectedDate) {
                 // Check if this goal applies to the selected date
-                const isSpecificDate = goal.specificDate === formatDate(selectedDate);
-                const isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay());
+                const dateStr = formatDate(selectedDate);
+                const isSpecificDate = goal.specificDate === dateStr;
+                // 반복 일정: startDate~endDate 범위 내에서만 표시
+                let isRecurringOnThisDay = goal.daysOfWeek?.includes(selectedDate.getDay());
+                if (isRecurringOnThisDay && goal.startDate && dateStr < goal.startDate) {
+                    isRecurringOnThisDay = false;
+                }
+                if (isRecurringOnThisDay && goal.endDate && dateStr > goal.endDate) {
+                    isRecurringOnThisDay = false;
+                }
 
                 if (isSpecificDate || isRecurringOnThisDay) {
                     if (goal.startTime && goal.endTime) {
@@ -1149,8 +1169,16 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                                 // Get all goals for this date with their colors
                                                 const goalsForDate = customGoals?.filter(g => {
-                                                    if (g.specificDate) return g.specificDate === formatDate(date);
-                                                    if (g.daysOfWeek && g.daysOfWeek.includes(date.getDay()) && !g.specificDate) return true;
+                                                    const dateStr = formatDate(date);
+                                                    if (g.specificDate) return g.specificDate === dateStr;
+                                                    // 반복 일정: startDate~endDate 범위 내에서만 표시
+                                                    if (g.daysOfWeek && g.daysOfWeek.includes(date.getDay()) && !g.specificDate) {
+                                                        // startDate가 있으면 해당 날짜 이후에만 표시
+                                                        if (g.startDate && dateStr < g.startDate) return false;
+                                                        // endDate가 있으면 해당 날짜까지만 표시
+                                                        if (g.endDate && dateStr > g.endDate) return false;
+                                                        return true;
+                                                    }
                                                     return false;
                                                 }) || [];
 
@@ -1325,6 +1353,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 if (g.specificDate) return false;
                                                 // 이 요일에 해당하는 반복 일정인지 확인
                                                 if (!g.daysOfWeek?.includes(dayOfWeek)) return false;
+
+                                                // startDate가 있으면 해당 날짜 이후에만 표시
+                                                if (g.startDate && dateStr < g.startDate) return false;
+                                                // endDate가 있으면 해당 날짜까지만 표시
+                                                if (g.endDate && dateStr > g.endDate) return false;
 
                                                 // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 중복이므로 제외
                                                 const hasDuplicate = specificDateGoals.some(sg =>
@@ -2062,6 +2095,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             text: activityName,
                                                             time: sH < 12 ? "morning" : sH < 18 ? "afternoon" : "evening",
                                                             daysOfWeek: [selectedDayOfWeek],
+                                                            startDate: formatDate(new Date()), // 오늘부터 반복 시작
                                                             startTime,
                                                             endTime,
                                                             color: activityColor,

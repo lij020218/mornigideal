@@ -137,6 +137,79 @@ export async function POST(request: Request) {
             console.log(`[Schedule Add] Slot found: ${calculatedStartTime} - ${calculatedEndTime} (${durationMinutes} min)`);
         }
 
+        // Smart sleep/wake time adjustment
+        // 취침 일정인 경우 기상 일정과 연동하여 종료 시간 조정
+        const isSleepSchedule = text.includes('취침') || text.toLowerCase().includes('sleep') || text.includes('잠') || text.includes('수면');
+        const isWakeSchedule = text.includes('기상') || text.toLowerCase().includes('wake') || text.includes('일어나');
+
+        if (isSleepSchedule && specificDate) {
+            // Find wake-up schedule for the same or next day
+            const nextDay = new Date(specificDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const nextDayStr = nextDay.toISOString().split('T')[0];
+
+            // Look for wake-up schedule today or tomorrow
+            const wakeSchedule = customGoals.find((g: any) => {
+                const isWake = g.text?.includes('기상') || g.text?.toLowerCase().includes('wake') || g.text?.includes('일어나');
+                const isRelevantDate = g.specificDate === specificDate || g.specificDate === nextDayStr;
+                // Also check recurring schedules
+                const isRecurringWake = isWake && g.daysOfWeek && g.daysOfWeek.length > 0;
+                return isWake && (isRelevantDate || isRecurringWake);
+            });
+
+            if (wakeSchedule) {
+                // Set sleep end time to wake-up start time
+                const wakeTime = wakeSchedule.startTime;
+                if (wakeTime && calculatedEndTime) {
+                    console.log(`[Schedule Add] Adjusting sleep end time to match wake time: ${wakeTime}`);
+                    calculatedEndTime = wakeTime;
+                }
+            }
+        }
+
+        // 기상 일정인 경우 취침 일정의 종료 시간도 맞춰 조정
+        // 전날 밤에 시작한 취침 일정도 찾아야 함 (예: 전날 23:00 취침 → 오늘 10:00 기상)
+        if (isWakeSchedule && specificDate) {
+            // 전날 날짜 계산
+            const prevDay = new Date(specificDate);
+            prevDay.setDate(prevDay.getDate() - 1);
+            const prevDayStr = prevDay.toISOString().split('T')[0];
+
+            // 같은 날 또는 전날의 취침 일정 찾기
+            const sleepSchedule = customGoals.find((g: any) => {
+                const isSleep = g.text?.includes('취침') || g.text?.toLowerCase().includes('sleep') || g.text?.includes('잠') || g.text?.includes('수면');
+                if (!isSleep) return false;
+
+                // 같은 날 취침 (새벽에 잔 경우)
+                if (g.specificDate === specificDate) return true;
+
+                // 전날 밤 취침 (저녁/밤에 잔 경우 - 18시 이후 시작)
+                if (g.specificDate === prevDayStr && g.startTime) {
+                    const startHour = parseInt(g.startTime.split(':')[0]);
+                    return startHour >= 18; // 저녁 6시 이후 시작한 취침만
+                }
+
+                // 반복 일정 체크
+                if (isSleep && g.daysOfWeek && g.daysOfWeek.length > 0) {
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (sleepSchedule && calculatedStartTime) {
+                // Update the existing sleep schedule's end time
+                const sleepIndex = customGoals.findIndex((g: any) => g.id === sleepSchedule.id);
+                if (sleepIndex !== -1) {
+                    customGoals[sleepIndex] = {
+                        ...customGoals[sleepIndex],
+                        endTime: calculatedStartTime
+                    };
+                    console.log(`[Schedule Add] Updated existing sleep schedule (${sleepSchedule.specificDate}) end time to: ${calculatedStartTime}`);
+                }
+            }
+        }
+
         // Determine time of day
         const getTimeOfDay = (time: string): "morning" | "afternoon" | "evening" => {
             const hour = parseInt(time.split(":")[0]);
@@ -212,6 +285,9 @@ export async function POST(request: Request) {
         };
 
         // Create new goal
+        // For recurring schedules (daysOfWeek), set startDate to today so it only shows from today onwards
+        const today = new Date().toISOString().split('T')[0];
+
         const newGoal = {
             id: `ai-${Date.now()}`,
             text,
@@ -221,6 +297,8 @@ export async function POST(request: Request) {
             color: getActivityColor(text, color),
             specificDate: specificDate || undefined,
             daysOfWeek: daysOfWeek || undefined,
+            // For recurring schedules, set startDate so they only appear from today onwards
+            startDate: daysOfWeek && daysOfWeek.length > 0 ? (specificDate || today) : undefined,
             notificationEnabled: true,
             location: location || undefined,
             memo: memo || undefined,
