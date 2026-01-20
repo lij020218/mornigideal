@@ -178,6 +178,13 @@ export function WeeklyReportContent() {
 
     useEffect(() => {
         fetchReports();
+
+        // 6시간마다 현재 주 통계 업데이트
+        const interval = setInterval(() => {
+            fetchCurrentWeekStats();
+        }, 6 * 60 * 60 * 1000); // 6시간
+
+        return () => clearInterval(interval);
     }, []);
 
     const getCurrentWeekNumber = () => {
@@ -203,6 +210,73 @@ export function WeeklyReportContent() {
         return { start: monday, end: sunday };
     };
 
+    const fetchCurrentWeekStats = async () => {
+        const currentWeek = getCurrentWeekRange();
+        const currentWeekNum = getCurrentWeekNumber();
+
+        try {
+            // 사용자 프로필에서 일정 가져오기
+            const profileRes = await fetch('/api/user/profile');
+            if (!profileRes.ok) {
+                throw new Error('Failed to fetch profile');
+            }
+            const profileData = await profileRes.json();
+            const customGoals = profileData.profile?.customGoals || [];
+
+            // 현재 주 일정 필터링
+            const currentWeekSchedules = customGoals.filter((goal: any) => {
+                if (!goal.schedules || goal.schedules.length === 0) return false;
+                return goal.schedules.some((schedule: any) => {
+                    const scheduleDate = new Date(schedule.date);
+                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end;
+                });
+            });
+
+            const totalSchedules = currentWeekSchedules.reduce((sum: number, goal: any) => {
+                return sum + goal.schedules.filter((s: any) => {
+                    const scheduleDate = new Date(s.date);
+                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end;
+                }).length;
+            }, 0);
+
+            const completedSchedules = currentWeekSchedules.reduce((sum: number, goal: any) => {
+                return sum + goal.schedules.filter((s: any) => {
+                    const scheduleDate = new Date(s.date);
+                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end && s.completed;
+                }).length;
+            }, 0);
+
+            const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
+
+            // 트렌드 브리핑 읽기 통계
+            const briefingsRes = await fetch('/api/trend-briefing');
+            const briefingsData = await briefingsRes.ok ? await briefingsRes.json() : { briefings: [] };
+            const readBriefings = briefingsData.briefings?.filter((b: any) => {
+                const createdAt = new Date(b.created_at);
+                return createdAt >= currentWeek.start && createdAt <= currentWeek.end && b.read;
+            }) || [];
+
+            setCurrentWeekStats({
+                weekNumber: currentWeekNum,
+                start: currentWeek.start.toISOString(),
+                end: currentWeek.end.toISOString(),
+                totalSchedules,
+                completedSchedules,
+                completionRate,
+                totalRead: readBriefings.length,
+                lastUpdated: new Date().toISOString(),
+            });
+
+        } catch (error) {
+            console.error('Failed to fetch current week stats:', error);
+            setCurrentWeekStats({
+                weekNumber: currentWeekNum,
+                start: currentWeek.start.toISOString(),
+                end: currentWeek.end.toISOString(),
+            });
+        }
+    };
+
     const fetchReports = async (isRefresh = false) => {
         try {
             if (isRefresh) {
@@ -218,17 +292,8 @@ export function WeeklyReportContent() {
                 setLastWeekReport(data.report);
             }
 
-            // 현재 진행 중인 주 통계 계산
-            const currentWeek = getCurrentWeekRange();
-            const currentWeekNum = getCurrentWeekNumber();
-
-            // TODO: API에서 현재 주 데이터 가져오기
-            // 임시로 간단한 통계만 표시
-            setCurrentWeekStats({
-                weekNumber: currentWeekNum,
-                start: currentWeek.start.toISOString(),
-                end: currentWeek.end.toISOString(),
-            });
+            // 현재 진행 중인 주 실시간 통계
+            await fetchCurrentWeekStats();
 
         } catch (error) {
             console.error('Failed to fetch reports:', error);
@@ -343,13 +408,49 @@ export function WeeklyReportContent() {
                         animate={{ opacity: 1, y: 0 }}
                         className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-green-500/20"
                     >
-                        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
-                            <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> 현재 진행 중 (Week {currentWeekStats.weekNumber})
-                        </h3>
-                        <div className="text-center py-8">
-                            <p className="text-sm text-muted-foreground mb-2">실시간 통계 기능은 곧 추가됩니다</p>
-                            <p className="text-xs text-muted-foreground">현재 주가 완료되면 자동으로 리포트가 생성됩니다</p>
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                                <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> 현재 진행 중 (Week {currentWeekStats.weekNumber})
+                            </h3>
+                            {currentWeekStats.lastUpdated && (
+                                <span className="text-xs text-muted-foreground">
+                                    업데이트: {new Date(currentWeekStats.lastUpdated).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
                         </div>
+
+                        {currentWeekStats.totalSchedules !== undefined ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <Calendar className="w-5 h-5 text-blue-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{currentWeekStats.completionRate?.toFixed(0) || 0}%</p>
+                                    <p className="text-xs text-muted-foreground">일정 완료</p>
+                                    <p className="text-xs text-muted-foreground mt-1">{currentWeekStats.completedSchedules || 0} / {currentWeekStats.totalSchedules || 0}</p>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-4 text-center">
+                                    <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <BookOpen className="w-5 h-5 text-purple-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{currentWeekStats.totalRead || 0}</p>
+                                    <p className="text-xs text-muted-foreground">읽은 브리핑</p>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
+                                    <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                        <Clock className="w-5 h-5 text-green-400" />
+                                    </div>
+                                    <p className="text-2xl font-bold">{7 - new Date().getDay()}</p>
+                                    <p className="text-xs text-muted-foreground">남은 일수</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-green-500 mx-auto mb-2" />
+                                <p className="text-sm text-muted-foreground">통계를 불러오는 중...</p>
+                            </div>
+                        )}
+
                         <div className="mt-4 text-center">
                             <Button
                                 variant="ghost"
