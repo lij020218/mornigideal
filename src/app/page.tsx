@@ -1113,14 +1113,16 @@ export default function HomePage() {
                 });
             }
 
-            // 6. 주간 리포트 + 피드백 (일요일 21시~24시)
-            const dayOfWeek = kstNow.getDay(); // 0: 일요일
+            // 6. 주간 리포트 + 피드백 (일요일 21시 이후 또는 월요일 아침 9시 이전)
+            const dayOfWeek = kstNow.getDay(); // 0: 일요일, 1: 월요일
             const isSunday = dayOfWeek === 0;
             const isMonday = dayOfWeek === 1;
+            const isSundayEvening = isSunday && hour >= 21; // 일요일 21시 이후
+            const isMondayMorning = isMonday && hour < 9; // 월요일 9시 이전
 
             // 주간 리포트: 하루에 한 번만 전송 (키로 중복 방지)
             const weeklyReportKey = `weekly_report_${today}`;
-            if (!localStorage.getItem(weeklyReportKey)) {
+            if ((isSundayEvening || isMondayMorning) && !localStorage.getItem(weeklyReportKey)) {
                 console.log('[AutoMessage] ✅ Sending weekly report');
                 localStorage.setItem(weeklyReportKey, 'true');
 
