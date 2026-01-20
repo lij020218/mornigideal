@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, Clock, Zap, Flame, Moon } from "lucide-react";
+import { BarChart3, Calendar, BookOpen, Award, TrendingUp, TrendingDown, Minus, ArrowRight, Loader2, RefreshCw, Clock, Zap, Flame, Moon, FileText, Layout } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import { WeeklyReportCards } from "./WeeklyReportCards";
 
 // Fieri Logo SVG Component
 const FieriLogo = ({ className = "" }: { className?: string }) => (
@@ -171,6 +172,8 @@ export function WeeklyReportContent() {
     const [currentReport, setCurrentReport] = useState<WeeklyReportData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showDetailedView, setShowDetailedView] = useState(false);
+    const [showCardsPopup, setShowCardsPopup] = useState(false);
 
     useEffect(() => {
         fetchReport();
@@ -243,7 +246,7 @@ export function WeeklyReportContent() {
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {/* Header with refresh */}
+            {/* Header with refresh and view toggle */}
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-xl sm:text-2xl font-bold">주간 성장 리포트</h2>
@@ -251,33 +254,114 @@ export function WeeklyReportContent() {
                         {formatDate(currentReport.period.start)} - {formatDate(currentReport.period.end)} (Week {currentReport.period.weekNumber})
                     </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchReport(true)}
-                    disabled={refreshing}
-                >
-                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowCardsPopup(true)}
+                    >
+                        <Layout className="w-4 h-4 mr-1" />
+                        카드 뉴스
+                    </Button>
+                    <Button
+                        variant={showDetailedView ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowDetailedView(!showDetailedView)}
+                    >
+                        <FileText className="w-4 h-4 mr-1" />
+                        {showDetailedView ? "간단히 보기" : "상세 보기"}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchReport(true)}
+                        disabled={refreshing}
+                    >
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                    </Button>
+                </div>
             </div>
 
-            {/* AI Narrative */}
-            {currentReport.narrative && (
+            {/* Card News Popup */}
+            <WeeklyReportCards
+                isOpen={showCardsPopup}
+                onClose={() => setShowCardsPopup(false)}
+                reportData={currentReport}
+            />
+
+            {/* Quick Summary - Always visible */}
+            {!showDetailedView && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
                 >
                     <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
-                        <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> Fi.eri 주간 분석
+                        <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> 이번 주 요약
                     </h3>
-                    <div className="prose prose-sm prose-invert max-w-none text-sm sm:text-base">
-                        <ReactMarkdown>{currentReport.narrative}</ReactMarkdown>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="bg-white/5 rounded-xl p-4 text-center">
+                            <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <Calendar className="w-5 h-5 text-blue-400" />
+                            </div>
+                            <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completionRate.toFixed(0)}%</p>
+                            <p className="text-xs text-muted-foreground">일정 완료</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-4 text-center">
+                            <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <BookOpen className="w-5 h-5 text-purple-400" />
+                            </div>
+                            <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
+                            <p className="text-xs text-muted-foreground">읽은 브리핑</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-4 text-center">
+                            <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <Award className="w-5 h-5 text-green-400" />
+                            </div>
+                            <p className="text-2xl font-bold">{currentReport.growthMetrics.consistencyScore.toFixed(0)}</p>
+                            <p className="text-xs text-muted-foreground">일관성 점수</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-4 text-center">
+                            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <Flame className="w-5 h-5 text-orange-400" />
+                            </div>
+                            <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.readingStreak}</p>
+                            <p className="text-xs text-muted-foreground">연속 학습</p>
+                        </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowDetailedView(true)}
+                            className="text-blue-400 hover:text-blue-300"
+                        >
+                            자세한 분석 보기 <ArrowRight className="w-4 h-4 ml-1" />
+                        </Button>
                     </div>
                 </motion.div>
             )}
 
-            {/* Key Metrics */}
+            {/* Detailed View - Hidden by default */}
+            {showDetailedView && (
+                <>
+                    {/* AI Narrative */}
+                    {currentReport.narrative && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
+                        >
+                            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+                                <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> Fi.eri 주간 분석
+                            </h3>
+                            <div className="prose prose-sm prose-invert max-w-none text-sm sm:text-base">
+                                <ReactMarkdown>{currentReport.narrative}</ReactMarkdown>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Key Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {/* Schedule Completion */}
                 <motion.div
@@ -574,47 +658,49 @@ export function WeeklyReportContent() {
                 )}
             </div>
 
-            {/* Weekly Activity Overview */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 }}
-                className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
-            >
-                <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
-                    <span className="text-lg">📅</span> 이번 주 활동 요약
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-white/5 rounded-xl p-4 text-center">
-                        <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                            <Calendar className="w-5 h-5 text-blue-400" />
+                    {/* Weekly Activity Overview */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.7 }}
+                        className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
+                    >
+                        <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
+                            <span className="text-lg">📅</span> 이번 주 활동 요약
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="bg-white/5 rounded-xl p-4 text-center">
+                                <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <Calendar className="w-5 h-5 text-blue-400" />
+                                </div>
+                                <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completedSchedules}</p>
+                                <p className="text-xs text-muted-foreground">완료한 일정</p>
+                            </div>
+                            <div className="bg-white/5 rounded-xl p-4 text-center">
+                                <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <BookOpen className="w-5 h-5 text-purple-400" />
+                                </div>
+                                <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
+                                <p className="text-xs text-muted-foreground">읽은 브리핑</p>
+                            </div>
+                            <div className="bg-white/5 rounded-xl p-4 text-center">
+                                <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <Award className="w-5 h-5 text-green-400" />
+                                </div>
+                                <p className="text-2xl font-bold">{currentReport.growthMetrics.newHabitsFormed}</p>
+                                <p className="text-xs text-muted-foreground">새로운 습관</p>
+                            </div>
+                            <div className="bg-white/5 rounded-xl p-4 text-center">
+                                <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <Clock className="w-5 h-5 text-amber-400" />
+                                </div>
+                                <p className="text-2xl font-bold">{Math.round(currentReport.growthMetrics.timeInvested / 60)}h</p>
+                                <p className="text-xs text-muted-foreground">투자 시간</p>
+                            </div>
                         </div>
-                        <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completedSchedules}</p>
-                        <p className="text-xs text-muted-foreground">완료한 일정</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4 text-center">
-                        <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                            <BookOpen className="w-5 h-5 text-purple-400" />
-                        </div>
-                        <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
-                        <p className="text-xs text-muted-foreground">읽은 브리핑</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4 text-center">
-                        <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                            <Award className="w-5 h-5 text-green-400" />
-                        </div>
-                        <p className="text-2xl font-bold">{currentReport.growthMetrics.newHabitsFormed}</p>
-                        <p className="text-xs text-muted-foreground">새로운 습관</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4 text-center">
-                        <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                            <Clock className="w-5 h-5 text-amber-400" />
-                        </div>
-                        <p className="text-2xl font-bold">{Math.round(currentReport.growthMetrics.timeInvested / 60)}h</p>
-                        <p className="text-xs text-muted-foreground">투자 시간</p>
-                    </div>
-                </div>
-            </motion.div>
+                    </motion.div>
+                </>
+            )}
         </div>
     );
 }
