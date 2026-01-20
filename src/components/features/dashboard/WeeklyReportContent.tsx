@@ -169,17 +169,41 @@ interface WeeklyReportData {
 }
 
 export function WeeklyReportContent() {
-    const [currentReport, setCurrentReport] = useState<WeeklyReportData | null>(null);
+    const [lastWeekReport, setLastWeekReport] = useState<WeeklyReportData | null>(null); // 완료된 지난 주
+    const [currentWeekStats, setCurrentWeekStats] = useState<any>(null); // 진행 중인 현재 주
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showPastReports, setShowPastReports] = useState(false);
     const [showCardsPopup, setShowCardsPopup] = useState(false);
 
     useEffect(() => {
-        fetchReport();
+        fetchReports();
     }, []);
 
-    const fetchReport = async (isRefresh = false) => {
+    const getCurrentWeekNumber = () => {
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+        return Math.ceil((days + startOfYear.getDay() + 1) / 7);
+    };
+
+    const getCurrentWeekRange = () => {
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - daysToSubtract);
+        monday.setHours(0, 0, 0, 0);
+
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+
+        return { start: monday, end: sunday };
+    };
+
+    const fetchReports = async (isRefresh = false) => {
         try {
             if (isRefresh) {
                 setRefreshing(true);
@@ -187,13 +211,27 @@ export function WeeklyReportContent() {
                 setLoading(true);
             }
 
+            // 지난 완료된 주 리포트 (카드 뉴스용)
             const response = await fetch('/api/weekly-report');
             if (response.ok) {
                 const data = await response.json();
-                setCurrentReport(data.report);
+                setLastWeekReport(data.report);
             }
+
+            // 현재 진행 중인 주 통계 계산
+            const currentWeek = getCurrentWeekRange();
+            const currentWeekNum = getCurrentWeekNumber();
+
+            // TODO: API에서 현재 주 데이터 가져오기
+            // 임시로 간단한 통계만 표시
+            setCurrentWeekStats({
+                weekNumber: currentWeekNum,
+                start: currentWeek.start.toISOString(),
+                end: currentWeek.end.toISOString(),
+            });
+
         } catch (error) {
-            console.error('Failed to fetch weekly report:', error);
+            console.error('Failed to fetch reports:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -233,123 +271,101 @@ export function WeeklyReportContent() {
         );
     }
 
-    if (!currentReport) {
+    if (!lastWeekReport && !currentWeekStats) {
         return (
             <div className="text-center py-12">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold mb-2">리포트를 불러올 수 없습니다</h3>
                 <p className="text-muted-foreground mb-4">잠시 후 다시 시도해주세요.</p>
-                <Button onClick={() => fetchReport()}>다시 시도</Button>
+                <Button onClick={() => fetchReports()}>다시 시도</Button>
             </div>
         );
     }
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {/* Card News Popup */}
-            <WeeklyReportCards
-                isOpen={showCardsPopup}
-                onClose={() => setShowCardsPopup(false)}
-                reportData={currentReport}
-            />
+            {/* Card News Popup - 지난 주 완료된 리포트 */}
+            {lastWeekReport && (
+                <WeeklyReportCards
+                    isOpen={showCardsPopup}
+                    onClose={() => setShowCardsPopup(false)}
+                    reportData={lastWeekReport}
+                />
+            )}
 
             {/* Current Week Summary - Always visible */}
-            {!showPastReports && (
+            {!showPastReports && currentWeekStats && (
                 <>
                     {/* Header */}
                     <div className="flex items-center justify-between mb-2">
                         <div>
                             <h2 className="text-xl sm:text-2xl font-bold">이번 주 현황</h2>
                             <p className="text-sm text-muted-foreground mt-1">
-                                {formatDate(currentReport.period.start)} - {formatDate(currentReport.period.end)} (Week {currentReport.period.weekNumber})
+                                {formatDate(currentWeekStats.start)} - {formatDate(currentWeekStats.end)} (Week {currentWeekStats.weekNumber}) - 진행 중
                             </p>
                         </div>
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => fetchReport(true)}
+                            onClick={() => fetchReports(true)}
                             disabled={refreshing}
                         >
                             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                         </Button>
                     </div>
 
-                    {/* Big Card News Button */}
-                    <motion.button
-                        onClick={() => setShowCardsPopup(true)}
-                        className="w-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-white/20 hover:scale-[1.02] transition-transform shadow-xl"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                    >
-                        <div className="flex items-center justify-between text-white">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                                    <Layout className="w-6 h-6 sm:w-8 sm:h-8" />
-                                </div>
-                                <div className="text-left">
-                                    <h3 className="text-lg sm:text-2xl font-bold mb-1">Week {currentReport.period.weekNumber} 카드 뉴스 보기</h3>
-                                    <p className="text-sm sm:text-base opacity-90">이번 주 성장을 한눈에 확인하세요</p>
-                                </div>
-                            </div>
-                            <ArrowRight className="w-6 h-6 sm:w-8 sm:h-8" />
-                        </div>
-                    </motion.button>
-
-                    {/* Quick Summary */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20"
-                >
-                    <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
-                        <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> 이번 주 요약
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Calendar className="w-5 h-5 text-blue-400" />
-                            </div>
-                            <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completionRate.toFixed(0)}%</p>
-                            <p className="text-xs text-muted-foreground">일정 완료</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <BookOpen className="w-5 h-5 text-purple-400" />
-                            </div>
-                            <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
-                            <p className="text-xs text-muted-foreground">읽은 브리핑</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Award className="w-5 h-5 text-green-400" />
-                            </div>
-                            <p className="text-2xl font-bold">{currentReport.growthMetrics.consistencyScore.toFixed(0)}</p>
-                            <p className="text-xs text-muted-foreground">일관성 점수</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Flame className="w-5 h-5 text-orange-400" />
-                            </div>
-                            <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.readingStreak}</p>
-                            <p className="text-xs text-muted-foreground">연속 학습</p>
-                        </div>
-                    </div>
-                    <div className="mt-4 text-center">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowPastReports(true)}
-                            className="text-blue-400 hover:text-blue-300"
+                    {/* Big Card News Button - 지난 주 카드 뉴스 */}
+                    {lastWeekReport && (
+                        <motion.button
+                            onClick={() => setShowCardsPopup(true)}
+                            className="w-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-white/20 hover:scale-[1.02] transition-transform shadow-xl"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                         >
-                            지난 주간 리포트 보기 <ArrowRight className="w-4 h-4 ml-1" />
-                        </Button>
-                    </div>
-                </motion.div>
+                            <div className="flex items-center justify-between text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                                        <Layout className="w-6 h-6 sm:w-8 sm:h-8" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="text-lg sm:text-2xl font-bold mb-1">지난 주 Week {lastWeekReport.period.weekNumber} 카드 뉴스</h3>
+                                        <p className="text-sm sm:text-base opacity-90">{formatDate(lastWeekReport.period.start)} - {formatDate(lastWeekReport.period.end)}</p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                            </div>
+                        </motion.button>
+                    )}
+
+                    {/* Quick Summary - 현재 진행 중인 주 */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-green-500/20"
+                    >
+                        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+                            <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> 현재 진행 중 (Week {currentWeekStats.weekNumber})
+                        </h3>
+                        <div className="text-center py-8">
+                            <p className="text-sm text-muted-foreground mb-2">실시간 통계 기능은 곧 추가됩니다</p>
+                            <p className="text-xs text-muted-foreground">현재 주가 완료되면 자동으로 리포트가 생성됩니다</p>
+                        </div>
+                        <div className="mt-4 text-center">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowPastReports(true)}
+                                className="text-blue-400 hover:text-blue-300"
+                            >
+                                지난 주간 리포트 보기 <ArrowRight className="w-4 h-4 ml-1" />
+                            </Button>
+                        </div>
+                    </motion.div>
                 </>
             )}
 
             {/* Past Weekly Reports - Detailed View */}
-            {showPastReports && (
+            {showPastReports && lastWeekReport && (
                 <>
                     {/* Back Button */}
                     <div className="flex items-center justify-between mb-4">
@@ -373,14 +389,14 @@ export function WeeklyReportContent() {
                                 size="sm"
                                 className="bg-blue-500/20 border-blue-500/50"
                             >
-                                Week {currentReport.period.weekNumber} (현재 주)
+                                Week {lastWeekReport.period.weekNumber} (지난 주)
                             </Button>
                             <span className="text-sm text-muted-foreground">이전 주차는 곧 추가됩니다</span>
                         </div>
                     </div>
 
                     {/* AI Narrative */}
-                    {currentReport.narrative && (
+                    {lastWeekReport.narrative && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -390,7 +406,7 @@ export function WeeklyReportContent() {
                                 <FieriLogo className="w-6 h-6 sm:w-7 sm:h-7" /> Fi.eri 주간 분석
                             </h3>
                             <div className="prose prose-sm prose-invert max-w-none text-sm sm:text-base">
-                                <ReactMarkdown>{currentReport.narrative}</ReactMarkdown>
+                                <ReactMarkdown>{lastWeekReport.narrative}</ReactMarkdown>
                             </div>
                         </motion.div>
                     )}
@@ -411,23 +427,23 @@ export function WeeklyReportContent() {
                         <div>
                             <h3 className="font-semibold text-sm sm:text-base">일정 완료율</h3>
                             <div className="flex items-center gap-1">
-                                {getChangeIcon(currentReport.comparisonWithLastWeek.completionRateChange)}
-                                <span className={`text-xs font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.completionRateChange)}`}>
-                                    {Math.abs(currentReport.comparisonWithLastWeek.completionRateChange).toFixed(1)}%p
+                                {getChangeIcon(lastWeekReport.comparisonWithLastWeek.completionRateChange)}
+                                <span className={`text-xs font-medium ${getChangeColor(lastWeekReport.comparisonWithLastWeek.completionRateChange)}`}>
+                                    {Math.abs(lastWeekReport.comparisonWithLastWeek.completionRateChange).toFixed(1)}%p
                                 </span>
                             </div>
                         </div>
                     </div>
                     <div className="flex justify-center mb-3">
                         <DonutChart
-                            percentage={currentReport.scheduleAnalysis.completionRate}
+                            percentage={lastWeekReport.scheduleAnalysis.completionRate}
                             size={100}
                             strokeWidth={10}
                             color="rgb(59, 130, 246)"
                         />
                     </div>
                     <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                        {currentReport.scheduleAnalysis.completedSchedules} / {currentReport.scheduleAnalysis.totalSchedules} 일정 완료
+                        {lastWeekReport.scheduleAnalysis.completedSchedules} / {lastWeekReport.scheduleAnalysis.totalSchedules} 일정 완료
                     </p>
                 </motion.div>
 
@@ -445,16 +461,16 @@ export function WeeklyReportContent() {
                         <div>
                             <h3 className="font-semibold text-sm sm:text-base">브리핑 읽기</h3>
                             <div className="flex items-center gap-1">
-                                {getChangeIcon(currentReport.comparisonWithLastWeek.readingChange)}
-                                <span className={`text-xs font-medium ${getChangeColor(currentReport.comparisonWithLastWeek.readingChange)}`}>
-                                    {Math.abs(currentReport.comparisonWithLastWeek.readingChange).toFixed(0)}%
+                                {getChangeIcon(lastWeekReport.comparisonWithLastWeek.readingChange)}
+                                <span className={`text-xs font-medium ${getChangeColor(lastWeekReport.comparisonWithLastWeek.readingChange)}`}>
+                                    {Math.abs(lastWeekReport.comparisonWithLastWeek.readingChange).toFixed(0)}%
                                 </span>
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center justify-center gap-6 mb-3">
                         <div className="text-center">
-                            <span className="text-4xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</span>
+                            <span className="text-4xl font-bold">{lastWeekReport.trendBriefingAnalysis.totalRead}</span>
                             <p className="text-xs text-muted-foreground">읽은 브리핑</p>
                         </div>
                         <div className="h-12 w-px bg-white/10" />
@@ -462,14 +478,14 @@ export function WeeklyReportContent() {
                             <div className="flex items-center gap-1">
                                 <Flame className="w-5 h-5 text-orange-500" />
                                 <span className="text-2xl font-bold text-orange-500">
-                                    {currentReport.trendBriefingAnalysis.readingStreak}
+                                    {lastWeekReport.trendBriefingAnalysis.readingStreak}
                                 </span>
                             </div>
                             <p className="text-xs text-muted-foreground">연속 학습</p>
                         </div>
                     </div>
                     <p className="text-xs text-muted-foreground text-center">
-                        하루 평균 {currentReport.trendBriefingAnalysis.avgReadPerDay.toFixed(1)}개 읽음
+                        하루 평균 {lastWeekReport.trendBriefingAnalysis.avgReadPerDay.toFixed(1)}개 읽음
                     </p>
                 </motion.div>
 
@@ -488,19 +504,19 @@ export function WeeklyReportContent() {
                     </div>
                     <div className="flex justify-center mb-3">
                         <DonutChart
-                            percentage={currentReport.growthMetrics.consistencyScore}
+                            percentage={lastWeekReport.growthMetrics.consistencyScore}
                             size={100}
                             strokeWidth={10}
                             color={
-                                currentReport.growthMetrics.consistencyScore >= 70 ? "rgb(34, 197, 94)" :
-                                currentReport.growthMetrics.consistencyScore >= 40 ? "rgb(234, 179, 8)" :
+                                lastWeekReport.growthMetrics.consistencyScore >= 70 ? "rgb(34, 197, 94)" :
+                                lastWeekReport.growthMetrics.consistencyScore >= 40 ? "rgb(234, 179, 8)" :
                                 "rgb(239, 68, 68)"
                             }
                         />
                     </div>
                     <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                        {currentReport.growthMetrics.consistencyScore >= 70 ? "훌륭해요! 꾸준히 성장하고 있어요" :
-                         currentReport.growthMetrics.consistencyScore >= 40 ? "조금 더 꾸준히 해보세요" :
+                        {lastWeekReport.growthMetrics.consistencyScore >= 70 ? "훌륭해요! 꾸준히 성장하고 있어요" :
+                         lastWeekReport.growthMetrics.consistencyScore >= 40 ? "조금 더 꾸준히 해보세요" :
                          "규칙적인 습관을 만들어보세요"}
                     </p>
                 </motion.div>
@@ -518,7 +534,7 @@ export function WeeklyReportContent() {
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                        {Object.entries(currentReport.scheduleAnalysis.categoryBreakdown).map(([category, count]) => {
+                        {Object.entries(lastWeekReport.scheduleAnalysis.categoryBreakdown).map(([category, count]) => {
                             const colorMap: Record<string, string> = {
                                 work: 'rgb(59, 130, 246)',
                                 learning: 'rgb(168, 85, 247)',
@@ -538,7 +554,7 @@ export function WeeklyReportContent() {
                                     key={category}
                                     label={categoryLabels[category] || category}
                                     value={count}
-                                    maxValue={currentReport.scheduleAnalysis.totalSchedules}
+                                    maxValue={lastWeekReport.scheduleAnalysis.totalSchedules}
                                     color={colorMap[category] || 'rgb(107, 114, 128)'}
                                     icon={iconMap[category]}
                                 />
@@ -548,18 +564,18 @@ export function WeeklyReportContent() {
 
                     <div className="flex flex-col justify-center items-center gap-4 p-4 bg-white/5 rounded-xl">
                         <div className="text-center">
-                            <p className="text-3xl font-bold">{currentReport.scheduleAnalysis.totalSchedules}</p>
+                            <p className="text-3xl font-bold">{lastWeekReport.scheduleAnalysis.totalSchedules}</p>
                             <p className="text-sm text-muted-foreground">총 일정</p>
                         </div>
                         <div className="w-full h-px bg-white/10" />
                         <div className="text-center">
-                            <p className="text-xl font-semibold">{currentReport.scheduleAnalysis.avgSchedulesPerDay.toFixed(1)}</p>
+                            <p className="text-xl font-semibold">{lastWeekReport.scheduleAnalysis.avgSchedulesPerDay.toFixed(1)}</p>
                             <p className="text-sm text-muted-foreground">일 평균 일정</p>
                         </div>
                         <div className="w-full h-px bg-white/10" />
                         <div className="text-center">
                             <p className="text-lg font-medium text-blue-400">
-                                {currentReport.scheduleAnalysis.mostProductiveDay || '-'}
+                                {lastWeekReport.scheduleAnalysis.mostProductiveDay || '-'}
                             </p>
                             <p className="text-xs text-muted-foreground">가장 생산적인 날</p>
                         </div>
@@ -569,7 +585,7 @@ export function WeeklyReportContent() {
 
             {/* Focus & Sleep Analysis */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {currentReport.focusAnalysis && (
+                {lastWeekReport.focusAnalysis && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -583,31 +599,31 @@ export function WeeklyReportContent() {
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">총 집중 시간</span>
                                 <span className="text-sm sm:text-base font-semibold">
-                                    {Math.floor(currentReport.focusAnalysis.totalFocusMinutes / 60)}시간 {currentReport.focusAnalysis.totalFocusMinutes % 60}분
+                                    {Math.floor(lastWeekReport.focusAnalysis.totalFocusMinutes / 60)}시간 {lastWeekReport.focusAnalysis.totalFocusMinutes % 60}분
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">집중 세션</span>
-                                <span className="text-sm sm:text-base font-semibold">{currentReport.focusAnalysis.focusSessions}회</span>
+                                <span className="text-sm sm:text-base font-semibold">{lastWeekReport.focusAnalysis.focusSessions}회</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">평균 세션</span>
-                                <span className="text-sm sm:text-base font-semibold">{currentReport.focusAnalysis.avgSessionMinutes}분</span>
+                                <span className="text-sm sm:text-base font-semibold">{lastWeekReport.focusAnalysis.avgSessionMinutes}분</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">이탈 횟수</span>
                                 <span className={cn(
                                     "text-sm sm:text-base font-semibold",
-                                    currentReport.focusAnalysis.totalInterruptions > 5 ? "text-red-400" : "text-green-400"
+                                    lastWeekReport.focusAnalysis.totalInterruptions > 5 ? "text-red-400" : "text-green-400"
                                 )}>
-                                    {currentReport.focusAnalysis.totalInterruptions}회
+                                    {lastWeekReport.focusAnalysis.totalInterruptions}회
                                 </span>
                             </div>
                         </div>
                     </motion.div>
                 )}
 
-                {currentReport.sleepAnalysis && (
+                {lastWeekReport.sleepAnalysis && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -620,26 +636,26 @@ export function WeeklyReportContent() {
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">수면 기록</span>
-                                <span className="text-sm sm:text-base font-semibold">{currentReport.sleepAnalysis.sleepSessions}회</span>
+                                <span className="text-sm sm:text-base font-semibold">{lastWeekReport.sleepAnalysis.sleepSessions}회</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">평균 수면</span>
                                 <span className={cn(
                                     "text-sm sm:text-base font-semibold",
-                                    currentReport.sleepAnalysis.avgSleepHours >= 7 ? "text-green-400" :
-                                    currentReport.sleepAnalysis.avgSleepHours >= 6 ? "text-yellow-400" : "text-red-400"
+                                    lastWeekReport.sleepAnalysis.avgSleepHours >= 7 ? "text-green-400" :
+                                    lastWeekReport.sleepAnalysis.avgSleepHours >= 6 ? "text-yellow-400" : "text-red-400"
                                 )}>
-                                    {currentReport.sleepAnalysis.avgSleepHours.toFixed(1)}시간
+                                    {lastWeekReport.sleepAnalysis.avgSleepHours.toFixed(1)}시간
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs sm:text-sm text-muted-foreground">규칙성 점수</span>
                                 <span className={cn(
                                     "text-sm sm:text-base font-semibold",
-                                    currentReport.sleepAnalysis.sleepConsistencyScore >= 70 ? "text-green-400" :
-                                    currentReport.sleepAnalysis.sleepConsistencyScore >= 50 ? "text-yellow-400" : "text-red-400"
+                                    lastWeekReport.sleepAnalysis.sleepConsistencyScore >= 70 ? "text-green-400" :
+                                    lastWeekReport.sleepAnalysis.sleepConsistencyScore >= 50 ? "text-yellow-400" : "text-red-400"
                                 )}>
-                                    {currentReport.sleepAnalysis.sleepConsistencyScore.toFixed(0)}/100
+                                    {lastWeekReport.sleepAnalysis.sleepConsistencyScore.toFixed(0)}/100
                                 </span>
                             </div>
                         </div>
@@ -649,7 +665,7 @@ export function WeeklyReportContent() {
 
             {/* Insights */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {currentReport.insights.achievements?.length > 0 && (
+                {lastWeekReport.insights.achievements?.length > 0 && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -660,7 +676,7 @@ export function WeeklyReportContent() {
                             <span>✨</span> 이번 주 성취
                         </h3>
                         <ul className="space-y-1.5 sm:space-y-2">
-                            {currentReport.insights.achievements.map((achievement, index) => (
+                            {lastWeekReport.insights.achievements.map((achievement, index) => (
                                 <li key={index} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
                                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 mt-0.5 text-green-500 flex-shrink-0" />
                                     <span>{achievement}</span>
@@ -670,7 +686,7 @@ export function WeeklyReportContent() {
                     </motion.div>
                 )}
 
-                {currentReport.insights.recommendations?.length > 0 && (
+                {lastWeekReport.insights.recommendations?.length > 0 && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -681,7 +697,7 @@ export function WeeklyReportContent() {
                             <span>💡</span> 다음 주 추천
                         </h3>
                         <ul className="space-y-1.5 sm:space-y-2">
-                            {currentReport.insights.recommendations.map((recommendation, index) => (
+                            {lastWeekReport.insights.recommendations.map((recommendation, index) => (
                                 <li key={index} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
                                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 mt-0.5 text-blue-500 flex-shrink-0" />
                                     <span>{recommendation}</span>
@@ -707,28 +723,28 @@ export function WeeklyReportContent() {
                                 <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
                                     <Calendar className="w-5 h-5 text-blue-400" />
                                 </div>
-                                <p className="text-2xl font-bold">{currentReport.scheduleAnalysis.completedSchedules}</p>
+                                <p className="text-2xl font-bold">{lastWeekReport.scheduleAnalysis.completedSchedules}</p>
                                 <p className="text-xs text-muted-foreground">완료한 일정</p>
                             </div>
                             <div className="bg-white/5 rounded-xl p-4 text-center">
                                 <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
                                     <BookOpen className="w-5 h-5 text-purple-400" />
                                 </div>
-                                <p className="text-2xl font-bold">{currentReport.trendBriefingAnalysis.totalRead}</p>
+                                <p className="text-2xl font-bold">{lastWeekReport.trendBriefingAnalysis.totalRead}</p>
                                 <p className="text-xs text-muted-foreground">읽은 브리핑</p>
                             </div>
                             <div className="bg-white/5 rounded-xl p-4 text-center">
                                 <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
                                     <Award className="w-5 h-5 text-green-400" />
                                 </div>
-                                <p className="text-2xl font-bold">{currentReport.growthMetrics.newHabitsFormed}</p>
+                                <p className="text-2xl font-bold">{lastWeekReport.growthMetrics.newHabitsFormed}</p>
                                 <p className="text-xs text-muted-foreground">새로운 습관</p>
                             </div>
                             <div className="bg-white/5 rounded-xl p-4 text-center">
                                 <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
                                     <Clock className="w-5 h-5 text-amber-400" />
                                 </div>
-                                <p className="text-2xl font-bold">{Math.round(currentReport.growthMetrics.timeInvested / 60)}h</p>
+                                <p className="text-2xl font-bold">{Math.round(lastWeekReport.growthMetrics.timeInvested / 60)}h</p>
                                 <p className="text-xs text-muted-foreground">투자 시간</p>
                             </div>
                         </div>
