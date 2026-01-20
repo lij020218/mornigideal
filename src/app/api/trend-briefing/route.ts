@@ -446,9 +446,17 @@ OUTPUT JSON:
   "title": "Korean title",
   "content": "### 핵심 내용\\n\\n[content]\\n\\n### senior ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
   "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
-  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "actionItems": ["AI 관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${trend.originalUrl}"
 }
+
+CRITICAL RULES FOR actionItems:
+- 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
+- 일정 제목으로 사용되므로 간단하고 명확하게
+- 현실적으로 30분~1시간 내에 실행 가능한 것만 (예: 읽기, 정리, 분석, 조사, 스크랩)
+- 절대 추상적이거나 장기적인 행동은 제외 (예: "전략 수립", "현장 조사", "파트너십 구축" 등은 금지)
+- 좋은 예시: "관련 기사 3개 읽기", "핵심 키워드 정리", "경쟁사 사례 조사"
+- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구", "기업 현장 조사"
 
 Write in Korean. Be practical and specific for senior ${job}.`;
 
@@ -557,20 +565,27 @@ ARTICLE:
 SECTIONS NEEDED:
 1. 핵심 3줄 요약: 3문장으로 핵심만 요약 (각 문장은 15-20자 이내)
 2. 왜 중요한가: ${userTitle}에게 이 뉴스가 중요한 이유와 영향 분석
-3. 실행 아이템: ${userTitle}가 취할 수 있는 3가지 구체적 행동
+3. 실행 아이템: ${userTitle}가 실제로 실행 가능한 3가지 간단한 행동
 
 OUTPUT JSON:
 {
   "title": "Korean title",
   "content": "### 왜 중요한가\\n\\n${userTitle}에게 이 뉴스가 중요한 이유를 설명합니다. **핵심 키워드**를 <mark>태그로 강조하세요.\\n\\n### 심층 분석\\n\\n[detailed analysis with context]",
   "keyTakeaways": ["3줄 요약 1 (15-20자)", "3줄 요약 2 (15-20자)", "3줄 요약 3 (15-20자)"],
-  "actionItems": ["구체적 행동 1 (30자 이내)", "구체적 행동 2 (30자 이내)", "구체적 행동 3 (30자 이내)"],
+  "actionItems": ["AI 관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${originalUrl}"
 }
 
-IMPORTANT RULES:
+CRITICAL RULES FOR actionItems:
+- 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
+- 일정 제목으로 사용되므로 간단하고 명확하게
+- 현실적으로 30분~1시간 내에 실행 가능한 것만 (예: 읽기, 정리, 분석, 조사, 스크랩)
+- 절대 추상적이거나 장기적인 행동은 제외 (예: "전략 수립", "현장 조사", "파트너십 구축" 등은 금지)
+- 좋은 예시: "관련 기사 3개 읽기", "핵심 키워드 정리", "경쟁사 사례 조사"
+- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구", "기업 현장 조사"
+
+OTHER RULES:
 - keyTakeaways는 정말 짧게 핵심만 (15-20자)
-- actionItems는 구체적이고 실행 가능한 행동 (30자 이내)
 - content에서 중요한 용어는 <mark>태그로 강조
 - 톤: 정중하고 전문적인 비서 말투 사용
 
