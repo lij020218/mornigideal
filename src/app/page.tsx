@@ -1035,20 +1035,40 @@ export default function HomePage() {
                     }).then(res => res.json()).then(data => {
                         console.log('[AutoMessage] Received AI resource for upcoming schedule:', data);
                         const recommendation = data.recommendation || "준비할 시간이 충분하네요. 다음 일정을 위해 가볍게 준비해볼까요?";
+
+                        // 다음 일정이 여가/휴식/개인 시간인 경우 간단한 메시지만
+                        const isLeisureSchedule = /여가|휴식|개인|자유|쉬기|break|rest|free/i.test(nextSchedule.text);
+
+                        let content: string;
+                        if (isLeisureSchedule) {
+                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n아직 확인하지 않은 트렌드 브리핑이 있다면 가볍게 읽어보는 건 어떨까요?`;
+                        } else {
+                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n${recommendation}`;
+                        }
+
                         const message: Message = {
                             id: `auto-gap-${Date.now()}`,
                             role: 'assistant',
-                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n${recommendation}\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                            content,
                             timestamp: now,
                         };
                         setMessages(prev => [...prev, message]);
                     }).catch(err => {
                         console.error('[AutoMessage] Failed to fetch AI resource for gap:', err);
                         // Fallback to basic message
+                        const isLeisureSchedule = /여가|휴식|개인|자유|쉬기|break|rest|free/i.test(nextSchedule.text);
+
+                        let content: string;
+                        if (isLeisureSchedule) {
+                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n아직 확인하지 않은 트렌드 브리핑이 있다면 가볍게 읽어보는 건 어떨까요?`;
+                        } else {
+                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n준비할 시간이 충분하네요. 다음 일정을 위해 가볍게 준비해볼까요?`;
+                        }
+
                         const message: Message = {
                             id: `auto-gap-${Date.now()}`,
                             role: 'assistant',
-                            content: `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n이 시간에 할 수 있는 것:\n• 메일 확인 및 처리\n• 트렌드 브리핑 읽기\n• 짧은 학습 세션\n\n무엇을 하시겠어요?`,
+                            content,
                             timestamp: now,
                         };
                         setMessages(prev => [...prev, message]);
