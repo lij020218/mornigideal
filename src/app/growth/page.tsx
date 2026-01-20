@@ -8,6 +8,7 @@ import { useUserPlan } from "@/hooks/useUserPlan";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { SmartInsightsWidget } from "@/components/features/dashboard/SmartInsightsWidget";
+import { WeeklyReportContent } from "@/components/features/dashboard/WeeklyReportContent";
 import { LongTermGoalsWidget } from "@/components/features/goals/LongTermGoalsWidget";
 import { GoalSettingModal } from "@/components/features/goals/GoalSettingModal";
 import {
@@ -407,6 +408,8 @@ export default function GrowthPage() {
 
                     {/* Analytics Tab */}
                     <TabsContent value="analytics" className="space-y-6">
+                        <WeeklyReportContent />
+
                         <SmartInsightsWidget
                             customGoals={[]}
                             currentTime={new Date()}

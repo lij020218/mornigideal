@@ -56,12 +56,6 @@ const NAV_ITEMS = [
         icon: TrendingUp,
         description: "학습 & 분석",
     },
-    {
-        label: "주간 리포트",
-        href: "/weekly-reports",
-        icon: BarChart3,
-        description: "주간 성장 분석",
-    },
 ];
 
 const BOTTOM_ITEMS = [
