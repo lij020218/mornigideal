@@ -172,7 +172,7 @@ export function WeeklyReportContent() {
     const [currentReport, setCurrentReport] = useState<WeeklyReportData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [showDetailedView, setShowDetailedView] = useState(false);
+    const [showPastReports, setShowPastReports] = useState(false);
     const [showCardsPopup, setShowCardsPopup] = useState(false);
 
     useEffect(() => {
@@ -246,42 +246,6 @@ export function WeeklyReportContent() {
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {/* Header with refresh and view toggle */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-xl sm:text-2xl font-bold">주간 성장 리포트</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        {formatDate(currentReport.period.start)} - {formatDate(currentReport.period.end)} (Week {currentReport.period.weekNumber})
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowCardsPopup(true)}
-                    >
-                        <Layout className="w-4 h-4 mr-1" />
-                        카드 뉴스
-                    </Button>
-                    <Button
-                        variant={showDetailedView ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowDetailedView(!showDetailedView)}
-                    >
-                        <FileText className="w-4 h-4 mr-1" />
-                        {showDetailedView ? "간단히 보기" : "상세 보기"}
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchReport(true)}
-                        disabled={refreshing}
-                    >
-                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    </Button>
-                </div>
-            </div>
-
             {/* Card News Popup */}
             <WeeklyReportCards
                 isOpen={showCardsPopup}
@@ -289,8 +253,49 @@ export function WeeklyReportContent() {
                 reportData={currentReport}
             />
 
-            {/* Quick Summary - Always visible */}
-            {!showDetailedView && (
+            {/* Current Week Summary - Always visible */}
+            {!showPastReports && (
+                <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-2">
+                        <div>
+                            <h2 className="text-xl sm:text-2xl font-bold">이번 주 현황</h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                {formatDate(currentReport.period.start)} - {formatDate(currentReport.period.end)} (Week {currentReport.period.weekNumber})
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchReport(true)}
+                            disabled={refreshing}
+                        >
+                            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
+
+                    {/* Big Card News Button */}
+                    <motion.button
+                        onClick={() => setShowCardsPopup(true)}
+                        className="w-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-white/20 hover:scale-[1.02] transition-transform shadow-xl"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        <div className="flex items-center justify-between text-white">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                                    <Layout className="w-6 h-6 sm:w-8 sm:h-8" />
+                                </div>
+                                <div className="text-left">
+                                    <h3 className="text-lg sm:text-2xl font-bold mb-1">Week {currentReport.period.weekNumber} 카드 뉴스 보기</h3>
+                                    <p className="text-sm sm:text-base opacity-90">이번 주 성장을 한눈에 확인하세요</p>
+                                </div>
+                            </div>
+                            <ArrowRight className="w-6 h-6 sm:w-8 sm:h-8" />
+                        </div>
+                    </motion.button>
+
+                    {/* Quick Summary */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -333,18 +338,47 @@ export function WeeklyReportContent() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setShowDetailedView(true)}
+                            onClick={() => setShowPastReports(true)}
                             className="text-blue-400 hover:text-blue-300"
                         >
-                            자세한 분석 보기 <ArrowRight className="w-4 h-4 ml-1" />
+                            지난 주간 리포트 보기 <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
                 </motion.div>
+                </>
             )}
 
-            {/* Detailed View - Hidden by default */}
-            {showDetailedView && (
+            {/* Past Weekly Reports - Detailed View */}
+            {showPastReports && (
                 <>
+                    {/* Back Button */}
+                    <div className="flex items-center justify-between mb-4">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowPastReports(false)}
+                            className="gap-2"
+                        >
+                            <ArrowRight className="w-4 h-4 rotate-180" />
+                            이번 주 현황으로 돌아가기
+                        </Button>
+                    </div>
+
+                    {/* Week Selector */}
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-4">
+                        <h3 className="text-lg font-semibold mb-2">주간 리포트 선택</h3>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="bg-blue-500/20 border-blue-500/50"
+                            >
+                                Week {currentReport.period.weekNumber} (현재 주)
+                            </Button>
+                            <span className="text-sm text-muted-foreground">이전 주차는 곧 추가됩니다</span>
+                        </div>
+                    </div>
+
                     {/* AI Narrative */}
                     {currentReport.narrative && (
                         <motion.div
