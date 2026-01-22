@@ -49,9 +49,11 @@ export function FieriInterventionsContainer({ className }: FieriInterventionsCon
     useEffect(() => {
         if (!session?.user?.email) return;
 
+        const userEmail = session.user.email;
+
         const fetchInterventions = async () => {
             try {
-                const response = await fetch(`/api/fieri/interventions?email=${encodeURIComponent(session.user.email)}`);
+                const response = await fetch(`/api/fieri/interventions?email=${encodeURIComponent(userEmail)}`);
                 if (!response.ok) {
                     console.error('Failed to fetch interventions');
                     return;
