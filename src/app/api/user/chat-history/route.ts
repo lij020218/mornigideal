@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { generateEmbedding, prepareTextForEmbedding } from "@/lib/embeddings";
 
 export interface ChatMessage {
     id: string;
@@ -140,6 +141,56 @@ export async function POST(request: Request) {
         if (error) {
             console.error("[Chat History] Save error:", error);
             return NextResponse.json({ error: "Failed to save chat" }, { status: 500 });
+        }
+
+        // Auto-embed for Max plan users (RAG)
+        try {
+            // Get user plan
+            const { data: planData } = await supabaseAdmin
+                .from("users")
+                .select("profile")
+                .eq("id", userData.id)
+                .single();
+
+            const userPlan = planData?.profile?.plan || "Free";
+
+            if (userPlan === "Max" && messages && messages.length > 0) {
+                // Generate embeddings for user messages only (not assistant responses)
+                const userMessages = messages.filter((m: ChatMessage) => m.role === 'user');
+
+                for (const msg of userMessages) {
+                    // Skip if message is too short (less than 10 chars)
+                    if (msg.content.length < 10) continue;
+
+                    // Prepare text with context
+                    const preparedText = prepareTextForEmbedding(
+                        msg.content,
+                        'chat',
+                        { date, timestamp: msg.timestamp }
+                    );
+
+                    // Generate embedding
+                    const { embedding } = await generateEmbedding(preparedText);
+
+                    // Store in user_memory
+                    await supabaseAdmin.from("user_memory").insert({
+                        user_id: userData.id,
+                        content_type: 'chat',
+                        content: msg.content,
+                        embedding: JSON.stringify(embedding),
+                        metadata: {
+                            date,
+                            timestamp: msg.timestamp,
+                            chatTitle: chatTitle,
+                        },
+                    });
+                }
+
+                console.log(`[Chat History] Auto-embedded ${userMessages.length} messages for Max user`);
+            }
+        } catch (embeddingError) {
+            // Don't fail the whole request if embedding fails
+            console.error("[Chat History] Auto-embedding error:", embeddingError);
         }
 
         return NextResponse.json({ success: true, chat: data });

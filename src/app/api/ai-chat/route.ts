@@ -32,9 +32,13 @@ export async function POST(request: Request) {
         // Get user profile for context
         let userContext = "";
         let scheduleContext = "";
+        let userPlan = "Free";
+        let eventLogsContext = "";
+
         try {
             const { getUserByEmail } = await import("@/lib/users");
             const user = await getUserByEmail(session.user.email);
+            userPlan = user?.profile?.plan || "Free";
             if (user?.profile) {
                 const p = user.profile;
 
@@ -124,9 +128,215 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
 `;
                     }
                 }
+
+                // Max 플랜 사용자: 내일/모레 일정도 제공 (일정 연쇄 분석용)
+                if (userPlan === "Max" && p.customGoals && p.customGoals.length > 0) {
+                    const today = new Date();
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    const dayAfterTomorrow = new Date(today);
+                    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+
+                    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+                    const tomorrowDayOfWeek = tomorrow.getDay();
+                    const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
+                    const dayAfterTomorrowDayOfWeek = dayAfterTomorrow.getDay();
+
+                    const tomorrowGoals = p.customGoals.filter((g: any) =>
+                        g.specificDate === tomorrowStr ||
+                        (g.daysOfWeek?.includes(tomorrowDayOfWeek) && !g.specificDate)
+                    );
+
+                    const dayAfterTomorrowGoals = p.customGoals.filter((g: any) =>
+                        g.specificDate === dayAfterTomorrowStr ||
+                        (g.daysOfWeek?.includes(dayAfterTomorrowDayOfWeek) && !g.specificDate)
+                    );
+
+                    if (tomorrowGoals.length > 0) {
+                        scheduleContext += `\n\n내일의 일정 (${tomorrowStr}):
+${tomorrowGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
+                    }
+
+                    if (dayAfterTomorrowGoals.length > 0) {
+                        scheduleContext += `\n\n모레의 일정 (${dayAfterTomorrowStr}):
+${dayAfterTomorrowGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
+                    }
+
+                    if (tomorrowGoals.length > 0 || dayAfterTomorrowGoals.length > 0) {
+                        scheduleContext += `\n\n**자비스 지침**: 일정을 추가할 때 위 일정들과의 충돌 여부를 반드시 확인하고, 필요시 자동 조정하세요.`;
+                    }
+                }
             }
         } catch (e) {
             console.error("[AI Chat] Failed to get user context:", e);
+        }
+
+        // Max 플랜 사용자: event_logs에서 최근 활동 데이터 가져오기
+        if (userPlan === "Max") {
+            try {
+                const { createClient } = await import("@supabase/supabase-js");
+                const supabase = createClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.SUPABASE_SERVICE_ROLE_KEY!
+                );
+
+                // 최근 7일간의 이벤트 로그 가져오기
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+                const { data: events, error } = await supabase
+                    .from('event_logs')
+                    .select('*')
+                    .eq('user_email', session.user.email)
+                    .gte('occurred_at', sevenDaysAgo.toISOString())
+                    .order('occurred_at', { ascending: false })
+                    .limit(50);
+
+                if (!error && events && events.length > 0) {
+                    // 패턴 분석
+                    const completedSchedules = events.filter(e => e.event_type === 'schedule_completed');
+                    const missedSchedules = events.filter(e => e.event_type === 'schedule_missed');
+                    const skippedSchedules = events.filter(e => e.event_type === 'schedule_snoozed');
+
+                    // 완료율 계산
+                    const totalScheduleEvents = completedSchedules.length + missedSchedules.length + skippedSchedules.length;
+                    const completionRate = totalScheduleEvents > 0
+                        ? Math.round((completedSchedules.length / totalScheduleEvents) * 100)
+                        : 0;
+
+                    // 수면 패턴
+                    const sleepEvents = events.filter(e =>
+                        e.event_type === 'schedule_completed' &&
+                        e.payload?.scheduleText?.includes('취침')
+                    );
+                    const avgSleepTime = sleepEvents.length > 0
+                        ? sleepEvents.reduce((sum, e) => {
+                            const time = e.payload?.startTime || '23:00';
+                            const [hour] = time.split(':').map(Number);
+                            return sum + hour;
+                        }, 0) / sleepEvents.length
+                        : null;
+
+                    // 운동 패턴
+                    const exerciseEvents = events.filter(e =>
+                        e.event_type === 'schedule_completed' &&
+                        (e.payload?.scheduleText?.includes('운동') || e.payload?.scheduleText?.includes('헬스'))
+                    );
+                    const exerciseFrequency = exerciseEvents.length;
+
+                    // 학습 패턴
+                    const learningEvents = events.filter(e =>
+                        e.event_type === 'schedule_completed' &&
+                        (e.payload?.scheduleText?.includes('학습') || e.payload?.scheduleText?.includes('공부'))
+                    );
+
+                    eventLogsContext = `
+🧠 **Max 플랜 - 사용자 행동 패턴 분석 (최근 7일):**
+
+📊 일정 완료율: ${completionRate}%
+- 완료: ${completedSchedules.length}개
+- 놓침: ${missedSchedules.length}개
+- 미루기: ${skippedSchedules.length}개
+
+${avgSleepTime ? `😴 수면 패턴:
+- 평균 취침 시간: 약 ${Math.round(avgSleepTime)}시
+- 최근 ${sleepEvents.length}회 취침 기록
+` : ''}
+
+${exerciseFrequency > 0 ? `💪 운동 패턴:
+- 최근 7일간 ${exerciseFrequency}회 운동 완료
+` : ''}
+
+${learningEvents.length > 0 ? `📚 학습 패턴:
+- 최근 7일간 ${learningEvents.length}회 학습 완료
+` : ''}
+
+**고맥락 응답 가이드 (Max 플랜 - 자비스 모드):**
+
+🎯 핵심 원칙: "조언(Advice) < 전략적 판단(Strategic Judgment) + 실행(Action)"
+
+1. **일정 연쇄 관리 (Schedule Chain Management) - 가장 중요!**
+   - 일정 하나가 아니라 **연쇄(체인)로 관리**하세요
+   - 예: 영화(21:00) → 취침(23:00) → 기상(07:00)은 하나의 수면 사이클
+   - ❌ 나쁜 예: "내일 오전 7시에 기상 일정 추가했어요!"
+   - ✅ 좋은 예: "영화 21:00 종료 후 각성 시간을 고려해, 22:15부터 수면 전환 블록을 자동 삽입했습니다. 23:00 취침 → 07:00 기상으로 8시간 수면 사이클 확보. 내일 오전은 회복 우선 모드로 진입합니다."
+   - **자동 조정**: 충돌/간격 문제는 사용자에게 묻지 말고 최적값으로 자동 조정 후 보고
+   - **추천 금지**: "~하세요" 대신 "~했습니다"로 실행 완료 보고
+
+2. **내일 일정과의 인과관계 설명 (Context Connection)**
+   - ❌ 나쁜 예: "평소처럼 ${avgSleepTime ? Math.round(avgSleepTime) : 23}시에 주무시는군요"
+   - ✅ 좋은 예: "내일 오전 [시간]에 [중요 일정명]이 있습니다. 지금 주무시면 [X]시간 수면 주기를 확보해서 컨디션 100%로 준비할 수 있습니다"
+
+3. **뻔한 조언 금지, 실질적 제안으로 대체**
+   - ❌ 금지: "화면 밝기 줄이세요", "카페인 피하세요" (네이버 검색 수준)
+   - ✅ 대신: "숙면을 위해 방해 금지 모드를 켤까요?", "내일 기상 알람 [시간]으로 설정할까요?"
+
+4. **구체적 성과 요약 보고 (Executive Summary)**
+   - ❌ 나쁜 예: "완료율 ${completionRate}%로 잘하고 계시네요!"
+   - ✅ 좋은 예: "오늘 '[일정명]'과 '[일정명]'을 모두 소화하셨습니다. 이번 주 평균 수행률(${completionRate}%)이 지난주보다 [X]% ${completionRate > 80 ? '상승' : '하락'}했습니다"
+
+5. **참모 역할 강조**
+   - 일정 추가 시: "등록했습니다" (단순 확인) → "반영했습니다" (실행 완료)
+   - 마무리: "잘 자세요" → "내일 아침 브리핑 준비해두고 대기하겠습니다"
+
+6. **데이터 기반 인사이트**
+   - 완료율 추이, 지난주 대비 증감, 카테고리별 성과 등 구체적 수치 언급
+   - "상위 X% 궤도", "목표 달성률 X%" 같은 벤치마크 제공
+`;
+                }
+            } catch (e) {
+                console.error("[AI Chat] Failed to get event logs:", e);
+            }
+        }
+
+        // Max 플랜 사용자: RAG (Retrieval-Augmented Generation)
+        let ragContext = "";
+        if (userPlan === "Max") {
+            try {
+                // Get the last user message as the query
+                const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop();
+                if (lastUserMessage?.content) {
+                    const query = lastUserMessage.content;
+
+                    // Retrieve similar memories
+                    const memoryResponse = await fetch(
+                        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/user/memory?query=${encodeURIComponent(query)}&threshold=0.7&limit=3`,
+                        {
+                            method: 'GET',
+                            headers: {
+                                Cookie: request.headers.get('cookie') || '',
+                            },
+                        }
+                    );
+
+                    if (memoryResponse.ok) {
+                        const { memories } = await memoryResponse.json();
+
+                        if (memories && memories.length > 0) {
+                            ragContext = `
+🧠 **과거 대화 컨텍스트 (RAG - Max 플랜):**
+
+다음은 사용자의 과거 대화/일정/목표에서 현재 질문과 유사한 내용입니다:
+
+${memories.map((m: any, idx: number) => `
+${idx + 1}. [${m.content_type}] (유사도: ${Math.round(m.similarity * 100)}%)
+${m.content}
+${m.metadata?.date ? `날짜: ${m.metadata.date}` : ''}
+`).join('\n')}
+
+**RAG 활용 지침:**
+- 위 과거 컨텍스트를 참고하여 더 개인화된 응답을 제공하세요
+- 사용자가 이전에 했던 질문/일정/목표와 연관지어 답변하세요
+- 예: "지난번에 [과거 내용]에 대해 이야기했었죠. 이번에는..."
+- 과거 패턴을 기반으로 더 정확한 추천을 제공하세요
+`;
+                            console.log('[AI Chat] RAG retrieved', memories.length, 'similar memories');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("[AI Chat] Failed to retrieve RAG context:", e);
+            }
         }
 
         // Trend briefing context (if provided)
@@ -210,6 +420,8 @@ ${briefings.map((t: any, i: number) => `${i + 1}. [ID: ${t.id}] [${t.category ||
         const systemPrompt = `당신은 Fi.eri 앱의 AI 어시스턴트입니다. ${currentDateContext}
 ${userContext}
 ${scheduleContext}
+${eventLogsContext}
+${ragContext}
 ${trendContext}
 ${pendingScheduleContext}
 
@@ -218,7 +430,12 @@ ${pendingScheduleContext}
 2. **간결함**: 2-3문장으로 핵심만 전달. 불필요한 격식 제거.
 3. **불릿 포인트 최소화**: 3개 이상 나열할 때만 사용. 대신 자연스러운 문장으로 표현.
 4. **이모지 활용**: 문장 끝에 적절한 이모지 1-2개로 친근함 표현 (과하지 않게).
-5. **🚨 시간 추천 시 절대 규칙 (매우 중요!)**:
+5. **🎬 휴식/여가 일정 절대 존중 (매우 중요!)**:
+   - 영화, 게임, 친구 만남, 데이트, 취미, 운동(여가용), 산책 등 휴식/즐거움 목적 일정 앞에서는 절대 생산성/학습 조언 금지!
+   - ❌ 절대 금지: "영화 보기 전에 노션 템플릿 열어두세요", "게임하면서 배운 점 메모하세요", "친구 만나면서 네트워킹 기회로 활용하세요"
+   - ✅ 올바른 반응: "영화 재밌게 보고 오세요! 🍿", "게임 즐기세요! 🎮", "좋은 시간 보내세요! ☕"
+   - 휴식은 휴식일 뿐입니다. 모든 시간을 생산적으로 만들려 하지 마세요.
+6. **🚨 시간 추천 시 절대 규칙 (매우 중요!)**:
    - 현재 시간: ${context?.currentTime || '알 수 없음'}
    - 일정/활동 추천 시 반드시 현재 시간 이후만 추천!
    - ❌ 틀린 예: 현재 15:00인데 "06:00에 스트레칭 추천" → 절대 금지!
