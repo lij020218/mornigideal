@@ -1126,7 +1126,8 @@ export default function HomePage() {
                 const tomorrowDayOfWeek = tomorrow.getDay();
 
                 // Get tomorrow's schedules
-                const tomorrowSchedules = customGoals.filter((goal: any) => {
+                const allGoals = userProfile?.profile?.customGoals || [];
+                const tomorrowSchedules = allGoals.filter((goal: any) => {
                     if (goal.specificDate) {
                         return goal.specificDate === tomorrowStr;
                     }
