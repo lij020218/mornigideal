@@ -36,7 +36,7 @@ export class Hands {
         reasonCodes: string[]
     ): Promise<ExecutionResult> {
         // 확인이 필요한 액션인지 체크
-        const needsConfirmation = GUARDRAILS.REQUIRES_CONFIRMATION.includes(plan.actionType);
+        const needsConfirmation = (GUARDRAILS.REQUIRES_CONFIRMATION as readonly string[]).includes(plan.actionType);
 
         if (needsConfirmation && level < InterventionLevel.L3_DIRECT) {
             console.error('[Hands] Action requires confirmation but level is too low');

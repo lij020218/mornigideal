@@ -197,7 +197,7 @@ ${schedulesText}
     private passesGuardrails(context: InterventionContext): boolean {
         // 확인 필요 액션인지 체크 (L3 이상에서만 허용)
         const requiresConfirmation = context.decision.reasonCodes.some(code =>
-            GUARDRAILS.REQUIRES_CONFIRMATION.includes(code)
+            (GUARDRAILS.REQUIRES_CONFIRMATION as readonly string[]).includes(code)
         );
 
         if (requiresConfirmation && context.decision.level < InterventionLevel.L3_DIRECT) {
@@ -238,7 +238,7 @@ ${schedulesText}
         // L4 자동 실행인데 확인 필요한 액션이면 거부
         if (
             context.decision.level === InterventionLevel.L4_AUTO &&
-            GUARDRAILS.REQUIRES_CONFIRMATION.includes(plan.actionType)
+            (GUARDRAILS.REQUIRES_CONFIRMATION as readonly string[]).includes(plan.actionType)
         ) {
             console.error('[Brain] Cannot auto-execute action that requires confirmation');
             return false;
