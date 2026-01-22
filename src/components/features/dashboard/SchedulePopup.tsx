@@ -149,8 +149,31 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Listen for open-schedule-popup event from goals page
             const handleOpenWithGoal = (event: CustomEvent) => {
-                const { linkedGoalId, linkedGoalTitle } = event.detail;
+                const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
                 setLinkedGoal({ id: linkedGoalId, title: linkedGoalTitle });
+
+                // Set view mode based on goal type
+                if (goalType === 'weekly') {
+                    // For weekly goals, show the weekly schedule view
+                    setViewMode('weekly');
+                    // Set to current week
+                    const now = new Date();
+                    const dayOfWeek = now.getDay();
+                    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                    const monday = new Date(now);
+                    monday.setDate(now.getDate() - daysToSubtract);
+                    monday.setHours(0, 0, 0, 0);
+                    setSelectedWeekStart(monday);
+                } else if (goalType === 'monthly') {
+                    // For monthly goals, show the calendar view
+                    setViewMode('calendar-full');
+                    // Set to current month
+                    setCurrentMonth(new Date());
+                } else if (goalType === 'yearly') {
+                    // For yearly goals, just open activity picker (simpler)
+                    setViewMode('calendar-full'); // Default view
+                }
+
                 setShowActivityPicker(true); // Open activity picker immediately
             };
 

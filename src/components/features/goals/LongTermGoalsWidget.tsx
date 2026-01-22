@@ -631,7 +631,8 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                                                     window.dispatchEvent(new CustomEvent('open-schedule-popup', {
                                                                         detail: {
                                                                             linkedGoalId: goal.id,
-                                                                            linkedGoalTitle: goal.title
+                                                                            linkedGoalTitle: goal.title,
+                                                                            goalType: goal.type // weekly, monthly, yearly
                                                                         }
                                                                     }));
                                                                 }}
