@@ -614,14 +614,32 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                                     className="overflow-hidden"
                                                 >
                                                     <div className="px-4 pb-4 pt-2 border-t border-border/50 mx-4">
-                                                        <div className="flex items-center gap-2 mb-3">
-                                                            <Calendar className="w-4 h-4 text-primary" />
-                                                            <span className="text-sm font-medium">연결된 일정</span>
-                                                            {schedules.length > 0 && (
-                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                                                    {schedules.length}개
-                                                                </span>
-                                                            )}
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <Calendar className="w-4 h-4 text-primary" />
+                                                                <span className="text-sm font-medium">연결된 일정</span>
+                                                                {schedules.length > 0 && (
+                                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                                                        {schedules.length}개
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    // Dispatch event to open schedule popup with linked goal
+                                                                    window.dispatchEvent(new CustomEvent('open-schedule-popup', {
+                                                                        detail: {
+                                                                            linkedGoalId: goal.id,
+                                                                            linkedGoalTitle: goal.title
+                                                                        }
+                                                                    }));
+                                                                }}
+                                                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors"
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                                일정 추가
+                                                            </button>
                                                         </div>
 
                                                         {isLoadingThisGoal ? (

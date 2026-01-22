@@ -139,10 +139,22 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         }
     }
 
+    // State for linked goal (when adding schedule from goal page)
+    const [linkedGoal, setLinkedGoal] = useState<{ id: string; title: string } | null>(null);
+
     useEffect(() => {
         if (isOpen) {
             if (initialSchedule) setSchedule(initialSchedule);
             if (initialCustomGoals) setCustomGoals(initialCustomGoals);
+
+            // Listen for open-schedule-popup event from goals page
+            const handleOpenWithGoal = (event: CustomEvent) => {
+                const { linkedGoalId, linkedGoalTitle } = event.detail;
+                setLinkedGoal({ id: linkedGoalId, title: linkedGoalTitle });
+                setShowActivityPicker(true); // Open activity picker immediately
+            };
+
+            window.addEventListener('open-schedule-popup', handleOpenWithGoal as EventListener);
 
             // Check for pending calendar event from email
             const pendingEvent = localStorage.getItem('pendingCalendarEvent');
@@ -181,6 +193,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     localStorage.removeItem('pendingCalendarEvent');
                 }
             }
+
+            return () => {
+                window.removeEventListener('open-schedule-popup', handleOpenWithGoal as EventListener);
+            };
         }
     }, [isOpen, initialSchedule, initialCustomGoals]);
 
@@ -301,8 +317,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(targetDate),
                 notificationEnabled: notificationEnabled,
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
             setCustomGoals([...customGoals, newGoal]);
+            setLinkedGoal(null); // Clear after adding
         }
 
         resetPickers();
@@ -344,8 +362,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(targetDate), // 특정 날짜에만 추가
                 notificationEnabled: notificationEnabled,
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
             setCustomGoals([...customGoals, newGoal]);
+            setLinkedGoal(null); // Clear after adding
         } else if (viewMode === 'daily-detail' && selectedDate) {
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
@@ -363,8 +383,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(selectedDate),
                 notificationEnabled: notificationEnabled,
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
             setCustomGoals([...customGoals, newGoal]);
+            setLinkedGoal(null); // Clear after adding
         }
 
         resetPickers();
@@ -393,8 +415,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 daysOfWeek: [selectedDayOfWeek],
                 startDate: formatDate(new Date()), // 오늘부터 반복 시작
                 notificationEnabled: notificationEnabled,
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
             setCustomGoals([...customGoals, newGoal]);
+            setLinkedGoal(null); // Clear after adding
         } else if (viewMode === 'daily-detail' && selectedDate) {
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
@@ -411,8 +435,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: 'primary',
                 specificDate: formatDate(selectedDate),
                 notificationEnabled: notificationEnabled,
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
             setCustomGoals([...customGoals, newGoal]);
+            setLinkedGoal(null); // Clear after adding
         }
 
         setCustomActivityText("");
