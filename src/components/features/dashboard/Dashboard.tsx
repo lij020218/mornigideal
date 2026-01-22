@@ -317,7 +317,16 @@ export function Dashboard({
         return () => window.removeEventListener('open-daily-briefing', handleOpenDailyBriefing);
     }, []);
 
+    // Listen for open-schedule-popup event from LongTermGoalsWidget
+    useEffect(() => {
+        const handleOpenSchedulePopup = () => {
+            console.log("Dashboard: 'open-schedule-popup' event received!");
+            setShowSchedulePopup(true);
+        };
 
+        window.addEventListener('open-schedule-popup', handleOpenSchedulePopup);
+        return () => window.removeEventListener('open-schedule-popup', handleOpenSchedulePopup);
+    }, []);
 
     const getCurriculumProgress = (curriculumId: number) => {
         const progressKey = `curriculum_progress_${curriculumId}`;
