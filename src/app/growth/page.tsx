@@ -11,6 +11,7 @@ import { SmartInsightsWidget } from "@/components/features/dashboard/SmartInsigh
 import { WeeklyReportContent } from "@/components/features/dashboard/WeeklyReportContent";
 import { LongTermGoalsWidget } from "@/components/features/goals/LongTermGoalsWidget";
 import { GoalSettingModal } from "@/components/features/goals/GoalSettingModal";
+import { SchedulePopup } from "@/components/features/dashboard/SchedulePopup";
 import {
     LearningCurriculumWizard,
     LearningCurriculumView,
@@ -52,6 +53,9 @@ export default function GrowthPage() {
     const [habitInsights, setHabitInsights] = useState<any>(null);
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [goalsKey, setGoalsKey] = useState(0);
+    const [showSchedulePopup, setShowSchedulePopup] = useState(false);
+    const [userProfile, setUserProfile] = useState<any>(null);
+    const [linkedGoalData, setLinkedGoalData] = useState<{ id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' } | null>(null);
 
     // Learning states
     const { plan: userPlanInfo, isLoading: isPlanLoading } = useUserPlan();
@@ -76,6 +80,13 @@ export default function GrowthPage() {
 
         const fetchData = async () => {
             try {
+                // Fetch user profile
+                const profileRes = await fetch('/api/user/profile');
+                if (profileRes.ok) {
+                    const profileData = await profileRes.json();
+                    setUserProfile(profileData);
+                }
+
                 // Fetch habit insights
                 const insightsRes = await fetch('/api/habit-insights');
                 if (insightsRes.ok) {
@@ -141,6 +152,52 @@ export default function GrowthPage() {
 
         fetchData();
     }, [session]);
+
+    // Listen for open-schedule-popup event from LongTermGoalsWidget
+    useEffect(() => {
+        const handleOpenSchedulePopup = (event: CustomEvent) => {
+            console.log("GrowthPage: 'open-schedule-popup' event received!", event.detail);
+            const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
+
+            setLinkedGoalData({
+                id: linkedGoalId,
+                title: linkedGoalTitle,
+                type: goalType
+            });
+            setShowSchedulePopup(true);
+        };
+
+        window.addEventListener('open-schedule-popup', handleOpenSchedulePopup as EventListener);
+        return () => window.removeEventListener('open-schedule-popup', handleOpenSchedulePopup as EventListener);
+    }, []);
+
+    const handleSaveSchedule = async (schedule: any, customGoals: any[]) => {
+        try {
+            const updatedProfile = {
+                ...userProfile?.profile,
+                schedule,
+                customGoals,
+            };
+
+            const response = await fetch('/api/user/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile: updatedProfile }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setUserProfile(data);
+                setShowSchedulePopup(false);
+
+                // Notify other components
+                window.dispatchEvent(new Event('profile-updated'));
+                window.dispatchEvent(new CustomEvent('schedule-updated'));
+            }
+        } catch (error) {
+            console.error('[Growth] Failed to save schedule:', error);
+        }
+    };
 
     const handleScheduleAdd = async (newSchedules: any[]) => {
         try {
@@ -449,6 +506,19 @@ export default function GrowthPage() {
                         onComplete={handleSlideComplete}
                     />
                 )}
+
+                {/* Schedule Popup */}
+                <SchedulePopup
+                    isOpen={showSchedulePopup}
+                    onClose={() => {
+                        setShowSchedulePopup(false);
+                        setLinkedGoalData(null); // Clear linked goal data when closing
+                    }}
+                    initialSchedule={userProfile?.profile?.schedule}
+                    initialCustomGoals={userProfile?.profile?.customGoals}
+                    onSave={handleSaveSchedule}
+                    linkedGoalData={linkedGoalData}
+                />
             </div>
         </div>
     );

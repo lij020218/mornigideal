@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2, Users, MapPin, FileText, Film, Tv, Music } from "lucide-react";
+import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpen, Target, Edit3, Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Heart, Gamepad2, Users, MapPin, FileText, Film, Tv, Music, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,7 @@ interface SchedulePopupProps {
     initialSchedule?: Schedule;
     initialCustomGoals?: CustomGoal[];
     onSave: (schedule: Schedule, customGoals: CustomGoal[]) => void;
+    linkedGoalData?: { id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' } | null;
 }
 
 const PRESET_ACTIVITIES = [
@@ -81,7 +82,7 @@ const DAYS_OF_WEEK = [
     { id: 0, label: '일', fullLabel: '일요일' },
 ];
 
-export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomGoals, onSave }: SchedulePopupProps) {
+export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomGoals, onSave, linkedGoalData }: SchedulePopupProps) {
     const [schedule, setSchedule] = useState<Schedule>({
         wakeUp: "07:00",
         workStart: "09:00",
@@ -141,11 +142,32 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
     // State for linked goal (when adding schedule from goal page)
     const [linkedGoal, setLinkedGoal] = useState<{ id: string; title: string } | null>(null);
+    const [availableGoals, setAvailableGoals] = useState<Array<{ id: string; title: string; type: string }>>([]);
+    const [showGoalSelector, setShowGoalSelector] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
             if (initialSchedule) setSchedule(initialSchedule);
             if (initialCustomGoals) setCustomGoals(initialCustomGoals);
+
+            // Fetch available goals for linking
+            const fetchGoals = async () => {
+                try {
+                    const response = await fetch('/api/user/long-term-goals');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const allGoals = [
+                            ...(data.goals?.weekly || []).map((g: any) => ({ ...g, type: 'weekly' })),
+                            ...(data.goals?.monthly || []).map((g: any) => ({ ...g, type: 'monthly' })),
+                            ...(data.goals?.yearly || []).map((g: any) => ({ ...g, type: 'yearly' })),
+                        ].filter((g: any) => !g.completed); // Only show incomplete goals
+                        setAvailableGoals(allGoals);
+                    }
+                } catch (error) {
+                    console.error('[SchedulePopup] Failed to fetch goals:', error);
+                }
+            };
+            fetchGoals();
 
             // Listen for open-schedule-popup event from goals page
             const handleOpenWithGoal = (event: CustomEvent) => {
@@ -222,6 +244,33 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             };
         }
     }, [isOpen, initialSchedule, initialCustomGoals]);
+
+    // Handle linkedGoalData prop changes
+    useEffect(() => {
+        if (linkedGoalData && isOpen) {
+            console.log('[SchedulePopup] Setting linkedGoal from prop:', linkedGoalData);
+            setLinkedGoal({ id: linkedGoalData.id, title: linkedGoalData.title });
+
+            // Set view mode based on goal type
+            if (linkedGoalData.type === 'weekly') {
+                setViewMode('weekly');
+                const now = new Date();
+                const dayOfWeek = now.getDay();
+                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                const monday = new Date(now);
+                monday.setDate(now.getDate() - daysToSubtract);
+                monday.setHours(0, 0, 0, 0);
+                setSelectedWeekStart(monday);
+            } else if (linkedGoalData.type === 'monthly') {
+                setViewMode('calendar-full');
+                setCurrentMonth(new Date());
+            } else if (linkedGoalData.type === 'yearly') {
+                setViewMode('calendar-full');
+            }
+
+            setShowActivityPicker(true);
+        }
+    }, [linkedGoalData, isOpen]);
 
     const resetPickers = () => {
         setShowActivityPicker(false);
@@ -342,6 +391,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 notificationEnabled: notificationEnabled,
                 ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
             };
+            console.log('[SchedulePopup] Adding schedule with linkedGoal:', linkedGoal, 'newGoal:', newGoal);
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
         }
@@ -1037,6 +1087,65 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 </Button>
                             </div>
                         </div>
+                    )}
+                </motion.div>
+            )}
+
+            {/* Goal Selector - shows after activity picked, before duration */}
+            {selectedActivity && !showDurationPicker && !isAddingCustom && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-muted/30 rounded-lg border border-border/50"
+                >
+                    <div className="flex items-center justify-between mb-3">
+                        <label className="text-sm font-medium flex items-center gap-2">
+                            <Flag className="w-4 h-4 text-primary" />
+                            목표와 연결 (선택사항)
+                        </label>
+                        {linkedGoal && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setLinkedGoal(null)}
+                                className="h-6 px-2 text-xs"
+                            >
+                                <X className="w-3 h-3 mr-1" />
+                                연결 해제
+                            </Button>
+                        )}
+                    </div>
+                    {linkedGoal ? (
+                        <div className="p-2 bg-primary/10 rounded border border-primary/20 text-sm">
+                            <span className="text-primary font-medium">✓ {linkedGoal.title}</span>
+                        </div>
+                    ) : availableGoals.length > 0 ? (
+                        <div className="space-y-2">
+                            <select
+                                value=""
+                                onChange={(e) => {
+                                    const goal = availableGoals.find(g => g.id === e.target.value);
+                                    if (goal) {
+                                        setLinkedGoal({ id: goal.id, title: goal.title });
+                                    }
+                                }}
+                                className="w-full p-2 border rounded-lg text-sm bg-white"
+                            >
+                                <option value="">목표 선택...</option>
+                                {availableGoals.map((goal) => (
+                                    <option key={goal.id} value={goal.id}>
+                                        [{goal.type === 'weekly' ? '주간' : goal.type === 'monthly' ? '월간' : '연간'}] {goal.title}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                이 일정을 장기 목표와 연결하면 목표 진행률이 자동으로 업데이트됩니다
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">
+                            연결 가능한 목표가 없습니다
+                        </p>
                     )}
                 </motion.div>
             )}

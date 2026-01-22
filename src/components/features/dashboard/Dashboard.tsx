@@ -96,6 +96,7 @@ export function Dashboard({
     const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
+    const [linkedGoalData, setLinkedGoalData] = useState<{ id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' } | null>(null);
 
     // Get icon for schedule based on text
     const getScheduleIcon = (text: string) => {
@@ -319,13 +320,20 @@ export function Dashboard({
 
     // Listen for open-schedule-popup event from LongTermGoalsWidget
     useEffect(() => {
-        const handleOpenSchedulePopup = () => {
-            console.log("Dashboard: 'open-schedule-popup' event received!");
+        const handleOpenSchedulePopup = (event: CustomEvent) => {
+            console.log("Dashboard: 'open-schedule-popup' event received!", event.detail);
+            const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
+
+            setLinkedGoalData({
+                id: linkedGoalId,
+                title: linkedGoalTitle,
+                type: goalType
+            });
             setShowSchedulePopup(true);
         };
 
-        window.addEventListener('open-schedule-popup', handleOpenSchedulePopup);
-        return () => window.removeEventListener('open-schedule-popup', handleOpenSchedulePopup);
+        window.addEventListener('open-schedule-popup', handleOpenSchedulePopup as EventListener);
+        return () => window.removeEventListener('open-schedule-popup', handleOpenSchedulePopup as EventListener);
     }, []);
 
     const getCurriculumProgress = (curriculumId: number) => {
@@ -1611,10 +1619,14 @@ export function Dashboard({
 
             <SchedulePopup
                 isOpen={showSchedulePopup}
-                onClose={() => setShowSchedulePopup(false)}
+                onClose={() => {
+                    setShowSchedulePopup(false);
+                    setLinkedGoalData(null); // Clear linked goal data when closing
+                }}
                 initialSchedule={userProfile?.schedule}
                 initialCustomGoals={userProfile?.customGoals}
                 onSave={handleSaveSchedule}
+                linkedGoalData={linkedGoalData}
             />
 
             {/* Goal Setting Modal */}
