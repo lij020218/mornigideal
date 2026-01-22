@@ -277,30 +277,30 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                 {totalCount > 0 && (
                     <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border/50">
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
-                                <Trophy className="w-4 h-4 text-green-600 dark:text-green-300" />
+                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                                <Trophy className="w-4 h-4 text-green-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-muted-foreground dark:text-gray-400">완료</p>
-                                <p className="font-bold text-sm dark:text-white">{completedCount}개</p>
+                                <p className="text-xs text-gray-500">완료</p>
+                                <p className="font-bold text-sm text-gray-900">{completedCount}개</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center">
-                                <Flame className="w-4 h-4 text-orange-600 dark:text-orange-300" />
+                            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+                                <Flame className="w-4 h-4 text-orange-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-muted-foreground dark:text-gray-400">진행률</p>
-                                <p className="font-bold text-sm dark:text-white">{averageProgress}%</p>
+                                <p className="text-xs text-gray-500">진행률</p>
+                                <p className="font-bold text-sm text-gray-900">{averageProgress}%</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
-                                <Star className="w-4 h-4 text-blue-600 dark:text-blue-300" />
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                                <Star className="w-4 h-4 text-blue-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-muted-foreground dark:text-gray-400">진행 중</p>
-                                <p className="font-bold text-sm dark:text-white">{totalCount - completedCount}개</p>
+                                <p className="text-xs text-gray-500">진행 중</p>
+                                <p className="font-bold text-sm text-gray-900">{totalCount - completedCount}개</p>
                             </div>
                         </div>
                     </div>
