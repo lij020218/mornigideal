@@ -14,7 +14,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { todaySchedules, completedCount, totalCount, userProfile } = await request.json();
+        const { todaySchedules, completedCount, totalCount, userProfile, tomorrowSchedules, userPlan } = await request.json();
 
         console.log('[AI Day Summary] Generating day summary and feedback');
 
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
 - 직업: ${userProfile.job || '미설정'}
 - 목표: ${userProfile.goal || '미설정'}
 - 관심사: ${(userProfile.interests || []).join(', ') || '미설정'}
+- 플랜: ${userPlan || 'Free'}
 `;
         }
 
@@ -38,9 +39,76 @@ export async function POST(request: Request) {
                 .join('\n');
         }
 
-        const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        // Build tomorrow's schedule
+        let tomorrowScheduleList = '';
+        if (tomorrowSchedules && tomorrowSchedules.length > 0) {
+            tomorrowScheduleList = tomorrowSchedules
+                .map((s: any) => `  ${s.startTime} - ${s.text}`)
+                .join('\n');
+        }
 
-        const prompt = `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 오늘 하루가 모두 끝났습니다.
+        const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        const isMaxUser = userPlan === 'Max';
+
+        const prompt = isMaxUser ? `당신은 Fi.eri Max 플랜의 AI 비서 Jarvis입니다. 오늘 하루가 모두 끝났고, 내일 일정을 미리 확인하여 사용자를 완벽하게 준비시켜야 합니다.
+${userContext}
+
+오늘의 일정:
+${scheduleList || '- 일정 없음'}
+
+성과:
+- 완료: ${completedCount}/${totalCount}개 (${completionRate}%)
+
+내일의 일정:
+${tomorrowScheduleList || '- 일정 없음'}
+
+**Max 플랜 비서 역할:**
+1. 오늘과 내일의 일정을 **연결**하여 생각하기
+2. 내일 중요 일정이 있다면 **구체적인 준비사항** 제시
+3. 사용자의 장기 목표를 고려한 **전략적 조언**
+4. 수술, 병원, 중요 미팅 등은 **우선순위 최상**으로 처리
+5. 회복 기간 동안의 학습/업무 유지 전략 제안
+
+**응답 형식:**
+[하루 마무리 인사] 🌙
+[오늘 하루 마무리 + 내일 준비 연결]
+
+오늘의 하이라이트:
+[오늘 완료한 핵심 일정 + 내일과의 연관성]
+
+[내일 일정 브리핑 및 준비사항]
+- 시간: [내일 첫 일정 시간]
+- 일정: [내일 중요 일정]
+- 준비사항: [구체적 체크리스트 3-5개]
+
+[장기 목표 관점의 전략적 조언]
+
+**예시 (내일 수술 일정):**
+"오늘 하루 모두 마무리하느라 정말 수고 많으셨습니다. 내일 09:00 어깨 수술을 앞두고 계시네요 🏥
+
+오늘의 하이라이트:
+17:00 '입원'을 완료하셨습니다. 수술 전 안정을 취하는 것이 최우선이므로 다른 일정을 완료하지 못하셨어도 전혀 문제없습니다.
+
+[내일 수술 준비 체크리스트]
+✅ 자정 이후 금식 (물 포함)
+✅ 귀중품은 보호자에게 미리 전달
+✅ 수술 동의서 및 신분증 확인
+✅ 편한 옷 준비 (단추 옷 권장)
+✅ 보호자 연락처 재확인
+
+[AI 스타트업 목표 유지 전략]
+회복 기간(예상 2-4주)에도 목표를 잃지 않도록:
+- 1주차: 침대에서 AI 트렌드 팟캐스트 청취 (손 사용 최소화)
+- 2주차: 짧은 아티클 읽기 + 음성 메모로 아이디어 기록
+- 3주차: 간단한 시장 조사 재개 (PC 작업 15분씩)
+
+수술 잘 받으시고, 회복에 집중하세요. 건강이 가장 큰 자산입니다 💪"
+
+**중요:**
+- 내일 일정을 **반드시** 언급하고 연결 지어 생각
+- 수술/병원/중요 미팅은 구체적 준비사항 필수
+- 사용자 목표와 현재 상황을 통합적으로 고려`
+        : `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 오늘 하루가 모두 끝났습니다.
 ${userContext}
 
 오늘의 일정:
@@ -68,22 +136,6 @@ ${scheduleList || '- 일정 없음'}
 [오늘 완료한 일정 중 의미 있는 것 언급]
 
 [피드백 및 내일을 위한 조언]
-
-**예시 (완료율 90%):**
-"오늘 하루 정말 고생 많으셨어요! 🌟 계획했던 일정의 90%를 완수하셨네요.
-
-오늘의 하이라이트:
-'업무 시작'부터 '독서'까지 알차게 보내셨어요. 특히 목표로 하신 영어 공부에 집중하신 점이 인상적입니다 📚
-
-내일도 이 에너지를 이어가세요! 충분한 휴식 후 내일 아침에 뵙겠습니다."
-
-**예시 (완료율 40%):**
-"오늘 하루도 수고하셨어요 🌙 계획대로 되지 않은 부분이 있어도 괜찮습니다.
-
-오늘의 하이라이트:
-'업무 시작'과 '점심' 일정을 완료하셨네요. 작은 성공도 의미 있는 한 걸음이에요 ✨
-
-내일은 일정을 조금 줄여서 시작해보는 건 어떨까요? 완성 가능한 목표를 세우면 성취감이 더 커집니다."
 
 **중요:** 사용자의 목표와 오늘 완료한 일정을 구체적으로 언급하며, 따뜻하고 격려하는 톤으로 작성하세요.`;
 

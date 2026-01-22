@@ -26,6 +26,7 @@ import { TrendBriefingDetail } from "@/components/features/dashboard/TrendBriefi
 import { markScheduleCompletion } from "@/lib/scheduleNotifications";
 import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
 import { SlideViewer } from "@/components/features/learning/SlideViewer";
+import { FieriInterventionsContainer } from "@/components/features/fieri/FieriInterventionsContainer";
 
 interface Schedule {
     id: string;
@@ -109,15 +110,7 @@ export default function HomePage() {
         }
         return true;
     });
-    const [learningTips, setLearningTips] = useState<{
-        greeting: string;
-        tips: { emoji: string; title: string; content: string }[];
-        encouragement: string;
-        scheduleId: string;
-        objectives?: string[];
-        dayTitle?: string;
-    } | null>(null);
-    const [isLoadingLearningTips, setIsLoadingLearningTips] = useState(false);
+    const [learningTipsShownFor, setLearningTipsShownFor] = useState<Set<string>>(new Set());
 
     // 슬라이드 뷰어 상태
     const [slideViewerData, setSlideViewerData] = useState<{
@@ -608,20 +601,25 @@ export default function HomePage() {
                 (s: any) => s.isLearning && s.learningData && !s.completed && !s.skipped
             );
 
-            if (!learningSchedule || learningTips?.scheduleId === (learningSchedule as any).id) {
+            if (!learningSchedule) {
                 return;
             }
 
-            // 이미 숨긴 학습 팁인지 확인
-            const dismissedKey = `learning_tips_dismissed_${(learningSchedule as any).id}`;
+            const scheduleId = (learningSchedule as any).id;
+
+            // 이미 표시한 학습 팁인지 확인
+            if (learningTipsShownFor.has(scheduleId)) {
+                return;
+            }
+
+            // localStorage에서도 확인 (페이지 새로고침 대응)
+            const dismissedKey = `learning_tips_dismissed_${scheduleId}`;
             if (localStorage.getItem(dismissedKey)) {
                 return;
             }
 
             const learningData = (learningSchedule as any).learningData;
             if (!learningData) return;
-
-            setIsLoadingLearningTips(true);
             try {
                 const res = await fetch('/api/ai-learning-tip', {
                     method: 'POST',
@@ -634,23 +632,51 @@ export default function HomePage() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    setLearningTips({
-                        ...data,
-                        scheduleId: (learningSchedule as any).id,
-                        objectives: learningData.objectives || [],
-                        dayTitle: learningData.dayTitle,
-                    });
+
+                    // 학습 팁을 채팅 메시지로 변환
+                    let tipMessage = `📚 **${learningData.dayTitle || '오늘의 학습'}**\n\n`;
+                    tipMessage += `${data.greeting}\n\n`;
+
+                    if (learningData.objectives && learningData.objectives.length > 0) {
+                        tipMessage += `**📌 학습 목표:**\n`;
+                        learningData.objectives.forEach((obj: string) => {
+                            tipMessage += `- ${obj}\n`;
+                        });
+                        tipMessage += `\n`;
+                    }
+
+                    if (data.tips && data.tips.length > 0) {
+                        tipMessage += `**💡 학습 팁:**\n\n`;
+                        data.tips.forEach((tip: any, index: number) => {
+                            tipMessage += `${tip.emoji} **${tip.title}**\n${tip.content}\n\n`;
+                        });
+                    }
+
+                    tipMessage += `${data.encouragement}`;
+
+                    // 채팅 메시지로 추가
+                    const message: Message = {
+                        id: `learning-tip-${Date.now()}`,
+                        role: 'assistant',
+                        content: tipMessage,
+                        timestamp: new Date(),
+                    };
+                    setMessages(prev => [...prev, message]);
+
+                    // dismissed 상태 저장 (중복 방지)
+                    const scheduleId = (learningSchedule as any).id;
+                    localStorage.setItem(`learning_tips_dismissed_${scheduleId}`, 'true');
+                    setLearningTipsShownFor(prev => new Set([...prev, scheduleId]));
+
                     console.log('[Home] Loaded learning tips for:', learningData.dayTitle);
                 }
             } catch (error) {
                 console.error('[Home] Failed to fetch learning tips:', error);
-            } finally {
-                setIsLoadingLearningTips(false);
             }
         };
 
         fetchLearningTips();
-    }, [session, todaySchedules, learningTips?.scheduleId]);
+    }, [session, todaySchedules, learningTipsShownFor]);
 
     // Auto-send schedule-based messages
     useEffect(() => {
@@ -1093,7 +1119,31 @@ export default function HomePage() {
                 const completed = todaySchedules.filter(s => s.completed).length;
                 const total = todaySchedules.length;
 
+                // Calculate tomorrow's date
+                const tomorrow = new Date(kstNow);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+                const tomorrowDayOfWeek = tomorrow.getDay();
+
+                // Get tomorrow's schedules
+                const tomorrowSchedules = customGoals.filter((goal: any) => {
+                    if (goal.specificDate) {
+                        return goal.specificDate === tomorrowStr;
+                    }
+                    if (goal.daysOfWeek?.includes(tomorrowDayOfWeek)) {
+                        if (goal.startDate && tomorrowStr < goal.startDate) return false;
+                        if (goal.endDate && tomorrowStr > goal.endDate) return false;
+                        return true;
+                    }
+                    return false;
+                }).sort((a: any, b: any) => {
+                    const aTime = a.startTime || '00:00';
+                    const bTime = b.startTime || '00:00';
+                    return aTime.localeCompare(bTime);
+                });
+
                 console.log('[AutoMessage] ✅ Sending AI day summary (21시~24시 사이)');
+                console.log('[AutoMessage] Tomorrow schedules:', tomorrowSchedules.length);
 
                 // AI 하루 마무리 요청 - gpt-5.2 사용
                 fetch('/api/ai-day-summary', {
@@ -1108,7 +1158,13 @@ export default function HomePage() {
                         })),
                         completedCount: completed,
                         totalCount: total,
-                        userProfile: userProfile
+                        userProfile: userProfile,
+                        tomorrowSchedules: tomorrowSchedules.map((s: any) => ({
+                            text: s.text,
+                            startTime: s.startTime,
+                            endTime: s.endTime
+                        })),
+                        userPlan: userProfile?.plan || 'Free'
                     }),
                 }).then(res => res.json()).then(data => {
                     console.log('[AutoMessage] Received AI day summary:', data);
@@ -2455,6 +2511,9 @@ export default function HomePage() {
 
             {/* 2️⃣ MIDDLE: Chat History + Recommendation Cards */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
+                {/* Fi.eri Auto-Interventions */}
+                <FieriInterventionsContainer className="mb-6 max-w-4xl mx-auto" />
+
                 {/* Chat History (최소화 - 마지막 3-5개만) */}
                 <div className={cn(
                     "space-y-4",
@@ -2469,91 +2528,6 @@ export default function HomePage() {
                             <p className="text-xs text-muted-foreground">
                                 일정, 학습, 목표에 대해 무엇이든 물어보세요
                             </p>
-                        </div>
-                    )}
-
-                    {/* Learning Tips Card - 학습 일정이 있을 때 표시 */}
-                    <AnimatePresence>
-                        {learningTips && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                className="relative bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4 max-w-3xl mx-auto"
-                            >
-                                <div className="flex items-start gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                                        <span className="text-xl">📚</span>
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-1">
-                                            {learningTips.dayTitle || '오늘의 학습'}
-                                        </h3>
-                                        <p className="text-sm text-blue-700 dark:text-blue-300">{learningTips.greeting}</p>
-                                    </div>
-                                </div>
-
-                                {/* 학습 목표 표시 */}
-                                {learningTips.objectives && learningTips.objectives.length > 0 && (
-                                    <div className="mb-4 p-3 bg-white/40 dark:bg-white/5 rounded-xl">
-                                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">오늘의 학습 목표</p>
-                                        <ul className="space-y-1.5">
-                                            {learningTips.objectives.map((obj, idx) => (
-                                                <li key={idx} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                                    <span className="text-blue-500 mt-0.5">•</span>
-                                                    <span>{obj}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-
-                                <div className="space-y-3">
-                                    {learningTips.tips.map((tip, index) => (
-                                        <motion.div
-                                            key={index}
-                                            initial={{ opacity: 0, x: -10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.1 }}
-                                            className="flex items-start gap-3 bg-white/60 dark:bg-white/5 rounded-xl p-3"
-                                        >
-                                            <span className="text-lg flex-shrink-0">{tip.emoji}</span>
-                                            <div>
-                                                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{tip.title}</p>
-                                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{tip.content}</p>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
-
-                                <div className="mt-4 pt-3 border-t border-blue-200/30 dark:border-blue-800/30">
-                                    <p className="text-xs text-center text-blue-600 dark:text-blue-400 font-medium">
-                                        {learningTips.encouragement}
-                                    </p>
-                                </div>
-
-                                <button
-                                    onClick={() => {
-                                        // 숨김 상태 저장
-                                        if (learningTips?.scheduleId) {
-                                            localStorage.setItem(`learning_tips_dismissed_${learningTips.scheduleId}`, 'true');
-                                        }
-                                        setLearningTips(null);
-                                    }}
-                                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-gray-200/50 dark:bg-gray-700/50 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-300/50 dark:hover:bg-gray-600/50 transition-colors"
-                                    title="닫기"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    {/* Loading Learning Tips */}
-                    {isLoadingLearningTips && (
-                        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-5 border border-blue-200/50 dark:border-blue-800/30 mb-4 flex items-center justify-center max-w-3xl mx-auto">
-                            <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
-                            <span className="text-sm text-blue-600 dark:text-blue-400">학습 팁을 준비하고 있어요...</span>
                         </div>
                     )}
 

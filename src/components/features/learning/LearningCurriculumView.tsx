@@ -326,7 +326,15 @@ export function LearningCurriculumView({
     const [isLoading, setIsLoading] = useState(true);
     const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set([1]));
     const [isAddingSchedule, setIsAddingSchedule] = useState(false);
-    const [addedToSchedule, setAddedToSchedule] = useState<Set<number>>(new Set());
+    const [addedToSchedule, setAddedToSchedule] = useState<Set<number>>(() => {
+        // localStorage에서 추가된 일정 복원
+        try {
+            const saved = localStorage.getItem(`added_to_schedule_${curriculum.id}`);
+            return saved ? new Set(JSON.parse(saved)) : new Set();
+        } catch {
+            return new Set();
+        }
+    });
     const [timePickerOpen, setTimePickerOpen] = useState(false);
     const [selectedDay, setSelectedDay] = useState<CurriculumDay | null>(null);
 
@@ -358,6 +366,14 @@ export function LearningCurriculumView({
             setProgress({
                 completedDays: newCompletedDays,
                 currentDay: newCurrentDay,
+            });
+
+            // 완료된 날짜는 addedToSchedule에서 제거
+            setAddedToSchedule(prev => {
+                const newSet = new Set([...prev]);
+                newSet.delete(dayNumber);
+                localStorage.setItem(`added_to_schedule_${curriculum.id}`, JSON.stringify([...newSet]));
+                return newSet;
             });
 
             await fetch("/api/user/learning-progress", {
@@ -474,7 +490,12 @@ export function LearningCurriculumView({
             window.dispatchEvent(new Event('profile-updated'));
 
             // 추가된 상태 업데이트 (일정에 추가됨, 아직 완료 아님)
-            setAddedToSchedule(prev => new Set([...prev, day.day]));
+            setAddedToSchedule(prev => {
+                const newSet = new Set([...prev, day.day]);
+                // localStorage에 저장
+                localStorage.setItem(`added_to_schedule_${curriculum.id}`, JSON.stringify([...newSet]));
+                return newSet;
+            });
 
             // 진행 상황은 일정 완료 시 업데이트됨 (여기서는 업데이트하지 않음)
             // handleCompleteDay는 실제로 일정을 완료했을 때 호출되어야 함
@@ -529,8 +550,8 @@ export function LearningCurriculumView({
                 }
             }));
 
-            // 채팅 페이지로 이동
-            router.push('/chat');
+            // 홈(채팅) 페이지로 이동
+            router.push('/');
 
         } catch (error) {
             console.error('[Learning] Failed to add schedule:', error);

@@ -162,12 +162,13 @@ ${goal.description ? `설명: ${goal.description}` : ""}
 **규칙 (반드시 준수!):**
 1. 실용적이고 실현 가능한 일정만 추천
 2. 각 일정은 30분~2시간 이내
-3. **목표 기간 ${endDateStr}까지만 유효한 일정 추천**
-   - 주간 목표: 이번 주 토요일(${endDate.getMonth() + 1}/${endDate.getDate()})까지만
-   - 월간 목표: 이번 달 말(${endDate.getMonth() + 1}/${endDate.getDate()})까지만
-   - 연간 목표: 올해 말(12/31)까지만
+3. **목표 기간 제한 (매우 중요!):**
+   - 주간 목표: 반드시 이번 주 토요일(${endDate.getMonth() + 1}월 ${endDate.getDate()}일)까지만 일정 추천
+   - 월간 목표: 반드시 이번 달 말(${endDate.getMonth() + 1}월 ${endDate.getDate()}일)까지만 일정 추천
+   - 연간 목표: 반드시 올해 말(12월 31일)까지만 일정 추천
+   - **기간이 지나면 자동으로 일정이 사라지므로 기간 내에만 추천!**
 4. **현재 시간 ${currentTimeStr} 이후의 시간대만 추천**
-5. **추천 가능한 요일만 사용: [${remainingDays.join(", ")}]**
+5. **추천 가능한 요일만 사용: [${remainingDays.join(", ")}]** (다른 요일 절대 불가)
 6. 일반적인 생활 패턴 고려 (아침: 6-9시, 저녁: 18-21시)
 
 **JSON 형식으로 응답** (다른 텍스트 없이 JSON만):

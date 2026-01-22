@@ -166,12 +166,12 @@ export function GlobalScheduleRecommender() {
                             // 채팅 메시지 추가
                             addChatMessage(messageContent);
 
-                            // 브라우저 알림 발송 (채팅 페이지가 아닐 때만)
-                            if (pathname !== '/chat') {
+                            // 브라우저 알림 발송 (홈 페이지가 아닐 때만)
+                            if (pathname !== '/') {
                                 sendBrowserNotification(
                                     '📋 일정 추천',
                                     `${pendingSchedules.length === 0 ? '남은 일정이 없어요' : '오늘 일정이 없어요'}! 새로운 일정을 추천해드릴까요?`,
-                                    () => router.push('/chat')
+                                    () => router.push('/')
                                 );
                             }
 

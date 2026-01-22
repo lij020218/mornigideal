@@ -93,11 +93,22 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     // State for View Mode
     // 'calendar-full': The initial large calendar view
     // 'daily-detail': The specific day timeline view
-    // 'weekly': The weekly recurring schedule view
+    // 'weekly': The weekly schedule view for a specific week
     const [viewMode, setViewMode] = useState<'calendar-full' | 'daily-detail' | 'weekly'>('calendar-full');
 
-    // For weekly view
-    const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<number>(1); // Monday
+    // For weekly view - now shows specific week's schedules
+    const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
+        // Get current week's Monday
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - daysToSubtract);
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+    });
+    const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<number>(1); // For adding schedules in weekly view
+    const [showRecurringPrompt, setShowRecurringPrompt] = useState(false); // Ask if schedule should be recurring
 
     // For calendar view
     const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -235,11 +246,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
         if (isRecurring) {
             // Determine the day of week for recurring schedule
-            // In weekly view: use selectedDayOfWeek
-            // In daily-detail view: use the selected date's day of week
-            const targetDayOfWeek = viewMode === 'weekly'
-                ? selectedDayOfWeek
-                : (selectedDate?.getDay() ?? new Date().getDay());
+            // Note: weekly view should NOT create recurring schedules
+            const targetDayOfWeek = viewMode === 'daily-detail'
+                ? (selectedDate?.getDay() ?? new Date().getDay())
+                : new Date().getDay();
 
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, undefined, targetDayOfWeek)) {
@@ -265,8 +275,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             let targetDate: Date;
             if (viewMode === 'daily-detail' && selectedDate) {
                 targetDate = selectedDate;
+            } else if (viewMode === 'weekly') {
+                // For weekly view, calculate the specific date based on selectedWeekStart and selectedDayOfWeek
+                targetDate = new Date(selectedWeekStart);
+                const daysToAdd = selectedDayOfWeek === 0 ? 6 : selectedDayOfWeek - 1;
+                targetDate.setDate(selectedWeekStart.getDate() + daysToAdd);
             } else {
-                // Fallback for other cases, though daily-detail should be the primary path here
+                // Fallback
                 const today = new Date();
                 targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
             }
@@ -308,13 +323,18 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
         if (viewMode === 'weekly') {
+            // Calculate the specific date for this day in the selected week
+            const targetDate = new Date(selectedWeekStart);
+            const daysToAdd = selectedDayOfWeek === 0 ? 6 : selectedDayOfWeek - 1; // Convert to offset from Monday
+            targetDate.setDate(selectedWeekStart.getDate() + daysToAdd);
+
             // Check for time conflict
-            if (hasTimeConflict(selectedTimeSlot, endTime, undefined, selectedDayOfWeek)) {
+            if (hasTimeConflict(selectedTimeSlot, endTime, targetDate)) {
                 alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
                 return;
             }
 
-            // Add as recurring goal for this day of week
+            // Add as specific date goal (not recurring)
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: selectedActivity.label,
@@ -322,8 +342,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 startTime: selectedTimeSlot,
                 endTime: endTime,
                 color: selectedActivity.color,
-                daysOfWeek: [selectedDayOfWeek],
-                startDate: formatDate(new Date()), // 오늘부터 반복 시작
+                specificDate: formatDate(targetDate), // 특정 날짜에만 추가
                 notificationEnabled: notificationEnabled,
             };
             setCustomGoals([...customGoals, newGoal]);
@@ -672,18 +691,38 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     const getScheduledActivityAtTime = (time: string) => {
         // Custom goals (including core activities now stored as customGoals)
         for (const goal of customGoals) {
-            // Weekly view: show goals for selected day of week
-            if (viewMode === 'weekly' && goal.daysOfWeek?.includes(selectedDayOfWeek)) {
-                if (goal.startTime && goal.endTime) {
-                    if (goal.startTime === time) {
-                        const preset = PRESET_ACTIVITIES.find(a => a.label === goal.text);
-                        const ActivityIcon = preset?.icon || Target;
-                        return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: true, isCore: preset?.isCore, memo: goal.memo };
+            // Weekly view: show goals for specific dates in the selected week
+            if (viewMode === 'weekly') {
+                // Calculate the date for each day of week in the selected week
+                const daysOfWeekToCheck = [0, 1, 2, 3, 4, 5, 6]; // All days
+                for (const dayOfWeek of daysOfWeekToCheck) {
+                    const targetDate = new Date(selectedWeekStart);
+                    targetDate.setDate(selectedWeekStart.getDate() + (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+                    const dateStr = formatDate(targetDate);
+
+                    // Check if this goal applies to this specific date
+                    const isSpecificDate = goal.specificDate === dateStr;
+                    let isRecurringOnThisDay = goal.daysOfWeek?.includes(dayOfWeek) && !goal.specificDate;
+                    if (isRecurringOnThisDay && goal.startDate && dateStr < goal.startDate) {
+                        isRecurringOnThisDay = false;
                     }
-                    if (isTimeInRange(time, goal.startTime, goal.endTime)) {
-                        const preset = PRESET_ACTIVITIES.find(a => a.label === goal.text);
-                        const ActivityIcon = preset?.icon || Target;
-                        return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: false, isCore: preset?.isCore, memo: goal.memo };
+                    if (isRecurringOnThisDay && goal.endDate && dateStr > goal.endDate) {
+                        isRecurringOnThisDay = false;
+                    }
+
+                    if (isSpecificDate || isRecurringOnThisDay) {
+                        if (goal.startTime && goal.endTime) {
+                            if (goal.startTime === time) {
+                                const preset = PRESET_ACTIVITIES.find(a => a.label === goal.text);
+                                const ActivityIcon = preset?.icon || Target;
+                                return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: true, isCore: preset?.isCore, memo: goal.memo };
+                            }
+                            if (isTimeInRange(time, goal.startTime, goal.endTime)) {
+                                const preset = PRESET_ACTIVITIES.find(a => a.label === goal.text);
+                                const ActivityIcon = preset?.icon || Target;
+                                return { label: goal.text, color: goal.color || 'primary', icon: ActivityIcon, isStart: false, isCore: preset?.isCore, memo: goal.memo };
+                            }
+                        }
                     }
                 }
             }
@@ -1720,6 +1759,51 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                             {/* MODE 3: WEEKLY VIEW (Calendar grid layout) */}
                             {viewMode === 'weekly' && (
                                 <div className="flex flex-col h-full">
+                                    {/* Week Navigation Header */}
+                                    <div className="flex items-center justify-between p-4 border-b border-border/30 bg-gradient-to-r from-purple-50/50 to-pink-50/50">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                const newWeekStart = new Date(selectedWeekStart);
+                                                newWeekStart.setDate(selectedWeekStart.getDate() - 7);
+                                                setSelectedWeekStart(newWeekStart);
+                                            }}
+                                            className="gap-2"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                            이전 주
+                                        </Button>
+                                        <div className="text-center">
+                                            <p className="text-sm font-semibold text-purple-600">
+                                                {selectedWeekStart.getFullYear()}년 {selectedWeekStart.getMonth() + 1}월 {(() => {
+                                                    const weekNum = Math.ceil((selectedWeekStart.getDate() + new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), 1).getDay()) / 7);
+                                                    return `${weekNum}주차`;
+                                                })()}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {selectedWeekStart.getMonth() + 1}/{selectedWeekStart.getDate()} - {(() => {
+                                                    const sunday = new Date(selectedWeekStart);
+                                                    sunday.setDate(selectedWeekStart.getDate() + 6);
+                                                    return `${sunday.getMonth() + 1}/${sunday.getDate()}`;
+                                                })()}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                const newWeekStart = new Date(selectedWeekStart);
+                                                newWeekStart.setDate(selectedWeekStart.getDate() + 7);
+                                                setSelectedWeekStart(newWeekStart);
+                                            }}
+                                            className="gap-2"
+                                        >
+                                            다음 주
+                                            <ChevronRight className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+
                                     {/* Weekly Calendar Grid */}
                                     <div className="flex flex-1 overflow-hidden">
                                         {/* Time column + Days grid */}
@@ -1774,9 +1858,26 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             </div>
                                                             {/* Day cells */}
                                                             {DAYS_OF_WEEK.map((day) => {
-                                                                // Find activities for this day and hour
+                                                                // Calculate the actual date for this day in the selected week
+                                                                const targetDate = new Date(selectedWeekStart);
+                                                                targetDate.setDate(selectedWeekStart.getDate() + (day.id === 0 ? 6 : day.id - 1));
+                                                                const dateStr = formatDate(targetDate);
+
+                                                                // Find activities for this specific date and hour
                                                                 const activitiesAtHour = customGoals.filter(goal => {
-                                                                    if (!goal.daysOfWeek?.includes(day.id)) return false;
+                                                                    // Check if this goal applies to this specific date
+                                                                    const isSpecificDate = goal.specificDate === dateStr;
+                                                                    let isRecurringOnThisDay = goal.daysOfWeek?.includes(day.id) && !goal.specificDate;
+
+                                                                    // Check date range for recurring goals
+                                                                    if (isRecurringOnThisDay && goal.startDate && dateStr < goal.startDate) {
+                                                                        isRecurringOnThisDay = false;
+                                                                    }
+                                                                    if (isRecurringOnThisDay && goal.endDate && dateStr > goal.endDate) {
+                                                                        isRecurringOnThisDay = false;
+                                                                    }
+
+                                                                    if (!isSpecificDate && !isRecurringOnThisDay) return false;
                                                                     if (!goal.startTime) return false;
                                                                     const [startH] = goal.startTime.split(':').map(Number);
                                                                     return startH === hour;

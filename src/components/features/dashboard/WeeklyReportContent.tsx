@@ -214,6 +214,12 @@ export function WeeklyReportContent() {
         const currentWeek = getCurrentWeekRange();
         const currentWeekNum = getCurrentWeekNumber();
 
+        console.log('[WeeklyReportStats] Current week range:', {
+            start: currentWeek.start.toISOString(),
+            end: currentWeek.end.toISOString(),
+            weekNumber: currentWeekNum
+        });
+
         try {
             // 사용자 프로필에서 일정 가져오기
             const profileRes = await fetch('/api/user/profile');
@@ -221,40 +227,156 @@ export function WeeklyReportContent() {
                 throw new Error('Failed to fetch profile');
             }
             const profileData = await profileRes.json();
-            const customGoals = profileData.profile?.customGoals || [];
-
-            // 현재 주 일정 필터링
-            const currentWeekSchedules = customGoals.filter((goal: any) => {
-                if (!goal.schedules || goal.schedules.length === 0) return false;
-                return goal.schedules.some((schedule: any) => {
-                    const scheduleDate = new Date(schedule.date);
-                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end;
-                });
+            console.log('[WeeklyReportStats] Profile data:', {
+                hasProfile: !!profileData.profile,
+                customGoalsLength: profileData.profile?.customGoals?.length || 0
             });
 
-            const totalSchedules = currentWeekSchedules.reduce((sum: number, goal: any) => {
-                return sum + goal.schedules.filter((s: any) => {
-                    const scheduleDate = new Date(s.date);
-                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end;
-                }).length;
-            }, 0);
+            const customGoals = profileData.profile?.customGoals || [];
 
-            const completedSchedules = currentWeekSchedules.reduce((sum: number, goal: any) => {
-                return sum + goal.schedules.filter((s: any) => {
-                    const scheduleDate = new Date(s.date);
-                    return scheduleDate >= currentWeek.start && scheduleDate <= currentWeek.end && s.completed;
-                }).length;
-            }, 0);
+            // 디버깅: customGoals 전체 확인
+            console.log('[WeeklyReportStats] All customGoals:', {
+                total: customGoals.length,
+                goals: customGoals.map((g: any) => ({
+                    id: g.id,
+                    text: g.text,
+                    startTime: g.startTime,
+                    endTime: g.endTime,
+                    specificDate: g.specificDate,
+                    daysOfWeek: g.daysOfWeek
+                }))
+            });
+
+            // 현재 주(월-일) 각 날짜에 실제로 보이는 일정들을 필터링
+            const startDate = new Date(currentWeek.start);
+            const endDate = new Date(currentWeek.end);
+
+            // 이번 주에 보이는 일정들을 수집 (각 일정은 한 번만 카운트)
+            const weekSchedulesMap = new Map<string, any>();
+
+            // 모든 일정을 순회하면서 이번 주에 해당하는지 확인
+            customGoals.forEach((goal: any) => {
+                // 장기 목표 복제본 필터링: ID가 "-숫자-숫자" 패턴으로 끝나면 스킵
+                // 예: goal-schedule-xxx-5-0, goal-schedule-xxx-6-0
+                if (/-\d+-\d+$/.test(goal.id)) {
+                    console.log(`[WeeklyReportStats] Skipping long-term goal duplicate: ${goal.text} (${goal.id})`);
+                    return;
+                }
+
+                // 이미 추가한 일정은 스킵 (duration과 상관없이 각 일정은 1개로 카운트)
+                if (weekSchedulesMap.has(goal.id)) {
+                    console.log(`[WeeklyReportStats] Skipping duplicate: ${goal.text} (${goal.id})`);
+                    return;
+                }
+
+                let isInThisWeek = false;
+
+                // specificDate 일정: 해당 날짜가 이번 주에 있는지 확인
+                if (goal.specificDate) {
+                    const goalDate = new Date(goal.specificDate);
+                    if (goalDate >= startDate && goalDate <= endDate) {
+                        isInThisWeek = true;
+                    }
+                } else if (goal.daysOfWeek && Array.isArray(goal.daysOfWeek)) {
+                    // 반복 일정: 이번 주 중 하루라도 해당 요일이 있으면 포함
+                    for (let i = 0; i < 7; i++) {
+                        const checkDate = new Date(startDate);
+                        checkDate.setDate(startDate.getDate() + i);
+                        const dayOfWeek = checkDate.getDay();
+                        const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+
+                        // 해당 요일이고, 날짜 범위 내에 있는지 확인
+                        if (goal.daysOfWeek.includes(dayOfWeek)) {
+                            if (goal.startDate && dateStr < goal.startDate) continue;
+                            if (goal.endDate && dateStr > goal.endDate) continue;
+                            isInThisWeek = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 이번 주에 해당하는 일정만 추가 (한 번만!)
+                if (isInThisWeek) {
+                    console.log(`[WeeklyReportStats] Adding to week: ${goal.text} (${goal.id})`);
+                    weekSchedulesMap.set(goal.id, goal);
+                } else {
+                    console.log(`[WeeklyReportStats] NOT in this week: ${goal.text} (${goal.id})`);
+                }
+            });
+
+            const weekSchedules = Array.from(weekSchedulesMap.values());
+
+            console.log('[WeeklyReportStats] Week schedules:', {
+                totalSchedules: weekSchedules.length,
+                schedules: weekSchedules.map((g: any) => ({
+                    id: g.id,
+                    text: g.text,
+                    specificDate: g.specificDate,
+                    daysOfWeek: g.daysOfWeek,
+                    startDate: g.startDate,
+                    endDate: g.endDate
+                }))
+            });
+
+            const totalSchedules = weekSchedules.length;
+            const completedGoalsSet = new Set<string>();
+
+            // 각 일정에 대해 이번 주에 한 번이라도 완료했는지 확인
+            for (let i = 0; i < 7; i++) {
+                const checkDate = new Date(startDate);
+                checkDate.setDate(startDate.getDate() + i);
+                const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+                const completionKey = `schedule_completions_${dateStr}`;
+                const completionsStr = localStorage.getItem(completionKey);
+
+                if (completionsStr) {
+                    try {
+                        const completions = JSON.parse(completionsStr);
+                        weekSchedules.forEach((goal: any) => {
+                            if (completions[goal.id]?.completed === true && !completedGoalsSet.has(goal.id)) {
+                                completedGoalsSet.add(goal.id);
+                                console.log(`[WeeklyReportStats] Completed: ${goal.text} on ${dateStr}`);
+                            }
+                        });
+                    } catch (e) {
+                        console.error('[WeeklyReportStats] Failed to parse completions for', dateStr, e);
+                    }
+                }
+            }
+
+            const completedSchedules = completedGoalsSet.size;
 
             const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
 
-            // 트렌드 브리핑 읽기 통계
-            const briefingsRes = await fetch('/api/trend-briefing');
-            const briefingsData = await briefingsRes.ok ? await briefingsRes.json() : { briefings: [] };
-            const readBriefings = briefingsData.briefings?.filter((b: any) => {
-                const createdAt = new Date(b.created_at);
-                return createdAt >= currentWeek.start && createdAt <= currentWeek.end && b.read;
-            }) || [];
+            console.log('[WeeklyReportStats] Final calculations:', {
+                totalSchedules,
+                completedSchedules,
+                completionRate
+            });
+
+            // 트렌드 브리핑 읽기 통계 - localStorage에서 직접 읽기
+            let totalReadBriefings = 0;
+            for (let i = 0; i < 7; i++) {
+                const checkDate = new Date(startDate);
+                checkDate.setDate(startDate.getDate() + i);
+                const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+                const readBriefingsKey = `read_briefings_${dateStr}`;
+                const readBriefingsStr = localStorage.getItem(readBriefingsKey);
+
+                if (readBriefingsStr) {
+                    try {
+                        const readBriefingsForDay = JSON.parse(readBriefingsStr);
+                        if (Array.isArray(readBriefingsForDay)) {
+                            totalReadBriefings += readBriefingsForDay.length;
+                            console.log(`[WeeklyReportStats] ${dateStr}: ${readBriefingsForDay.length} briefings read`);
+                        }
+                    } catch (e) {
+                        console.error('[WeeklyReportStats] Failed to parse read briefings for', dateStr, e);
+                    }
+                }
+            }
+
+            console.log('[WeeklyReportStats] Total read briefings this week:', totalReadBriefings);
 
             setCurrentWeekStats({
                 weekNumber: currentWeekNum,
@@ -263,12 +385,12 @@ export function WeeklyReportContent() {
                 totalSchedules,
                 completedSchedules,
                 completionRate,
-                totalRead: readBriefings.length,
+                totalRead: totalReadBriefings,
                 lastUpdated: new Date().toISOString(),
             });
 
         } catch (error) {
-            console.error('Failed to fetch current week stats:', error);
+            console.error('[WeeklyReportStats] Failed to fetch current week stats:', error);
             setCurrentWeekStats({
                 weekNumber: currentWeekNum,
                 start: currentWeek.start.toISOString(),

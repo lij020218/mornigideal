@@ -133,7 +133,7 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
 
     const handleToastClick = useCallback((notification: ChatNotification) => {
         removeToast(notification.id);
-        router.push('/chat');
+        router.push('/');
     }, [removeToast, router]);
 
     // Listen for custom notification events
