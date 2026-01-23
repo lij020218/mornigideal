@@ -999,6 +999,9 @@ export function Dashboard({
                                 endTime: g.endTime!,
                                 icon: getScheduleIcon(g.text),
                                 color: g.color || 'primary',
+                                location: g.location,
+                                memo: g.memo,
+                                detailedInfo: g.detailedInfo,
                             })) || [];
 
                             const allSchedules = [...customItems].sort((a, b) => {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Clock, Play, X, ChevronRight, CalendarDays } from "lucide-react";
+import { CheckCircle2, Clock, Play, X, ChevronRight, CalendarDays, MapPin, FileText, ChevronLeft } from "lucide-react";
 import { getTodayCompletions } from "@/lib/scheduleNotifications";
 
 interface Schedule {
@@ -13,6 +13,9 @@ interface Schedule {
     endTime: string;
     color: string;
     icon: React.ComponentType<{ className?: string }>;
+    location?: string;
+    memo?: string;
+    detailedInfo?: string;
 }
 
 interface CurrentScheduleCardProps {
@@ -23,8 +26,9 @@ interface CurrentScheduleCardProps {
     onScheduleClick?: () => void;
 }
 
-export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, onToggleComplete, onScheduleClick }: CurrentScheduleCardProps) {
+export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, onScheduleClick }: CurrentScheduleCardProps) {
     const [showAllSchedules, setShowAllSchedules] = useState(false);
+    const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
 
     const colorMap: Record<string, { bg: string; border: string; text: string; gradient: string }> = {
         yellow: { bg: "bg-yellow-500/10", border: "border-yellow-500/30", text: "text-yellow-600", gradient: "from-yellow-500 to-amber-500" },
@@ -37,6 +41,8 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
         amber: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-600", gradient: "from-amber-500 to-orange-500" },
         primary: { bg: "bg-primary/10", border: "border-primary/30", text: "text-primary", gradient: "from-amber-500 to-orange-500" },
     };
+
+    const completions = getTodayCompletions();
 
     if (!schedule || !currentTime) {
         return (
@@ -59,7 +65,6 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
         );
     }
 
-    const completions = getTodayCompletions();
     const isCompleted = completions[schedule.id]?.completed === true;
 
     const [startH, startM] = schedule.startTime.split(':').map(Number);
@@ -91,6 +96,21 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
         return { completed, active, upcoming, past };
     };
 
+    // Calculate duration
+    const getDuration = (startTime: string, endTime: string) => {
+        const [sH, sM] = startTime.split(':').map(Number);
+        const [eH, eM] = endTime.split(':').map(Number);
+        let start = sH * 60 + sM;
+        let end = eH * 60 + eM;
+        if (end < start) end += 24 * 60;
+        const duration = end - start;
+        const hours = Math.floor(duration / 60);
+        const mins = duration % 60;
+        if (hours > 0 && mins > 0) return `${hours}시간 ${mins}분`;
+        if (hours > 0) return `${hours}시간`;
+        return `${mins}분`;
+    };
+
     return (
         <>
             <motion.div
@@ -117,12 +137,7 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
                 <div className="p-4 sm:p-6">
                     <div className="flex items-start gap-4">
                         {/* Icon */}
-                        <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleComplete(schedule.id);
-                            }}
+                        <div
                             className={cn(
                                 "w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center shrink-0 transition-all",
                                 isCompleted
@@ -135,7 +150,7 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
                             ) : (
                                 <Icon className={cn("w-7 h-7 sm:w-8 sm:h-8", isActive && "animate-pulse")} />
                             )}
-                        </motion.button>
+                        </div>
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
@@ -170,11 +185,9 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
                     </div>
 
                     {/* Action hint */}
-                    {!isCompleted && (
-                        <p className="mt-4 text-xs text-muted-foreground text-center">
-                            탭하여 전체 일정 보기 · 아이콘 탭하여 완료
-                        </p>
-                    )}
+                    <p className="mt-4 text-xs text-muted-foreground text-center">
+                        탭하여 전체 일정 보기
+                    </p>
                 </div>
             </motion.div>
 
@@ -186,7 +199,10 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
-                        onClick={() => setShowAllSchedules(false)}
+                        onClick={() => {
+                            setShowAllSchedules(false);
+                            setSelectedSchedule(null);
+                        }}
                     >
                         <motion.div
                             initial={{ y: "100%", opacity: 0 }}
@@ -196,126 +212,301 @@ export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, 
                             onClick={(e) => e.stopPropagation()}
                             className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-hidden shadow-2xl"
                         >
-                            {/* Header */}
-                            <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
-                                        <CalendarDays className="w-4 h-4 text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-base">오늘의 일정</h3>
-                                        <p className="text-xs text-muted-foreground">
-                                            {allSchedules.filter(s => completions[s.id]?.completed).length}/{allSchedules.length} 완료
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setShowAllSchedules(false)}
-                                    className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            {/* Schedule List */}
-                            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
-                                {allSchedules.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                                        <p className="text-sm">오늘 일정이 없습니다</p>
-                                    </div>
-                                ) : (
-                                    allSchedules.map((s) => {
-                                        const status = getScheduleStatus(s);
-                                        const sColors = colorMap[s.color] || colorMap.primary;
-                                        const SIcon = s.icon;
-
-                                        return (
-                                            <motion.button
-                                                key={s.id}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => {
-                                                    onToggleComplete(s.id);
-                                                }}
-                                                className={cn(
-                                                    "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left",
-                                                    status.completed
-                                                        ? "bg-green-50 border border-green-200"
-                                                        : status.active
-                                                            ? cn(sColors.bg, sColors.border, "border")
-                                                            : "bg-gray-50 hover:bg-gray-100"
-                                                )}
+                            <AnimatePresence mode="wait">
+                                {selectedSchedule ? (
+                                    // Schedule Detail View
+                                    <motion.div
+                                        key="detail"
+                                        initial={{ opacity: 0, x: 50 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -50 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        {/* Detail Header */}
+                                        <div className="flex items-center gap-3 p-4 border-b border-gray-100">
+                                            <button
+                                                onClick={() => setSelectedSchedule(null)}
+                                                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
                                             >
-                                                {/* Time indicator */}
-                                                <div className={cn(
-                                                    "w-1.5 h-12 rounded-full shrink-0",
-                                                    status.completed ? "bg-green-500" :
-                                                        status.active ? "bg-gradient-to-b " + sColors.gradient.replace("from-", "from-").replace("to-", "to-") :
-                                                            status.past ? "bg-gray-300" : "bg-gray-200"
-                                                )} />
+                                                <ChevronLeft className="w-4 h-4" />
+                                            </button>
+                                            <h3 className="font-bold text-base flex-1">일정 상세</h3>
+                                            <button
+                                                onClick={() => {
+                                                    setShowAllSchedules(false);
+                                                    setSelectedSchedule(null);
+                                                }}
+                                                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
 
-                                                {/* Icon */}
-                                                <div className={cn(
-                                                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                                                    status.completed
-                                                        ? "bg-green-500 text-white"
-                                                        : status.active
-                                                            ? cn("bg-gradient-to-br", sColors.gradient, "text-white")
-                                                            : "bg-gray-100"
-                                                )}>
-                                                    {status.completed ? (
-                                                        <CheckCircle2 className="w-5 h-5" />
-                                                    ) : (
-                                                        <SIcon className={cn(
-                                                            "w-5 h-5",
-                                                            status.active ? "" : sColors.text
-                                                        )} />
-                                                    )}
-                                                </div>
+                                        {/* Detail Content */}
+                                        <div className="p-4 space-y-4">
+                                            {(() => {
+                                                const status = getScheduleStatus(selectedSchedule);
+                                                const sColors = colorMap[selectedSchedule.color] || colorMap.primary;
+                                                const SIcon = selectedSchedule.icon;
 
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <p className={cn(
-                                                            "font-medium truncate",
-                                                            status.completed && "line-through text-muted-foreground"
-                                                        )}>
-                                                            {s.text}
-                                                        </p>
-                                                        {status.active && !status.completed && (
-                                                            <span className="flex items-center gap-0.5 text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">
-                                                                <Play className="w-2 h-2 fill-current" /> NOW
-                                                            </span>
+                                                return (
+                                                    <>
+                                                        {/* Main Info */}
+                                                        <div className="flex items-start gap-4">
+                                                            <div className={cn(
+                                                                "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0",
+                                                                status.completed
+                                                                    ? "bg-green-500 text-white"
+                                                                    : cn("bg-gradient-to-br", sColors.gradient, "text-white")
+                                                            )}>
+                                                                {status.completed ? (
+                                                                    <CheckCircle2 className="w-7 h-7" />
+                                                                ) : (
+                                                                    <SIcon className="w-7 h-7" />
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    {status.active && !status.completed && (
+                                                                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                                                            <Play className="w-2.5 h-2.5 fill-current" /> 진행 중
+                                                                        </span>
+                                                                    )}
+                                                                    {status.completed && (
+                                                                        <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                                                            완료
+                                                                        </span>
+                                                                    )}
+                                                                    {status.upcoming && (
+                                                                        <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                                                                            예정
+                                                                        </span>
+                                                                    )}
+                                                                    {status.past && !status.completed && (
+                                                                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                                                                            지남
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <h3 className={cn(
+                                                                    "text-xl font-bold",
+                                                                    status.completed && "line-through text-muted-foreground"
+                                                                )}>
+                                                                    {selectedSchedule.text}
+                                                                </h3>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Time Info */}
+                                                        <div className={cn("p-4 rounded-xl", sColors.bg)}>
+                                                            <div className="flex items-center gap-3">
+                                                                <Clock className={cn("w-5 h-5", sColors.text)} />
+                                                                <div>
+                                                                    <p className="font-semibold">
+                                                                        {selectedSchedule.startTime} - {selectedSchedule.endTime}
+                                                                    </p>
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        {getDuration(selectedSchedule.startTime, selectedSchedule.endTime)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Location */}
+                                                        {selectedSchedule.location && (
+                                                            <div className="p-4 rounded-xl bg-gray-50">
+                                                                <div className="flex items-start gap-3">
+                                                                    <MapPin className="w-5 h-5 text-gray-500 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="text-sm text-muted-foreground mb-1">장소</p>
+                                                                        <p className="font-medium">{selectedSchedule.location}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         )}
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                                        <Clock className="w-3 h-3" />
-                                                        {s.startTime} - {s.endTime}
+
+                                                        {/* Memo */}
+                                                        {selectedSchedule.memo && (
+                                                            <div className="p-4 rounded-xl bg-gray-50">
+                                                                <div className="flex items-start gap-3">
+                                                                    <FileText className="w-5 h-5 text-gray-500 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="text-sm text-muted-foreground mb-1">메모</p>
+                                                                        <p className="font-medium whitespace-pre-wrap">{selectedSchedule.memo}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Detailed Info */}
+                                                        {selectedSchedule.detailedInfo && (
+                                                            <div className="p-4 rounded-xl bg-gray-50">
+                                                                <p className="text-sm text-muted-foreground mb-2">세부 정보</p>
+                                                                <p className="text-sm whitespace-pre-wrap">{selectedSchedule.detailedInfo}</p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* No additional info */}
+                                                        {!selectedSchedule.location && !selectedSchedule.memo && !selectedSchedule.detailedInfo && (
+                                                            <div className="text-center py-6 text-muted-foreground">
+                                                                <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                                                                <p className="text-sm">추가 정보가 없습니다</p>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* Detail Footer */}
+                                        <div className="p-4 border-t border-gray-100 bg-gray-50">
+                                            <button
+                                                onClick={() => {
+                                                    setShowAllSchedules(false);
+                                                    setSelectedSchedule(null);
+                                                    onScheduleClick?.();
+                                                }}
+                                                className="w-full py-3 text-sm font-medium text-primary hover:bg-primary/5 rounded-xl transition-colors"
+                                            >
+                                                일정 편집하기
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                ) : (
+                                    // Schedule List View
+                                    <motion.div
+                                        key="list"
+                                        initial={{ opacity: 0, x: -50 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 50 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                                                    <CalendarDays className="w-4 h-4 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-base">오늘의 일정</h3>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {allSchedules.filter(s => completions[s.id]?.completed).length}/{allSchedules.length} 완료
                                                     </p>
                                                 </div>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowAllSchedules(false)}
+                                                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
 
-                                                {/* Checkbox indicator */}
-                                                {!status.completed && (
-                                                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 shrink-0" />
-                                                )}
-                                            </motion.button>
-                                        );
-                                    })
+                                        {/* Schedule List */}
+                                        <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
+                                            {allSchedules.length === 0 ? (
+                                                <div className="text-center py-8 text-muted-foreground">
+                                                    <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                                                    <p className="text-sm">오늘 일정이 없습니다</p>
+                                                </div>
+                                            ) : (
+                                                allSchedules.map((s) => {
+                                                    const status = getScheduleStatus(s);
+                                                    const sColors = colorMap[s.color] || colorMap.primary;
+                                                    const SIcon = s.icon;
+
+                                                    return (
+                                                        <motion.button
+                                                            key={s.id}
+                                                            whileTap={{ scale: 0.98 }}
+                                                            onClick={() => setSelectedSchedule(s)}
+                                                            className={cn(
+                                                                "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left",
+                                                                status.completed
+                                                                    ? "bg-green-50 border border-green-200"
+                                                                    : status.active
+                                                                        ? cn(sColors.bg, sColors.border, "border")
+                                                                        : "bg-gray-50 hover:bg-gray-100"
+                                                            )}
+                                                        >
+                                                            {/* Time indicator */}
+                                                            <div className={cn(
+                                                                "w-1.5 h-12 rounded-full shrink-0",
+                                                                status.completed ? "bg-green-500" :
+                                                                    status.active ? cn("bg-gradient-to-b", sColors.gradient) :
+                                                                        status.past ? "bg-gray-300" : "bg-gray-200"
+                                                            )} />
+
+                                                            {/* Icon */}
+                                                            <div className={cn(
+                                                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                                                status.completed
+                                                                    ? "bg-green-500 text-white"
+                                                                    : status.active
+                                                                        ? cn("bg-gradient-to-br", sColors.gradient, "text-white")
+                                                                        : "bg-gray-100"
+                                                            )}>
+                                                                {status.completed ? (
+                                                                    <CheckCircle2 className="w-5 h-5" />
+                                                                ) : (
+                                                                    <SIcon className={cn(
+                                                                        "w-5 h-5",
+                                                                        status.active ? "" : sColors.text
+                                                                    )} />
+                                                                )}
+                                                            </div>
+
+                                                            {/* Content */}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className={cn(
+                                                                        "font-medium truncate",
+                                                                        status.completed && "line-through text-muted-foreground"
+                                                                    )}>
+                                                                        {s.text}
+                                                                    </p>
+                                                                    {status.active && !status.completed && (
+                                                                        <span className="flex items-center gap-0.5 text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                                                            <Play className="w-2 h-2 fill-current" /> NOW
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                                                    <Clock className="w-3 h-3" />
+                                                                    {s.startTime} - {s.endTime}
+                                                                    {s.location && (
+                                                                        <>
+                                                                            <span className="mx-1">·</span>
+                                                                            <MapPin className="w-3 h-3" />
+                                                                            <span className="truncate max-w-[80px]">{s.location}</span>
+                                                                        </>
+                                                                    )}
+                                                                </p>
+                                                            </div>
+
+                                                            {/* Arrow */}
+                                                            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                        </motion.button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div className="p-4 border-t border-gray-100 bg-gray-50">
+                                            <button
+                                                onClick={() => {
+                                                    setShowAllSchedules(false);
+                                                    onScheduleClick?.();
+                                                }}
+                                                className="w-full py-3 text-sm font-medium text-primary hover:bg-primary/5 rounded-xl transition-colors"
+                                            >
+                                                일정 관리하기
+                                            </button>
+                                        </div>
+                                    </motion.div>
                                 )}
-                            </div>
-
-                            {/* Footer */}
-                            <div className="p-4 border-t border-gray-100 bg-gray-50">
-                                <button
-                                    onClick={() => {
-                                        setShowAllSchedules(false);
-                                        onScheduleClick?.();
-                                    }}
-                                    className="w-full py-3 text-sm font-medium text-primary hover:bg-primary/5 rounded-xl transition-colors"
-                                >
-                                    일정 관리하기
-                                </button>
-                            </div>
+                            </AnimatePresence>
                         </motion.div>
                     </motion.div>
                 )}
