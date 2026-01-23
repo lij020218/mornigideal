@@ -976,36 +976,9 @@ export function Dashboard({
                         </div>
                     </div>
 
-                    {/* Mobile Layout: Daily Rhythm -> Current Schedule -> Upcoming -> Stats */}
+                    {/* Mobile Layout: Current Schedule -> Upcoming -> Stats */}
                     <div className="flex flex-col gap-4 md:hidden">
-                        {/* 1. 나의 하루 리듬 (Top) */}
-                        <Card className="glass-card border-none">
-                            <CardContent className="p-4">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-semibold flex items-center gap-2 text-sm">
-                                        <Sparkles className="w-4 h-4 text-amber-500" /> 나의 하루 리듬
-                                    </h3>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 px-2"
-                                        onClick={() => setShowSchedulePopup(true)}
-                                    >
-                                        <Edit3 className="w-3.5 h-3.5" /> 일정 관리
-                                    </Button>
-                                </div>
-                                <DailyRhythmTimeline
-                                    schedule={userProfile?.schedule}
-                                    customGoals={userProfile?.customGoals}
-                                    dailyGoals={dailyGoals}
-                                    toggleCustomGoal={toggleCustomGoal}
-                                    isMobile={true}
-                                    currentTime={currentTime}
-                                />
-                            </CardContent>
-                        </Card>
-
-                        {/* 2. Current Schedule Card (Prominent) */}
+                        {/* 1. Current Schedule Card (Prominent) */}
                         {(() => {
                             if (!currentTime) return null;
                             const now = currentTime;
