@@ -1040,6 +1040,7 @@ export function Dashboard({
                                 <>
                                     <CurrentScheduleCard
                                         schedule={currentSchedule || null}
+                                        allSchedules={allSchedules}
                                         currentTime={currentTime}
                                         onToggleComplete={toggleCustomGoal}
                                         onScheduleClick={() => setShowSchedulePopup(true)}
