@@ -118,9 +118,9 @@ export function WeeklyGoalsSummary() {
 
     if (loading) {
         return (
-            <div className="bg-gradient-to-br from-white/5 to-white/[0.02] rounded-xl sm:rounded-2xl p-4 sm:p-6">
+            <div className="glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6">
                 <div className="flex items-center justify-center py-6 sm:py-8">
-                    <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-muted-foreground" />
+                    <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-primary" />
                 </div>
             </div>
         );
@@ -137,12 +137,12 @@ export function WeeklyGoalsSummary() {
     const displayGoals = weeklyGoals.slice(0, 3);
 
     return (
-        <div className="bg-gradient-to-br from-white/5 to-white/[0.02] rounded-xl sm:rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-xl sm:rounded-2xl overflow-hidden">
             {/* Header */}
             <div className="px-3 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center">
-                        <Flag className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-primary" />
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-md shadow-amber-500/20">
+                        <Flag className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-white" />
                     </div>
                     <div>
                         <h3 className="font-bold text-sm sm:text-base">이번 주 목표</h3>
@@ -164,15 +164,15 @@ export function WeeklyGoalsSummary() {
             {/* Content */}
             <div className="px-3 sm:px-5 pb-3 sm:pb-5">
                 {totalCount === 0 ? (
-                    <div className="text-center py-6 sm:py-8 bg-white/[0.02] rounded-lg sm:rounded-xl">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto mb-3 sm:mb-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/10 to-purple-500/10 flex items-center justify-center">
-                            <Flag className="w-6 h-6 sm:w-7 sm:h-7 text-primary/60" />
+                    <div className="text-center py-6 sm:py-8 bg-gray-50/50 rounded-lg sm:rounded-xl border border-gray-100">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto mb-3 sm:mb-4 rounded-xl sm:rounded-2xl bg-amber-50 flex items-center justify-center">
+                            <Flag className="w-6 h-6 sm:w-7 sm:h-7 text-amber-500" />
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
                             이번 주 목표를 설정해보세요
                         </p>
                         <Link href="/growth">
-                            <Button size="sm" className="rounded-lg sm:rounded-xl gap-1.5 sm:gap-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs sm:text-sm h-8 sm:h-9">
+                            <Button size="sm" className="rounded-lg sm:rounded-xl gap-1.5 sm:gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/20 text-xs sm:text-sm h-8 sm:h-9">
                                 <Flag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 목표 설정하기
                             </Button>
@@ -184,22 +184,22 @@ export function WeeklyGoalsSummary() {
                         <div className="relative">
                             <div className="flex items-center justify-between text-xs sm:text-sm mb-1.5 sm:mb-2">
                                 <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
+                                    <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-500" />
                                     <span className="text-muted-foreground">전체 진행률</span>
                                 </div>
                                 <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <span className="font-bold text-base sm:text-lg">{overallProgress}%</span>
-                                    <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-primary/10">
-                                        <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />
-                                        <span className="text-[10px] sm:text-xs font-medium text-primary">
+                                    <span className="font-bold text-base sm:text-lg text-gradient">{overallProgress}%</span>
+                                    <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200/50">
+                                        <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500" />
+                                        <span className="text-[10px] sm:text-xs font-medium text-amber-600">
                                             {completedCount}/{totalCount}
                                         </span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="h-2 sm:h-2.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-2.5 sm:h-3 bg-gray-100 rounded-full overflow-hidden">
                                 <motion.div
-                                    className="h-full bg-gradient-to-r from-primary to-purple-500 rounded-full"
+                                    className="h-full progress-gradient rounded-full"
                                     initial={{ width: 0 }}
                                     animate={{ width: `${overallProgress}%` }}
                                     transition={{ duration: 0.8, ease: "easeOut" }}
@@ -246,7 +246,7 @@ export function WeeklyGoalsSummary() {
                                         </div>
                                         {/* Mini Progress */}
                                         <div className="flex items-center gap-1.5 sm:gap-2">
-                                            <div className="w-12 sm:w-16 h-1 sm:h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                            <div className="w-14 sm:w-16 h-1.5 sm:h-2 bg-gray-100 rounded-full overflow-hidden">
                                                 <div
                                                     className={cn(
                                                         "h-full rounded-full transition-all",

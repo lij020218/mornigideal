@@ -863,9 +863,9 @@ export function Dashboard({
 
 
     return (
-        <div className="p-4 md:p-6 pt-20 md:pt-6 max-w-7xl mx-auto space-y-6 md:space-y-10 min-h-screen bg-background/50 backdrop-blur-sm overflow-visible">
-            {/* Fixed Mobile Header */}
-            <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border md:hidden">
+        <div className="p-3 sm:p-4 md:p-6 pt-16 sm:pt-18 md:pt-6 max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-10 min-h-screen overflow-visible">
+            {/* Fixed Mobile Header - Glassmorphism */}
+            <div className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/20 md:hidden">
                 <div className="flex items-center justify-between px-4 py-3">
                     <Link href="/dashboard" className="flex items-center">
                         <div className="w-10 h-10 bg-foreground text-background rounded-xl flex items-center justify-center font-bold text-lg">
@@ -947,8 +947,11 @@ export function Dashboard({
 
                     {/* Daily Flow Header */}
                     <div className="flex justify-between items-center">
-                        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                            <Clock className="w-6 h-6 text-primary" /> Daily Flow
+                        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                                <Clock className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gradient">Daily Flow</span>
                         </h2>
                         <div className="flex items-center gap-2">
                             <Button

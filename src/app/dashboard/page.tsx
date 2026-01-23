@@ -27,9 +27,13 @@ export default async function DashboardPage() {
     ]);
 
     return (
-        <div className="min-h-screen bg-background relative md:ml-20">
-            {/* Background Gradients */}
-            <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-primary/5 to-transparent -z-10" />
+        <div className="min-h-screen bg-gradient-mesh relative md:ml-20 overflow-hidden">
+            {/* Animated Gradient Orbs - Warm Amber */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="gradient-orb gradient-orb-amber w-[500px] h-[500px] -top-48 -left-24 animate-blob" />
+                <div className="gradient-orb gradient-orb-orange w-[400px] h-[400px] top-1/3 -right-32 animate-blob animation-delay-2000" />
+                <div className="gradient-orb gradient-orb-yuzu w-[350px] h-[350px] bottom-0 left-1/4 animate-blob animation-delay-4000" />
+            </div>
             <Dashboard
                 username={username}
                 initialProfile={user?.profile || null}

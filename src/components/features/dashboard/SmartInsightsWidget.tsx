@@ -273,17 +273,19 @@ export function SmartInsightsWidget({ customGoals = [], currentTime, initialHabi
     const currentCard = insights[currentIndex];
 
     return (
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 w-full">
             {/* Navigation dots */}
             {insights.length > 1 && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5 sm:gap-2">
                     {insights.map((_, idx) => (
                         <button
                             key={idx}
                             onClick={() => setCurrentIndex(idx)}
                             className={cn(
-                                "w-3 h-3 rounded-full transition-all",
-                                idx === currentIndex ? "bg-primary h-6" : "bg-black/10 hover:bg-black/20"
+                                "w-2 sm:w-3 rounded-full transition-all",
+                                idx === currentIndex
+                                    ? "h-4 sm:h-6 bg-gradient-to-b from-amber-500 to-orange-500 shadow-md shadow-amber-500/20"
+                                    : "h-2 sm:h-3 bg-gray-200 hover:bg-gray-300"
                             )}
                         />
                     ))}
@@ -299,17 +301,16 @@ export function SmartInsightsWidget({ customGoals = [], currentTime, initialHabi
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.3 }}
                     className={cn(
-                        "flex items-center gap-5 px-8 py-6 rounded-2xl border min-w-[420px]",
-                        "shadow-sm bg-white",
-                        currentCard.color
+                        "flex items-center gap-3 sm:gap-5 px-4 sm:px-6 md:px-8 py-4 sm:py-5 md:py-6 rounded-xl sm:rounded-2xl flex-1",
+                        "glass-card glass-card-hover"
                     )}
                 >
-                    <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-foreground shrink-0 shadow-sm border border-black/5">
-                        <span className="scale-150">{currentCard.icon}</span>
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-amber-500/20">
+                        <span className="scale-100 sm:scale-125 md:scale-150">{currentCard.icon}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <span className="text-lg font-bold text-foreground">{currentCard.title}</span>
-                        <span className="text-xl text-muted-foreground font-medium">{currentCard.message}</span>
+                    <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
+                        <span className="text-sm sm:text-base md:text-lg font-bold text-foreground truncate">{currentCard.title}</span>
+                        <span className="text-sm sm:text-base md:text-xl text-muted-foreground font-medium line-clamp-2">{currentCard.message}</span>
                     </div>
                 </motion.div>
             </AnimatePresence>

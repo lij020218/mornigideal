@@ -285,10 +285,12 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             className="space-y-6"
         >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Newspaper className="w-5 h-5 text-blue-400" />
-                    <span className="hidden sm:inline">오늘의 트렌드 브리핑</span>
-                    <span className="sm:hidden">트렌드 브리핑</span>
+                <h2 className="text-xl font-semibold flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                        <Newspaper className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="hidden sm:inline text-gradient">오늘의 트렌드 브리핑</span>
+                    <span className="sm:hidden text-gradient">트렌드 브리핑</span>
                 </h2>
                 <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto">
                     {lastUpdated && (
@@ -445,32 +447,32 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             {/* Desktop: Original grid layout */}
             <div className="hidden md:grid md:grid-cols-3 gap-4">
                 {/* Goal Card */}
-                <div className="md:col-span-1 bg-card border border-border rounded-xl p-5 flex flex-col justify-between group transition-all duration-300 hover:shadow-md">
+                <div className="md:col-span-1 glass-card glass-card-hover rounded-xl p-5 flex flex-col justify-between group">
                     <div className="flex items-center gap-2 text-muted-foreground mb-3">
-                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                        <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25">
                             <Target className="w-4 h-4" />
                         </div>
-                        <span className="text-xs font-bold uppercase tracking-wider">My Goal</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gradient">My Goal</span>
                     </div>
                     <div>
                         <p className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-2">
                             {goal || "목표를 설정해주세요"}
                         </p>
                         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500"></span>
                             {job}
                         </div>
                     </div>
                 </div>
 
                 {/* Interests Card */}
-                <div className="md:col-span-2 bg-card border border-border rounded-xl p-5 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-all">
+                <div className="md:col-span-2 glass-card glass-card-hover rounded-xl p-5 flex flex-col justify-between relative overflow-hidden group">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2 text-muted-foreground">
-                            <div className="p-1.5 rounded-lg bg-purple-100 text-purple-600">
+                            <div className="p-1.5 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 text-white shadow-md shadow-amber-500/25">
                                 <Sparkles className="w-4 h-4" />
                             </div>
-                            <span className="text-xs font-bold uppercase tracking-wider">Interest Areas</span>
+                            <span className="text-xs font-bold uppercase tracking-wider text-gradient-subtle">Interest Areas</span>
                         </div>
                         <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
                             <PopoverTrigger asChild>
@@ -530,13 +532,13 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             </div>
 
             {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     {[1, 2, 3].map((i) => (
                         <div key={i} className="h-48 rounded-xl bg-muted animate-pulse border border-border" />
                     ))}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     {briefings.map((briefing) => {
                         const isRead = readBriefings.has(briefing.id);
                         return (
@@ -546,10 +548,10 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                 onClick={() => handleBriefingClick(briefing)}
                                 whileHover={{ y: -4 }}
                                 className={cn(
-                                    "group cursor-pointer relative flex flex-col justify-between h-full rounded-xl p-5 transition-all duration-300 hover:shadow-lg",
+                                    "group cursor-pointer relative flex flex-col justify-between h-full rounded-lg sm:rounded-xl p-3 sm:p-4 md:p-5 transition-all duration-300",
                                     isRead
-                                        ? "bg-muted/50 border border-border/50"
-                                        : "bg-card border border-border"
+                                        ? "glass-card opacity-70"
+                                        : "glass-card glass-card-hover"
                                 )}
                             >
                                 {/* 읽음 표시 배지 */}
@@ -560,19 +562,19 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                     </div>
                                 )}
 
-                                {/* 안읽음 표시 (파란 점) */}
+                                {/* 안읽음 표시 (그라데이션 점) */}
                                 {!isRead && (
                                     <div className="absolute top-3 right-3">
                                         <span className="relative flex h-2.5 w-2.5">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-amber-500 to-orange-500"></span>
                                         </span>
                                     </div>
                                 )}
 
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-start pr-12">
-                                        <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border", getCategoryColor(briefing.category))}>
+                                <div className="space-y-2 sm:space-y-3 md:space-y-4">
+                                    <div className="flex justify-between items-start pr-10 sm:pr-12">
+                                        <span className={cn("text-[10px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase tracking-wider border", getCategoryColor(briefing.category))}>
                                             {getPrimaryCategory(briefing.category)}
                                         </span>
                                         <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-full">{briefing.time}</span>
@@ -581,7 +583,7 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                         "font-bold text-base md:text-lg leading-snug transition-colors line-clamp-2",
                                         isRead
                                             ? "text-muted-foreground group-hover:text-foreground"
-                                            : "text-foreground group-hover:text-primary"
+                                            : "text-foreground group-hover:text-gradient"
                                     )}>
                                         {briefing.title}
                                     </h3>
@@ -598,10 +600,10 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
 
                                 <div className="mt-5 pt-4 border-t border-border flex justify-between items-center">
                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <span className={cn("w-1.5 h-1.5 rounded-full", isRead ? "bg-green-500" : "bg-blue-500")} />
+                                        <span className={cn("w-1.5 h-1.5 rounded-full", isRead ? "bg-green-500" : "bg-gradient-to-r from-amber-500 to-orange-500")} />
                                         {briefing.source}
                                     </div>
-                                    <div className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
+                                    <div className="flex items-center gap-1 text-xs text-gradient font-medium opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
                                         <span>{isRead ? "다시 보기" : "Read More"}</span>
                                         <ExternalLink className="w-3.5 h-3.5" />
                                     </div>
