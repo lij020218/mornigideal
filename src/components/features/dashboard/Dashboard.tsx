@@ -23,6 +23,9 @@ import { SmartInsightsWidget } from "./SmartInsightsWidget";
 import { AIGreeting } from "./AIGreeting";
 import { GoalSettingModal } from "../goals/GoalSettingModal";
 import { WeeklyGoalsSummary } from "./WeeklyGoalsSummary";
+import { CurrentScheduleCard } from "./CurrentScheduleCard";
+import { UpcomingSchedules } from "./UpcomingSchedules";
+import { SwipeableStats } from "./SwipeableStats";
 
 
 interface DashboardProps {
@@ -973,232 +976,19 @@ export function Dashboard({
                         </div>
                     </div>
 
-                    {/* Mobile Layout: Goals -> Timeline -> Insights */}
+                    {/* Mobile Layout: Daily Rhythm -> Current Schedule -> Upcoming -> Stats */}
                     <div className="flex flex-col gap-4 md:hidden">
-                        {/* 1. Goals (Mobile) */}
-                        <div className="grid grid-cols-2 gap-3">
-                            {(() => {
-                                // Dynamic Goal Card Logic (Same as Desktop)
-                                if (!currentTime) return null;
-                                const now = currentTime;
-                                const currentDay = now.getDay();
-                                const currentTimeValue = now.getHours() * 60 + now.getMinutes();
-
-                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-
-                                // Show events with specificDate matching today OR recurring schedules for today's day
-                                // IMPORTANT: If specificDate exists, ONLY show on that exact date (not as recurring)
-                                const customItems = userProfile?.customGoals?.filter(g => {
-                                    if (g.specificDate) {
-                                        // Specific date events only show on that exact date
-                                        return g.specificDate === todayStr;
-                                    }
-                                    // Recurring events (no specificDate) show on matching days of week
-                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
-                                    // startDate가 있으면 해당 날짜 이후에만 표시
-                                    if (g.startDate && todayStr < g.startDate) return false;
-                                    // endDate가 있으면 해당 날짜까지만 표시 (목표 기간 제한)
-                                    if (g.endDate && todayStr > g.endDate) return false;
-                                    return true;
-                                }).map(g => ({
-                                    id: g.id,
-                                    text: g.text,
-                                    startTime: g.startTime!,
-                                    endTime: g.endTime!,
-                                    icon: getScheduleIcon(g.text),
-                                    color: g.color || 'primary',
-                                    type: 'custom'
-                                })) || [];
-
-                                // Only use calendar events (customItems)
-                                const allSchedules = [...customItems];
-
-                                allSchedules.sort((a, b) => {
-                                    const [aH, aM] = a.startTime.split(':').map(Number);
-                                    const [bH, bM] = b.startTime.split(':').map(Number);
-                                    return (aH * 60 + aM) - (bH * 60 + bM);
-                                });
-
-                                let targetSchedule = allSchedules.find(s => {
-                                    const [sH, sM] = s.startTime.split(':').map(Number);
-                                    const [eH, eM] = s.endTime.split(':').map(Number);
-                                    let start = sH * 60 + sM;
-                                    let end = eH * 60 + eM;
-                                    if (end < start) end += 24 * 60;
-                                    return currentTimeValue >= start && currentTimeValue < end;
-                                });
-
-                                if (!targetSchedule) {
-                                    targetSchedule = allSchedules.find(s => {
-                                        const [sH, sM] = s.startTime.split(':').map(Number);
-                                        const start = sH * 60 + sM;
-                                        return start > currentTimeValue;
-                                    });
-                                }
-
-                                if (!targetSchedule && allSchedules.length > 0) {
-                                    targetSchedule = allSchedules[0];
-                                }
-
-                                if (targetSchedule) {
-                                    const completionStatus = getTodayCompletions()[targetSchedule.id];
-                                    const isCompleted = completionStatus?.completed === true;
-                                    const [sH, sM] = targetSchedule.startTime.split(':').map(Number);
-                                    const [eH, eM] = targetSchedule.endTime.split(':').map(Number);
-                                    let start = sH * 60 + sM;
-                                    let end = eH * 60 + eM;
-                                    if (end < start) end += 24 * 60;
-                                    const isActive = !isCompleted && currentTimeValue >= start && currentTimeValue < end;
-                                    const isUpcoming = !isCompleted && currentTimeValue < start;
-                                    const Icon = targetSchedule.icon;
-
-                                    const colorMap: Record<string, string> = {
-                                        yellow: "bg-yellow-500",
-                                        purple: "bg-purple-500",
-                                        green: "bg-green-500",
-                                        blue: "bg-blue-500",
-                                        red: "bg-red-500",
-                                        orange: "bg-orange-500",
-                                        pink: "bg-pink-500",
-                                        primary: "bg-purple-600"
-                                    };
-                                    const bgClass = colorMap[targetSchedule.color] || "bg-purple-600";
-
-                                    return (
-                                        <motion.button
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => {
-                                                if (targetSchedule.id === 'wake-up') updateDailyGoal("wakeUp", !dailyGoals.wakeUp);
-                                            }}
-                                            className={cn(
-                                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center transition-all",
-                                                isCompleted ? "bg-green-500/10 border-green-500/30" :
-                                                    (isActive || isUpcoming) ? "bg-purple-500/10 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]" :
-                                                        "bg-white/5 border-white/10"
-                                            )}
-                                        >
-                                            <div className={cn(
-                                                "w-8 h-8 rounded-full flex items-center justify-center",
-                                                isCompleted ? "bg-green-500 text-black" :
-                                                    (isActive || isUpcoming) ? `${bgClass} text-white` :
-                                                        "bg-white/10 text-muted-foreground"
-                                            )}>
-                                                {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Icon className={cn("w-4 h-4", isActive && "animate-pulse")} />}
-                                            </div>
-                                            <div>
-                                                <p className={cn("font-semibold text-sm", (isActive || isUpcoming) && "text-purple-400")}>{targetSchedule.text}</p>
-                                                <p className="text-xs text-muted-foreground">{targetSchedule.startTime}</p>
-                                            </div>
-                                        </motion.button>
-                                    );
-                                } else {
-                                    return (
-                                        <div className="p-3 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                                            <p className="text-xs">일정이 없습니다</p>
-                                        </div>
-                                    );
-                                }
-                            })()}
-
-                            {/* Schedule Completion Goal */}
-                            {(() => {
-                                // Calculate today's schedule completion rate
-                                const now = currentTime || new Date();
-                                const currentDay = now.getDay();
-                                const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-
-                                const todaySchedules = userProfile?.customGoals?.filter(g => {
-                                    if (g.specificDate) {
-                                        return g.specificDate === todayStr;
-                                    }
-                                    if (!g.daysOfWeek?.includes(currentDay)) return false;
-                                    if (g.startDate && todayStr < g.startDate) return false;
-                                    if (g.endDate && todayStr > g.endDate) return false;
-                                    return true;
-                                }) || [];
-
-                                const completions = getTodayCompletions();
-                                const completedCount = todaySchedules.filter(s => completions[s.id]?.completed === true).length;
-                                const totalCount = todaySchedules.length;
-                                const completionRate = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
-                                const isGoalMet = totalCount > 0 && completionRate >= 70;
-
-                                return (
-                                    <div className={cn(
-                                        "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
-                                        isGoalMet
-                                            ? "bg-purple-500/10 border-purple-500/30"
-                                            : "bg-white/5 border-white/10"
-                                    )}>
-                                        <div className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center",
-                                            isGoalMet ? "bg-purple-500 text-white" : "bg-purple-500/20 text-purple-400"
-                                        )}>
-                                            <CheckCircle2 className="w-4 h-4" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-sm">달성 ({completedCount}/{totalCount})</p>
-                                            <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
-                                                <motion.div
-                                                    className="h-full bg-purple-500"
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${completionRate}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            {/* Trend Briefing Goal */}
-                            <div className={cn(
-                                "p-3 rounded-xl border flex flex-col items-center justify-center gap-2 text-center",
-                                dailyGoals.trendBriefing >= 6
-                                    ? "bg-blue-500/10 border-blue-500/30"
-                                    : "bg-white/5 border-white/10"
-                            )}>
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center",
-                                    dailyGoals.trendBriefing >= 6 ? "bg-blue-500 text-white" : "bg-blue-500/20 text-blue-400"
-                                )}>
-                                    <TrendingUp className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <p className="font-semibold text-sm">브리핑 ({dailyGoals.trendBriefing}/6)</p>
-                                    <div className="mt-1 h-1.5 w-16 bg-white/10 rounded-full overflow-hidden mx-auto">
-                                        <motion.div
-                                            className="h-full bg-blue-500"
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${Math.min((dailyGoals.trendBriefing / 6) * 100, 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Schedule Change Button (Mobile) */}
-                            <motion.button
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => setShowSchedulePopup(true)}
-                                className="p-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors flex flex-col items-center justify-center gap-2"
-                            >
-                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                    <Edit3 className="w-4 h-4 text-primary" />
-                                </div>
-                                <p className="font-semibold text-sm text-primary">일정 변경</p>
-                            </motion.button>
-                        </div>
-
-                        {/* 2. Timeline (Mobile - Horizontal) */}
+                        {/* 1. 나의 하루 리듬 (Top) */}
                         <Card className="glass-card border-none">
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="font-semibold flex items-center gap-2 text-sm">
-                                        <Sparkles className="w-4 h-4 text-yellow-500" /> 나의 하루 리듬
+                                        <Sparkles className="w-4 h-4 text-amber-500" /> 나의 하루 리듬
                                     </h3>
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-7 text-xs text-muted-foreground hover:text-white gap-1.5 px-2"
+                                        className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 px-2"
                                         onClick={() => setShowSchedulePopup(true)}
                                     >
                                         <Edit3 className="w-3.5 h-3.5" /> 일정 관리
@@ -1215,13 +1005,97 @@ export function Dashboard({
                             </CardContent>
                         </Card>
 
-                        {/* 3. Insights (Mobile) */}
-                        <div className="h-40">
-                            <PeerInsightsCard
-                                job={userProfile?.job || "마케터"}
-                                level={userProfile?.level || "중급"}
-                            />
-                        </div>
+                        {/* 2. Current Schedule Card (Prominent) */}
+                        {(() => {
+                            if (!currentTime) return null;
+                            const now = currentTime;
+                            const currentDay = now.getDay();
+                            const currentTimeValue = now.getHours() * 60 + now.getMinutes();
+                            const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+                            const customItems = userProfile?.customGoals?.filter(g => {
+                                if (g.specificDate) return g.specificDate === todayStr;
+                                if (!g.daysOfWeek?.includes(currentDay)) return false;
+                                if (g.startDate && todayStr < g.startDate) return false;
+                                if (g.endDate && todayStr > g.endDate) return false;
+                                return true;
+                            }).map(g => ({
+                                id: g.id,
+                                text: g.text,
+                                startTime: g.startTime!,
+                                endTime: g.endTime!,
+                                icon: getScheduleIcon(g.text),
+                                color: g.color || 'primary',
+                            })) || [];
+
+                            const allSchedules = [...customItems].sort((a, b) => {
+                                const [aH, aM] = a.startTime.split(':').map(Number);
+                                const [bH, bM] = b.startTime.split(':').map(Number);
+                                return (aH * 60 + aM) - (bH * 60 + bM);
+                            });
+
+                            // Find current active schedule
+                            let currentSchedule = allSchedules.find(s => {
+                                const [sH, sM] = s.startTime.split(':').map(Number);
+                                const [eH, eM] = s.endTime.split(':').map(Number);
+                                let start = sH * 60 + sM;
+                                let end = eH * 60 + eM;
+                                if (end < start) end += 24 * 60;
+                                return currentTimeValue >= start && currentTimeValue < end;
+                            });
+
+                            // If no active, find next upcoming
+                            if (!currentSchedule) {
+                                currentSchedule = allSchedules.find(s => {
+                                    const [sH, sM] = s.startTime.split(':').map(Number);
+                                    return sH * 60 + sM > currentTimeValue;
+                                });
+                            }
+
+                            // Find upcoming schedules (excluding current)
+                            const upcomingSchedules = allSchedules.filter(s => {
+                                if (currentSchedule && s.id === currentSchedule.id) return false;
+                                const [sH, sM] = s.startTime.split(':').map(Number);
+                                return sH * 60 + sM > currentTimeValue;
+                            });
+
+                            // Calculate completion stats
+                            const completions = getTodayCompletions();
+                            const completedCount = allSchedules.filter(s => completions[s.id]?.completed === true).length;
+
+                            return (
+                                <>
+                                    <CurrentScheduleCard
+                                        schedule={currentSchedule || null}
+                                        currentTime={currentTime}
+                                        onToggleComplete={toggleCustomGoal}
+                                        onScheduleClick={() => setShowSchedulePopup(true)}
+                                    />
+
+                                    {/* 3. Upcoming Schedules (Smaller) */}
+                                    {upcomingSchedules.length > 0 && (
+                                        <UpcomingSchedules
+                                            schedules={upcomingSchedules}
+                                            currentTime={currentTime}
+                                            onToggleComplete={toggleCustomGoal}
+                                            onViewAll={() => setShowSchedulePopup(true)}
+                                        />
+                                    )}
+
+                                    {/* 4. Swipeable Stats (Circular Progress) */}
+                                    <SwipeableStats
+                                        scheduleCompletion={{
+                                            completed: completedCount,
+                                            total: allSchedules.length,
+                                        }}
+                                        briefingCompletion={{
+                                            read: dailyGoals.trendBriefing,
+                                            total: 6,
+                                        }}
+                                    />
+                                </>
+                            );
+                        })()}
                     </div>
 
                     {/* Desktop Layout: Original Grid */}
