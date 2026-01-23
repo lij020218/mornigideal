@@ -86,9 +86,11 @@ export function SlideViewer({
         setIsLoading(true);
         setError(null);
         try {
+            console.log("[SlideViewer] Fetching slides for:", { curriculumId, dayNumber });
+
             // First try to get existing slides
             const getRes = await fetch(
-                `/api/ai-learning-slides?curriculumId=${curriculumId}&dayNumber=${dayNumber}`
+                `/api/ai-learning-slides?curriculumId=${encodeURIComponent(curriculumId)}&dayNumber=${dayNumber}`
             );
 
             if (getRes.ok) {
@@ -97,13 +99,17 @@ export function SlideViewer({
                     curriculumId,
                     dayNumber,
                     hasSlides: !!data.slides,
-                    slidesLength: data.slides?.length
+                    slidesLength: data.slides?.length,
+                    slidesData: data.slides ? 'exists' : 'null'
                 });
-                if (data.slides && data.slides.length > 0) {
+                if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
+                    console.log("[SlideViewer] Using cached slides from DB");
                     setSlides(data.slides);
                     setIsLoading(false);
                     return;
                 }
+            } else {
+                console.log("[SlideViewer] GET request failed:", getRes.status);
             }
 
             // If no existing slides, generate new ones
@@ -510,17 +516,17 @@ export function SlideViewer({
             exit={{ opacity: 0 }}
             className={cn(
                 "fixed inset-0 z-50 flex flex-col bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20",
-                isFullscreen ? "" : "p-4 md:p-8"
+                isFullscreen ? "" : "pt-16 pb-4 px-3 md:pt-8 md:pb-8 md:px-8"
             )}
         >
             {/* Header */}
             {!isFullscreen && (
-                <div className="flex items-center justify-between mb-4 bg-white/60 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/50 shadow-sm">
-                    <div className="flex items-center gap-3">
-                        <FieriLogo className="w-10 h-10" />
+                <div className="flex items-center justify-between mb-3 md:mb-4 bg-white/90 backdrop-blur-sm rounded-xl md:rounded-2xl px-3 md:px-4 py-2.5 md:py-3 border border-gray-200/50 shadow-sm">
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                        <FieriLogo className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0" />
                         <div className="min-w-0 flex-1">
                             <h2 className="font-bold text-gray-800 text-sm md:text-base truncate">Day {dayNumber}: {dayTitle}</h2>
-                            <p className="text-xs text-gray-500 truncate">{topic}</p>
+                            <p className="text-xs text-gray-600 truncate">{topic}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
@@ -529,27 +535,27 @@ export function SlideViewer({
                             variant="outline"
                             size="sm"
                             className={cn(
-                                "gap-1 md:gap-2 border-gray-200 hover:bg-purple-50 h-8 md:h-9 px-2 md:px-3",
-                                showNotes && "bg-purple-100 border-purple-200"
+                                "gap-1 md:gap-2 border-gray-300 hover:bg-purple-50 h-8 md:h-9 px-2 md:px-3",
+                                showNotes && "bg-purple-100 border-purple-300"
                             )}
                         >
-                            <Lightbulb className={cn("w-4 h-4", showNotes ? "text-purple-600" : "text-gray-500")} />
+                            <Lightbulb className={cn("w-4 h-4", showNotes ? "text-purple-600" : "text-gray-600")} />
                             <span className="hidden md:inline">노트</span>
                         </Button>
                         <Button
                             onClick={() => setIsFullscreen(!isFullscreen)}
                             variant="outline"
                             size="sm"
-                            className="border-gray-200 hover:bg-purple-50 h-8 md:h-9 px-2 md:px-3 hidden md:flex"
+                            className="border-gray-300 hover:bg-purple-50 h-8 md:h-9 px-2 md:px-3 hidden md:flex"
                         >
                             {isFullscreen ? (
-                                <Minimize2 className="w-4 h-4 text-gray-500" />
+                                <Minimize2 className="w-4 h-4 text-gray-600" />
                             ) : (
-                                <Maximize2 className="w-4 h-4 text-gray-500" />
+                                <Maximize2 className="w-4 h-4 text-gray-600" />
                             )}
                         </Button>
                         <Button onClick={onClose} variant="ghost" size="sm" className="hover:bg-gray-100 h-8 md:h-9 px-2 md:px-3">
-                            <X className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
+                            <X className="w-4 h-4 md:w-5 md:h-5 text-gray-600" />
                         </Button>
                     </div>
                 </div>
@@ -557,7 +563,7 @@ export function SlideViewer({
 
             {/* Slide Content */}
             <div className={cn(
-                "flex-1 flex flex-col overflow-hidden",
+                "flex-1 flex flex-col overflow-hidden min-h-0",
                 isFullscreen ? "p-8" : ""
             )}>
                 <AnimatePresence mode="wait">
@@ -567,38 +573,38 @@ export function SlideViewer({
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -50 }}
                         transition={{ duration: 0.3 }}
-                        className="flex-1 bg-white/80 backdrop-blur-sm rounded-2xl p-6 md:p-10 flex flex-col shadow-xl border border-white/50 overflow-y-auto"
+                        className="flex-1 bg-white/95 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-10 flex flex-col shadow-lg border border-gray-200/50 overflow-y-auto min-h-0"
                     >
                         {/* Slide Number */}
-                        <div className="flex items-center justify-between mb-3 md:mb-4 flex-shrink-0">
-                            <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 md:px-3 py-1 rounded-full">
+                        <div className="flex items-center justify-between mb-2 md:mb-4 flex-shrink-0">
+                            <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2 md:px-3 py-1 rounded-full">
                                 {slide.slideNumber} / {slides.length}
                             </span>
                             {slide.visualSuggestion && (
-                                <span className="text-xs text-purple-500 flex items-center gap-1 bg-purple-50 px-2 md:px-3 py-1 rounded-full max-w-[50%] truncate">
+                                <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-100 px-2 md:px-3 py-1 rounded-full max-w-[50%] truncate">
                                     💡 {slide.visualSuggestion}
                                 </span>
                             )}
                         </div>
 
                         {/* Title */}
-                        <h1 className="text-xl md:text-4xl font-bold mb-4 md:mb-8 bg-gradient-to-r from-purple-600 via-violet-600 to-pink-600 bg-clip-text text-transparent flex-shrink-0">
+                        <h1 className="text-lg md:text-4xl font-bold mb-3 md:mb-8 bg-gradient-to-r from-purple-600 via-violet-600 to-pink-600 bg-clip-text text-transparent flex-shrink-0 leading-tight">
                             {slide.title}
                         </h1>
 
                         {/* Content - 퀴즈 또는 일반 콘텐츠 */}
-                        <div className="flex-1 overflow-y-auto pr-1 md:pr-2">
+                        <div className="flex-1 overflow-y-auto pr-1 md:pr-2 min-h-0">
                             {slide.type === "quiz" && slide.quiz ? (
                                 renderQuizSlide(slide)
                             ) : (
-                                <div className="space-y-4 md:space-y-8">
+                                <div className="space-y-3 md:space-y-6">
                                     {slide.content.map((point, index) => (
                                         <motion.div
                                             key={index}
                                             initial={{ opacity: 0, y: 15 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: index * 0.1 }}
-                                            className="text-sm md:text-lg text-gray-700 leading-[1.7] md:leading-[1.8]"
+                                            className="text-sm md:text-lg text-gray-800 leading-[1.7] md:leading-[1.8]"
                                         >
                                             {renderContentWithHighlight(point)}
                                         </motion.div>
@@ -629,7 +635,7 @@ export function SlideViewer({
             </div>
 
             {/* Progress Bar */}
-            <div className="h-1 md:h-1.5 bg-gray-200 rounded-full overflow-hidden mt-3 md:mt-4">
+            <div className="h-1.5 md:h-2 bg-gray-200 rounded-full overflow-hidden mt-2 md:mt-4">
                 <motion.div
                     className="h-full bg-gradient-to-r from-purple-500 via-violet-500 to-pink-500"
                     initial={{ width: 0 }}
@@ -639,7 +645,7 @@ export function SlideViewer({
             </div>
 
             {/* Navigation */}
-            <div className="flex items-center justify-between mt-4 bg-white/60 backdrop-blur-sm rounded-xl md:rounded-2xl px-3 md:px-4 py-2 md:py-3 border border-white/50 shadow-sm">
+            <div className="flex items-center justify-between mt-2 md:mt-4 bg-white/90 backdrop-blur-sm rounded-xl md:rounded-2xl px-3 md:px-4 py-2.5 md:py-3 border border-gray-200/50 shadow-sm">
                 <Button
                     onClick={handlePrev}
                     disabled={currentSlide === 0}
