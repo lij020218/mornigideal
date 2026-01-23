@@ -81,7 +81,14 @@ export async function POST(request: Request) {
         }
 
         // Check if slides already exist for this user
-        const { data: existingSlides } = await supabase
+        console.log("[AI Learning Slides] POST - Checking for existing slides:", {
+            curriculumId,
+            curriculumIdLength: curriculumId?.length,
+            dayNumber,
+            userId: userData.id
+        });
+
+        const { data: existingSlides, error: checkError } = await supabase
             .from("learning_slides")
             .select("*")
             .eq("curriculum_id", curriculumId)
@@ -89,10 +96,19 @@ export async function POST(request: Request) {
             .eq("user_id", userData.id)
             .single();
 
+        console.log("[AI Learning Slides] POST - Existing slides check:", {
+            found: !!existingSlides,
+            slidesCount: existingSlides?.slides_data?.length,
+            error: checkError?.message,
+            errorCode: checkError?.code
+        });
+
         if (existingSlides) {
-            console.log("[AI Learning Slides] Returning existing slides for user:", userData.id);
+            console.log("[AI Learning Slides] ✅ Returning cached slides for user:", userData.id);
             return NextResponse.json({ slides: existingSlides.slides_data });
         }
+
+        console.log("[AI Learning Slides] 🔄 No cached slides found, generating new ones...");
 
         const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
         const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
@@ -285,10 +301,13 @@ export async function GET(request: Request) {
 
         console.log("[AI Learning Slides] GET Query:", {
             curriculumId,
+            curriculumIdLength: curriculumId?.length,
             dayNumber: parseInt(dayNumber),
             userId: userData.id,
             found: !!slides,
-            error: slidesError?.message
+            slidesDataLength: slides?.slides_data?.length,
+            error: slidesError?.message,
+            errorCode: slidesError?.code
         });
 
         if (!slides) {
