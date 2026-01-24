@@ -459,12 +459,12 @@ export function WeeklyReportCards({ isOpen, onClose, reportData }: WeeklyReportC
                         className="fixed top-20 left-4 right-4 bottom-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[380px] sm:h-[680px] z-50 flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Close Button */}
+                        {/* Close Button - inside card on mobile, outside on desktop */}
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={onClose}
-                            className="absolute -top-14 right-0 sm:-top-2 sm:-right-12 text-white hover:bg-white/20 z-10"
+                            className="absolute top-3 right-3 sm:-top-2 sm:-right-12 text-white hover:bg-white/20 z-20"
                         >
                             <X className="w-6 h-6" />
                         </Button>
