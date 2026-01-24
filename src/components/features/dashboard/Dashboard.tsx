@@ -339,13 +339,22 @@ export function Dashboard({
     useEffect(() => {
         const handleOpenSchedulePopup = (event: CustomEvent) => {
             console.log("Dashboard: 'open-schedule-popup' event received!", event.detail);
-            const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
+            // Support both old format (linkedGoalId, linkedGoalTitle, goalType) and new format (linkedGoal)
+            const { linkedGoal, linkedGoalId, linkedGoalTitle, goalType } = event.detail || {};
 
-            setLinkedGoalData({
-                id: linkedGoalId,
-                title: linkedGoalTitle,
-                type: goalType
-            });
+            if (linkedGoal) {
+                setLinkedGoalData({
+                    id: linkedGoal.id,
+                    title: linkedGoal.title,
+                    type: linkedGoal.type
+                });
+            } else if (linkedGoalId) {
+                setLinkedGoalData({
+                    id: linkedGoalId,
+                    title: linkedGoalTitle,
+                    type: goalType
+                });
+            }
             setShowSchedulePopup(true);
         };
 
@@ -1084,6 +1093,19 @@ export function Dashboard({
                                             total: 6,
                                         }}
                                     />
+
+                                    {/* 5. Growth Insights (Mobile) */}
+                                    <Card className="glass-card border-none">
+                                        <CardContent className="p-4">
+                                            <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                                                <Users className="w-4 h-4 text-purple-400" /> 성장 인사이트
+                                            </h3>
+                                            <PeerInsightsCard
+                                                job={userProfile?.job || "마케터"}
+                                                level={userProfile?.level || "중급"}
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </>
                             );
                         })()}
@@ -1771,6 +1793,35 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         color: string;
     } | null>(null);
 
+    // Fetch long-term goals for displaying linked goal badges
+    const [longTermGoals, setLongTermGoals] = useState<{
+        weekly: Array<{ id: string; title: string; category?: string }>;
+        monthly: Array<{ id: string; title: string; category?: string }>;
+        yearly: Array<{ id: string; title: string; category?: string }>;
+    } | null>(null);
+
+    useEffect(() => {
+        const fetchGoals = async () => {
+            try {
+                const res = await fetch('/api/user/long-term-goals');
+                if (res.ok) {
+                    const data = await res.json();
+                    setLongTermGoals(data.goals);
+                }
+            } catch (error) {
+                console.error('[DailyRhythmTimeline] Failed to fetch long-term goals:', error);
+            }
+        };
+        fetchGoals();
+    }, []);
+
+    // Helper to get linked goal info
+    const getLinkedGoalInfo = (linkedGoalId?: string, linkedGoalType?: 'weekly' | 'monthly' | 'yearly') => {
+        if (!linkedGoalId || !linkedGoalType || !longTermGoals) return null;
+        const goalList = longTermGoals[linkedGoalType] || [];
+        return goalList.find(g => g.id === linkedGoalId) || null;
+    };
+
     // Build timeline items
     const baseTimelineItems: Array<{
         time: string;
@@ -1781,6 +1832,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
         endTime?: string;
         location?: string;
         memo?: string;
+        linkedGoalId?: string;
+        linkedGoalType?: 'weekly' | 'monthly' | 'yearly';
     }> = [];
 
     // Note: Base schedule items (schedule.wakeUp, etc.) are no longer added here.
@@ -1813,6 +1866,8 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                 endTime: goal.endTime,
                 location: goal.location,
                 memo: goal.memo,
+                linkedGoalId: goal.linkedGoalId,
+                linkedGoalType: goal.linkedGoalType,
             });
         }
     });
@@ -2102,6 +2157,21 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                         )}
                                     </div>
 
+                                    {/* Linked Goal Badge */}
+                                    {item.linkedGoalId && item.linkedGoalType && (() => {
+                                        const linkedGoal = getLinkedGoalInfo(item.linkedGoalId, item.linkedGoalType);
+                                        if (!linkedGoal) return null;
+                                        const typeLabels = { weekly: '주간', monthly: '월간', yearly: '연간' };
+                                        return (
+                                            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">
+                                                <Target className="w-3 h-3 text-primary" />
+                                                <span className="text-[9px] font-medium text-primary truncate max-w-[80px]" title={linkedGoal.title}>
+                                                    {typeLabels[item.linkedGoalType]} 목표
+                                                </span>
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* Completion status */}
                                     {completion && (
                                         <motion.span
@@ -2212,7 +2282,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                                 >
                                                     {item.label.length > 50 ? item.label.substring(0, 50) + '...' : item.label}
                                                 </h4>
-                                                <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                     <p className={cn(
                                                         "text-sm font-mono",
                                                         (isActive || isUpcoming) ? "text-gray-700" : "text-muted-foreground"
@@ -2230,6 +2300,20 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                                                             예정됨
                                                         </span>
                                                     )}
+                                                    {/* Linked Goal Badge */}
+                                                    {item.linkedGoalId && item.linkedGoalType && (() => {
+                                                        const linkedGoal = getLinkedGoalInfo(item.linkedGoalId, item.linkedGoalType);
+                                                        if (!linkedGoal) return null;
+                                                        const typeLabels = { weekly: '주간', monthly: '월간', yearly: '연간' };
+                                                        return (
+                                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs">
+                                                                <Target className="w-3 h-3 text-primary" />
+                                                                <span className="font-medium text-primary">
+                                                                    {typeLabels[item.linkedGoalType]}: {linkedGoal.title.length > 15 ? linkedGoal.title.substring(0, 15) + '...' : linkedGoal.title}
+                                                                </span>
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>
