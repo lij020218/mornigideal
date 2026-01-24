@@ -1763,11 +1763,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                     {/* Right Sidebar: Edit Panel - Fixed bottom sheet on mobile */}
                                     <div className={cn(
-                                        "bg-muted/50 overflow-y-auto custom-scrollbar",
-                                        // Mobile: fixed bottom sheet when active
+                                        "overflow-y-auto custom-scrollbar",
+                                        // Mobile: fixed bottom sheet when active - solid white background
                                         (showEditOptions || showTimePicker)
-                                            ? "fixed md:relative bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-10 rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-border p-4 md:p-5 max-h-[60vh] md:max-h-none w-full md:w-80"
-                                            : "hidden md:block w-80 border-l border-border p-5"
+                                            ? "fixed md:relative bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-50 rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-border p-4 md:p-5 max-h-[60vh] md:max-h-none w-full md:w-80 bg-white md:bg-muted/50 shadow-[0_-4px_20px_rgba(0,0,0,0.15)] md:shadow-none"
+                                            : "hidden md:block w-80 border-l border-border p-5 bg-muted/50"
                                     )}>
                                         {showEditOptions && selectedActivityId ? (
                                             <motion.div
