@@ -209,12 +209,17 @@ ${gaps.length > 0
 
 ${userContext}
 
-🚨 **현재 시간: ${currentTimeStr}** (${currentHour >= 18 ? '저녁' : currentHour >= 12 ? '오후' : '오전'} ${currentHour}시)
+🚨🚨🚨 **현재 시간: ${currentTimeStr}** (${currentHour >= 18 ? '저녁' : currentHour >= 12 ? '오후' : '오전'} ${currentHour}시) 🚨🚨🚨
+
+**⚠️ 가장 중요한 규칙 - 반드시 준수:**
+현재 시간은 ${currentTimeStr} (${currentHour >= 18 ? '저녁' : currentHour >= 12 ? '오후' : '오전'})입니다.
+suggestedStartTime은 반드시 ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')} 이후여야 합니다!
 
 **추천 원칙:**
-1. **🚨 시간 제약 (최우선!)**: 현재 시간 ${currentTimeStr} 이후의 시간만 추천하세요!
-   - ❌ 절대 금지: ${currentHour}시 이전 시간 추천 (예: 06:00, 09:00 등 과거 시간)
-   - ✅ 가능: ${currentHour}시 이후만 (예: ${String(Math.min(currentHour + 1, 23)).padStart(2, '0')}:00 이후)
+1. **🚨 시간 제약 (최우선! 위반 시 추천 무효!)**:
+   - ❌❌❌ 절대 금지: ${String(currentHour).padStart(2, '0')}:00 이전의 모든 시간 (06:00, 07:00, ..., ${String(currentHour - 1).padStart(2, '0')}:00)
+   - ✅ 허용: ${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')} ~ 23:00 사이만
+   - 예시: 현재 19:30이면 → 19:30, 20:00, 20:30, 21:00 등만 가능. 06:00, 09:00 등은 금지!
 2. **데이터 기반**: 사용자의 실제 행동 패턴을 반영하세요
 3. **건강 우선**: 운동이나 수면이 부족하면 이를 개선할 수 있는 일정을 우선 추천
 4. **시간대 맞춤**: 사용자가 평소 해당 활동을 하는 시간대에 추천
@@ -256,7 +261,7 @@ JSON 형식으로만 응답하세요:
             messages: [
                 {
                     role: "system",
-                    content: "You are a smart schedule recommendation AI that analyzes user behavior patterns and suggests personalized activities."
+                    content: `You are a smart schedule recommendation AI. CRITICAL RULE: The current time is ${currentTimeStr}. You MUST ONLY recommend times AFTER ${currentTimeStr}. NEVER recommend times before ${currentHour}:00 (like 06:00, 09:00, etc. if current time is afternoon/evening). This is the most important rule - violating it makes the recommendation useless.`
                 },
                 {
                     role: "user",
@@ -279,7 +284,43 @@ JSON 형식으로만 응답하세요:
             completion.usage?.completion_tokens || 0
         );
 
-        return result.recommendations || [];
+        // Get current time for validation
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTimeMinutes = currentHour * 60 + currentMinute;
+
+        // Filter and fix recommendations with past times
+        const validatedRecommendations = (result.recommendations || [])
+            .map((rec: any) => {
+                if (!rec.suggestedStartTime) return rec;
+
+                const [recHour, recMinute] = rec.suggestedStartTime.split(':').map(Number);
+                const recTimeMinutes = recHour * 60 + (recMinute || 0);
+
+                // If recommended time is in the past, adjust to current time + 30 minutes
+                if (recTimeMinutes < currentTimeMinutes) {
+                    const adjustedMinutes = currentTimeMinutes + 30;
+                    const adjustedHour = Math.floor(adjustedMinutes / 60);
+                    const adjustedMinute = adjustedMinutes % 60;
+
+                    // Only adjust if within reasonable hours (before 23:00)
+                    if (adjustedHour < 23) {
+                        console.log(`[Schedule Recommendations] Fixed past time: ${rec.suggestedStartTime} -> ${String(adjustedHour).padStart(2, '0')}:${String(adjustedMinute).padStart(2, '0')}`);
+                        return {
+                            ...rec,
+                            suggestedStartTime: `${String(adjustedHour).padStart(2, '0')}:${String(adjustedMinute).padStart(2, '0')}`,
+                        };
+                    }
+                    // If too late, filter out this recommendation
+                    console.log(`[Schedule Recommendations] Filtered out past time recommendation: ${rec.suggestedStartTime}`);
+                    return null;
+                }
+                return rec;
+            })
+            .filter(Boolean);
+
+        return validatedRecommendations;
     } catch (error: any) {
         console.error('[Schedule Recommendations] OpenAI error:', error);
         return [];
