@@ -694,7 +694,7 @@ export function LearningCurriculumView({
                                                     animate={{ opacity: 1, x: 0 }}
                                                     transition={{ delay: (day.day % 7) * 0.05 }}
                                                     className={cn(
-                                                        "p-4 rounded-xl transition-all",
+                                                        "p-3 sm:p-4 rounded-xl transition-all",
                                                         isCompleted
                                                             ? "bg-green-500/10 border border-green-500/20"
                                                             : isCurrent
@@ -704,59 +704,64 @@ export function LearningCurriculumView({
                                                             : "bg-white/[0.03] hover:bg-white/[0.06]"
                                                     )}
                                                 >
-                                                    <div className="flex items-start gap-3">
-                                                        <div className={cn(
-                                                            "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
-                                                            isCompleted
-                                                                ? "bg-green-500/20"
-                                                                : isCurrent
-                                                                ? "bg-purple-500/20"
-                                                                : "bg-white/10"
-                                                        )}>
-                                                            {isCompleted ? (
-                                                                <Check className="w-5 h-5 text-green-400" />
-                                                            ) : isLocked ? (
-                                                                <Lock className="w-5 h-5 text-muted-foreground" />
-                                                            ) : (
-                                                                <span className={cn(
-                                                                    "font-bold",
-                                                                    isCurrent ? "text-purple-400" : "text-muted-foreground"
-                                                                )}>
-                                                                    {day.day}
-                                                                </span>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <h4 className={cn(
-                                                                    "font-medium text-sm",
-                                                                    isCompleted && "text-green-400"
-                                                                )}>
-                                                                    {day.title}
-                                                                </h4>
-                                                                {isCurrent && (
-                                                                    <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-xs">
-                                                                        오늘
+                                                    {/* Mobile: Vertical layout, Desktop: Horizontal layout */}
+                                                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                                                        {/* Top row on mobile: Icon + Title + Badge */}
+                                                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                            <div className={cn(
+                                                                "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                                                                isCompleted
+                                                                    ? "bg-green-500/20"
+                                                                    : isCurrent
+                                                                    ? "bg-purple-500/20"
+                                                                    : "bg-white/10"
+                                                            )}>
+                                                                {isCompleted ? (
+                                                                    <Check className="w-5 h-5 text-green-400" />
+                                                                ) : isLocked ? (
+                                                                    <Lock className="w-5 h-5 text-muted-foreground" />
+                                                                ) : (
+                                                                    <span className={cn(
+                                                                        "font-bold",
+                                                                        isCurrent ? "text-purple-400" : "text-muted-foreground"
+                                                                    )}>
+                                                                        {day.day}
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-xs text-muted-foreground line-clamp-2">
-                                                                {day.description}
-                                                            </p>
-                                                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                                                                <span className="flex items-center gap-1">
-                                                                    <Clock className="w-3 h-3" />
-                                                                    {day.estimatedMinutes}분
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <Target className="w-3 h-3" />
-                                                                    {day.objectives.length}개 목표
-                                                                </span>
+
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                                    <h4 className={cn(
+                                                                        "font-medium text-sm",
+                                                                        isCompleted && "text-green-400"
+                                                                    )}>
+                                                                        {day.title}
+                                                                    </h4>
+                                                                    {isCurrent && (
+                                                                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-xs shrink-0">
+                                                                            오늘
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                    {day.description}
+                                                                </p>
+                                                                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Clock className="w-3 h-3" />
+                                                                        {day.estimatedMinutes}분
+                                                                    </span>
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Target className="w-3 h-3" />
+                                                                        {day.objectives.length}개 목표
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
 
-                                                        <div className="flex items-center gap-2">
+                                                        {/* Buttons - Full width on mobile, auto on desktop */}
+                                                        <div className="flex items-center gap-2 mt-2 sm:mt-0 sm:shrink-0">
                                                             {/* Max 플랜: 슬라이드 버튼 + 일정 추가 버튼 */}
                                                             {userPlan === "max" && !isLocked && (
                                                                 <>
@@ -764,7 +769,7 @@ export function LearningCurriculumView({
                                                                         onClick={() => onStartDay(day, true)}
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        className="gap-1 rounded-lg text-xs h-8"
+                                                                        className="gap-1 rounded-lg text-xs h-8 flex-1 sm:flex-none"
                                                                     >
                                                                         <FileText className="w-3 h-3" />
                                                                         슬라이드
@@ -778,7 +783,7 @@ export function LearningCurriculumView({
                                                                             disabled={isAddingSchedule}
                                                                             size="sm"
                                                                             className={cn(
-                                                                                "gap-1 rounded-lg text-xs h-8",
+                                                                                "gap-1 rounded-lg text-xs h-8 flex-1 sm:flex-none",
                                                                                 isCurrent && "bg-purple-500 hover:bg-purple-600"
                                                                             )}
                                                                         >
@@ -799,7 +804,7 @@ export function LearningCurriculumView({
                                                                     disabled={isAddingSchedule}
                                                                     size="sm"
                                                                     className={cn(
-                                                                        "gap-1 rounded-lg text-xs h-8",
+                                                                        "gap-1 rounded-lg text-xs h-8 flex-1 sm:flex-none",
                                                                         isCurrent && "bg-purple-500 hover:bg-purple-600"
                                                                     )}
                                                                 >
