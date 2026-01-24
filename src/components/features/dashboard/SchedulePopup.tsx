@@ -1372,14 +1372,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
                         onClick={onClose}
                     />
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-0 top-0 w-full h-full bg-white z-50 overflow-hidden flex flex-col md:left-1/2 md:top-[5%] md:-translate-x-1/2 md:w-full md:max-w-5xl md:h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-2xl"
+                        className="fixed left-0 top-0 w-full h-full bg-white z-[60] overflow-hidden flex flex-col pt-[env(safe-area-inset-top)] md:pt-0 md:left-1/2 md:top-[5%] md:-translate-x-1/2 md:w-full md:max-w-5xl md:h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-2xl"
                     >
                         {/* Header */}
                         <div className="flex flex-col gap-2 p-3 md:p-6 border-b border-border shrink-0 bg-white">
@@ -2563,7 +2563,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         </div>
 
                         {/* Footer (Simplified) */}
-                        <div className="flex justify-end gap-3 p-6 border-t border-border shrink-0 bg-white">
+                        <div className="flex justify-end gap-3 p-4 md:p-6 pb-[calc(1rem+env(safe-area-inset-bottom)+80px)] md:pb-6 border-t border-border shrink-0 bg-white">
                             <Button variant="ghost" onClick={onClose}>닫기</Button>
                             <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
                                 <Check className="w-4 h-4 mr-2" />
