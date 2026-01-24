@@ -62,6 +62,16 @@ export function SmartInsightsWidget({ customGoals = [], currentTime, initialHabi
     } | null>(initialHabitInsights || null);
     const [insights, setInsights] = useState<InsightCard[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [, setCompletionTrigger] = useState(0);
+
+    // Listen for completion changes
+    useEffect(() => {
+        const handleCompletionChange = () => {
+            setCompletionTrigger(prev => prev + 1);
+        };
+        window.addEventListener("schedule-completion-changed", handleCompletionChange);
+        return () => window.removeEventListener("schedule-completion-changed", handleCompletionChange);
+    }, []);
 
     // Load location from settings
     useEffect(() => {

@@ -54,6 +54,11 @@ export function markScheduleCompletion(
 
     localStorage.setItem(key, JSON.stringify(completions));
 
+    // Dispatch event to notify all components about the completion change
+    window.dispatchEvent(new CustomEvent("schedule-completion-changed", {
+        detail: { goalId, completed, linkedGoalId, linkedGoalType }
+    }));
+
     // If schedule is linked to a goal and completed, update goal progress
     if (completed && linkedGoalId && linkedGoalType) {
         updateLinkedGoalProgress(linkedGoalId, linkedGoalType);

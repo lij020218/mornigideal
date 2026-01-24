@@ -100,6 +100,20 @@ export function Dashboard({
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(initialProfile);
     const [linkedGoalData, setLinkedGoalData] = useState<{ id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' } | null>(null);
+    const [completionUpdateTrigger, setCompletionUpdateTrigger] = useState(0); // Force re-render on completion change
+
+    // Listen for schedule completion changes from other components/pages
+    useEffect(() => {
+        const handleCompletionChange = () => {
+            console.log("[Dashboard] Schedule completion changed, refreshing...");
+            setCompletionUpdateTrigger(prev => prev + 1);
+        };
+
+        window.addEventListener("schedule-completion-changed", handleCompletionChange);
+        return () => {
+            window.removeEventListener("schedule-completion-changed", handleCompletionChange);
+        };
+    }, []);
 
     // Get icon for schedule based on text
     const getScheduleIcon = (text: string) => {

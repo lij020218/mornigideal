@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Clock, Play, X, ChevronRight, CalendarDays, MapPin, FileText, ChevronLeft } from "lucide-react";
@@ -29,6 +29,16 @@ interface CurrentScheduleCardProps {
 export function CurrentScheduleCard({ schedule, allSchedules = [], currentTime, onScheduleClick }: CurrentScheduleCardProps) {
     const [showAllSchedules, setShowAllSchedules] = useState(false);
     const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
+    const [, setCompletionTrigger] = useState(0); // Force re-render on completion change
+
+    // Listen for completion changes
+    useEffect(() => {
+        const handleCompletionChange = () => {
+            setCompletionTrigger(prev => prev + 1);
+        };
+        window.addEventListener("schedule-completion-changed", handleCompletionChange);
+        return () => window.removeEventListener("schedule-completion-changed", handleCompletionChange);
+    }, []);
 
     const colorMap: Record<string, { bg: string; border: string; text: string; gradient: string }> = {
         yellow: { bg: "bg-yellow-500/10", border: "border-yellow-500/30", text: "text-yellow-600", gradient: "from-yellow-500 to-amber-500" },

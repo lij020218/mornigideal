@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Clock, ChevronRight } from "lucide-react";
@@ -22,6 +23,17 @@ interface UpcomingSchedulesProps {
 }
 
 export function UpcomingSchedules({ schedules, currentTime, onToggleComplete, onViewAll }: UpcomingSchedulesProps) {
+    const [, setCompletionTrigger] = useState(0);
+
+    // Listen for completion changes
+    useEffect(() => {
+        const handleCompletionChange = () => {
+            setCompletionTrigger(prev => prev + 1);
+        };
+        window.addEventListener("schedule-completion-changed", handleCompletionChange);
+        return () => window.removeEventListener("schedule-completion-changed", handleCompletionChange);
+    }, []);
+
     if (schedules.length === 0) {
         return null;
     }
