@@ -44,7 +44,8 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
     const [lastUpdated, setLastUpdated] = useState<string>("");
     const [isCached, setIsCached] = useState(false);
     const [newInterest, setNewInterest] = useState("");
-    const [isInterestOpen, setIsInterestOpen] = useState(false);
+    const [isMobileInterestOpen, setIsMobileInterestOpen] = useState(false);
+    const [isDesktopInterestOpen, setIsDesktopInterestOpen] = useState(false);
     const [viewedTitles, setViewedTitles] = useState<string[]>([]); // 이미 본 뉴스 제목 추적
     const [readBriefings, setReadBriefings] = useState<Set<string>>(new Set()); // 읽은 브리핑 ID 추적
     const [isContextExpanded, setIsContextExpanded] = useState(false); // 모바일에서 컨텍스트 카드 펼침 상태
@@ -236,12 +237,16 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
         fetchBriefings(true); // Force refresh to get new briefings based on interests
     };
 
-    const handleAddInterestSubmit = (e: React.FormEvent) => {
+    const handleAddInterestSubmit = (e: React.FormEvent, isMobile: boolean = false) => {
         e.preventDefault();
         if (newInterest.trim() && onAddInterest) {
             onAddInterest(newInterest.trim());
             setNewInterest("");
-            setIsInterestOpen(false);
+            if (isMobile) {
+                setIsMobileInterestOpen(false);
+            } else {
+                setIsDesktopInterestOpen(false);
+            }
         }
     };
 
@@ -388,15 +393,25 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                             </div>
                                             <span className="text-[10px] font-bold uppercase tracking-wider">Interest Areas</span>
                                         </div>
-                                        <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
+                                        <Popover open={isMobileInterestOpen} onOpenChange={setIsMobileInterestOpen}>
                                             <PopoverTrigger asChild>
                                                 <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] bg-muted hover:bg-muted/80 border border-border rounded-full">
                                                     <Plus className="w-3 h-3 mr-1" />
                                                     추가
                                                 </Button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-60 p-3 bg-white border-border shadow-lg">
-                                                <form onSubmit={handleAddInterestSubmit} className="space-y-2">
+                                            <PopoverContent
+                                                className="w-60 p-3 bg-white border-border shadow-lg z-[100]"
+                                                onOpenAutoFocus={(e) => e.preventDefault()}
+                                                onInteractOutside={(e) => {
+                                                    // Prevent closing when interacting with input on mobile
+                                                    const target = e.target as HTMLElement;
+                                                    if (target.tagName === 'INPUT' || target.closest('form')) {
+                                                        e.preventDefault();
+                                                    }
+                                                }}
+                                            >
+                                                <form onSubmit={(e) => handleAddInterestSubmit(e, true)} className="space-y-2">
                                                     <h4 className="font-medium text-sm text-foreground">관심 분야 추가</h4>
                                                     <div className="flex gap-2">
                                                         <Input
@@ -404,7 +419,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                                             onChange={(e) => setNewInterest(e.target.value)}
                                                             placeholder="예: 화장품, AI, 마케팅"
                                                             className="h-8 text-sm bg-muted border-border"
-                                                            autoFocus
                                                         />
                                                         <Button type="submit" size="sm" className="h-8 px-3">
                                                             <Plus className="w-4 h-4" />
@@ -474,15 +488,25 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                             </div>
                             <span className="text-xs font-bold uppercase tracking-wider text-gradient-subtle">Interest Areas</span>
                         </div>
-                        <Popover open={isInterestOpen} onOpenChange={setIsInterestOpen}>
+                        <Popover open={isDesktopInterestOpen} onOpenChange={setIsDesktopInterestOpen}>
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-7 px-3 text-xs bg-muted hover:bg-muted/80 border border-border rounded-full">
                                     <Plus className="w-3.5 h-3.5 mr-1.5" />
                                     추가
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-60 p-3 bg-white border-border shadow-lg">
-                                <form onSubmit={handleAddInterestSubmit} className="space-y-2">
+                            <PopoverContent
+                                className="w-60 p-3 bg-white border-border shadow-lg z-[100]"
+                                onOpenAutoFocus={(e) => e.preventDefault()}
+                                onInteractOutside={(e) => {
+                                    // Prevent closing when interacting with input
+                                    const target = e.target as HTMLElement;
+                                    if (target.tagName === 'INPUT' || target.closest('form')) {
+                                        e.preventDefault();
+                                    }
+                                }}
+                            >
+                                <form onSubmit={(e) => handleAddInterestSubmit(e, false)} className="space-y-2">
                                     <h4 className="font-medium text-sm text-foreground">관심 분야 추가</h4>
                                     <div className="flex gap-2">
                                         <Input
@@ -490,7 +514,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                                             onChange={(e) => setNewInterest(e.target.value)}
                                             placeholder="예: 화장품, AI, 마케팅"
                                             className="h-8 text-sm bg-muted border-border"
-                                            autoFocus
                                         />
                                         <Button type="submit" size="sm" className="h-8 px-3">
                                             <Plus className="w-4 h-4" />
