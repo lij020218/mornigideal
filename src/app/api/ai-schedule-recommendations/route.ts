@@ -81,12 +81,19 @@ interface ScheduleGap {
 function findScheduleGaps(schedules: any[], targetDate: Date): ScheduleGap[] {
     const gaps: ScheduleGap[] = [];
 
+    // Current time - only recommend FUTURE times
+    const now = new Date();
+
     // Define day boundaries (6am to 11pm)
     const dayStart = new Date(targetDate);
     dayStart.setHours(6, 0, 0, 0);
 
     const dayEnd = new Date(targetDate);
     dayEnd.setHours(23, 0, 0, 0);
+
+    // IMPORTANT: Start from current time if today, not from 6am
+    // This ensures we only recommend future times, not past times
+    const effectiveStart = now > dayStart ? new Date(Math.max(now.getTime(), dayStart.getTime())) : dayStart;
 
     // Sort schedules by start time
     const sortedSchedules = schedules
@@ -96,8 +103,8 @@ function findScheduleGaps(schedules: any[], targetDate: Date): ScheduleGap[] {
         }))
         .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-    // Find gaps
-    let currentTime = dayStart;
+    // Find gaps (starting from current time, not 6am)
+    let currentTime = effectiveStart;
 
     for (const schedule of sortedSchedules) {
         if (schedule.start > currentTime) {
@@ -192,16 +199,27 @@ ${gaps.length > 0
     : '- 비어있는 시간 없음'}
 `;
 
+    // Get current time for context
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
     const prompt = `당신은 Fi.eri 앱의 스마트 일정 추천 AI입니다. 사용자의 행동 패턴과 건강 데이터를 분석하여, 오늘 비어있는 시간대에 맞춤형 일정을 추천하세요.
 
 ${userContext}
 
+🚨 **현재 시간: ${currentTimeStr}** (${currentHour >= 18 ? '저녁' : currentHour >= 12 ? '오후' : '오전'} ${currentHour}시)
+
 **추천 원칙:**
-1. **데이터 기반**: 사용자의 실제 행동 패턴을 반영하세요
-2. **건강 우선**: 운동이나 수면이 부족하면 이를 개선할 수 있는 일정을 우선 추천
-3. **시간대 맞춤**: 사용자가 평소 해당 활동을 하는 시간대에 추천
-4. **실현 가능성**: 비어있는 시간의 길이에 맞는 현실적인 활동만 추천
-5. **목표 연결**: 사용자의 목표("${profile?.goal}")와 관련된 활동 포함
+1. **🚨 시간 제약 (최우선!)**: 현재 시간 ${currentTimeStr} 이후의 시간만 추천하세요!
+   - ❌ 절대 금지: ${currentHour}시 이전 시간 추천 (예: 06:00, 09:00 등 과거 시간)
+   - ✅ 가능: ${currentHour}시 이후만 (예: ${String(Math.min(currentHour + 1, 23)).padStart(2, '0')}:00 이후)
+2. **데이터 기반**: 사용자의 실제 행동 패턴을 반영하세요
+3. **건강 우선**: 운동이나 수면이 부족하면 이를 개선할 수 있는 일정을 우선 추천
+4. **시간대 맞춤**: 사용자가 평소 해당 활동을 하는 시간대에 추천
+5. **실현 가능성**: 비어있는 시간의 길이에 맞는 현실적인 활동만 추천
+6. **목표 연결**: 사용자의 목표("${profile?.goal}")와 관련된 활동 포함
 
 **추천 형식:**
 각 추천은 다음 정보를 포함하세요:
