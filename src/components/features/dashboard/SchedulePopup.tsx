@@ -1275,46 +1275,47 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         className="fixed left-0 top-0 w-full h-full bg-white z-50 overflow-hidden flex flex-col md:left-1/2 md:top-[5%] md:-translate-x-1/2 md:w-full md:max-w-5xl md:h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-2xl"
                     >
                         {/* Header */}
-                        <div className="flex justify-between items-center p-3 md:p-6 border-b border-border shrink-0 bg-white">
-                            <div className="flex items-center gap-2 md:gap-4">
+                        <div className="flex flex-col gap-2 p-3 md:p-6 border-b border-border shrink-0 bg-white">
+                            {/* Top row: Title and close button */}
+                            <div className="flex justify-between items-center">
                                 <h2 className="text-base md:text-xl font-bold flex items-center gap-1.5 md:gap-2">
                                     <Clock className="w-4 h-4 md:w-5 md:h-5 text-primary" /> 일정 관리
                                 </h2>
-
-                                {/* View Switcher */}
-                                <div className="flex bg-muted rounded-lg p-0.5 md:p-1 border border-border">
-                                    <button
-                                        onClick={() => setViewMode('calendar-full')}
-                                        className={cn(
-                                            "px-2 md:px-4 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
-                                            (viewMode === 'calendar-full' || viewMode === 'daily-detail')
-                                                ? "bg-primary text-white shadow-lg"
-                                                : "text-muted-foreground hover:text-foreground"
-                                        )}
-                                    >
-                                        캘린더
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            if (viewMode !== 'weekly') {
-                                                setViewMode('weekly');
-                                                resetPickers();
-                                            }
-                                        }}
-                                        className={cn(
-                                            "px-2 md:px-4 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
-                                            viewMode === 'weekly'
-                                                ? "bg-primary text-white shadow-lg"
-                                                : "text-muted-foreground hover:text-foreground"
-                                        )}
-                                    >
-                                        주간
-                                    </button>
-                                </div>
+                                <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-muted h-8 w-8 md:h-10 md:w-10">
+                                    <X className="w-4 h-4 md:w-5 md:h-5" />
+                                </Button>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-muted h-8 w-8 md:h-10 md:w-10">
-                                <X className="w-4 h-4 md:w-5 md:h-5" />
-                            </Button>
+
+                            {/* View Switcher - separate row on mobile */}
+                            <div className="flex bg-muted rounded-lg p-0.5 md:p-1 border border-border w-fit">
+                                <button
+                                    onClick={() => setViewMode('calendar-full')}
+                                    className={cn(
+                                        "px-3 md:px-4 py-1.5 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
+                                        (viewMode === 'calendar-full' || viewMode === 'daily-detail')
+                                            ? "bg-primary text-white shadow-lg"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    )}
+                                >
+                                    캘린더
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (viewMode !== 'weekly') {
+                                            setViewMode('weekly');
+                                            resetPickers();
+                                        }
+                                    }}
+                                    className={cn(
+                                        "px-3 md:px-4 py-1.5 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
+                                        viewMode === 'weekly'
+                                            ? "bg-primary text-white shadow-lg"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    )}
+                                >
+                                    주간 시간표
+                                </button>
+                            </div>
                         </div>
 
                         {/* CONTENT AREA */}
@@ -1352,8 +1353,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                         ))}
                                     </div>
 
-                                    {/* Calendar Grid - Scrollable Container */}
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 -mr-2">
+                                    {/* Calendar Grid */}
+                                    <div className="flex-1 overflow-y-auto">
                                         <div className="grid grid-cols-7 gap-1 md:gap-4">
                                             {/* Empty cells for start of month */}
                                             {Array.from({ length: getDaysInMonth(currentMonth).firstDayOfMonth }).map((_, i) => (
@@ -1410,12 +1411,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 return (
                                                     <motion.button
                                                         key={day}
-                                                        style={{ aspectRatio: '1/1' }}
                                                         whileHover={{ scale: 1.02 }}
                                                         whileTap={{ scale: 0.98 }}
                                                         onClick={() => handleDateSelect(day)}
                                                         className={cn(
-                                                            "relative rounded-lg md:rounded-2xl border p-1 md:p-3 flex flex-col items-start justify-between transition-all group",
+                                                            "relative rounded-lg md:rounded-2xl border p-1.5 md:p-3 flex flex-col items-start justify-between transition-all group aspect-square min-h-[44px] md:min-h-0",
                                                             isToday
                                                                 ? "bg-primary/10 border-primary text-foreground shadow-sm"
                                                                 : "bg-white border-border hover:border-primary/50 hover:shadow-sm text-foreground"
