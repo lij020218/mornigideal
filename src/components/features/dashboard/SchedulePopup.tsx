@@ -1272,21 +1272,21 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-1/2 top-[5%] -translate-x-1/2 w-full max-w-5xl bg-white border border-border rounded-2xl shadow-2xl z-50 h-[85vh] overflow-hidden flex flex-col"
+                        className="fixed left-0 top-0 w-full h-full bg-white z-50 overflow-hidden flex flex-col md:left-1/2 md:top-[5%] md:-translate-x-1/2 md:w-full md:max-w-5xl md:h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-2xl"
                     >
                         {/* Header */}
-                        <div className="flex justify-between items-center p-6 border-b border-border shrink-0 bg-white">
-                            <div className="flex items-center gap-4">
-                                <h2 className="text-xl font-bold flex items-center gap-2">
-                                    <Clock className="w-5 h-5 text-primary" /> 일정 관리
+                        <div className="flex justify-between items-center p-3 md:p-6 border-b border-border shrink-0 bg-white">
+                            <div className="flex items-center gap-2 md:gap-4">
+                                <h2 className="text-base md:text-xl font-bold flex items-center gap-1.5 md:gap-2">
+                                    <Clock className="w-4 h-4 md:w-5 md:h-5 text-primary" /> 일정 관리
                                 </h2>
 
                                 {/* View Switcher */}
-                                <div className="flex bg-muted rounded-lg p-1 border border-border">
+                                <div className="flex bg-muted rounded-lg p-0.5 md:p-1 border border-border">
                                     <button
                                         onClick={() => setViewMode('calendar-full')}
                                         className={cn(
-                                            "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                                            "px-2 md:px-4 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
                                             (viewMode === 'calendar-full' || viewMode === 'daily-detail')
                                                 ? "bg-primary text-white shadow-lg"
                                                 : "text-muted-foreground hover:text-foreground"
@@ -1302,18 +1302,18 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             }
                                         }}
                                         className={cn(
-                                            "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                                            "px-2 md:px-4 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all",
                                             viewMode === 'weekly'
                                                 ? "bg-primary text-white shadow-lg"
                                                 : "text-muted-foreground hover:text-foreground"
                                         )}
                                     >
-                                        주간 시간표
+                                        주간
                                     </button>
                                 </div>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-muted">
-                                <X className="w-5 h-5" />
+                            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-muted h-8 w-8 md:h-10 md:w-10">
+                                <X className="w-4 h-4 md:w-5 md:h-5" />
                             </Button>
                         </div>
 
@@ -1324,27 +1324,29 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 <motion.div
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="p-6 h-full flex flex-col"
+                                    className="p-3 md:p-6 h-full flex flex-col"
                                 >
                                     {/* Calendar Header */}
-                                    <div className="flex items-center justify-between mb-6">
-                                        <h3 className="text-2xl font-bold">
+                                    <div className="flex items-center justify-between mb-3 md:mb-6">
+                                        <h3 className="text-lg md:text-2xl font-bold">
                                             {currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월
                                         </h3>
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={handlePrevMonth}>
-                                                <ChevronLeft className="w-4 h-4 mr-1" /> 이전 달
+                                        <div className="flex gap-1 md:gap-2">
+                                            <Button variant="outline" size="sm" onClick={handlePrevMonth} className="h-8 px-2 md:px-3 text-xs md:text-sm">
+                                                <ChevronLeft className="w-4 h-4" />
+                                                <span className="hidden md:inline ml-1">이전 달</span>
                                             </Button>
-                                            <Button variant="outline" size="sm" onClick={handleNextMonth}>
-                                                다음 달 <ChevronRight className="w-4 h-4 ml-1" />
+                                            <Button variant="outline" size="sm" onClick={handleNextMonth} className="h-8 px-2 md:px-3 text-xs md:text-sm">
+                                                <span className="hidden md:inline mr-1">다음 달</span>
+                                                <ChevronRight className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     </div>
 
                                     {/* Days Header */}
-                                    <div className="grid grid-cols-7 gap-4 mb-2 text-center">
+                                    <div className="grid grid-cols-7 gap-1 md:gap-4 mb-1 md:mb-2 text-center">
                                         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-                                            <div key={d} className={cn("text-sm font-medium text-muted-foreground py-2", i === 0 && "text-red-500", i === 6 && "text-blue-500")}>
+                                            <div key={d} className={cn("text-xs md:text-sm font-medium text-muted-foreground py-1 md:py-2", i === 0 && "text-red-500", i === 6 && "text-blue-500")}>
                                                 {d}
                                             </div>
                                         ))}
@@ -1352,7 +1354,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                                     {/* Calendar Grid - Scrollable Container */}
                                     <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 -mr-2">
-                                        <div className="grid grid-cols-7 gap-4">
+                                        <div className="grid grid-cols-7 gap-1 md:gap-4">
                                             {/* Empty cells for start of month */}
                                             {Array.from({ length: getDaysInMonth(currentMonth).firstDayOfMonth }).map((_, i) => (
                                                 <div key={`empty-${i}`} className="bg-transparent" />
@@ -1413,7 +1415,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                         whileTap={{ scale: 0.98 }}
                                                         onClick={() => handleDateSelect(day)}
                                                         className={cn(
-                                                            "relative rounded-2xl border p-3 flex flex-col items-start justify-between transition-all group",
+                                                            "relative rounded-lg md:rounded-2xl border p-1 md:p-3 flex flex-col items-start justify-between transition-all group",
                                                             isToday
                                                                 ? "bg-primary/10 border-primary text-foreground shadow-sm"
                                                                 : "bg-white border-border hover:border-primary/50 hover:shadow-sm text-foreground"
@@ -1421,12 +1423,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                     >
                                                         <div className="flex justify-between items-start w-full">
                                                             <span className={cn(
-                                                                "text-2xl font-light tracking-tight",
+                                                                "text-sm md:text-2xl font-light tracking-tight",
                                                                 isToday && "text-primary font-bold"
                                                             )}>{day}</span>
 
                                                             {isToday && (
-                                                                <span className="text-[10px] font-medium bg-primary text-white px-2 py-0.5 rounded-full">
+                                                                <span className="hidden md:inline text-[10px] font-medium bg-primary text-white px-2 py-0.5 rounded-full">
                                                                     TODAY
                                                                 </span>
                                                             )}
@@ -1435,11 +1437,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                         {/* Schedule indicators - colored bars */}
                                                         {uniqueColors.length > 0 && (
                                                             <div className="flex flex-col gap-0.5 mt-auto w-full">
-                                                                {uniqueColors.map((color, idx) => (
+                                                                {uniqueColors.slice(0, 2).map((color, idx) => (
                                                                     <div
                                                                         key={idx}
                                                                         className={cn(
-                                                                            "h-1 rounded-full",
+                                                                            "h-0.5 md:h-1 rounded-full",
                                                                             getIndicatorColor(color)
                                                                         )}
                                                                         style={{ width: `${Math.min(100, 40 + idx * 15)}%` }}
@@ -1448,7 +1450,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             </div>
                                                         )}
 
-                                                        <div className="absolute inset-0 rounded-2xl ring-1 ring-primary/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                                                        <div className="absolute inset-0 rounded-lg md:rounded-2xl ring-1 ring-primary/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                                                     </motion.button>
                                                 );
                                             })}
@@ -1459,33 +1461,33 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
                             {/* MODE 2: DAILY DETAIL - Clean card-based design */}
                             {viewMode === 'daily-detail' && selectedDate && (
-                                <div className="flex h-full">
-                                    {/* Left Sidebar */}
-                                    <div className="w-72 border-r border-border bg-muted/50 flex flex-col">
+                                <div className="flex flex-col md:flex-row h-full">
+                                    {/* Left Sidebar - horizontal on mobile */}
+                                    <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-border bg-muted/50 flex flex-col shrink-0">
                                         {/* Fixed Header */}
-                                        <div className="p-6 pb-4">
+                                        <div className="p-3 md:p-6 md:pb-4 flex md:flex-col items-center md:items-start gap-3 md:gap-0">
                                             <Button
                                                 variant="ghost"
                                                 onClick={handleBackToCalendar}
-                                                className="mb-4 w-fit flex items-center gap-2 -ml-2 text-muted-foreground hover:text-foreground"
+                                                className="md:mb-4 w-fit flex items-center gap-1 md:gap-2 -ml-1 md:-ml-2 text-muted-foreground hover:text-foreground h-8 px-2"
                                             >
-                                                <ChevronLeft className="w-4 h-4" /> 돌아가기
+                                                <ChevronLeft className="w-4 h-4" /> <span className="hidden md:inline">돌아가기</span>
                                             </Button>
 
-                                            <div>
-                                                <h3 className="text-3xl font-bold text-foreground">
+                                            <div className="flex items-baseline gap-2 md:block">
+                                                <h3 className="text-xl md:text-3xl font-bold text-foreground">
                                                     {selectedDate?.getDate()}일
                                                 </h3>
-                                                <p className="text-lg text-muted-foreground">
+                                                <p className="text-sm md:text-lg text-muted-foreground">
                                                     {selectedDate?.getMonth()! + 1}월 · {DAYS_OF_WEEK.find(d => d.id === selectedDate?.getDay())?.fullLabel}
                                                 </p>
                                             </div>
                                         </div>
 
-                                        {/* Scrollable Activity List */}
-                                        <div className="flex-1 overflow-y-auto px-6 pb-6 hide-scrollbar">
-                                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 sticky top-0 bg-muted/50 py-2">일정 추가</h4>
-                                            <div className="grid grid-cols-3 gap-2">
+                                        {/* Scrollable Activity List - horizontal scroll on mobile */}
+                                        <div className="flex-1 overflow-x-auto md:overflow-y-auto px-3 md:px-6 pb-3 md:pb-6 hide-scrollbar">
+                                            <h4 className="hidden md:block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 sticky top-0 bg-muted/50 py-2">일정 추가</h4>
+                                            <div className="flex md:grid md:grid-cols-3 gap-2">
                                                 {PRESET_ACTIVITIES.map((activity) => {
                                                     const ActivityIcon = activity.icon;
                                                     return (
@@ -1503,7 +1505,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                                 setActivityMemo("");
                                                             }}
                                                             className={cn(
-                                                                "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md",
+                                                                "p-2 rounded-xl border flex flex-col items-center gap-1 transition-all hover:shadow-md shrink-0 w-14 md:w-auto",
                                                                 getColorClasses(activity.color)
                                                             )}
                                                         >
@@ -1518,7 +1520,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="w-full border-dashed mt-4"
+                                                className="shrink-0 w-14 md:w-full border-dashed md:mt-4 flex-col md:flex-row h-auto py-2 md:py-2"
                                                 onClick={() => {
                                                     setShowTimePicker(true);
                                                     setPendingActivity(null);
@@ -1528,14 +1530,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                     setCustomActivityText("");
                                                 }}
                                             >
-                                                <Plus className="w-4 h-4 mr-2" />
-                                                직접 입력
+                                                <Plus className="w-4 h-4 md:mr-2" />
+                                                <span className="text-[9px] md:text-sm">직접</span>
                                             </Button>
                                         </div>
                                     </div>
 
                                     {/* Main Content */}
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white">
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6 bg-white">
                                         {(() => {
                                             // Get goals for selected date - 중복 제거 로직 포함
                                             const dateStr = formatDate(selectedDate);
@@ -1652,8 +1654,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                         })()}
                                     </div>
 
-                                    {/* Right Sidebar: Edit Panel */}
-                                    <div className="w-80 border-l border-border p-5 bg-muted/50 overflow-y-auto custom-scrollbar">
+                                    {/* Right Sidebar: Edit Panel - Fixed bottom sheet on mobile */}
+                                    <div className={cn(
+                                        "bg-muted/50 overflow-y-auto custom-scrollbar",
+                                        // Mobile: fixed bottom sheet when active
+                                        (showEditOptions || showTimePicker)
+                                            ? "fixed md:relative bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-10 rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-border p-4 md:p-5 max-h-[60vh] md:max-h-none w-full md:w-80"
+                                            : "hidden md:block w-80 border-l border-border p-5"
+                                    )}>
                                         {showEditOptions && selectedActivityId ? (
                                             <motion.div
                                                 initial={{ opacity: 0, x: 20 }}
@@ -1918,7 +1926,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                             {viewMode === 'weekly' && (
                                 <div className="flex flex-col h-full">
                                     {/* Week Navigation Header */}
-                                    <div className="flex items-center justify-between p-4 border-b border-border/30 bg-gradient-to-r from-purple-50/50 to-pink-50/50">
+                                    <div className="flex items-center justify-between p-2 md:p-4 border-b border-border/30 bg-gradient-to-r from-purple-50/50 to-pink-50/50">
                                         <Button
                                             variant="outline"
                                             size="sm"
@@ -1927,19 +1935,19 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 newWeekStart.setDate(selectedWeekStart.getDate() - 7);
                                                 setSelectedWeekStart(newWeekStart);
                                             }}
-                                            className="gap-2"
+                                            className="gap-1 md:gap-2 h-8 px-2 md:px-3"
                                         >
                                             <ChevronLeft className="w-4 h-4" />
-                                            이전 주
+                                            <span className="hidden md:inline">이전 주</span>
                                         </Button>
                                         <div className="text-center">
-                                            <p className="text-sm font-semibold text-purple-600">
+                                            <p className="text-xs md:text-sm font-semibold text-purple-600">
                                                 {selectedWeekStart.getFullYear()}년 {selectedWeekStart.getMonth() + 1}월 {(() => {
                                                     const weekNum = Math.ceil((selectedWeekStart.getDate() + new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), 1).getDay()) / 7);
                                                     return `${weekNum}주차`;
                                                 })()}
                                             </p>
-                                            <p className="text-xs text-muted-foreground mt-1">
+                                            <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">
                                                 {selectedWeekStart.getMonth() + 1}/{selectedWeekStart.getDate()} - {(() => {
                                                     const sunday = new Date(selectedWeekStart);
                                                     sunday.setDate(selectedWeekStart.getDate() + 6);
@@ -1955,9 +1963,9 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 newWeekStart.setDate(selectedWeekStart.getDate() + 7);
                                                 setSelectedWeekStart(newWeekStart);
                                             }}
-                                            className="gap-2"
+                                            className="gap-1 md:gap-2 h-8 px-2 md:px-3"
                                         >
-                                            다음 주
+                                            <span className="hidden md:inline">다음 주</span>
                                             <ChevronRight className="w-4 h-4" />
                                         </Button>
                                     </div>
@@ -1969,7 +1977,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             {/* Header: Days of week */}
                                             <div className="flex border-b border-border/50 bg-white/80 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
                                                 {/* Time column header */}
-                                                <div className="w-16 shrink-0 p-2 border-r border-border/30" />
+                                                <div className="w-10 md:w-16 shrink-0 p-1 md:p-2 border-r border-border/30" />
                                                 {/* Day headers */}
                                                 {DAYS_OF_WEEK.map((day) => (
                                                     <div
@@ -1979,14 +1987,14 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                             resetPickers();
                                                         }}
                                                         className={cn(
-                                                            "flex-1 py-4 text-center cursor-pointer transition-all border-r border-border/30 last:border-r-0",
+                                                            "flex-1 py-2 md:py-4 text-center cursor-pointer transition-all border-r border-border/30 last:border-r-0",
                                                             selectedDayOfWeek === day.id
                                                                 ? "bg-gradient-to-br from-primary/10 to-purple-500/5"
                                                                 : "hover:bg-muted/30",
                                                         )}
                                                     >
                                                         <span className={cn(
-                                                            "text-sm font-bold transition-colors",
+                                                            "text-xs md:text-sm font-bold transition-colors",
                                                             selectedDayOfWeek === day.id && "text-primary",
                                                             day.id === 0 && selectedDayOfWeek !== day.id && "text-red-500",
                                                             day.id === 6 && selectedDayOfWeek !== day.id && "text-blue-500"
@@ -1996,7 +2004,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                         {selectedDayOfWeek === day.id && (
                                                             <motion.div
                                                                 layoutId="weeklyDayIndicator"
-                                                                className="mx-auto mt-1.5 w-1.5 h-1.5 rounded-full bg-primary"
+                                                                className="mx-auto mt-1 md:mt-1.5 w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-primary"
                                                             />
                                                         )}
                                                     </div>
@@ -2009,9 +2017,9 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                 {Array.from({ length: 18 }, (_, i) => i + 6).map((hour) => {
                                                     const timeStr = `${hour.toString().padStart(2, '0')}:00`;
                                                     return (
-                                                        <div key={hour} className="flex border-b border-border/30 min-h-[64px] hover:bg-white/50 transition-colors">
+                                                        <div key={hour} className="flex border-b border-border/30 min-h-[48px] md:min-h-[64px] hover:bg-white/50 transition-colors">
                                                             {/* Time label */}
-                                                            <div className="w-16 shrink-0 py-2 px-1 text-[11px] text-muted-foreground/70 font-medium border-r border-border/20 text-right pr-2 flex items-start justify-end pt-1">
+                                                            <div className="w-10 md:w-16 shrink-0 py-1 md:py-2 px-0.5 md:px-1 text-[9px] md:text-[11px] text-muted-foreground/70 font-medium border-r border-border/20 text-right pr-1 md:pr-2 flex items-start justify-end pt-0.5 md:pt-1">
                                                                 {hour < 12 ? `${hour}AM` : hour === 12 ? '12PM' : `${hour - 12}PM`}
                                                             </div>
                                                             {/* Day cells */}
@@ -2097,7 +2105,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                                                     animate={{ opacity: 1, scale: 1 }}
                                                                                     whileHover={{ scale: 1.02 }}
                                                                                     className={cn(
-                                                                                        "flex items-center gap-1.5 px-2 py-1.5 rounded-lg border shadow-sm mb-1 cursor-pointer transition-all hover:shadow-md",
+                                                                                        "flex items-center gap-0.5 md:gap-1.5 px-1 md:px-2 py-1 md:py-1.5 rounded-md md:rounded-lg border shadow-sm mb-1 cursor-pointer transition-all hover:shadow-md",
                                                                                         gradientMap[activity.color || 'primary'] || gradientMap.primary
                                                                                     )}
                                                                                     title={`${activity.text} (${activity.startTime}-${activity.endTime})`}
@@ -2112,12 +2120,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                                                                     }}
                                                                                 >
                                                                                     <div className={cn(
-                                                                                        "w-5 h-5 rounded-md flex items-center justify-center shrink-0",
+                                                                                        "w-4 h-4 md:w-5 md:h-5 rounded-md flex items-center justify-center shrink-0",
                                                                                         iconBgMap[activity.color || 'primary'] || iconBgMap.primary
                                                                                     )}>
-                                                                                        <ActivityIcon className="w-3 h-3" />
+                                                                                        <ActivityIcon className="w-2.5 h-2.5 md:w-3 md:h-3" />
                                                                                     </div>
-                                                                                    <span className="text-[10px] font-semibold truncate">{activity.text}</span>
+                                                                                    <span className="text-[8px] md:text-[10px] font-semibold truncate">{activity.text}</span>
                                                                                 </motion.div>
                                                                             );
                                                                         })}
@@ -2130,8 +2138,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                             </div>
                                         </div>
 
-                                        {/* Right Sidebar: Add/Edit Panel */}
-                                        <div className="w-80 border-l border-border/50 p-5 bg-gradient-to-b from-muted/50 to-white overflow-y-auto custom-scrollbar flex flex-col">
+                                        {/* Right Sidebar: Add/Edit Panel - Fixed bottom sheet on mobile */}
+                                        <div className={cn(
+                                            "bg-gradient-to-b from-muted/50 to-white overflow-y-auto custom-scrollbar flex flex-col",
+                                            (showEditOptions || showTimePicker || showActivityPicker)
+                                                ? "fixed md:relative bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-10 rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-border/50 p-4 md:p-5 max-h-[60vh] md:max-h-none w-full md:w-80"
+                                                : "hidden md:flex w-80 border-l border-border/50 p-5"
+                                        )}>
                                         {showEditOptions && selectedActivityId ? (
                                             /* Edit existing schedule */
                                             <motion.div
