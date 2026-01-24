@@ -327,58 +327,78 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                 )}
             </AnimatePresence>
 
-            {/* Main Header - Smaller on mobile */}
+            {/* Main Header - Mobile: Compact single row, Desktop: Original layout */}
             <div className={cn(
-                "flex flex-col md:flex-row md:items-end md:justify-between gap-2 md:gap-4 transition-all duration-300",
+                "transition-all duration-300",
                 isCompact && "opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto"
             )}>
-                <div>
-                    <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-5xl font-bold tracking-tighter pb-1 sm:pb-1.5 md:pb-2">
-                        <span className="text-gradient">Good {greeting.period},</span> <br className="md:hidden" />
+                {/* Mobile Layout - Compact */}
+                <div className="md:hidden">
+                    {/* Greeting + Username */}
+                    <h1 className="text-xl font-bold tracking-tighter">
+                        <span className="text-gradient">Good {greeting.period},</span>{" "}
                         <span className="font-light text-gray-400">{username}</span>
                     </h1>
-                    <p className="text-xs sm:text-sm md:text-base lg:text-lg text-gray-500 mt-1 sm:mt-1.5 md:mt-2 font-medium tracking-tight line-clamp-2 md:line-clamp-none">
-                        {greeting.korean}
-                    </p>
+
+                    {/* Weather + Goal in one row */}
+                    <div className="flex items-center gap-2 mt-2">
+                        <WeatherDisplay compact />
+                        {userProfile?.goal && (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card flex-1 min-w-0">
+                                <Target className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                <span className="text-xs font-medium text-gray-700 truncate">
+                                    {userProfile.goal}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Time & Weather Display - Desktop */}
-                <div className="hidden md:flex items-start gap-6">
-                    {/* Time */}
-                    <div className="flex flex-col items-end gap-1">
-                        <span className="font-mono text-3xl font-light tracking-tighter text-gray-400">
-                            {currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className="text-xs text-gray-400 font-medium tracking-widest uppercase">Current Time</span>
+                {/* Desktop Layout - Original */}
+                <div className="hidden md:flex md:flex-row md:items-end md:justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl lg:text-5xl font-bold tracking-tighter pb-2">
+                            <span className="text-gradient">Good {greeting.period},</span>{" "}
+                            <span className="font-light text-gray-400">{username}</span>
+                        </h1>
+                        <p className="text-base lg:text-lg text-gray-500 mt-2 font-medium tracking-tight">
+                            {greeting.korean}
+                        </p>
                     </div>
 
-                    {/* Weather - Next to Clock */}
-                    <WeatherDisplay inline />
+                    {/* Time & Weather Display - Desktop */}
+                    <div className="flex items-start gap-6">
+                        {/* Time */}
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="font-mono text-3xl font-light tracking-tighter text-gray-400">
+                                {currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span className="text-xs text-gray-400 font-medium tracking-widest uppercase">Current Time</span>
+                        </div>
+
+                        {/* Weather - Next to Clock */}
+                        <WeatherDisplay inline />
+                    </div>
                 </div>
             </div>
 
-            {/* AI Insights Strip - Horizontal Scroll on Mobile, hide when compact */}
+            {/* AI Insights Strip - Desktop only */}
             <div className={cn(
-                "flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-4 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide pt-1 md:pt-2 transition-all duration-300",
-                isCompact && "opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto"
+                "hidden md:flex gap-3 pb-4 pt-2 transition-all duration-300",
+                isCompact && "md:opacity-100 md:h-auto"
             )}>
-                {/* Weather Chip - Mobile Only */}
-                <div className="md:hidden">
-                    <WeatherDisplay compact />
-                </div>
-
                 {/* AI Insight Chip */}
                 {habitInsights && (
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl glass-card glass-card-hover"
+                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl glass-card glass-card-hover"
                     >
-                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-md shadow-amber-400/25">
-                            <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-white" />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-md shadow-amber-400/25">
+                            <Sparkles className="w-4 h-4 text-white" />
                         </div>
-                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
+                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
                             {habitInsights.insight}
                         </span>
                     </motion.div>
@@ -390,12 +410,12 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.3 }}
-                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl glass-card glass-card-hover"
+                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl glass-card glass-card-hover"
                     >
-                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/25">
-                            <Zap className="w-3 h-3 md:w-4 md:h-4 text-white" />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/25">
+                            <Zap className="w-4 h-4 text-white" />
                         </div>
-                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
+                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap tracking-tight">
                             {habitInsights.suggestion}
                         </span>
                     </motion.div>
@@ -407,12 +427,12 @@ export function AIGreeting({ username, currentTime, userProfile, habitInsights }
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.4 }}
-                        className="flex-shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl glass-card glass-card-hover"
+                        className="flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-2xl glass-card glass-card-hover"
                     >
-                        <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-yellow-400 flex items-center justify-center shadow-md shadow-amber-500/25">
-                            <Target className="w-3 h-3 md:w-4 md:h-4 text-white" />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-yellow-400 flex items-center justify-center shadow-md shadow-amber-500/25">
+                            <Target className="w-4 h-4 text-white" />
                         </div>
-                        <span className="text-xs md:text-sm font-semibold text-gray-700 whitespace-nowrap max-w-[150px] md:max-w-[200px] truncate tracking-tight">
+                        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap max-w-[200px] truncate tracking-tight">
                             {userProfile.goal}
                         </span>
                     </motion.div>
