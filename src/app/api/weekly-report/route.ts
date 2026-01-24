@@ -13,6 +13,26 @@ import db from "@/lib/db";
  * 없으면 새로 생성합니다.
  */
 
+// 주차 번호를 빠르게 계산하는 함수 (DB 쿼리 없이)
+function getTargetWeekNumber(): number {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const dayOfWeek = now.getDay();
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() - daysToSubtract);
+
+    // 지난 주의 월요일
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+
+    // 주차 계산 (ISO 8601 기준)
+    const startOfYear = new Date(lastMonday.getFullYear(), 0, 1);
+    const days = Math.floor((lastMonday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    return Math.ceil((days + startOfYear.getDay() + 1) / 7);
+}
+
 export async function GET(request: NextRequest) {
     try {
         const session = await auth();
@@ -25,13 +45,12 @@ export async function GET(request: NextRequest) {
 
         console.log(`[Weekly Report API] Fetching report for ${userEmail}`);
 
-        // 먼저 리포트 데이터를 생성하여 주차 번호를 확인
-        const reportData = await generateWeeklyReport(userEmail);
-        const targetWeekNumber = reportData.period.weekNumber;
+        // 빠른 주차 번호 계산 (DB 쿼리 없이)
+        const targetWeekNumber = getTargetWeekNumber();
 
-        console.log(`[Weekly Report API] Target week: ${targetWeekNumber} (${reportData.period.start} ~ ${reportData.period.end})`);
+        console.log(`[Weekly Report API] Target week: ${targetWeekNumber}`);
 
-        // 해당 주차의 리포트가 이미 존재하는지 확인
+        // 캐시 먼저 확인 (DB 쿼리 1회)
         const { data: existingReport } = await supabase
             .from('user_events')
             .select('*')
@@ -42,9 +61,9 @@ export async function GET(request: NextRequest) {
             .limit(1)
             .maybeSingle();
 
-        // 이미 존재하는 리포트가 있으면 그것을 반환
+        // 이미 존재하는 리포트가 있으면 그것을 반환 (매우 빠름)
         if (existingReport?.metadata?.report_data) {
-            console.log(`[Weekly Report API] Returning existing report for week ${targetWeekNumber}`);
+            console.log(`[Weekly Report API] Returning cached report for week ${targetWeekNumber}`);
             return NextResponse.json({
                 success: true,
                 cached: true,
@@ -55,7 +74,9 @@ export async function GET(request: NextRequest) {
             });
         }
 
+        // 캐시 없음 - 리포트 데이터 생성 (느린 작업)
         console.log(`[Weekly Report API] Generating new report for week ${targetWeekNumber}`);
+        const reportData = await generateWeeklyReport(userEmail);
 
         // Get user profile for AI narrative
         const { data: userData } = await supabase
