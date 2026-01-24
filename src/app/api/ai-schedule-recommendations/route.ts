@@ -284,10 +284,7 @@ JSON 형식으로만 응답하세요:
             completion.usage?.completion_tokens || 0
         );
 
-        // Get current time for validation
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
+        // Calculate time in minutes for validation (reusing currentHour and currentMinute from above)
         const currentTimeMinutes = currentHour * 60 + currentMinute;
 
         // Filter and fix recommendations with past times
