@@ -10,7 +10,7 @@ export async function POST(request: Request) {
         }
 
         const scheduleData = await request.json();
-        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo } = scheduleData;
+        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo, linkedGoalId, linkedGoalType } = scheduleData;
 
         if (!text) {
             return NextResponse.json(
@@ -302,6 +302,9 @@ export async function POST(request: Request) {
             notificationEnabled: true,
             location: location || undefined,
             memo: memo || undefined,
+            // Goal linking
+            linkedGoalId: linkedGoalId || undefined,
+            linkedGoalType: linkedGoalType || undefined,
         };
 
         // Add to customGoals

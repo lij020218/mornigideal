@@ -651,8 +651,27 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                                             <div className="text-center py-4 text-sm text-muted-foreground">
                                                                 <p>연결된 일정이 없습니다</p>
                                                                 <p className="text-xs mt-1">
-                                                                    일정 추가 시 이 목표와 연결하면 진행률이 자동으로 계산됩니다
+                                                                    아래 버튼으로 이 목표와 연결된 일정을 추가해보세요
                                                                 </p>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        // Dispatch event to open schedule popup with this goal linked
+                                                                        window.dispatchEvent(new CustomEvent('open-schedule-popup', {
+                                                                            detail: {
+                                                                                linkedGoal: {
+                                                                                    id: goal.id,
+                                                                                    title: goal.title,
+                                                                                    type: goal.type as 'weekly' | 'monthly' | 'yearly'
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+                                                                >
+                                                                    <Plus className="w-3.5 h-3.5" />
+                                                                    일정 추가하기
+                                                                </button>
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-2">
@@ -710,6 +729,25 @@ export function LongTermGoalsWidget({ onOpenGoalModal, compact = false }: LongTe
                                                                         </div>
                                                                     );
                                                                 })}
+                                                                {/* Add more schedules button */}
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        window.dispatchEvent(new CustomEvent('open-schedule-popup', {
+                                                                            detail: {
+                                                                                linkedGoal: {
+                                                                                    id: goal.id,
+                                                                                    title: goal.title,
+                                                                                    type: goal.type as 'weekly' | 'monthly' | 'yearly'
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                    className="w-full mt-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-primary/30 text-primary text-xs font-medium hover:bg-primary/5 transition-colors"
+                                                                >
+                                                                    <Plus className="w-3.5 h-3.5" />
+                                                                    일정 추가하기
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>

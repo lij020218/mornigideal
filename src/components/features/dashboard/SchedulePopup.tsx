@@ -141,8 +141,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     }
 
     // State for linked goal (when adding schedule from goal page)
-    const [linkedGoal, setLinkedGoal] = useState<{ id: string; title: string } | null>(null);
-    const [availableGoals, setAvailableGoals] = useState<Array<{ id: string; title: string; type: string }>>([]);
+    const [linkedGoal, setLinkedGoal] = useState<{ id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' } | null>(null);
+    const [availableGoals, setAvailableGoals] = useState<Array<{ id: string; title: string; type: 'weekly' | 'monthly' | 'yearly' }>>([]);
     const [showGoalSelector, setShowGoalSelector] = useState(false);
 
     useEffect(() => {
@@ -171,11 +171,19 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Listen for open-schedule-popup event from goals page
             const handleOpenWithGoal = (event: CustomEvent) => {
-                const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
-                setLinkedGoal({ id: linkedGoalId, title: linkedGoalTitle });
+                const { linkedGoalId, linkedGoalTitle, goalType, linkedGoal: goalFromEvent } = event.detail || {};
+
+                // Support both old format and new format (from LongTermGoalsWidget)
+                if (goalFromEvent) {
+                    setLinkedGoal({ id: goalFromEvent.id, title: goalFromEvent.title, type: goalFromEvent.type });
+                } else if (linkedGoalId) {
+                    setLinkedGoal({ id: linkedGoalId, title: linkedGoalTitle, type: goalType || 'weekly' });
+                }
+
+                const effectiveGoalType = goalFromEvent?.type || goalType;
 
                 // Set view mode based on goal type
-                if (goalType === 'weekly') {
+                if (effectiveGoalType === 'weekly') {
                     // For weekly goals, show the weekly schedule view
                     setViewMode('weekly');
                     // Set to current week
@@ -186,12 +194,12 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     monday.setDate(now.getDate() - daysToSubtract);
                     monday.setHours(0, 0, 0, 0);
                     setSelectedWeekStart(monday);
-                } else if (goalType === 'monthly') {
+                } else if (effectiveGoalType === 'monthly') {
                     // For monthly goals, show the calendar view
                     setViewMode('calendar-full');
                     // Set to current month
                     setCurrentMonth(new Date());
-                } else if (goalType === 'yearly') {
+                } else if (effectiveGoalType === 'yearly') {
                     // For yearly goals, just open activity picker (simpler)
                     setViewMode('calendar-full'); // Default view
                 }
@@ -249,7 +257,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     useEffect(() => {
         if (linkedGoalData && isOpen) {
             console.log('[SchedulePopup] Setting linkedGoal from prop:', linkedGoalData);
-            setLinkedGoal({ id: linkedGoalData.id, title: linkedGoalData.title });
+            setLinkedGoal({ id: linkedGoalData.id, title: linkedGoalData.title, type: linkedGoalData.type });
 
             // Set view mode based on goal type
             if (linkedGoalData.type === 'weekly') {
@@ -271,6 +279,37 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             setShowActivityPicker(true);
         }
     }, [linkedGoalData, isOpen]);
+
+    // 목표 타입에 따른 날짜 범위 계산 (주간: 금주, 월간: 당월, 연간: 당해년도)
+    const getGoalDateRange = (goalType: 'weekly' | 'monthly' | 'yearly'): { startDate: string; endDate: string } => {
+        const now = new Date();
+        let startDate: Date;
+        let endDate: Date;
+
+        if (goalType === 'weekly') {
+            // 금주 월요일 ~ 일요일
+            const dayOfWeek = now.getDay();
+            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - daysToMonday);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(startDate);
+            endDate.setDate(startDate.getDate() + 6);
+        } else if (goalType === 'monthly') {
+            // 당월 1일 ~ 말일
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        } else {
+            // 당해년도 1월 1일 ~ 12월 31일
+            startDate = new Date(now.getFullYear(), 0, 1);
+            endDate = new Date(now.getFullYear(), 11, 31);
+        }
+
+        return {
+            startDate: formatDate(startDate),
+            endDate: formatDate(endDate),
+        };
+    };
 
     const resetPickers = () => {
         setShowActivityPicker(false);
@@ -380,6 +419,9 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 return;
             }
 
+            // 목표 연결 시 날짜 범위 적용
+            const goalDateRange = linkedGoal ? getGoalDateRange(linkedGoal.type) : null;
+
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: selectedActivity.label,
@@ -389,7 +431,11 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(targetDate),
                 notificationEnabled: notificationEnabled,
-                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
+                ...(linkedGoal && {
+                    linkedGoalId: linkedGoal.id,
+                    linkedGoalType: linkedGoal.type,
+                    // 목표 기간 내로 제한 (specificDate는 이미 설정되어 있으므로 범위 체크용)
+                }),
             };
             console.log('[SchedulePopup] Adding schedule with linkedGoal:', linkedGoal, 'newGoal:', newGoal);
             setCustomGoals([...customGoals, newGoal]);
@@ -435,7 +481,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(targetDate), // 특정 날짜에만 추가
                 notificationEnabled: notificationEnabled,
-                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
+                ...(linkedGoal && {
+                    linkedGoalId: linkedGoal.id,
+                    linkedGoalType: linkedGoal.type,
+                }),
             };
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
@@ -456,7 +505,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: selectedActivity.color,
                 specificDate: formatDate(selectedDate),
                 notificationEnabled: notificationEnabled,
-                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
+                ...(linkedGoal && {
+                    linkedGoalId: linkedGoal.id,
+                    linkedGoalType: linkedGoal.type,
+                }),
             };
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
@@ -478,6 +530,9 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 return;
             }
 
+            // 목표 연결 시 날짜 범위 적용 (반복 일정)
+            const goalDateRange = linkedGoal ? getGoalDateRange(linkedGoal.type) : null;
+
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: customActivityText,
@@ -486,9 +541,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 endTime: endTime,
                 color: 'primary',
                 daysOfWeek: [selectedDayOfWeek],
-                startDate: formatDate(new Date()), // 오늘부터 반복 시작
+                startDate: goalDateRange?.startDate || formatDate(new Date()), // 목표 시작일 또는 오늘
+                ...(goalDateRange && { endDate: goalDateRange.endDate }), // 목표 종료일
                 notificationEnabled: notificationEnabled,
-                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
+                ...(linkedGoal && { linkedGoalId: linkedGoal.id, linkedGoalType: linkedGoal.type }),
             };
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
@@ -508,7 +564,10 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 color: 'primary',
                 specificDate: formatDate(selectedDate),
                 notificationEnabled: notificationEnabled,
-                ...(linkedGoal && { linkedGoalId: linkedGoal.id }),
+                ...(linkedGoal && {
+                    linkedGoalId: linkedGoal.id,
+                    linkedGoalType: linkedGoal.type,
+                }),
             };
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
@@ -1065,6 +1124,54 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 </div>
                             </div>
 
+                            {/* Goal Selector for custom activities */}
+                            <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-xs font-medium flex items-center gap-1.5">
+                                        <Flag className="w-3.5 h-3.5 text-primary" />
+                                        목표와 연결 (선택)
+                                    </label>
+                                    {linkedGoal && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setLinkedGoal(null)}
+                                            className="h-5 px-1.5 text-[10px]"
+                                        >
+                                            <X className="w-2.5 h-2.5 mr-0.5" />
+                                            해제
+                                        </Button>
+                                    )}
+                                </div>
+                                {linkedGoal ? (
+                                    <div className="p-1.5 bg-primary/10 rounded border border-primary/20 text-xs">
+                                        <span className="text-primary font-medium">✓ {linkedGoal.title}</span>
+                                    </div>
+                                ) : availableGoals.length > 0 ? (
+                                    <select
+                                        value=""
+                                        onChange={(e) => {
+                                            const goal = availableGoals.find(g => g.id === e.target.value);
+                                            if (goal) {
+                                                setLinkedGoal({ id: goal.id, title: goal.title, type: goal.type });
+                                            }
+                                        }}
+                                        className="w-full p-1.5 border rounded text-xs bg-white"
+                                    >
+                                        <option value="">목표 선택...</option>
+                                        {availableGoals.map((goal) => (
+                                            <option key={goal.id} value={goal.id}>
+                                                [{goal.type === 'weekly' ? '주간' : goal.type === 'monthly' ? '월간' : '연간'}] {goal.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">
+                                        연결 가능한 목표 없음
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="flex gap-2">
                                 <Button
                                     size="sm"
@@ -1126,7 +1233,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                                 onChange={(e) => {
                                     const goal = availableGoals.find(g => g.id === e.target.value);
                                     if (goal) {
-                                        setLinkedGoal({ id: goal.id, title: goal.title });
+                                        setLinkedGoal({ id: goal.id, title: goal.title, type: goal.type });
                                     }
                                 }}
                                 className="w-full p-2 border rounded-lg text-sm bg-white"

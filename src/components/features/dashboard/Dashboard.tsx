@@ -627,6 +627,9 @@ export function Dashboard({
                                 color: goal.color,
                                 specificDate: dateStr,
                                 notificationEnabled: goal.notificationEnabled || false,
+                                // Preserve goal linking
+                                linkedGoalId: goal.linkedGoalId,
+                                linkedGoalType: goal.linkedGoalType,
                             });
                         }
                     });
