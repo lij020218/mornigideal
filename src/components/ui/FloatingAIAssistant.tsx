@@ -23,7 +23,21 @@ import { cn } from "@/lib/utils";
 import { TrendBriefingDetail } from "@/components/features/dashboard/TrendBriefingDetail";
 
 interface ChatAction {
-    type: "add_schedule" | "open_link" | "open_curriculum";
+    type:
+        | "add_schedule"
+        | "delete_schedule"
+        | "update_schedule"
+        | "open_link"
+        | "open_curriculum"
+        | "web_search"
+        | "add_weekly_goal"
+        | "open_briefing"
+        | "show_goals"
+        | "show_habits"
+        | "show_analysis"
+        | "set_reminder"
+        | "save_learning"
+        | "resolve_conflict";
     label: string;
     data: Record<string, any>;
 }
@@ -712,6 +726,17 @@ export function FloatingAIAssistant({
 
     // Handle action button clicks in chat
     const handleChatAction = async (action: ChatAction, messageId: string) => {
+        // Remove the action button after click
+        const removeAction = () => {
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === messageId
+                        ? { ...m, actions: m.actions?.filter((a) => a !== action) }
+                        : m
+                )
+            );
+        };
+
         if (action.type === "add_schedule") {
             try {
                 const res = await fetch("/api/user/schedule/add", {
@@ -731,22 +756,171 @@ export function FloatingAIAssistant({
                         content: `✅ ${result.message || "일정이 추가되었습니다!"}`,
                     },
                 ]);
-
-                setMessages((prev) =>
-                    prev.map((m) =>
-                        m.id === messageId
-                            ? { ...m, actions: m.actions?.filter((a) => a !== action) }
-                            : m
-                    )
-                );
+                removeAction();
             } catch (error) {
                 setMessages((prev) => [
                     ...prev,
                     { id: `error-${Date.now()}`, role: "assistant", content: "❌ 일정 추가에 실패했습니다." },
                 ]);
             }
+        } else if (action.type === "delete_schedule") {
+            try {
+                const res = await fetch("/api/user/schedule/delete", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(action.data),
+                });
+
+                if (!res.ok) throw new Error("Failed to delete schedule");
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `system-${Date.now()}`,
+                        role: "assistant",
+                        content: `✅ 일정이 삭제되었습니다!`,
+                    },
+                ]);
+                removeAction();
+            } catch (error) {
+                setMessages((prev) => [
+                    ...prev,
+                    { id: `error-${Date.now()}`, role: "assistant", content: "❌ 일정 삭제에 실패했습니다." },
+                ]);
+            }
+        } else if (action.type === "update_schedule") {
+            try {
+                const res = await fetch("/api/user/schedule/modify", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(action.data),
+                });
+
+                if (!res.ok) throw new Error("Failed to update schedule");
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `system-${Date.now()}`,
+                        role: "assistant",
+                        content: `✅ 일정이 수정되었습니다!`,
+                    },
+                ]);
+                removeAction();
+            } catch (error) {
+                setMessages((prev) => [
+                    ...prev,
+                    { id: `error-${Date.now()}`, role: "assistant", content: "❌ 일정 수정에 실패했습니다." },
+                ]);
+            }
+        } else if (action.type === "show_goals") {
+            // Navigate to goals page or show goals modal
+            window.dispatchEvent(new CustomEvent('show-goals-panel', { detail: action.data }));
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `system-${Date.now()}`,
+                    role: "assistant",
+                    content: `📊 목표 현황을 확인하세요!`,
+                },
+            ]);
+            removeAction();
+        } else if (action.type === "show_habits") {
+            // Navigate to habits/analytics page
+            window.dispatchEvent(new CustomEvent('show-habits-panel', { detail: action.data }));
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `system-${Date.now()}`,
+                    role: "assistant",
+                    content: `📈 습관 트래킹 현황을 확인하세요!`,
+                },
+            ]);
+            removeAction();
+        } else if (action.type === "show_analysis") {
+            // Navigate to time analysis page
+            window.dispatchEvent(new CustomEvent('show-analysis-panel', { detail: action.data }));
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `system-${Date.now()}`,
+                    role: "assistant",
+                    content: `⏱️ 시간 분석 결과를 확인하세요!`,
+                },
+            ]);
+            removeAction();
+        } else if (action.type === "set_reminder") {
+            try {
+                // Request notification permission if needed
+                if ('Notification' in window && Notification.permission === 'default') {
+                    await Notification.requestPermission();
+                }
+
+                const res = await fetch("/api/user/reminder/add", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(action.data),
+                });
+
+                if (!res.ok) throw new Error("Failed to set reminder");
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `system-${Date.now()}`,
+                        role: "assistant",
+                        content: `⏰ 리마인더가 설정되었습니다! (${action.data.targetTime})`,
+                    },
+                ]);
+                removeAction();
+            } catch (error) {
+                setMessages((prev) => [
+                    ...prev,
+                    { id: `error-${Date.now()}`, role: "assistant", content: "❌ 리마인더 설정에 실패했습니다." },
+                ]);
+            }
+        } else if (action.type === "save_learning") {
+            try {
+                const res = await fetch("/api/user/learning/save", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(action.data),
+                });
+
+                if (!res.ok) throw new Error("Failed to save learning");
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `system-${Date.now()}`,
+                        role: "assistant",
+                        content: `📝 성장 기록이 저장되었습니다!`,
+                    },
+                ]);
+                removeAction();
+            } catch (error) {
+                setMessages((prev) => [
+                    ...prev,
+                    { id: `error-${Date.now()}`, role: "assistant", content: "❌ 성장 기록 저장에 실패했습니다." },
+                ]);
+            }
+        } else if (action.type === "resolve_conflict") {
+            // Show conflict resolution UI
+            window.dispatchEvent(new CustomEvent('show-conflict-resolution', { detail: action.data }));
+            removeAction();
+        } else if (action.type === "open_briefing" && action.data.briefingId) {
+            // Find briefing and show it
+            const briefing = briefings.find(b => b.id === String(action.data.briefingId));
+            if (briefing) {
+                setSelectedBriefing(briefing);
+            }
+            removeAction();
+        } else if (action.type === "web_search" && action.data.query) {
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(action.data.query)}`, "_blank");
+            removeAction();
         } else if (action.type === "open_link" && action.data.url) {
             window.open(action.data.url, "_blank");
+            removeAction();
         }
     };
 

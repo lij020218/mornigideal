@@ -1,0 +1,99 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { supabase } from "@/lib/supabase";
+
+export async function POST(request: Request) {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { scheduleId, text, startTime, isRepeating, specificDate } = await request.json();
+
+        if (!text && !scheduleId) {
+            return NextResponse.json(
+                { error: "scheduleId or text is required" },
+                { status: 400 }
+            );
+        }
+
+        // Get current user profile
+        const { data: userData, error: fetchError } = await supabase
+            .from("users")
+            .select("profile")
+            .eq("email", session.user.email)
+            .single();
+
+        if (fetchError || !userData) {
+            console.error("[Schedule Delete] Fetch error:", fetchError);
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        const profile = userData.profile || {};
+        const customGoals = profile.customGoals || [];
+
+        // Find the schedule to delete
+        let scheduleIndex = -1;
+
+        if (scheduleId) {
+            // Find by ID (exact match)
+            scheduleIndex = customGoals.findIndex((g: any) => g.id === scheduleId);
+        } else {
+            // Find by text and time (approximate match)
+            scheduleIndex = customGoals.findIndex((g: any) => {
+                // Text match (case-insensitive, partial match)
+                const textMatch = g.text?.toLowerCase().includes(text.toLowerCase()) ||
+                    text.toLowerCase().includes(g.text?.toLowerCase());
+
+                // Time match (if provided)
+                const timeMatch = !startTime || g.startTime === startTime;
+
+                // Date match (for specific date schedules)
+                const dateMatch = !specificDate || g.specificDate === specificDate;
+
+                // Repeating match
+                const repeatingMatch = isRepeating === undefined ||
+                    (isRepeating && g.daysOfWeek && g.daysOfWeek.length > 0) ||
+                    (!isRepeating && !g.daysOfWeek);
+
+                return textMatch && timeMatch && dateMatch && repeatingMatch;
+            });
+        }
+
+        if (scheduleIndex === -1) {
+            return NextResponse.json(
+                { error: "Schedule not found", details: `Could not find schedule: ${text}` },
+                { status: 404 }
+            );
+        }
+
+        const deletedSchedule = customGoals[scheduleIndex];
+
+        // Remove from array
+        const updatedCustomGoals = customGoals.filter((_: any, idx: number) => idx !== scheduleIndex);
+        const updatedProfile = { ...profile, customGoals: updatedCustomGoals };
+
+        // Save to database
+        const { error: updateError } = await supabase
+            .from("users")
+            .update({ profile: updatedProfile })
+            .eq("email", session.user.email);
+
+        if (updateError) {
+            console.error("[Schedule Delete] Update error:", updateError);
+            return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
+        }
+
+        console.log(`[Schedule Delete] Deleted: ${deletedSchedule.text} at ${deletedSchedule.startTime} for ${session.user.email}`);
+
+        return NextResponse.json({
+            success: true,
+            deleted: deletedSchedule,
+            message: `"${deletedSchedule.text}" 일정이 삭제되었습니다.`,
+        });
+    } catch (error: any) {
+        console.error("[Schedule Delete] Error:", error);
+        return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
+    }
+}
