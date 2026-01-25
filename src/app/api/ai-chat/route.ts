@@ -541,13 +541,12 @@ ${briefings.map((t: any, i: number) => `${i + 1}. [ID: ${t.id}] [${t.category ||
 현재 시간: ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)
 현재 연도: ${year}년
 
-🚨 **시간 관련 절대 규칙** (최우선 규칙 - 위반 시 논리 오류!):
+🚨 **시간 관련 규칙**:
 - 현재 시간은 ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)입니다.
-- 현재 시간(${currentHour}시) 이후의 시간만 추천 가능합니다!
-- ❌ 절대 금지: ${currentHour}시 이전 시간 추천 (예: ${currentHour >= 12 ? '06:00, 09:00, 11:00' : currentHour >= 6 ? '05:00' : '없음'} 등)
-- ✅ 추천 가능: ${currentHour}시 ~ 23시 사이만 (예: ${String(Math.min(currentHour + 1, 23)).padStart(2, '0')}:00, ${String(Math.min(currentHour + 2, 23)).padStart(2, '0')}:00 등)
-- 현재 ${timeOfDayKorean}이므로 ${timeOfDayKorean} 또는 그 이후 시간대만 추천하세요.
-- ⚠️ 논리 체크: "저녁"이라고 말하면서 "06:00 조깅" 추천 = 논리 오류! 저녁이면 18:00 이후만 가능!
+- **오늘** 일정: 현재 시간(${currentHour}시) 이후만 추천 가능
+- **내일/미래 날짜** 일정: 시간 제약 없음! 오전/오후/저녁 모두 가능
+- 예: "내일 오후 1시 점심" → 13:00에 등록 OK (미래 날짜이므로)
+- 예: "오늘 저녁" (현재 ${currentHour}시) → ${currentHour}시 이후만 가능
 
 중요: 사용자가 "오늘" 또는 "today"라고 하면 ${year}년 ${month}월 ${day}일을 의미합니다.
 `;
@@ -587,7 +586,7 @@ ${userPlan === "Max" ? `**자비스 모드**: 실행 중심. "~반영했습니�
 ## Core Rules
 1. **즉시 실행**: "추가해줘/잡아줘/등록해줘" → 바로 actions에 포함. 질문 금지.
 2. **휴식 존중**: 여가 일정(게임/영화/운동) 앞에서 생산성 조언 금지.
-3. **시간 제약**: 현재 시간(${context?.currentTime || 'N/A'}) 이후만 추천. 서버에서 검증됨.
+3. **시간 제약**: 오늘 일정만 현재 시간 이후 제한. 내일/미래는 시간 제약 없음!
 
 ## Action Schema (TypeScript)
 \`\`\`typescript
