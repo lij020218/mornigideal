@@ -98,7 +98,9 @@ export async function generateDailyBriefings() {
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
             const prompt = `Create a morning briefing for ${user.name} (Job: ${job}).
-            
+
+            ⚠️ **CRITICAL: ALL OUTPUT MUST BE IN KOREAN (한국어). DO NOT USE ANY OTHER LANGUAGE.**
+
             CONTEXT:
             1. YESTERDAY'S ACTIVITY (${yesterdayStr}):
                - Data: ${JSON.stringify(yesterdayGoals || { completed_goals: [], read_trends: [] })}
@@ -116,7 +118,8 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
                - Source: ${t.source || 'Unknown'}
                - Why relevant: ${t.relevance || 'Curated for you'}`).join('\n\n')}
             
-            TASK: Generate a JSON response with the following fields (in Korean):
+            TASK: Generate a JSON response with the following fields.
+            ⚠️ **모든 필드는 반드시 한국어로만 작성하세요. 러시아어, 영어, 중국어 등 다른 언어 절대 금지.**
             - greeting: Warm morning greeting emphasizing ${job} role.
             - yesterday_summary: 1 sentence summary of yesterday's performance (be encouraging if low).
             - yesterday_score: integer 0-100 (estimate based on activity).
