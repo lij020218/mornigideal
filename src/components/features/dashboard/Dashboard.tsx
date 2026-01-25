@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, Edit3, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera, Utensils, Home, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileCode, Hospital, Lightbulb, MapPin } from "lucide-react";
+import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, CalendarDays, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera, Utensils, Home, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileCode, Hospital, Lightbulb, MapPin } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
@@ -997,7 +997,7 @@ export function Dashboard({
                                 className="text-muted-foreground hover:text-white gap-2"
                                 onClick={() => setShowSchedulePopup(true)}
                             >
-                                <Edit3 className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
+                                <CalendarDays className="w-4 h-4" /> <span className="hidden md:inline">일정 관리</span>
                             </Button>
                         </div>
                     </div>
@@ -2025,7 +2025,7 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         className="gap-2 border-primary/30 hover:bg-primary/10"
                         onClick={() => document.querySelector<HTMLButtonElement>('[aria-label="일정 추가/변경"]')?.click()}
                     >
-                        <Edit3 className="w-4 h-4" />
+                        <CalendarDays className="w-4 h-4" />
                         일정 추가하기
                     </Button>
                 </div>
