@@ -2557,51 +2557,50 @@ export default function HomePage() {
                                     // Assistant message - with logo
                                     <div className="mb-8 flex gap-3">
                                         <FieriLogo className="w-12 h-12 flex-shrink-0 mt-0.5" />
-                                        <div className="text-sm text-foreground leading-relaxed">
+                                        <div className="flex-1 text-sm text-foreground leading-relaxed">
                                             <p className="whitespace-pre-wrap">{message.content}</p>
+                                            {/* Action buttons - inside assistant message for proper layout */}
+                                            {message.actions && message.actions.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-4">
+                                                    {message.actions
+                                                        .filter((action) => action.type !== 'add_schedule')
+                                                        .map((action, idx) => (
+                                                            <Button
+                                                                key={idx}
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    console.log('[Home] Action clicked:', action);
+
+                                                                    if (action.type === 'open_briefing') {
+                                                                        console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
+                                                                        const briefingId = action.data?.briefingId || action.data?.id;
+                                                                        console.log('[Home] Looking for briefing ID:', briefingId);
+
+                                                                        if (briefingId) {
+                                                                            // Find the full briefing object from trendBriefings
+                                                                            const fullBriefing = trendBriefings.find(
+                                                                                (b: any) => b.id === briefingId || b.id === parseInt(briefingId)
+                                                                            );
+                                                                            if (fullBriefing) {
+                                                                                console.log('[Home] Opening briefing:', fullBriefing.title);
+                                                                                setSelectedBriefing(fullBriefing);
+                                                                            } else {
+                                                                                console.error('[Home] Briefing not found. ID:', briefingId, 'Available IDs:', trendBriefings.map((b: any) => b.id));
+                                                                            }
+                                                                        } else {
+                                                                            console.error('[Home] No briefingId in action.data:', action.data);
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                className="text-xs h-8 rounded-full"
+                                                            >
+                                                                {action.label}
+                                                            </Button>
+                                                        ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                )}
-
-                                {/* Action buttons - only show non-schedule actions (schedule actions auto-execute) */}
-                                {message.actions && message.actions.length > 0 && message.role === "assistant" && (
-                                    <div className="flex flex-wrap gap-2 mt-4">
-                                        {message.actions
-                                            .filter((action) => action.type !== 'add_schedule')
-                                            .map((action, idx) => (
-                                                <Button
-                                                    key={idx}
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => {
-                                                        console.log('[Home] Action clicked:', action);
-
-                                                        if (action.type === 'open_briefing') {
-                                                            console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
-                                                            const briefingId = action.data?.briefingId || action.data?.id;
-                                                            console.log('[Home] Looking for briefing ID:', briefingId);
-
-                                                            if (briefingId) {
-                                                                // Find the full briefing object from trendBriefings
-                                                                const fullBriefing = trendBriefings.find(
-                                                                    (b: any) => b.id === briefingId || b.id === parseInt(briefingId)
-                                                                );
-                                                                if (fullBriefing) {
-                                                                    console.log('[Home] Opening briefing:', fullBriefing.title);
-                                                                    setSelectedBriefing(fullBriefing);
-                                                                } else {
-                                                                    console.error('[Home] Briefing not found. ID:', briefingId, 'Available IDs:', trendBriefings.map((b: any) => b.id));
-                                                                }
-                                                            } else {
-                                                                console.error('[Home] No briefingId in action.data:', action.data);
-                                                            }
-                                                        }
-                                                    }}
-                                                    className="text-xs h-8 rounded-full"
-                                                >
-                                                    {action.label}
-                                                </Button>
-                                            ))}
                                     </div>
                                 )}
                             </div>
