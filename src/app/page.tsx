@@ -2561,7 +2561,7 @@ export default function HomePage() {
                                             <p className="whitespace-pre-wrap">{message.content}</p>
                                             {/* Action buttons - inside assistant message for proper layout */}
                                             {message.actions && message.actions.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 mt-4">
+                                                <div className="flex flex-wrap gap-2 mt-4 relative z-10">
                                                     {message.actions
                                                         .filter((action) => action.type !== 'add_schedule')
                                                         .map((action, idx) => (
@@ -2569,7 +2569,9 @@ export default function HomePage() {
                                                                 key={idx}
                                                                 size="sm"
                                                                 variant="outline"
-                                                                onClick={() => {
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    e.preventDefault();
                                                                     console.log('[Home] Action clicked:', action);
 
                                                                     if (action.type === 'open_briefing') {
@@ -2593,7 +2595,7 @@ export default function HomePage() {
                                                                         }
                                                                     }
                                                                 }}
-                                                                className="text-xs h-8 rounded-full"
+                                                                className="text-xs h-9 px-4 rounded-full touch-manipulation"
                                                             >
                                                                 {action.label}
                                                             </Button>
