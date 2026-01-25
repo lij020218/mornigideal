@@ -527,7 +527,7 @@ export function SlideViewer({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className={cn(
-                "fixed inset-0 z-50 flex flex-col bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20",
+                "fixed inset-0 z-50 flex flex-col bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50",
                 isFullscreen ? "" : "pt-16 pb-4 px-3 md:pt-8 md:pb-8 md:px-8"
             )}
         >
@@ -593,7 +593,7 @@ export function SlideViewer({
                                 {slide.slideNumber} / {slides.length}
                             </span>
                             {slide.visualSuggestion && (
-                                <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-100 px-2 md:px-3 py-1 rounded-full max-w-[50%] truncate">
+                                <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-100 px-2 md:px-3 py-1 rounded-full">
                                     💡 {slide.visualSuggestion}
                                 </span>
                             )}
