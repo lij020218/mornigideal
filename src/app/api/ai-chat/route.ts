@@ -277,8 +277,8 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
                     }
                 }
 
-                // Max 플랜 사용자: 내일/모레 일정도 제공 (일정 연쇄 분석용)
-                if (userPlan === "Max" && p.customGoals && p.customGoals.length > 0) {
+                // 모든 사용자: 내일/모레 일정도 제공
+                if (p.customGoals && p.customGoals.length > 0) {
                     const today = new Date();
                     const tomorrow = new Date(today);
                     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -290,15 +290,29 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
                     const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
                     const dayAfterTomorrowDayOfWeek = dayAfterTomorrow.getDay();
 
-                    const tomorrowGoals = p.customGoals.filter((g: any) =>
-                        g.specificDate === tomorrowStr ||
-                        (g.daysOfWeek?.includes(tomorrowDayOfWeek) && !g.specificDate)
-                    );
+                    const tomorrowGoals = p.customGoals.filter((g: any) => {
+                        // 특정 날짜 일정
+                        if (g.specificDate === tomorrowStr) return true;
+                        // 반복 일정: 요일 매칭 + startDate 이후인지 확인
+                        if (g.daysOfWeek?.includes(tomorrowDayOfWeek)) {
+                            // startDate가 있으면 내일이 그 이후인지 확인
+                            if (g.startDate && tomorrowStr < g.startDate) return false;
+                            return true;
+                        }
+                        return false;
+                    });
 
-                    const dayAfterTomorrowGoals = p.customGoals.filter((g: any) =>
-                        g.specificDate === dayAfterTomorrowStr ||
-                        (g.daysOfWeek?.includes(dayAfterTomorrowDayOfWeek) && !g.specificDate)
-                    );
+                    const dayAfterTomorrowGoals = p.customGoals.filter((g: any) => {
+                        // 특정 날짜 일정
+                        if (g.specificDate === dayAfterTomorrowStr) return true;
+                        // 반복 일정: 요일 매칭 + startDate 이후인지 확인
+                        if (g.daysOfWeek?.includes(dayAfterTomorrowDayOfWeek)) {
+                            // startDate가 있으면 모레가 그 이후인지 확인
+                            if (g.startDate && dayAfterTomorrowStr < g.startDate) return false;
+                            return true;
+                        }
+                        return false;
+                    });
 
                     if (tomorrowGoals.length > 0) {
                         scheduleContext += `\n\n내일의 일정 (${tomorrowStr}):
