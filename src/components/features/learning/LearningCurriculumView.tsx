@@ -342,6 +342,30 @@ export function LearningCurriculumView({
         fetchProgress();
     }, [curriculum.id]);
 
+    // 외부에서 학습 진행 상태가 업데이트되면 새로고침
+    useEffect(() => {
+        const handleProgressUpdate = (event: CustomEvent) => {
+            if (event.detail.curriculumId === curriculum.id) {
+                setProgress({
+                    completedDays: event.detail.completedDays,
+                    currentDay: event.detail.currentDay,
+                });
+                // 완료된 날짜는 addedToSchedule에서 제거
+                setAddedToSchedule(prev => {
+                    const newSet = new Set([...prev]);
+                    event.detail.completedDays.forEach((day: number) => newSet.delete(day));
+                    localStorage.setItem(`added_to_schedule_${curriculum.id}`, JSON.stringify([...newSet]));
+                    return newSet;
+                });
+            }
+        };
+
+        window.addEventListener('learning-progress-updated', handleProgressUpdate as EventListener);
+        return () => {
+            window.removeEventListener('learning-progress-updated', handleProgressUpdate as EventListener);
+        };
+    }, [curriculum.id]);
+
     const fetchProgress = async () => {
         try {
             const res = await fetch(`/api/user/learning-progress?curriculumId=${curriculum.id}`);

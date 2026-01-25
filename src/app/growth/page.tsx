@@ -255,9 +255,47 @@ export default function GrowthPage() {
         }
     };
 
-    const handleSlideComplete = () => {
+    const handleSlideComplete = async () => {
+        // 학습 진행 상태 업데이트 (DB에 저장)
+        if (slideViewerData && selectedCurriculum) {
+            try {
+                // 현재 진행 상태 가져오기
+                const progressRes = await fetch(`/api/user/learning-progress?curriculumId=${selectedCurriculum.id}`);
+                let completedDays: number[] = [];
+
+                if (progressRes.ok) {
+                    const progressData = await progressRes.json();
+                    completedDays = progressData.completedDays || [];
+                }
+
+                // 완료한 날 추가
+                const dayNumber = slideViewerData.day.day;
+                if (!completedDays.includes(dayNumber)) {
+                    const newCompletedDays = [...completedDays, dayNumber];
+                    const newCurrentDay = Math.max(...newCompletedDays) + 1;
+
+                    await fetch('/api/user/learning-progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            curriculumId: selectedCurriculum.id,
+                            completedDays: newCompletedDays,
+                            currentDay: newCurrentDay,
+                        }),
+                    });
+                    console.log('[Growth] Learning progress updated:', { curriculumId: selectedCurriculum.id, dayNumber });
+
+                    // LearningCurriculumView 컴포넌트가 진행 상태를 새로고침하도록 이벤트 발생
+                    window.dispatchEvent(new CustomEvent('learning-progress-updated', {
+                        detail: { curriculumId: selectedCurriculum.id, completedDays: newCompletedDays, currentDay: newCurrentDay }
+                    }));
+                }
+            } catch (error) {
+                console.error('[Growth] Failed to update learning progress:', error);
+            }
+        }
+
         setSlideViewerData(null);
-        // Refresh curriculum view to show updated progress
     };
 
     const handleDeleteCurriculum = async (curriculumId: string, e: React.MouseEvent) => {

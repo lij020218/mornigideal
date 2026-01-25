@@ -188,10 +188,21 @@ export function WeeklyReportContent() {
     }, []);
 
     const getCurrentWeekNumber = () => {
+        // ISO 8601 주차 계산 (월요일 시작, 1월 4일이 포함된 주가 Week 1)
         const now = new Date();
-        const startOfYear = new Date(now.getFullYear(), 0, 1);
-        const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-        return Math.ceil((days + startOfYear.getDay() + 1) / 7);
+        const target = new Date(now.valueOf());
+
+        // 현재 날짜를 가장 가까운 목요일로 조정 (ISO 8601 규칙)
+        const dayOfWeek = now.getDay();
+        const diff = dayOfWeek === 0 ? -3 : 4 - dayOfWeek; // 일요일은 -3, 그 외는 목요일까지 거리
+        target.setDate(now.getDate() + diff);
+
+        // 해당 연도의 1월 1일
+        const yearStart = new Date(target.getFullYear(), 0, 1);
+
+        // 주차 계산
+        const weekNumber = Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        return weekNumber;
     };
 
     const getCurrentWeekRange = () => {

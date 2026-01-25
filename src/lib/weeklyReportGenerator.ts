@@ -93,10 +93,13 @@ function getLastCompletedWeek(date: Date): { start: Date; end: Date; weekNumber:
     lastSunday.setDate(lastMonday.getDate() + 6);
     lastSunday.setHours(23, 59, 59, 999);
 
-    // 주차 계산 (ISO 8601 기준)
-    const startOfYear = new Date(lastMonday.getFullYear(), 0, 1);
-    const days = Math.floor((lastMonday.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+    // ISO 8601 주차 계산 (월요일 시작, 1월 4일이 포함된 주가 Week 1)
+    const target = new Date(lastMonday.valueOf());
+    const dow = lastMonday.getDay();
+    const diff = dow === 0 ? -3 : 4 - dow;
+    target.setDate(lastMonday.getDate() + diff);
+    const yearStart = new Date(target.getFullYear(), 0, 1);
+    const weekNumber = Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 
     return { start: lastMonday, end: lastSunday, weekNumber };
 }

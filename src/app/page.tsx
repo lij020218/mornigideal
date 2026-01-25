@@ -123,6 +123,9 @@ export default function HomePage() {
         topic: string;
         currentLevel: string;
         targetLevel: string;
+        scheduleId?: string;
+        linkedGoalId?: string;
+        linkedGoalType?: "weekly" | "monthly" | "yearly";
     } | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -2396,6 +2399,9 @@ export default function HomePage() {
                                                                                 topic: ld.curriculumTopic || '',
                                                                                 currentLevel: 'intermediate',
                                                                                 targetLevel: 'advanced',
+                                                                                scheduleId: schedule.id,
+                                                                                linkedGoalId: schedule.linkedGoalId,
+                                                                                linkedGoalType: schedule.linkedGoalType,
                                                                             });
                                                                         }}
                                                                         className="h-9 border border-purple-500 bg-purple-500/20 hover:bg-purple-500/30 text-purple-700 font-medium"
@@ -2829,9 +2835,61 @@ export default function HomePage() {
                     currentLevel={slideViewerData.currentLevel}
                     targetLevel={slideViewerData.targetLevel}
                     onClose={() => setSlideViewerData(null)}
-                    onComplete={() => {
+                    onComplete={async () => {
                         // 슬라이드 완료 시 처리
                         console.log('[Home] Slide viewing completed');
+
+                        if (slideViewerData) {
+                            // 1. 일정 완료 처리
+                            if (slideViewerData.scheduleId) {
+                                // UI 상태 업데이트
+                                setTodaySchedules(prev => prev.map(s =>
+                                    s.id === slideViewerData.scheduleId ? { ...s, completed: true, skipped: false } : s
+                                ));
+
+                                // localStorage 및 연결된 목표 업데이트
+                                markScheduleCompletion(
+                                    slideViewerData.scheduleId,
+                                    true,
+                                    slideViewerData.linkedGoalId,
+                                    slideViewerData.linkedGoalType
+                                );
+                            }
+
+                            // 2. 학습 진행 상태 업데이트 (DB에 저장)
+                            try {
+                                // 현재 진행 상태 가져오기
+                                const progressRes = await fetch(`/api/user/learning-progress?curriculumId=${slideViewerData.curriculumId}`);
+                                let completedDays: number[] = [];
+                                let currentDay = 1;
+
+                                if (progressRes.ok) {
+                                    const progressData = await progressRes.json();
+                                    completedDays = progressData.completedDays || [];
+                                    currentDay = progressData.currentDay || 1;
+                                }
+
+                                // 완료한 날 추가
+                                if (!completedDays.includes(slideViewerData.dayNumber)) {
+                                    const newCompletedDays = [...completedDays, slideViewerData.dayNumber];
+                                    const newCurrentDay = Math.max(...newCompletedDays) + 1;
+
+                                    await fetch('/api/user/learning-progress', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            curriculumId: slideViewerData.curriculumId,
+                                            completedDays: newCompletedDays,
+                                            currentDay: newCurrentDay,
+                                        }),
+                                    });
+                                    console.log('[Home] Learning progress updated:', { curriculumId: slideViewerData.curriculumId, dayNumber: slideViewerData.dayNumber });
+                                }
+                            } catch (error) {
+                                console.error('[Home] Failed to update learning progress:', error);
+                            }
+                        }
+
                         setSlideViewerData(null);
                     }}
                 />
