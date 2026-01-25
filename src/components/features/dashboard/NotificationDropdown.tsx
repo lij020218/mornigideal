@@ -233,7 +233,7 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="absolute right-0 top-14 w-[min(calc(100vw-2rem),380px)] sm:w-96 bg-background/95 border border-border rounded-xl shadow-2xl z-50 backdrop-blur-xl overflow-hidden max-h-[70vh] sm:max-h-[600px] flex flex-col"
+                        className="fixed left-1/2 -translate-x-1/2 top-20 sm:absolute sm:left-auto sm:translate-x-0 sm:right-0 sm:top-14 w-[calc(100vw-2rem)] max-w-[380px] sm:w-96 bg-white border border-border rounded-xl shadow-2xl z-50 overflow-hidden max-h-[70vh] sm:max-h-[600px] flex flex-col"
                     >
                         {/* Header */}
                         <div className="p-3 sm:p-4 border-b border-border bg-muted/30 shrink-0">
