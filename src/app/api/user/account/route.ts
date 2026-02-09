@@ -116,3 +116,62 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
     }
 }
+
+export async function PUT(request: NextRequest) {
+    try {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { currentPassword, newPassword } = await request.json();
+
+        if (!currentPassword || !newPassword) {
+            return NextResponse.json({ error: "현재 비밀번호와 새 비밀번호를 입력해주세요." }, { status: 400 });
+        }
+
+        if (newPassword.length < 8) {
+            return NextResponse.json({ error: "새 비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
+        }
+
+        // Get user
+        const { data: userData, error: userError } = await supabaseAdmin
+            .from("users")
+            .select("id, password")
+            .eq("email", userEmail)
+            .single();
+
+        if (userError || !userData) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        // Verify current password
+        let isValid = false;
+        if (userData.password.startsWith("$2")) {
+            isValid = await bcrypt.compare(currentPassword, userData.password);
+        } else {
+            isValid = currentPassword === userData.password;
+        }
+
+        if (!isValid) {
+            return NextResponse.json({ error: "현재 비밀번호가 일치하지 않습니다." }, { status: 403 });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+        // Update password
+        const { error: updateError } = await supabaseAdmin
+            .from("users")
+            .update({ password: hashedPassword, updated_at: new Date().toISOString() })
+            .eq("id", userData.id);
+
+        if (updateError) {
+            return NextResponse.json({ error: "Failed to update password" }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true, message: "비밀번호가 변경되었습니다." });
+    } catch (error: any) {
+        return NextResponse.json({ error: "Failed to change password" }, { status: 500 });
+    }
+}
