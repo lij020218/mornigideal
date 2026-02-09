@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabase } from "@/lib/supabase";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { isMaxPlan } from "@/lib/user-plan";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -38,15 +38,15 @@ const LEVEL_LABELS: Record<string, string> = {
     expert: "전문가",
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // Check if user has Max plan (from user_subscriptions table)
-        const hasMaxPlan = await isMaxPlan(session.user.email);
+        const hasMaxPlan = await isMaxPlan(userEmail);
         if (!hasMaxPlan) {
             return NextResponse.json(
                 { error: "Slide generation is only available for Max plan users" },
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
             messages: [
                 {
                     role: "system",
-                    content: `교육 콘텐츠 전문가입니다. 깊이 있으면서도 읽기 쉬운 슬라이드를 작성합니다.
+                    content: `교육 콘텐츠 전문가입니다. 깊이 있으면서도 읽기 쉬운 슬라이드를 존댓말로 작성합니다.
 
 **핵심 원칙:**
 - 각 content는 2-3문장으로 충실하게 설명
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                userEmail,
                 "gpt-5.2-2025-12-11",
                 "ai-learning-slides",
                 usage.prompt_tokens,
@@ -265,10 +265,10 @@ export async function POST(request: Request) {
 }
 
 // GET endpoint to fetch slides for a specific day
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -276,7 +276,7 @@ export async function GET(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {

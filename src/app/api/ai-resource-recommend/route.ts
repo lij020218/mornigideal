@@ -3,6 +3,9 @@ import { auth } from "@/auth";
 import OpenAI from "openai";
 import { getUserByEmail } from "@/lib/users";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { getPrompt, SYSTEM_PROMPT } from "@/lib/prompts/resource-recommend";
+import { generateEmbedding } from "@/lib/embeddings";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -19,287 +22,156 @@ interface UserProfileData {
     level?: string;
 }
 
+/**
+ * RAG 컨텍스트 조회: 활동명으로 관련 과거 기억 검색
+ */
+async function fetchRagForActivity(activityName: string, userId: string): Promise<string> {
+    try {
+        const { embedding } = await generateEmbedding(activityName);
+
+        const { data: memories } = await supabaseAdmin.rpc(
+            'search_similar_memories',
+            {
+                query_embedding: JSON.stringify(embedding),
+                match_user_id: userId,
+                match_threshold: 0.75,
+                match_count: 3,
+            }
+        );
+
+        if (!memories || memories.length === 0) return "";
+
+        return `
+🧠 **관련 과거 기억:**
+${memories.map((m: any, i: number) => `${i + 1}. [${m.content_type}] ${m.content}${m.metadata?.date ? ` (${m.metadata.date})` : ''}`).join('\n')}
+
+이 과거 기억을 참고하여 더 개인화된 조언을 제공하세요.`;
+    } catch (error) {
+        console.error("[AI Resource Recommend] RAG fetch error:", error);
+        return "";
+    }
+}
+
 export async function POST(request: NextRequest) {
     try {
         console.log("[AI Resource Recommend] API 호출 시작");
 
-        // Check authentication
         const session = await auth();
         if (!session?.user?.email) {
-            console.error("[AI Resource Recommend] Unauthorized access attempt");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { activity, category, context, timeUntil, activityName, userProfile: providedProfile } = await request.json();
-        console.log("[AI Resource Recommend] 요청 데이터:", { activity, category, context, timeUntil, activityName });
-
-        // activityName is used for schedule_start context
+        const { activity, category, context, timeUntil, activityName, userProfile: providedProfile, tone, completionRate, completionStreak, dayDensity, location } = await request.json();
         const targetActivity = activityName || activity;
 
         if (!targetActivity) {
-            return NextResponse.json(
-                { error: "Activity is required" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Activity is required" }, { status: 400 });
         }
 
-        // Get user profile from database if not provided
+        // 프로필 로드
         let userProfile: UserProfileData = providedProfile || {};
         if (!providedProfile || Object.keys(providedProfile).length === 0) {
             try {
                 const user = await getUserByEmail(session.user.email);
                 if (user?.profile) {
                     userProfile = user.profile as UserProfileData;
-                    console.log("[AI Resource Recommend] DB에서 프로필 로드:", userProfile);
                 }
-            } catch (error) {
-                console.error("[AI Resource Recommend] 프로필 로드 실패:", error);
-            }
+            } catch {}
         }
 
-        // Build user context with enhanced profile data
+        // 사용자 컨텍스트 빌드
         const interestMap: Record<string, string> = {
-            ai: "AI/인공지능",
-            startup: "스타트업/창업",
-            marketing: "마케팅/브랜딩",
-            development: "개발/프로그래밍",
-            design: "디자인/UX",
-            finance: "재테크/투자",
-            selfdev: "자기계발",
-            health: "건강/운동",
+            ai: "AI/인공지능", startup: "스타트업/창업", marketing: "마케팅/브랜딩",
+            development: "개발/프로그래밍", design: "디자인/UX", finance: "재테크/투자",
+            selfdev: "자기계발", health: "건강/운동",
         };
-
         const experienceMap: Record<string, string> = {
-            student: "학생/취준생",
-            junior: "1-3년차",
-            mid: "4-7년차",
-            senior: "8년차 이상",
-            beginner: "입문자",
-            intermediate: "중급자",
+            student: "학생/취준생", junior: "1-3년차", mid: "4-7년차",
+            senior: "8년차 이상", beginner: "입문자", intermediate: "중급자",
         };
 
         const interestLabels = (userProfile.interests || []).map(i => interestMap[i] || i);
         const experienceLabel = experienceMap[userProfile.experience || userProfile.level || ""] || userProfile.experience || userProfile.level || "미설정";
+        const job = userProfile.job || userProfile.field || '전문직';
 
         let userContext = "";
         if (userProfile && Object.keys(userProfile).length > 0) {
-            userContext = `
-사용자 정보:
-- 직업/분야: ${userProfile.job || userProfile.field || '미설정'}
+            userContext = `사용자 정보:
+- 직업/분야: ${job}
 - 경력: ${experienceLabel}
 - 목표: ${userProfile.goal || '미설정'}
 - 관심사: ${interestLabels.join(', ') || '미설정'}
-${userProfile.major ? `- 전공: ${userProfile.major}` : ''}
-`;
+${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
         }
 
-        // Get current context for personalized messages
         const now = new Date();
         const hour = now.getHours();
-        const currentSeason = now.getMonth() >= 11 || now.getMonth() <= 1 ? "겨울" :
-            now.getMonth() >= 2 && now.getMonth() <= 4 ? "봄" :
-                now.getMonth() >= 5 && now.getMonth() <= 7 ? "여름" : "가을";
         const timeOfDay = hour < 12 ? "오전" : hour < 18 ? "오후" : "저녁";
 
-        // Generate different prompts based on context
-        let prompt = "";
+        // RAG 컨텍스트 조회 (사용자 ID 필요)
+        let ragContext = "";
+        try {
+            const user = await getUserByEmail(session.user.email);
+            if (user?.id) {
+                ragContext = await fetchRagForActivity(targetActivity, user.id);
+            }
+        } catch {}
 
-        if (context === "upcoming_schedule") {
-            // 다가오는 일정에 대한 준비 조언
-            prompt = `${userContext}
-사용자의 다음 일정인 "${targetActivity}"까지 ${timeUntil}분 남았습니다.
-전문 AI 비서로서 사용자의 정보를 고려하여 2-3문장의 간결하고 구체적인 준비 팁을 제공하세요. 존댓말과 이모지 1개를 사용하세요.
-예: "영화 감상 전 팝콘과 음료를 준비하고 조명을 어둡게 조절해보세요 🍿 알림을 끄면 더 몰입할 수 있습니다."`;
-        } else if (context === "schedule_pre_reminder") {
-            // 일정 시작 10분 전 사전 알림
-            prompt = `${userContext}
-곧 사용자의 "${targetActivity}" 일정이 시작됩니다.
-사용자의 프로필을 고려하여, 이 일정과 관련하여 준비하거나 결정해야 할 사항을 묻는 따뜻하고 구체적인 질문을 1-2문장으로 작성하세요. 존댓말을 사용하세요.
-예: (영화 감상) "어떤 영화를 보실지 결정하셨나요? 기분에 맞는 영화를 추천해드릴까요?"
-예: (회의) "회의 자료는 모두 준비되셨나요? 미리 확인할 사항이 있다면 말씀해주세요."
-예: (독서, 목표가 '영어 공부') "오늘은 영어 원서를 읽어보시는 건 어떠세요? 추천해드릴까요?"`;
-        } else if (context === "schedule_completed") {
-            // 일정 종료 후 맞춤형 피드백 요청
-            prompt = `${userContext}
-사용자가 "${targetActivity}" 일정을 마쳤습니다.
+        // 위치 컨텍스트
+        const locationContext = location
+            ? `📍 사용자 현재 위치: ${location.city || `${location.latitude}, ${location.longitude}`}`
+            : "";
 
-**역할**: 사용자 직업("${userProfile?.job || userProfile?.field || '전문직'}")을 이해하는 전문 비서
+        // Prompt Registry에서 프롬프트 조회
+        const prompt = getPrompt(context, {
+            userContext, targetActivity, job, timeUntil, category, timeOfDay, hour, ragContext, tone, completionRate, completionStreak, dayDensity, locationContext,
+        });
 
-**핵심 지침**:
-1. "${targetActivity}"는 어떠셨나요? 라고 자연스럽게 물어보세요
-2. 해당 **직업에 특화된** 후속 질문 2-3개를 리스트(•)로 제안하세요
-3. 활동을 **시작하기 전** 건넬 말이 아니라, **끝난 후** 회고/정리에 초점을 맞추세요
-4. 존댓말과 이모지 1개를 사용하세요
-
-**직업별 좋은 예시**:
-
-- (회계사 + 업무) "업무는 어떠셨나요? 📊
-• 오늘 처리한 전표나 세무 업무를 정리해드릴까요?
-• 내일 마감인 신고 건이 있나요?
-• 클라이언트에게 전달할 검토 사항이 있나요?"
-
-- (개발자 + 업무) "개발 업무는 어떠셨나요? 💻
-• 오늘 커밋한 내용을 정리해드릴까요?
-• 코드 리뷰가 필요한 PR이 있나요?
-• 내일 이어서 작업할 이슈가 있나요?"
-
-- (마케터 + 업무) "마케팅 업무는 어떠셨나요? 📈
-• 오늘 캠페인 성과 데이터를 정리해드릴까요?
-• 다음 주 콘텐츠 일정을 확인해볼까요?
-• A/B 테스트 결과를 분석해드릴까요?"
-
-- (디자이너 + 업무) "디자인 작업은 어떠셨나요? 🎨
-• 오늘 작업한 디자인을 정리해드릴까요?
-• 피드백 받을 준비가 된 시안이 있나요?
-• 내일 핸드오프 예정인 작업이 있나요?"
-
-- (영업 + 업무) "영업 활동은 어떠셨나요? 📞
-• 오늘 미팅 결과를 CRM에 기록해드릴까요?
-• 팔로업이 필요한 고객이 있나요?
-• 다음 주 파이프라인을 정리해볼까요?"
-
-**일반 활동 예시**:
-- (공부) "공부는 어떠셨나요? 📚
-• 오늘 배운 내용을 간단히 요약해드릴까요?
-• 이해가 안 되는 부분이 있었나요?"
-
-- (운동) "운동은 어떠셨나요? 💪
-• 오늘 운동 기록을 남겨드릴까요?
-• 스트레칭은 충분히 하셨나요?"
-
-**나쁜 예시** (시작 전 말투라서 부적절):
-❌ "어떤 영화를 보실지 결정하셨나요?"
-❌ "회의 자료는 모두 준비되셨나요?"
-
-**중요**: 사용자의 직업에 맞는 **실무적인 후속 질문**을 하세요. 일반적인 질문은 금지입니다.`;
-        } else if (context === "in_progress") {
-            // T+30분: 업무 진행 중 인사이트 제공
-            prompt = `${userContext}
-사용자가 "${targetActivity}" 활동을 시작한 지 30분이 지났습니다.
-
-**역할: 해당 직업 분야의 전문 멘토**
-사용자의 직업("${userProfile?.job || userProfile?.field || '전문직'}")에 **실제로 도움이 되는 업무 관련 정보**를 제공하세요.
-
-**핵심 원칙:**
-1. **직업 특화 정보**: 해당 직업에서 실제로 사용하는 도구, 자료, 최신 동향을 언급
-2. **실무에 바로 적용 가능**: 일반적인 조언이 아닌, 지금 업무에 바로 쓸 수 있는 구체적 팁
-3. **업계 용어 사용**: 해당 분야 종사자라면 바로 이해할 수 있는 전문 용어 포함
-4. **간결함**: 2-3문장
-
-**직업별 좋은 예시:**
-
-- (회계사) "이번 달 부가세 신고 마감이 다가오고 있어요 📊 국세청 홈택스에서 전자세금계산서 합계표를 미리 확인해보시는 건 어떨까요? 최근 개정된 법인세법 시행령도 참고하시면 좋겠습니다."
-
-- (개발자) "코드 리뷰 시간이라면, GitHub Copilot의 최신 기능으로 리팩토링 제안을 받아보세요 💻 오늘 발표된 Node.js 22 LTS 업데이트 내용도 체크해보시면 좋겠습니다."
-
-- (마케터) "구글 애널리틱스 4에서 이번 주 전환율 추이를 확인해보세요 📈 메타 광고 관리자에서 A/B 테스트 결과도 같이 검토하면 인사이트를 얻을 수 있어요."
-
-- (디자이너) "Figma의 Dev Mode로 개발팀과 핸드오프 준비를 해보세요 🎨 Auto Layout 설정이 잘 되어 있는지 확인하면 협업이 수월해집니다."
-
-- (변호사) "대법원 종합법률정보에서 최근 판례를 검색해보세요 ⚖️ 이번 달 시행되는 개정 법률 중 담당 사건과 관련된 내용이 있는지 확인해보시는 건 어떨까요?"
-
-- (의사/간호사) "최신 의학 저널(NEJM, Lancet)에서 관련 분야 연구를 체크해보세요 🏥 진료 가이드라인 업데이트 사항도 확인하면 좋겠습니다."
-
-- (교사) "학생 평가 자료를 정리하면서, 에듀넷 T-CLEAR의 성취기준 자료를 참고해보세요 📝 다음 수업 자료 준비에 도움이 될 거예요."
-
-- (영업/세일즈) "CRM에서 이번 주 팔로업해야 할 고객 리스트를 확인해보세요 📞 업계 동향 뉴스도 체크하면 고객 미팅 때 대화 소재가 됩니다."
-
-**나쁜 예시:**
-❌ "잘 하고 계시네요! 화이팅!" (너무 일반적)
-❌ "뽀모도로 기법을 사용해보세요" (직업과 무관한 일반 생산성 팁)
-❌ "물 한 잔 드시고 스트레칭 하세요" (업무와 무관)
-
-**중요**: 사용자의 직업을 파악하고, 그 직업에서 **실제로 사용하는 도구, 사이트, 자료**를 언급하세요. 일반적인 생산성 조언은 금지입니다.`;
-        } else if (context === "schedule_start") {
-            // 일정 시작 시 리소스 추천
-            prompt = `${userContext}
-"${targetActivity}" 시간이 시작되었습니다.
-
-**역할**: 사용자 직업("${userProfile?.job || userProfile?.field || '전문직'}")에 특화된 전문 비서
-
-**핵심 원칙:**
-1. **직업 맞춤 시작 팁**: 해당 직업에서 업무/활동을 시작할 때 실제로 도움이 되는 구체적 조언
-2. **실무 도구/자료 언급**: 해당 분야에서 사용하는 실제 도구, 사이트, 자료 추천
-3. **간결함**: 2-3문장, 존댓말과 이모지 1개
-
-**직업별 좋은 예시:**
-- (회계사 + 업무) "오늘 처리할 전표 목록을 먼저 확인해보세요 📊 더존이나 세무사랑 프로그램에서 미결 건을 체크하면 우선순위를 정하기 쉽습니다."
-- (개발자 + 업무) "오늘의 Jira 티켓을 확인하고 PR 리뷰부터 시작해보세요 💻 아침에 코드 리뷰하면 집중이 잘 됩니다."
-- (마케터 + 업무) "오늘 광고 성과 데이터부터 확인해보세요 📈 어제 대비 CTR 변화를 체크하면 오늘 최적화 방향이 보입니다."
-- (디자이너 + 업무) "Figma에서 어제 받은 피드백 코멘트부터 확인해보세요 🎨 수정 사항을 먼저 처리하면 오후에 새 작업에 집중할 수 있어요."
-- (영업 + 업무) "오늘 미팅 예정인 고객사 정보를 CRM에서 다시 확인해보세요 📞 최근 커뮤니케이션 히스토리를 파악하면 대화가 수월해집니다."
-
-**일반 활동 예시:**
-- (독서 + 목표: 영어공부) "영어 원서 읽기를 시도해보세요 📚 Kindle 앱의 단어 탭 기능을 활용하면 모르는 단어를 바로 확인할 수 있어요."
-- (운동 + 레벨: beginner) "가벼운 동적 스트레칭으로 몸을 풀고 시작하세요 🏃 부상 예방에 중요합니다."
-
-**주의**: 사용자의 직업이 있다면 해당 직업에서 실제 사용하는 도구와 워크플로우를 언급하세요.`;
-        } else {
-            // 기존 일정 추가 시 리소스 추천 (기본)
-            prompt = `${userContext}
-사용자가 "${targetActivity}" (${category}, ${timeOfDay} ${hour}시) 일정을 추가했습니다.
-전문 AI 비서로서, 사용자 정보를 고려하여 이 활동을 바로 시작하는 데 도움이 되는 실질적인 조언이나 리소스를 제공하세요.
-
-**지침**:
-1. **맥락 파악**: 활동 이름에서 구체적인 의도가 보이면(예: "영화 감상") 검색 방법보다는 **실제 콘텐츠 추천**이나 **분위기 조성 팁**을 제공하세요.
-2. **과도한 검색 지양**: 단순히 "유튜브에 ~ 검색하세요"라고 나열하기보다, "유튜브 '김시선' 채널의 최신 리뷰를 확인해보세요"처럼 구체적으로 콕 집어주세요.
-3. **간결함**: 3-5개 리스트가 아닐 수 있습니다. 활동 성격에 맞춰 가장 필요한 1-2가지만 임팩트 있게 제안해도 좋습니다.
-
-**필수 포함**:
-- 활동을 더 즐겁게 만들 "한 끗 차이" 팁 (예: 조명, 간식, 준비물)
-- 고민 시간을 줄여줄 구체적인 시작점 (예: 넷플릭스 Top 10 바로가기, 특정 유튜브 채널명)`;
-        }
-
-        console.log("[AI Resource Recommend] OpenAI 요청 시작");
-        const modelName = "gpt-5.2-2025-12-11";
+        // OpenAI 호출 (JSON 출력 강제)
+        const modelName = "gpt-4.1-mini-2025-04-14";
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [
-                {
-                    role: "system",
-                    content: `당신은 사용자의 직업과 분야를 깊이 이해하는 전문 AI 비서입니다.
-
-**핵심 원칙:**
-1. **직업 특화**: 사용자의 직업(회계사, 개발자, 마케터, 디자이너, 변호사, 의사, 교사 등)에 따라 해당 분야에서 실제로 사용하는 도구, 사이트, 용어, 워크플로우를 언급하세요.
-2. **실무 중심**: 일반적인 생산성 팁(뽀모도로, 물 마시기, 스트레칭 등)이 아닌, 해당 업무에 직접 도움이 되는 정보만 제공하세요.
-3. **업계 지식**: 해당 분야의 최신 동향, 마감일(세금 신고, 분기 마감 등), 자주 사용하는 플랫폼(홈택스, Jira, Figma, CRM 등)을 알고 있어야 합니다.
-4. **간결함**: 2-3문장으로 핵심만 전달하세요. 존댓말을 사용하세요.
-
-당신의 목표는 사용자가 "이 AI가 내 직업을 정말 이해하는구나"라고 느끼게 만드는 것입니다.`
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
+                { role: "system", content: SYSTEM_PROMPT },
+                { role: "user", content: prompt },
             ],
+            response_format: { type: "json_object" },
             temperature: 0.7,
         });
 
-        console.log("[AI Resource Recommend] OpenAI 응답 성공");
-        const recommendation = completion.choices[0]?.message?.content || "리소스를 추천할 수 없습니다.";
+        const rawContent = completion.choices[0]?.message?.content || '{}';
 
-        // Log usage
+        // JSON 파싱 (실패 시 텍스트 fallback)
+        let message = "";
+        let actions: any[] = [];
+
+        try {
+            const parsed = JSON.parse(rawContent);
+            message = parsed.message || rawContent;
+            actions = Array.isArray(parsed.actions) ? parsed.actions : [];
+        } catch {
+            // JSON 파싱 실패 시 텍스트 그대로 사용
+            message = rawContent;
+        }
+
+        // 사용량 로깅
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
-                modelName,
-                "ai-resource-recommend",
-                usage.prompt_tokens,
-                usage.completion_tokens
+                session.user.email, modelName, "ai-resource-recommend",
+                usage.prompt_tokens, usage.completion_tokens
             );
         }
 
         return NextResponse.json({
-            recommendation,
+            recommendation: message,
+            actions,
             activity: targetActivity,
             category,
             context,
         });
     } catch (error: any) {
-        console.error("[AI Resource Recommend] 에러 발생:", error);
-        console.error("[AI Resource Recommend] 에러 상세:", error.message);
-        console.error("[AI Resource Recommend] 에러 스택:", error.stack);
+        console.error("[AI Resource Recommend] Error:", error.message);
         return NextResponse.json(
             { error: "Failed to generate resource recommendation", details: error.message },
             { status: 500 }

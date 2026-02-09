@@ -12,6 +12,7 @@ import {
     GUARDRAILS,
     REASON_CODES
 } from '@/types/jarvis';
+import { resolvePersonaStyle, getPersonaBlock, type PersonaStyle } from '@/lib/prompts/persona';
 
 const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY
@@ -48,9 +49,6 @@ export class Brain {
         const prompt = this.buildPrompt(context);
 
         try {
-            // AI 호출 횟수 증가 (Standard, Pro 플랜 추적)
-            await this.incrementAIUsage(context.userEmail);
-
             const response = await anthropic.messages.create({
                 model: 'claude-3-5-sonnet-20241022',
                 max_tokens: 1024,
@@ -63,6 +61,9 @@ export class Brain {
                     }
                 ]
             });
+
+            // AI 호출 횟수 증가 (API 호출 성공 후에만 차감)
+            await this.incrementAIUsage(context.userEmail);
 
             const content = response.content[0];
             if (content.type !== 'text') {
@@ -88,32 +89,21 @@ export class Brain {
      * 시스템 프롬프트 (자비스 페르소나 + 가드레일)
      */
     private getSystemPrompt(preferences: any): string {
-        const tone = preferences.notificationStyle || 'friendly';
+        const notifStyle = preferences.notificationStyle || 'friendly';
 
-        let persona = '';
-        if (tone === 'jarvis_tone') {
-            persona = '당신은 Fi.eri입니다. 침착하고 정중하며 효율적인 AI 비서로, 사용자의 일정을 분석하고 최적의 제안을 합니다.';
-        } else if (tone === 'friendly') {
-            persona = '당신은 Fi.eri입니다. 친근하고 따뜻한 AI 비서로, 사용자를 배려하며 도움을 제공합니다.';
-        } else {
-            persona = '당신은 Fi.eri입니다. 간결하고 명확한 AI 비서입니다.';
-        }
+        // 페르소나 시스템에서 스타일 매핑
+        let personaStyle: PersonaStyle = 'friendly';
+        if (notifStyle === 'jarvis_tone') personaStyle = 'professional';
+        else if (notifStyle === 'brief') personaStyle = 'brief';
 
-        return `${persona}
+        const personaBlock = getPersonaBlock({
+            style: personaStyle,
+            plan: 'max',
+        });
+
+        return `${personaBlock}
 
 당신은 사용자의 일정과 루틴을 24시간 모니터링하며, 필요한 순간에 적절히 개입하여 도움을 줍니다.
-
-**톤 가이드 (매우 중요!):**
-- 항상 **1인칭 시점**으로 직접 말하세요 ("Fi.eri가~" 같은 3인칭 금지)
-- 친구처럼 자연스럽고 편안한 말투
-- "~해요", "~할까요?", "~어때요?" 같은 부드러운 존댓말
-- 이모지 1-2개로 친근함 표현
-
-**나쁜 예 (3인칭 - 금지!):**
-"Fi.eri가 오늘 일정이 과밀하다고 판단했어요."
-
-**좋은 예 (1인칭 - 올바름!):**
-"오늘 일정이 너무 빡빡해 보여요. 💦"
 
 중요한 제약사항 (절대 지켜야 함):
 1. 다음 단어/표현을 절대 사용하지 마세요: ${GUARDRAILS.FORBIDDEN_PATTERNS.join(', ')}

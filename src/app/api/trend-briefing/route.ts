@@ -1,7 +1,8 @@
 ﻿import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
-import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache } from "@/lib/newsCache";
+import { NextRequest, NextResponse } from "next/server";
+import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache, getDetailCache } from "@/lib/newsCache";
 import Parser from 'rss-parser';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
@@ -102,11 +103,17 @@ export async function GET(request: Request) {
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
+        // Get user email from JWT or session
+        const userEmail = await getUserEmailWithAuth(request as NextRequest);
+        if (!userEmail) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        console.log('[API] Trend briefing request');
         console.log('[API] Exclude count:', excludeTitles.length);
 
         // Check cache first (only if not force refreshing and no exclusions)
         if (!forceRefresh && excludeTitles.length === 0) {
-            const cachedData = await getTrendsCache();
+            const cachedData = await getTrendsCache(userEmail);
 
             if (cachedData && cachedData.trends.length > 0) {
                 const lastUpdatedDate = new Date(cachedData.lastUpdated);
@@ -415,8 +422,8 @@ Select now.`;
 
         console.log(`[API] Selected ${trends.length} articles from RSS feeds`);
 
-        // Save to cache
-        await saveTrendsCache(trends, true);
+        // Save to cache (with user email for proper caching)
+        await saveTrendsCache(trends, true, userEmail);
 
         // Pre-generate details for all trends - MUST await to ensure cache is ready
         console.log('[API] Pre-generating details for all trends...');
@@ -468,7 +475,7 @@ Write in Korean. Be practical and specific for senior ${job}.`;
 
                     // Validate structure
                     if (detail.content && detail.keyTakeaways && detail.actionItems) {
-                        await saveDetailCache(trend.id, detail);
+                        await saveDetailCache(trend.id, detail, userEmail);
                         console.log(`[API] Pre-generated detail for: ${trend.title}`);
                     } else {
                         console.warn(`[API] Invalid detail structure for ${trend.title}:`, Object.keys(detail));
@@ -505,12 +512,16 @@ export async function POST(request: Request) {
 
         console.log('[API POST] Received request for detail:', { title, level, job, trendId });
 
+        // Get user email from JWT or session
+        const userEmail = await getUserEmailWithAuth(request as NextRequest);
+        if (!userEmail) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        console.log('[API POST] Trend briefing detail request');
+
         // Check cache first
         if (trendId) {
-            const cachedDetail = await (async () => {
-                const { getDetailCache } = await import("@/lib/newsCache");
-                return getDetailCache(trendId);
-            })();
+            const cachedDetail = await getDetailCache(trendId, userEmail);
 
             if (cachedDetail) {
                 console.log('[API] Found cached detail, checking structure...');
@@ -595,17 +606,42 @@ Write in Korean.`;
         const response = await result.response;
         const text = response.text();
 
+        console.log('[API POST] Gemini raw response length:', text?.length || 0);
+
+        if (!text || text.trim().length === 0) {
+            console.error('[API POST] Gemini returned empty response');
+            return NextResponse.json({ error: "AI returned empty response" }, { status: 500 });
+        }
+
         let detail;
         try {
             detail = JSON.parse(text);
+            console.log('[API POST] Parsed detail:', {
+                hasTitle: !!detail.title,
+                hasContent: !!detail.content,
+                contentLength: detail.content?.length || 0,
+                keyTakeawaysCount: detail.keyTakeaways?.length || 0,
+                actionItemsCount: detail.actionItems?.length || 0
+            });
         } catch (e) {
-            console.error("Failed to parse detail JSON", e);
+            console.error("[API POST] Failed to parse detail JSON:", e);
+            console.error("[API POST] Raw text:", text.substring(0, 500));
             return NextResponse.json({ error: "Failed to generate detail" }, { status: 500 });
         }
 
+        // Validate required fields
+        if (!detail.content || detail.content.trim().length === 0) {
+            console.error('[API POST] Generated detail has empty content');
+            return NextResponse.json({ error: "Generated detail has no content" }, { status: 500 });
+        }
+
+        // Ensure arrays exist
+        if (!detail.keyTakeaways) detail.keyTakeaways = [];
+        if (!detail.actionItems) detail.actionItems = [];
+
         // Cache the detail
         if (trendId) {
-            await saveDetailCache(trendId, detail);
+            await saveDetailCache(trendId, detail, userEmail);
         }
 
         return NextResponse.json({

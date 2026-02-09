@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabase } from "@/lib/supabase";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { v4 as uuidv4 } from "uuid";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -39,10 +39,10 @@ const LEVEL_LABELS: Record<string, string> = {
     expert: "전문가",
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -123,7 +123,7 @@ ${specialInstructions}
             messages: [
                 {
                     role: "system",
-                    content: "당신은 체계적인 교육 커리큘럼을 설계하는 전문가입니다. 학습자의 수준과 목표에 맞는 실용적인 커리큘럼을 만들어주세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
+                    content: "당신은 체계적인 교육 커리큘럼을 설계하는 전문가입니다. 학습자의 수준과 목표에 맞는 실용적인 커리큘럼을 만들어주세요. 존댓말을 사용하세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
                 },
                 {
                     role: "user",
@@ -149,7 +149,7 @@ ${specialInstructions}
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                userEmail,
                 "gpt-4o-mini-2024-07-18",
                 "ai-learning-curriculum",
                 usage.prompt_tokens,
@@ -175,7 +175,7 @@ ${specialInstructions}
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (userData) {
@@ -209,17 +209,17 @@ ${specialInstructions}
 }
 
 // GET endpoint to fetch user's curriculums
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {
@@ -232,7 +232,24 @@ export async function GET() {
             .eq("user_id", userData.id)
             .order("created_at", { ascending: false });
 
-        return NextResponse.json({ curriculums: curriculums || [] });
+        // curriculum_data에서 필요한 정보 추출하여 반환
+        const formattedCurriculums = (curriculums || []).map((c: any) => {
+            const data = c.curriculum_data || {};
+            return {
+                id: c.id,
+                topic: data.topic || c.topic,
+                reason: data.reason || c.reason,
+                currentLevel: data.currentLevel || c.current_level,
+                targetLevel: data.targetLevel || c.target_level,
+                duration: data.duration || c.duration,
+                days: data.days || [],
+                createdAt: data.createdAt || c.created_at,
+                hasSlides: data.hasSlides || false,
+                userPlan: c.user_plan || 'standard',
+            };
+        });
+
+        return NextResponse.json({ curriculums: formattedCurriculums });
     } catch (error: any) {
         console.error("[AI Learning Curriculum] GET Error:", error);
         return NextResponse.json({ error: "Failed to fetch curriculums" }, { status: 500 });
@@ -240,10 +257,10 @@ export async function GET() {
 }
 
 // DELETE endpoint to remove a curriculum
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -257,7 +274,7 @@ export async function DELETE(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {

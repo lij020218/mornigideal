@@ -27,10 +27,11 @@ export function generateTrendId(title: string): string {
 
 /**
  * Get cached trends for today
+ * @param emailOverride - Optional email for API routes where session is unavailable (e.g., mobile JWT auth)
  */
-export async function getTrendsCache(): Promise<{ trends: any[]; lastUpdated: string } | null> {
+export async function getTrendsCache(emailOverride?: string): Promise<{ trends: any[]; lastUpdated: string } | null> {
     try {
-        const userEmail = await getUserEmail();
+        const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
             console.warn('[NewsCache] No user email, skipping cache lookup');
             return null;
@@ -92,10 +93,13 @@ export async function getTrendsHistory(date: string): Promise<any[] | null> {
 
 /**
  * Save trends to cache
+ * @param trends - Trends to cache
+ * @param clearExisting - Whether to clear existing cache first
+ * @param emailOverride - Optional email for API routes where session is unavailable (e.g., mobile JWT auth)
  */
-export async function saveTrendsCache(trends: any[], clearExisting: boolean = false): Promise<void> {
+export async function saveTrendsCache(trends: any[], clearExisting: boolean = false, emailOverride?: string): Promise<void> {
     try {
-        const userEmail = await getUserEmail();
+        const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
             console.warn('[NewsCache] No user email, skipping cache save');
             return;
@@ -133,10 +137,12 @@ export async function saveTrendsCache(trends: any[], clearExisting: boolean = fa
 
 /**
  * Get cached detail for a specific trend
+ * @param trendId - Unique ID of the trend
+ * @param emailOverride - Optional email for API routes where session is unavailable (e.g., mobile JWT auth)
  */
-export async function getDetailCache(trendId: string): Promise<any | null> {
+export async function getDetailCache(trendId: string, emailOverride?: string): Promise<any | null> {
     try {
-        const userEmail = await getUserEmail();
+        const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
             console.warn('[NewsCache] No user email, skipping detail cache lookup');
             return null;

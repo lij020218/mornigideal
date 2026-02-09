@@ -11,6 +11,7 @@ import { QuizView } from "./QuizView";
 import { QuizResult } from "./QuizResult";
 import { DrawingCanvas } from "./DrawingCanvas";
 import 'katex/dist/katex.min.css';
+import { toast } from "sonner";
 
 interface PageAnalysis {
     page: number;
@@ -265,7 +266,7 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
             }
         } catch (error: any) {
             console.error('Concepts generation error:', error);
-            alert('핵심 개념 생성에 실패했습니다: ' + error.message);
+            toast.error('핵심 개념 생성에 실패했습니다');
         } finally {
             setIsLoadingConcepts(false);
         }
@@ -292,7 +293,7 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
             }
         } catch (error: any) {
             console.error('Quiz grading error:', error);
-            alert('채점에 실패했습니다: ' + error.message);
+            toast.error('채점에 실패했습니다');
         } finally {
             setIsGradingQuiz(false);
         }
@@ -353,7 +354,7 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
             }
         } catch (error) {
             console.error('Rating submission error:', error);
-            alert('평가 제출에 실패했습니다.');
+            toast.error('평가 제출에 실패했습니다');
         } finally {
             setIsSubmittingRating(false);
         }

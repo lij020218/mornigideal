@@ -14,6 +14,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 
 import LoadingView from "./LoadingView";
+import { toast } from "sonner";
 
 interface Slide {
     slideNumber: number;
@@ -116,7 +117,7 @@ export default function LearningPage() {
             }));
         } catch (error) {
             console.error("Error generating lesson:", error);
-            alert("학습 콘텐츠를 생성하는데 실패했습니다.");
+            toast.error("학습 콘텐츠를 생성하는데 실패했습니다.");
         } finally {
             setLoading(false);
         }

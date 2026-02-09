@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TrendingUp, Users, Bell, CheckCircle2, Clock, Loader2, RefreshCw, Target, ArrowRight, User, Settings, Sun, BookOpen, Circle, Moon, Briefcase, Coffee, CalendarDays, Sparkles, XCircle, FileText, Heart, Gamepad2, Dumbbell, Film, Tv, Music, Headphones, Mic, Code, Laptop, Pen, Palette, Camera, Utensils, Home, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileCode, Hospital, Lightbulb, MapPin } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { getDailyGoals, saveDailyGoals, markLearningComplete } from "@/lib/dailyGoals";
 import { motion, AnimatePresence } from "framer-motion";
 import { SchedulePopup, type CustomGoal } from "./SchedulePopup";
@@ -422,11 +423,11 @@ export function Dashboard({
                 setCurriculum(data.curriculum);
                 localStorage.setItem("user_curriculum", JSON.stringify(data.curriculum));
             } else {
-                alert("커리큘럼 생성에 실패했습니다. 다시 시도해주세요.");
+                toast.error("커리큘럼 생성에 실패했습니다.");
             }
         } catch (error) {
             console.error("Error generating curriculum:", error);
-            alert("커리큘럼 생성 중 오류가 발생했습니다.");
+            toast.error("커리큘럼 생성 중 오류가 발생했습니다.");
         } finally {
             setGeneratingCurriculum(false);
         }

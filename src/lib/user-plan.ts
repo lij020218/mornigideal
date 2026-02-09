@@ -3,7 +3,7 @@
  * - 플랜 조회, 기능 접근 권한 체크, 사용량 관리
  *
  * 플랜 구조:
- * - Standard (₩4,900): 일일 AI 50회
+ * - Standard (무료): 일일 AI 50회
  * - Pro (₩9,900): 일일 AI 100회 + 리스크 알림, 스마트 브리핑
  * - Max (₩21,900): 무제한 + 장기 기억, 선제적 제안
  *
@@ -14,7 +14,7 @@
  * - 리스크 알림: Pro, Max
  * - 스마트 브리핑: Pro, Max
  * - 장기 기억 (RAG): Max only
- * - 선제적 제안: Max only
+ * - 선제적 제안: 전 플랜 (규칙 기반, AI 비용 $0)
  */
 
 import { supabase } from "./supabase";
@@ -27,7 +27,7 @@ export interface PlanFeatures {
     jarvis_memory: boolean;          // 장기 기억 시스템 (Max)
     risk_alerts: boolean;            // 리스크 알림 (Pro, Max)
     smart_briefing: boolean;         // 스마트 브리핑 (Pro, Max)
-    proactive_suggestions: boolean;  // 선제적 제안 (Max)
+    proactive_suggestions: boolean;  // 선제적 제안 (전 플랜)
 }
 
 // 플랜 정보
@@ -76,8 +76,8 @@ export const PLAN_DETAILS: Record<UserPlanType, {
     standard: {
         name: "Standard",
         nameKo: "스탠다드",
-        price: 4900,
-        monthlyPrice: "₩4,900/월",
+        price: 0,
+        monthlyPrice: "무료",
         dailyAiCallsLimit: 50,
         features: [
             "일일 AI 호출 50회",
@@ -88,8 +88,9 @@ export const PLAN_DETAILS: Record<UserPlanType, {
             "학습 팁",
             "10분 전 준비 알림",
             "리소스 추천 (유튜브)",
+            "선제적 알림",
         ],
-        highlights: ["기본 AI 비서 기능"],
+        highlights: ["기본 AI 비서 기능", "선제적 일정/목표 알림"],
     },
     pro: {
         name: "Pro",
@@ -102,9 +103,10 @@ export const PLAN_DETAILS: Record<UserPlanType, {
             "Standard의 모든 기능",
             "리스크 알림",
             "스마트 브리핑",
+            "선제적 알림",
             "100MB 메모리 저장소",
         ],
-        highlights: ["일정 충돌/준비시간 부족 경고", "맞춤 뉴스 브리핑"],
+        highlights: ["일정 충돌/준비시간 부족 경고", "맞춤 뉴스 브리핑", "선제적 일정/목표 알림"],
     },
     max: {
         name: "Max",
@@ -115,7 +117,7 @@ export const PLAN_DETAILS: Record<UserPlanType, {
         features: [
             "무제한 AI 호출",
             "Pro의 모든 기능",
-            "자비스 장기 기억 (RAG)",
+            "AI 장기 기억 (RAG)",
             "선제적 제안",
             "1GB 메모리 저장소",
         ],

@@ -16,7 +16,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
     // 인증 체크 (Cron Secret)
     const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET || 'dev-secret';
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+        return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
+    }
 
     if (authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json(
@@ -55,7 +58,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     // 인증 체크
     const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET || 'dev-secret';
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+        return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
+    }
 
     if (authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json(
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log(`[Jarvis API] Running for user: ${userEmail}`);
+        console.log('[Jarvis API] Running for specific user');
 
         const { JarvisOrchestrator } = await import('@/lib/jarvis');
         const orchestrator = new JarvisOrchestrator(userEmail);
@@ -82,7 +88,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: `Jarvis run completed for ${userEmail}`,
+            message: 'Jarvis run completed for user',
             timestamp: new Date().toISOString()
         });
     } catch (error) {

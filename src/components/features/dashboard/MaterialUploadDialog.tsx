@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Upload, FileText, Loader2, BookOpen, Sparkles, Check } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { toast } from "sonner";
 
 interface MaterialUploadDialogProps {
     open: boolean;
@@ -50,7 +51,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
             // Check file size (50MB limit with Blob Storage)
             const maxSize = 50 * 1024 * 1024; // 50MB in bytes
             if (selectedFile.size > maxSize) {
-                alert("파일 크기가 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다.");
+                toast.error("파일 크기가 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다.");
                 e.target.value = ""; // Reset input
                 return;
             }
@@ -58,14 +59,14 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
             if (validTypes.includes(selectedFile.type)) {
                 setFile(selectedFile);
             } else {
-                alert("지원하지 않는 파일 형식입니다. TXT, PDF, DOC, DOCX 파일만 업로드 가능합니다.");
+                toast.error("지원하지 않는 파일 형식입니다.");
             }
         }
     };
 
     const handleSubmit = async () => {
         if (!file) {
-            alert("파일을 선택해주세요.");
+            toast.warning("파일을 선택해주세요.");
             return;
         }
 
@@ -178,7 +179,7 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
             const errorMessage = error.message.includes('413') || error.message.includes('Content Too Large')
                 ? '파일이 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다.'
                 : `분석 실패: ${error.message}`;
-            alert(errorMessage);
+            toast.error(errorMessage);
             setUploading(false);
             setProgress({ stage: "", message: "" });
         }

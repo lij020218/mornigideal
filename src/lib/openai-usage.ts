@@ -85,7 +85,7 @@ export async function logOpenAIUsage(
     console.log('💰 ========================================');
     console.log(`⏰ ${timestamp}`);
     console.log(`📍 Endpoint: ${endpoint}`);
-    console.log(`👤 User: ${userEmail}`);
+    console.log(`👤 User: ${userEmail?.substring(0, 3)}***`);
     console.log(`🤖 Model: ${model}`);
     console.log(`📊 Tokens:`);
     console.log(`   ↗️  Input:  ${inputTokens.toLocaleString()} tokens`);

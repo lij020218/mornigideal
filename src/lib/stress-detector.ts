@@ -27,7 +27,7 @@ export async function detectDailyState(userEmail: string): Promise<DailyState> {
     const todayStart = `${today}T00:00:00`;
     const todayEnd = `${today}T23:59:59`;
 
-    console.log(`[Stress Detector] Analyzing state for ${userEmail} on ${today}`);
+    console.log(`[Stress Detector] Analyzing state for ${today}`);
 
     // 오늘의 모든 이벤트 가져오기
     const { data: events, error } = await supabase

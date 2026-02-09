@@ -2,8 +2,7 @@ import { Dashboard } from "@/components/features/dashboard/Dashboard";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedMaterials, getCachedCurriculum, getCachedTrendBriefing, getCachedRecommendations, getCachedHabitInsights } from "@/lib/data-service";
-import { Suspense } from "react";
-import { FloatingAIAssistant } from "@/components/ui/FloatingAIAssistant";
+
 
 // Enable static optimization with revalidation
 export const revalidate = 60; // Revalidate every 60 seconds
@@ -41,11 +40,6 @@ export default async function DashboardPage() {
                 initialCurriculum={curriculum}
                 initialTrendBriefing={trendBriefing}
                 initialHabitInsights={habitInsights}
-            />
-            <FloatingAIAssistant
-                showSuggestions={true}
-                briefings={[]}
-                recommendations={[]}
             />
         </div>
     );

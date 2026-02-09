@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Send, Sparkles, Clock, CheckCircle2, Calendar, Plus, Loader2, Target, X, Coffee, Utensils, Moon, Dumbbell, BookOpen, Briefcase, Home, Sun, Heart, Gamepad2, MapPin, Film, Tv, Music, Activity, TreePine, Rocket, Brain, BarChart3, Megaphone, FileText, Hospital, Lightbulb, Pen, Code } from "lucide-react";
+import { ChevronDown, Send, Sparkles, CheckCircle2, Plus, Loader2, X, Moon, MapPin, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { normalizeColor, getIconBg, getCardBg, getCardBorder, getCardShadow, getBadgeStyle, getInProgressCardStyle, getUpcomingCardStyle, getIconStyle } from "@/lib/scheduleColors";
+import { timeToMinutes, getChatDate, getDateFromTimestamp, getCurrentScheduleInfo } from "@/lib/scheduleUtils";
+import { getScheduleIcon, getScheduleMessage } from "@/lib/scheduleIcons";
+import { useUserLocation } from "@/hooks/useUserLocation";
+import { usePlaceholderRotation } from "@/hooks/usePlaceholderRotation";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { useAutoMessages } from "@/hooks/useAutoMessages";
+import type { Schedule, ChatAction, Message, RecommendationCard, AppState } from "@/types/dashboard";
 
 // Fieri Logo SVG Component - 소용돌이 로고
 const FieriLogo = ({ className = "" }: { className?: string }) => (
@@ -28,47 +37,7 @@ import { useFocusSleepMode } from "@/contexts/FocusSleepModeContext";
 import { SlideViewer } from "@/components/features/learning/SlideViewer";
 import { FieriInterventionsContainer } from "@/components/features/fieri/FieriInterventionsContainer";
 
-interface Schedule {
-    id: string;
-    text: string;
-    startTime: string;
-    endTime?: string;
-    completed?: boolean;
-    skipped?: boolean;
-    color?: string;
-    location?: string;
-    memo?: string;  // 세부사항/설명
-    workMode?: 'focus' | 'research' | 'brainstorm' | 'light' | null;
-    linkedGoalId?: string;
-    linkedGoalType?: "weekly" | "monthly" | "yearly";
-}
-
-interface ChatAction {
-    type: "add_schedule" | "open_briefing" | "add_weekly_goal";
-    label: string;
-    data: Record<string, any>;
-}
-
-interface Message {
-    id: string;
-    role: "user" | "assistant" | "system";
-    content: string;
-    timestamp: Date;
-    actions?: ChatAction[];
-}
-
-interface RecommendationCard {
-    id: string;
-    title: string;
-    description: string;
-    estimatedTime: string;
-    icon: string;
-    category: string;
-    priority?: string;
-    action?: () => void;
-}
-
-type AppState = "idle" | "chatting" | "schedule-expanded";
+// Types imported from @/types/dashboard
 
 const PLACEHOLDER_ROTATION = [
     "오늘 일정 추천해줘",
@@ -86,22 +55,18 @@ export default function HomePage() {
     // Redirect if not authenticated
     useEffect(() => {
         if (status === "unauthenticated") {
-            router.push("/login");
+            router.push("/landing");
         }
     }, [status, router]);
 
     // State
     const [appState, setAppState] = useState<AppState>("idle");
     const [scheduleExpanded, setScheduleExpanded] = useState(false);
-    const [todaySchedules, setTodaySchedules] = useState<Schedule[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
-    const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [selectedBriefing, setSelectedBriefing] = useState<any>(null);
-    const [trendBriefings, setTrendBriefings] = useState<any[]>([]);
-    const [userProfile, setUserProfile] = useState<any>(null);
     const [showRecommendations, setShowRecommendations] = useState(() => {
         // Check localStorage on initial load (client-side only)
         if (typeof window !== 'undefined') {
@@ -110,8 +75,6 @@ export default function HomePage() {
         }
         return true;
     });
-    const [learningTipsShownFor, setLearningTipsShownFor] = useState<Set<string>>(new Set());
-
     // 슬라이드 뷰어 상태
     const [slideViewerData, setSlideViewerData] = useState<{
         isOpen: boolean;
@@ -133,22 +96,20 @@ export default function HomePage() {
     const isFetchingRecommendations = useRef(false);
     const hasFetchedRecommendations = useRef(false);
 
-    // Helper function to get chat date (midnight cutoff, KST timezone)
-    const getChatDate = () => {
-        const now = new Date();
-        // Convert to KST (UTC+9) for consistent date handling
-        const kstDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-
-        // Return YYYY-MM-DD format in KST (midnight cutoff)
-        return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
-    };
-
-    // Helper function to get chat date from a timestamp (midnight cutoff, KST timezone)
-    const getDateFromTimestamp = (timestamp: Date) => {
-        const kstDate = new Date(timestamp.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-
-        return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}`;
-    };
+    // Custom hooks
+    const userLocation = useUserLocation();
+    const placeholder = usePlaceholderRotation(PLACEHOLDER_ROTATION, 4000);
+    const {
+        todaySchedules, setTodaySchedules,
+        userProfile, setUserProfile,
+        trendBriefings, setTrendBriefings,
+        streakData,
+        refreshSchedules,
+    } = useDashboardData(session);
+    useAutoMessages({
+        session, todaySchedules, userProfile, trendBriefings,
+        userLocation, setMessages, messages,
+    });
 
     // Load messages from server on mount
     useEffect(() => {
@@ -470,986 +431,12 @@ export default function HomePage() {
         };
     }, [session, messages]);
 
-    // Rotate placeholder every 4 seconds
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_ROTATION.length);
-        }, 4000);
-        return () => clearInterval(interval);
-    }, []);
-
     // Scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // Fetch today's schedules and user profile
-    useEffect(() => {
-        if (!session?.user?.email) return;
-
-        const fetchSchedules = async () => {
-            try {
-                const response = await fetch('/api/user/profile');
-                if (response.ok) {
-                    const data = await response.json();
-                    // IMPORTANT: Use getChatDate() for KST timezone, not UTC-based toISOString()
-                    const today = getChatDate();
-                    // Calculate day of week from the date string to ensure consistency with KST
-                    const todayDateObj = new Date(today + 'T12:00:00');
-                    const currentDay = todayDateObj.getDay();
-
-                    console.log('[Home] Fetched profile data:', data);
-                    console.log('[Home] Custom goals:', data.profile?.customGoals);
-
-                    // Store user profile for AI context
-                    setUserProfile(data.profile);
-
-                    // Include both specific date schedules AND recurring schedules for today - 중복 제거
-                    const allGoals = data.profile?.customGoals || [];
-
-                    // 특정 날짜 일정 (우선순위 높음)
-                    const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
-
-                    // 반복 일정 (중복 제거)
-                    const recurringGoals = allGoals.filter((g: any) => {
-                        if (g.specificDate) return false;
-                        if (!g.daysOfWeek?.includes(currentDay)) return false;
-                        // startDate가 있으면 해당 날짜 이후에만 표시
-                        if (g.startDate && today < g.startDate) return false;
-                        // endDate가 있으면 해당 날짜까지만 표시
-                        if (g.endDate && today > g.endDate) return false;
-                        // 같은 이름 + 같은 시간의 특정 날짜 일정이 있으면 제외
-                        const hasDuplicate = specificDateGoals.some((sg: any) =>
-                            sg.text === g.text && sg.startTime === g.startTime
-                        );
-                        return !hasDuplicate;
-                    });
-
-                    const todayGoals = [...specificDateGoals, ...recurringGoals];
-                    console.log(`[Home] Total ${todayGoals.length} goals for today (specific: ${specificDateGoals.length}, recurring: ${recurringGoals.length})`);
-
-                    // 서버에 저장된 completed/skipped 상태 사용 (디바이스 간 동기화)
-                    // 일정 자체에 completed/skipped가 저장되어 있음
-                    const schedulesWithStatus = todayGoals.map((g: any) => ({
-                        ...g,
-                        completed: g.completed || false,
-                        skipped: g.skipped || false
-                    }));
-
-                    setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || '')));
-                    console.log('[Home] Loaded schedules from server:', schedulesWithStatus.length);
-                }
-            } catch (error) {
-                console.error('[Home] Failed to fetch schedules:', error);
-            }
-        };
-
-        fetchSchedules();
-
-        // Listen for schedule updates
-        const handleScheduleUpdate = () => {
-            console.log('[Home] Schedule updated, refetching...');
-            fetchSchedules();
-        };
-
-        window.addEventListener('schedule-added', handleScheduleUpdate);
-        window.addEventListener('schedule-updated', handleScheduleUpdate);
-        window.addEventListener('schedule-deleted', handleScheduleUpdate);
-
-        // Poll for updates every 30 seconds
-        const pollInterval = setInterval(fetchSchedules, 30000);
-
-        return () => {
-            window.removeEventListener('schedule-added', handleScheduleUpdate);
-            window.removeEventListener('schedule-updated', handleScheduleUpdate);
-            window.removeEventListener('schedule-deleted', handleScheduleUpdate);
-            clearInterval(pollInterval);
-        };
-    }, [session]);
-
-    // Fetch trend briefings
-    useEffect(() => {
-        if (!session?.user?.email || !userProfile) return;
-
-        const fetchTrendBriefings = async () => {
-            try {
-                const params = new URLSearchParams({
-                    job: userProfile.job || 'Professional',
-                    goal: userProfile.goal || '',
-                    interests: (userProfile.interests || []).join(','),
-                });
-
-                const response = await fetch(`/api/trend-briefing?${params.toString()}`);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    setTrendBriefings(data.trends || []);
-                    console.log('[Home] Loaded trend briefings:', data.trends?.length);
-                }
-            } catch (error) {
-                console.error('[Home] Failed to fetch trend briefings:', error);
-            }
-        };
-
-        fetchTrendBriefings();
-    }, [session, userProfile]);
-
-    // Fetch learning tips when there's a learning schedule
-    useEffect(() => {
-        if (!session?.user?.email || todaySchedules.length === 0) return;
-
-        const fetchLearningTips = async () => {
-            // 학습 일정 찾기 (isLearning: true 또는 learningData가 있는 일정)
-            const learningSchedule = todaySchedules.find(
-                (s: any) => s.isLearning && s.learningData && !s.completed && !s.skipped
-            );
-
-            if (!learningSchedule) {
-                return;
-            }
-
-            const scheduleId = (learningSchedule as any).id;
-
-            // 이미 표시한 학습 팁인지 확인
-            if (learningTipsShownFor.has(scheduleId)) {
-                return;
-            }
-
-            // localStorage에서도 확인 (페이지 새로고침 대응)
-            const dismissedKey = `learning_tips_dismissed_${scheduleId}`;
-            if (localStorage.getItem(dismissedKey)) {
-                return;
-            }
-
-            const learningData = (learningSchedule as any).learningData;
-            if (!learningData) return;
-            try {
-                const res = await fetch('/api/ai-learning-tip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        learningData,
-                        userLevel: 'intermediate',
-                    }),
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-
-                    // 학습 팁을 채팅 메시지로 변환
-                    let tipMessage = `📚 **${learningData.dayTitle || '오늘의 학습'}**\n\n`;
-                    tipMessage += `${data.greeting}\n\n`;
-
-                    if (learningData.objectives && learningData.objectives.length > 0) {
-                        tipMessage += `**📌 학습 목표:**\n`;
-                        learningData.objectives.forEach((obj: string) => {
-                            tipMessage += `- ${obj}\n`;
-                        });
-                        tipMessage += `\n`;
-                    }
-
-                    if (data.tips && data.tips.length > 0) {
-                        tipMessage += `**💡 학습 팁:**\n\n`;
-                        data.tips.forEach((tip: any, index: number) => {
-                            tipMessage += `${tip.emoji} **${tip.title}**\n${tip.content}\n\n`;
-                        });
-                    }
-
-                    tipMessage += `${data.encouragement}`;
-
-                    // 채팅 메시지로 추가
-                    const message: Message = {
-                        id: `learning-tip-${Date.now()}`,
-                        role: 'assistant',
-                        content: tipMessage,
-                        timestamp: new Date(),
-                    };
-                    setMessages(prev => [...prev, message]);
-
-                    // dismissed 상태 저장 (중복 방지)
-                    const scheduleId = (learningSchedule as any).id;
-                    localStorage.setItem(`learning_tips_dismissed_${scheduleId}`, 'true');
-                    setLearningTipsShownFor(prev => new Set([...prev, scheduleId]));
-
-                    console.log('[Home] Loaded learning tips for:', learningData.dayTitle);
-                }
-            } catch (error) {
-                console.error('[Home] Failed to fetch learning tips:', error);
-            }
-        };
-
-        fetchLearningTips();
-    }, [session, todaySchedules, learningTipsShownFor]);
-
-    // Auto-send schedule-based messages
-    useEffect(() => {
-        if (!session?.user) {
-            console.log('[AutoMessage] Skipping - no session');
-            return;
-        }
-
-        const checkAndSendScheduleMessages = () => {
-            const now = new Date();
-            const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-            const currentMinutes = kstNow.getHours() * 60 + kstNow.getMinutes();
-            const today = getChatDate(); // Use KST timezone
-            const hour = kstNow.getHours();
-
-            console.log('[AutoMessage] Checking schedules:', {
-                currentTime: `${kstNow.getHours()}:${kstNow.getMinutes()} KST`,
-                currentMinutes,
-                today,
-                schedulesCount: todaySchedules.length
-            });
-
-            // 0. 아침 인사 메시지 (5-12시 사이 한 번만) - AI 기반
-            // Use separate keys for rich AI greeting vs basic greeting
-            const richGreetingKey = `rich_morning_greeting_${today}`;
-            const legacyKey = `morning_greeting_${today}`;
-            const alreadySentRichMorning = localStorage.getItem(richGreetingKey);
-            const hasLegacyGreeting = localStorage.getItem(legacyKey);
-
-            console.log('[AutoMessage] Morning greeting check:', {
-                hour,
-                inTimeRange: hour >= 5 && hour < 12,
-                alreadySentRich: !!alreadySentRichMorning,
-                hasLegacy: !!hasLegacyGreeting,
-                key: richGreetingKey
-            });
-
-            // Send AI greeting if: morning time AND rich greeting not sent yet
-            // (legacy key is ignored for new rich greeting)
-            if (hour >= 5 && hour < 12 && !alreadySentRichMorning) {
-                localStorage.setItem(richGreetingKey, 'true');
-                console.log('[AutoMessage] ✅ Sending AI morning greeting');
-
-                // AI에게 아침 인사 + 일정 추천 요청
-                fetch('/api/ai-morning-greeting', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        todaySchedules: todaySchedules.map(s => ({
-                            text: s.text,
-                            startTime: s.startTime,
-                            endTime: s.endTime,
-                        })),
-                        userProfile: userProfile,
-                    }),
-                })
-                    .then(async res => {
-                        const data = await res.json();
-                        if (!res.ok) {
-                            console.error('[AutoMessage] AI morning greeting API error:', data.error);
-                            throw new Error(data.error || 'API error');
-                        }
-                        return data;
-                    })
-                    .then(data => {
-                        console.log('[AutoMessage] Received AI morning greeting:', data.greeting?.substring(0, 100) + '...');
-                        if (!data.greeting) {
-                            console.error('[AutoMessage] No greeting in response:', data);
-                            throw new Error('No greeting in response');
-                        }
-                        const message: Message = {
-                            id: `auto-morning-${Date.now()}`,
-                            role: 'assistant',
-                            content: data.greeting,
-                            timestamp: now,
-                        };
-                        // Replace existing basic greeting if present, otherwise add new
-                        setMessages(prev => {
-                            // If first message is a basic greeting (short and starts with greeting text), replace it
-                            if (prev.length > 0 && prev[0].role === 'assistant' &&
-                                (prev[0].content.includes('좋은 아침이에요') || prev[0].content.includes('좋은 오후') ||
-                                 prev[0].content.includes('좋은 저녁') || prev[0].content.includes('아직 깨어')) &&
-                                prev[0].content.length < 200) { // Basic greetings are short
-                                console.log('[AutoMessage] Replacing basic greeting with AI greeting');
-                                return [message, ...prev.slice(1)];
-                            }
-                            return [...prev, message];
-                        });
-                    })
-                    .catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI morning greeting:', err);
-                        // Fallback - don't add if there's already a greeting
-                        setMessages(prev => {
-                            if (prev.length > 0 && prev[0].role === 'assistant') {
-                                console.log('[AutoMessage] Fallback skipped - greeting already exists');
-                                return prev;
-                            }
-                            const message: Message = {
-                                id: `auto-morning-${Date.now()}`,
-                                role: 'assistant',
-                                content: '좋은 아침이에요! ☀️\n\n활기찬 하루 보내세요! 💪',
-                                timestamp: now,
-                            };
-                            return [...prev, message];
-                        });
-                    });
-            }
-
-            // 일정이 없으면 여기서 종료
-            if (todaySchedules.length === 0) {
-                return;
-            }
-
-            todaySchedules.forEach(schedule => {
-                const startMinutes = timeToMinutes(schedule.startTime);
-                const endMinutes = schedule.endTime ? timeToMinutes(schedule.endTime) : startMinutes + 60;
-
-                console.log('[AutoMessage] Checking schedule:', {
-                    text: schedule.text,
-                    startTime: schedule.startTime,
-                    startMinutes,
-                    currentMinutes,
-                    diff: startMinutes - currentMinutes
-                });
-
-                // 1. 일정 시작 10분 전 메시지
-                const tenMinutesBefore = startMinutes - 10;
-                const sentBeforeKey = `schedule_before_${schedule.id}_${today}`;
-                const alreadySentBefore = !!localStorage.getItem(sentBeforeKey);
-
-                console.log('[AutoMessage] 10분 전 체크:', {
-                    tenMinutesBefore,
-                    currentMinutes,
-                    inRange: currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes,
-                    alreadySent: alreadySentBefore,
-                    key: sentBeforeKey
-                });
-
-                if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !alreadySentBefore) {
-                    console.log('[AutoMessage] ✅ Sending 10-15분 전 preparation message for:', schedule.text);
-                    localStorage.setItem(sentBeforeKey, 'true');
-
-                    // AI 준비 조언 요청 (10-15분 전) - gpt-5.2 사용
-                    const timeUntilStart = startMinutes - currentMinutes;
-                    fetch('/api/ai-schedule-prep', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            schedule: {
-                                text: schedule.text,
-                                startTime: schedule.startTime
-                            },
-                            userProfile: userProfile,
-                            timeUntil: timeUntilStart
-                        }),
-                    }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI schedule prep advice:', data);
-                        const advice = data.advice || `${timeUntilStart}분 후 "${schedule.text}" 일정이 시작됩니다! 준비하세요 🕐`;
-                        const message: Message = {
-                            id: `auto-before-${Date.now()}`,
-                            role: 'assistant',
-                            content: advice,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI schedule prep:', err);
-                        // Fallback
-                        const message: Message = {
-                            id: `auto-before-${Date.now()}`,
-                            role: 'assistant',
-                            content: `곧 "${schedule.text}" 일정이 ${schedule.startTime}에 시작됩니다.\n\n준비하실 것이 있나요? 필요하신 정보를 찾아드릴까요?`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    });
-                }
-
-                // 2. 일정 시작 시 메시지
-                const sentStartKey = `schedule_start_${schedule.id}_${today}`;
-                const alreadySentStart = !!localStorage.getItem(sentStartKey);
-
-                console.log('[AutoMessage] 시작 시 체크:', {
-                    startMinutes,
-                    currentMinutes,
-                    inRange: currentMinutes >= startMinutes && currentMinutes < startMinutes + 5,
-                    alreadySent: alreadySentStart,
-                    key: sentStartKey
-                });
-
-                if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !alreadySentStart) {
-                    console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
-                    localStorage.setItem(sentStartKey, 'true');
-
-                    // 일정 특성에 맞는 시작 메시지 생성
-                    const getScheduleStartMessage = (scheduleName: string) => {
-                        const name = scheduleName.toLowerCase();
-
-                        // 식사
-                        if (/식사|점심|저녁|아침|밥|브런치|런치|디너|야식|간식/.test(name)) {
-                            const mealEmojis: Record<string, string> = {
-                                '아침': '🍳', '점심': '🍚', '저녁': '🍽️', '야식': '🌙', '브런치': '🥐', '간식': '🍪'
-                            };
-                            let emoji = '🍽️';
-                            for (const [key, val] of Object.entries(mealEmojis)) {
-                                if (name.includes(key)) { emoji = val; break; }
-                            }
-                            const msgs = ['맛있게 드세요!', '든든하게 드세요!', '맛있는 식사 되세요!'];
-                            return { emoji, msg: msgs[Math.floor(Math.random() * msgs.length)] };
-                        }
-
-                        // 휴식/취침
-                        if (/휴식|쉬는|낮잠|수면|취침|잠|기상|일어나/.test(name)) {
-                            // 취침/수면은 수면 모드 안내 포함
-                            if (/취침|잠|수면/.test(name)) {
-                                return { emoji: '🌙', msg: '취침 모드를 켜서 수면 시간을 기록해보세요! 좋은 꿈 꾸세요 😴' };
-                            }
-                            const restMsgs: Record<string, { emoji: string; msg: string }> = {
-                                '기상': { emoji: '☀️', msg: '상쾌한 아침 되세요!' },
-                                '일어나': { emoji: '🌅', msg: '좋은 아침이에요!' },
-                                '휴식': { emoji: '☕', msg: '편하게 쉬세요!' },
-                                '낮잠': { emoji: '😌', msg: '달콤한 낮잠 되세요!' },
-                            };
-                            for (const [key, val] of Object.entries(restMsgs)) {
-                                if (name.includes(key)) return val;
-                            }
-                            return { emoji: '☕', msg: '편하게 쉬세요!' };
-                        }
-
-                        // 여가
-                        if (/게임|영화|드라마|유튜브|넷플릭스|독서|음악|산책/.test(name)) {
-                            const leisureMsgs: Record<string, { emoji: string; msg: string }> = {
-                                '게임': { emoji: '🎮', msg: '즐거운 시간 보내세요!' },
-                                '영화': { emoji: '🎬', msg: '재미있게 보세요!' },
-                                '드라마': { emoji: '📺', msg: '재미있게 보세요!' },
-                                '유튜브': { emoji: '📱', msg: '즐거운 시청 되세요!' },
-                                '넷플릭스': { emoji: '🍿', msg: '재미있게 보세요!' },
-                                '독서': { emoji: '📚', msg: '즐거운 독서 시간 되세요!' },
-                                '음악': { emoji: '🎵', msg: '좋은 음악과 함께하세요!' },
-                                '산책': { emoji: '🚶', msg: '상쾌한 산책 되세요!' },
-                            };
-                            for (const [key, val] of Object.entries(leisureMsgs)) {
-                                if (name.includes(key)) return val;
-                            }
-                            return { emoji: '🎉', msg: '즐거운 시간 보내세요!' };
-                        }
-
-                        // 운동
-                        if (/운동|헬스|요가|필라테스|러닝|조깅|수영|등산/.test(name)) {
-                            return { emoji: '💪', msg: '오늘도 화이팅!' };
-                        }
-
-                        // 업무/회의
-                        if (/업무|출근|회의|미팅|프레젠테이션|발표|면접/.test(name)) {
-                            return { emoji: '💼', msg: '화이팅!' };
-                        }
-
-                        // 공부
-                        if (/공부|학습|강의|수업|시험|과제/.test(name)) {
-                            return { emoji: '📖', msg: '집중해서 화이팅!' };
-                        }
-
-                        // 기본
-                        return { emoji: '🕐', msg: '화이팅!' };
-                    };
-
-                    const { emoji, msg } = getScheduleStartMessage(schedule.text);
-                    const message: Message = {
-                        id: `auto-start-${Date.now()}`,
-                        role: 'assistant',
-                        content: `"${schedule.text}" 시간이에요 ${emoji}\n\n${msg}`,
-                        timestamp: new Date(),
-                    };
-                    setMessages(prev => [...prev, message]);
-                }
-
-                // 2.5. 일정 시작 30분 후 인사이트 (T+30) - work_mode 기반 결정
-                const thirtyMinutesAfterStart = startMinutes + 30;
-                const sentInsightKey = `schedule_insight_${schedule.id}_${today}`;
-                const alreadySentInsight = !!localStorage.getItem(sentInsightKey);
-
-                // work_mode가 있으면 그것을 우선 사용, 없으면 일정 이름으로 추론
-                let shouldSendInsight = false;
-                const workKeywords = ['업무', '회의', '학습', '공부', '프로젝트', '작업', '개발', '코딩', '미팅', '수업', '강의', '시작'];
-
-                if (schedule.workMode) {
-                    // 'focus' 모드는 인사이트 제공 안 함 (집중 중)
-                    shouldSendInsight = schedule.workMode !== 'focus';
-                } else {
-                    // 업무/학습 관련 일정에 인사이트 제공
-                    shouldSendInsight = workKeywords.some(keyword =>
-                        schedule.text.includes(keyword)
-                    );
-                }
-
-                // 디버그 로그 추가
-                console.log('[AutoMessage] T+30 체크:', {
-                    scheduleText: schedule.text,
-                    startMinutes,
-                    thirtyMinutesAfterStart,
-                    currentMinutes,
-                    shouldSendInsight,
-                    inTimeRange: currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5,
-                    alreadySentInsight,
-                    key: sentInsightKey
-                });
-
-                if (shouldSendInsight && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
-                    console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);
-                    localStorage.setItem(sentInsightKey, 'true');
-
-                    // 직접적으로 진행 상황을 묻는 메시지
-                    const message: Message = {
-                        id: `auto-insight-${Date.now()}`,
-                        role: 'assistant',
-                        content: `"${schedule.text}" 시작한 지 30분이 지났네요!\n\n잠깐, 어떻게 진행되고 있는지 여쭤봐도 될까요?\n\n• 현재 어떻게 진행되고 있나요?\n• 혹시 막히는 부분이 있으신가요?\n• 필요한 자료나 정보가 있으면 말씀해주세요!\n\n도움이 필요하시면 언제든 말씀해주세요 😊`,
-                        timestamp: new Date(),
-                    };
-                    setMessages(prev => [...prev, message]);
-                }
-
-                // 3. 일정 종료 후 메시지
-                const sentAfterKey = `schedule_after_${schedule.id}_${today}`;
-                if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
-                    localStorage.setItem(sentAfterKey, 'true');
-
-                    // AI 맞춤형 피드백 요청
-                    fetch('/api/ai-resource-recommend', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            activityName: schedule.text,
-                            context: 'schedule_completed',
-                            userProfile: userProfile
-                        }),
-                    }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI feedback prompt:', data);
-                        const recommendation = data.recommendation || "어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?";
-                        const message: Message = {
-                            id: `auto-after-${Date.now()}`,
-                            role: 'assistant',
-                            content: `"${schedule.text}" 일정이 끝났습니다.\n\n${recommendation}`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI feedback:', err);
-                        // Fallback to basic message
-                        const message: Message = {
-                            id: `auto-after-${Date.now()}`,
-                            role: 'assistant',
-                            content: `"${schedule.text}" 일정이 끝났습니다.\n\n어떠셨나요?\n• 간단히 기록하실 내용이 있나요?\n• 다음 액션 아이템을 정리해드릴까요?\n• 추가 일정이 필요하신가요?`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    });
-                }
-            });
-
-            // 4. 빈 시간 감지 (다음 일정까지 30분 이상 남았을 때)
-            const nextSchedule = todaySchedules
-                .filter(s => !s.completed && !s.skipped)
-                .find(s => timeToMinutes(s.startTime) > currentMinutes);
-
-            if (nextSchedule) {
-                const timeUntilNext = timeToMinutes(nextSchedule.startTime) - currentMinutes;
-                const sentGapKey = `schedule_gap_${nextSchedule.id}_${today}`;
-
-                if (timeUntilNext >= 30 && timeUntilNext <= 40 && !localStorage.getItem(sentGapKey)) {
-                    localStorage.setItem(sentGapKey, 'true');
-
-                    // AI 추천 요청 with 다음 일정 정보
-                    fetch('/api/ai-resource-recommend', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            activityName: nextSchedule.text,
-                            context: 'upcoming_schedule',
-                            timeUntil: timeUntilNext,
-                            userProfile: userProfile
-                        }),
-                    }).then(res => res.json()).then(data => {
-                        console.log('[AutoMessage] Received AI resource for upcoming schedule:', data);
-                        const recommendation = data.recommendation || "준비할 시간이 충분하네요. 다음 일정을 위해 가볍게 준비해볼까요?";
-
-                        // 다음 일정이 여가/휴식/개인 시간인 경우 간단한 메시지만
-                        const isLeisureSchedule = /여가|휴식|개인|자유|쉬기|break|rest|free/i.test(nextSchedule.text);
-
-                        let content: string;
-                        if (isLeisureSchedule) {
-                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n아직 확인하지 않은 트렌드 브리핑이 있다면 가볍게 읽어보는 건 어떨까요?`;
-                        } else {
-                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n${recommendation}`;
-                        }
-
-                        const message: Message = {
-                            id: `auto-gap-${Date.now()}`,
-                            role: 'assistant',
-                            content,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    }).catch(err => {
-                        console.error('[AutoMessage] Failed to fetch AI resource for gap:', err);
-                        // Fallback to basic message
-                        const isLeisureSchedule = /여가|휴식|개인|자유|쉬기|break|rest|free/i.test(nextSchedule.text);
-
-                        let content: string;
-                        if (isLeisureSchedule) {
-                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n아직 확인하지 않은 트렌드 브리핑이 있다면 가볍게 읽어보는 건 어떨까요?`;
-                        } else {
-                            content = `다음 일정 "${nextSchedule.text}"까지 ${timeUntilNext}분 남았어요.\n\n준비할 시간이 충분하네요. 다음 일정을 위해 가볍게 준비해볼까요?`;
-                        }
-
-                        const message: Message = {
-                            id: `auto-gap-${Date.now()}`,
-                            role: 'assistant',
-                            content,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    });
-                }
-            }
-
-            // 5. 하루 마무리 (21시~24시 사이, 마지막 일정 종료 후) - AI 피드백
-            // 조건: 21시~24시 사이 + 마지막 일정 종료 10분 후 + 아직 안 보낸 경우
-            const lastSchedule = todaySchedules
-                .filter(s => s.endTime)
-                .sort((a, b) => timeToMinutes(b.endTime!) - timeToMinutes(a.endTime!))[0];
-
-            const sentDayEndKey = `day_end_${today}`;
-            const isEveningTime = hour >= 21 && hour < 24; // 21시~24시 사이
-            const hasSchedulesEnded = lastSchedule ? currentMinutes >= timeToMinutes(lastSchedule.endTime!) + 10 : false;
-            const shouldSendDaySummary = isEveningTime && (hasSchedulesEnded || !lastSchedule) && !localStorage.getItem(sentDayEndKey);
-
-            if (shouldSendDaySummary && todaySchedules.length > 0) {
-                localStorage.setItem(sentDayEndKey, 'true');
-
-                const completed = todaySchedules.filter(s => s.completed).length;
-                const total = todaySchedules.length;
-
-                // Calculate tomorrow's date
-                const tomorrow = new Date(kstNow);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-                const tomorrowDayOfWeek = tomorrow.getDay();
-
-                // Get tomorrow's schedules
-                const allGoals = userProfile?.profile?.customGoals || [];
-                const tomorrowSchedules = allGoals.filter((goal: any) => {
-                    if (goal.specificDate) {
-                        return goal.specificDate === tomorrowStr;
-                    }
-                    if (goal.daysOfWeek?.includes(tomorrowDayOfWeek)) {
-                        if (goal.startDate && tomorrowStr < goal.startDate) return false;
-                        if (goal.endDate && tomorrowStr > goal.endDate) return false;
-                        return true;
-                    }
-                    return false;
-                }).sort((a: any, b: any) => {
-                    const aTime = a.startTime || '00:00';
-                    const bTime = b.startTime || '00:00';
-                    return aTime.localeCompare(bTime);
-                });
-
-                console.log('[AutoMessage] ✅ Sending AI day summary (21시~24시 사이)');
-                console.log('[AutoMessage] Tomorrow schedules:', tomorrowSchedules.length);
-
-                // AI 하루 마무리 요청 - gpt-5.2 사용
-                fetch('/api/ai-day-summary', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        todaySchedules: todaySchedules.map(s => ({
-                            text: s.text,
-                            startTime: s.startTime,
-                            endTime: s.endTime,
-                            completed: s.completed
-                        })),
-                        completedCount: completed,
-                        totalCount: total,
-                        userProfile: userProfile,
-                        tomorrowSchedules: tomorrowSchedules.map((s: any) => ({
-                            text: s.text,
-                            startTime: s.startTime,
-                            endTime: s.endTime
-                        })),
-                        userPlan: userProfile?.plan || 'Free'
-                    }),
-                }).then(res => res.json()).then(data => {
-                    console.log('[AutoMessage] Received AI day summary:', data);
-                    const summary = data.summary || `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completed}/${total}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
-                    const message: Message = {
-                        id: `auto-dayend-${Date.now()}`,
-                        role: 'assistant',
-                        content: summary,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
-                }).catch(err => {
-                    console.error('[AutoMessage] Failed to fetch AI day summary:', err);
-                    // Fallback
-                    const message: Message = {
-                        id: `auto-dayend-${Date.now()}`,
-                        role: 'assistant',
-                        content: `오늘 일정이 모두 끝났어요! 🎉\n\n오늘의 성과:\n✅ 완료: ${completed}/${total}개\n\n내일을 위한 제안이 필요하신가요?`,
-                        timestamp: now,
-                    };
-                    setMessages(prev => [...prev, message]);
-                });
-            }
-
-            // 6. 주간 리포트 + 피드백 (일요일 21시 이후 또는 월요일 아침 9시 이전)
-            const dayOfWeek = kstNow.getDay(); // 0: 일요일, 1: 월요일
-            const isSunday = dayOfWeek === 0;
-            const isMonday = dayOfWeek === 1;
-            const isSundayEvening = isSunday && hour >= 21; // 일요일 21시 이후
-            const isMondayMorning = isMonday && hour < 9; // 월요일 9시 이전
-
-            // 주간 리포트: 하루에 한 번만 전송 (키로 중복 방지)
-            const weeklyReportKey = `weekly_report_${today}`;
-            if ((isSundayEvening || isMondayMorning) && !localStorage.getItem(weeklyReportKey)) {
-                console.log('[AutoMessage] ✅ Sending weekly report');
-                localStorage.setItem(weeklyReportKey, 'true');
-
-                // Fetch weekly report
-                fetch('/api/weekly-report')
-                    .then(res => res.json())
-                    .then(async (reportData) => {
-                        if (reportData.success && reportData.report) {
-                            const report = reportData.report;
-
-                            // Build report message
-                            let reportContent = `## 📊 이번 주 성장 리포트\n\n`;
-                            reportContent += `**${report.period.start} ~ ${report.period.end}** (Week ${report.period.weekNumber})\n\n`;
-
-                            // Key metrics
-                            reportContent += `### 핵심 지표\n`;
-                            reportContent += `- 📅 일정 완료율: **${report.scheduleAnalysis.completionRate.toFixed(0)}%** (${report.scheduleAnalysis.completedSchedules}/${report.scheduleAnalysis.totalSchedules})\n`;
-                            reportContent += `- 📚 브리핑 읽기: **${report.trendBriefingAnalysis.totalRead}개**\n`;
-                            reportContent += `- 🔥 일관성 점수: **${report.growthMetrics.consistencyScore.toFixed(0)}점**\n\n`;
-
-                            // AI Narrative
-                            if (report.narrative) {
-                                reportContent += `### AI 분석\n${report.narrative}\n\n`;
-                            }
-
-                            // Achievements
-                            if (report.insights.achievements?.length > 0) {
-                                reportContent += `### ✨ 이번 주 성취\n`;
-                                report.insights.achievements.forEach((a: string) => {
-                                    reportContent += `- ${a}\n`;
-                                });
-                                reportContent += `\n`;
-                            }
-
-                            // Recommendations
-                            if (report.insights.recommendations?.length > 0) {
-                                reportContent += `### 💡 다음 주 추천\n`;
-                                report.insights.recommendations.forEach((r: string) => {
-                                    reportContent += `- ${r}\n`;
-                                });
-                            }
-
-                            reportContent += `\n새로운 한 주도 화이팅! 🎉`;
-
-                            const message: Message = {
-                                id: `auto-weekly-report-${Date.now()}`,
-                                role: 'assistant',
-                                content: reportContent,
-                                timestamp: now,
-                            };
-                            setMessages(prev => [...prev, message]);
-                        }
-                    })
-                    .catch(err => {
-                        console.error('[AutoMessage] Failed to fetch weekly report:', err);
-                        // Fallback: basic message
-                        const message: Message = {
-                            id: `auto-weekly-report-${Date.now()}`,
-                            role: 'assistant',
-                            content: `한 주 동안 고생 많으셨어요! 🎉\n\n이번 주도 열심히 달려오셨네요.\n새로운 한 주도 화이팅입니다!`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    });
-            }
-
-            // 7. 주간 목표 리셋 - 새로운 주 시작 시 (주차 기반 체크)
-            // ISO 주차 계산 (월요일 시작)
-            const getWeekNumber = (date: Date): string => {
-                const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-                const dayNum = d.getUTCDay() || 7;
-                d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-                const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-                const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-                return `${d.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
-            };
-
-            const currentWeek = getWeekNumber(kstNow);
-            const lastResetWeek = localStorage.getItem('weekly_goals_last_reset_week');
-
-            // 새로운 주이고, 아직 리셋하지 않은 경우
-            if (currentWeek !== lastResetWeek) {
-                console.log('[AutoMessage] ✅ New week detected! Resetting weekly goals:', { currentWeek, lastResetWeek });
-                localStorage.setItem('weekly_goals_last_reset_week', currentWeek);
-
-                // Reset weekly goals
-                fetch('/api/user/long-term-goals', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        goal: { type: 'weekly' },
-                        action: 'resetWeekly',
-                    }),
-                })
-                    .then(res => res.json())
-                    .then(data => {
-                        console.log('[AutoMessage] Weekly goals reset:', data);
-
-                        const archivedGoals = data.archived?.goals || [];
-                        const completedCount = archivedGoals.filter((g: any) => g.completed).length;
-
-                        // 지난주 목표가 있었을 때만 메시지 표시
-                        if (archivedGoals.length > 0) {
-                            const message: Message = {
-                                id: `auto-weekly-reset-${Date.now()}`,
-                                role: 'assistant',
-                                content: `새로운 한 주가 시작되었어요! 🌅\n\n지난주 목표가 아카이브되었습니다.\n✅ 완료: ${completedCount}/${archivedGoals.length}개\n\n이번 주 목표를 설정해보세요!\n\n[성장 페이지에서 목표 설정하기](/growth)`,
-                                timestamp: now,
-                            };
-                            setMessages(prev => [...prev, message]);
-                        }
-                    })
-                    .catch(err => {
-                        console.error('[AutoMessage] Failed to reset weekly goals:', err);
-                        // 실패 시 다음에 다시 시도할 수 있도록 키 제거
-                        localStorage.removeItem('weekly_goals_last_reset_week');
-                    });
-            }
-
-            // 8. 트렌드 브리핑 읽기 알림 (10시, 14시, 18시, 22시 - 4시간 간격)
-            const briefingReminderHours = [10, 14, 18, 22];
-            if (briefingReminderHours.includes(hour)) {
-                const briefingReminderKey = `briefing_reminder_${today}_${hour}`;
-                if (!localStorage.getItem(briefingReminderKey)) {
-                    // Check if there are unread briefings
-                    const readBriefings = JSON.parse(localStorage.getItem(`read_briefings_${today}`) || '[]');
-                    const unreadCount = trendBriefings.filter(b => !readBriefings.includes(b.id)).length;
-
-                    if (unreadCount > 0) {
-                        localStorage.setItem(briefingReminderKey, 'true');
-                        console.log('[AutoMessage] ✅ Sending briefing reminder:', unreadCount);
-
-                        const message: Message = {
-                            id: `auto-briefing-reminder-${Date.now()}`,
-                            role: 'assistant',
-                            content: `아직 안 읽은 트렌드 브리핑이 ${unreadCount}개 있어요 📰\n\n잠깐 시간 내서 확인해보실래요? 최신 트렌드 놓치기 아까울 것 같아요! 🚀`,
-                            timestamp: now,
-                        };
-                        setMessages(prev => [...prev, message]);
-                    }
-                }
-            }
-
-            // 9. 빈 시간대 일정 추천 (12시, 16시, 19시에 일정이 없으면) - AI 기반
-            const idleCheckHours = [12, 16, 19];
-            if (idleCheckHours.includes(hour)) {
-                const idleCheckKey = `idle_check_${today}_${hour}`;
-                if (!localStorage.getItem(idleCheckKey)) {
-                    // Check if there's no schedule in the next 2 hours
-                    const twoHoursLater = currentMinutes + 120;
-                    const hasUpcomingSchedule = todaySchedules.some(s => {
-                        const sMinutes = timeToMinutes(s.startTime);
-                        return sMinutes >= currentMinutes && sMinutes <= twoHoursLater;
-                    });
-
-                    if (!hasUpcomingSchedule) {
-                        localStorage.setItem(idleCheckKey, 'true');
-                        console.log('[AutoMessage] ✅ Fetching smart schedule recommendations');
-
-                        // Fetch AI-powered recommendations based on user patterns
-                        fetch('/api/ai-schedule-recommendations', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                date: today,
-                                currentSchedules: todaySchedules.map(s => ({
-                                    text: s.text,
-                                    startTime: s.startTime,
-                                    endTime: s.endTime,
-                                    start_time: `${today}T${s.startTime}:00`,
-                                    end_time: `${today}T${s.endTime}:00`,
-                                })),
-                            }),
-                        }).then(res => res.json()).then(data => {
-                            const recommendations = data.recommendations || [];
-                            console.log('[AutoMessage] Received AI recommendations:', recommendations);
-
-                            if (recommendations.length > 0) {
-                                // Pick top priority recommendation
-                                const topRec = recommendations.sort((a: any, b: any) => {
-                                    const priority = { high: 3, medium: 2, low: 1 };
-                                    return (priority[b.priority as keyof typeof priority] || 0) - (priority[a.priority as keyof typeof priority] || 0);
-                                })[0];
-
-                                const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
-                                const message: Message = {
-                                    id: `auto-idle-${Date.now()}`,
-                                    role: 'assistant',
-                                    content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n💡 추천: ${topRec.scheduleText} (${topRec.suggestedDuration}분)\n시작 시간: ${topRec.suggestedStartTime}\n\n${topRec.reason}\n\n일정 추가하실래요?`,
-                                    timestamp: now,
-                                    actions: [{
-                                        type: 'add_schedule',
-                                        label: `${topRec.scheduleText} 추가하기`,
-                                        data: {
-                                            text: topRec.scheduleText,
-                                            startTime: topRec.suggestedStartTime,
-                                            duration: topRec.suggestedDuration,
-                                        }
-                                    }]
-                                };
-                                setMessages(prev => [...prev, message]);
-                            } else {
-                                // Fallback to generic message
-                                const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
-                                const activities = hour === 12
-                                    ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
-                                    : hour === 16
-                                    ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
-                                    : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
-                                const message: Message = {
-                                    id: `auto-idle-${Date.now()}`,
-                                    role: 'assistant',
-                                    content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
-                                    timestamp: now,
-                                };
-                                setMessages(prev => [...prev, message]);
-                            }
-                        }).catch(err => {
-                            console.error('[AutoMessage] Failed to fetch recommendations:', err);
-                            // Fallback to generic message
-                            const timeContext = hour === 12 ? '점심' : hour === 16 ? '오후' : '저녁';
-                            const activities = hour === 12
-                                ? '산책하거나, 맛있는 점심 먹거나, 잠깐 휴식하는 건 어때요? ☕'
-                                : hour === 16
-                                ? '가볍게 스트레칭하거나, 책 읽거나, 목표 관련 작업하기 좋은 시간이에요 📚'
-                                : '하루 마무리하면서 독서하거나, 내일 계획 세우거나, 편하게 쉬어도 좋아요 🌙';
-                            const message: Message = {
-                                id: `auto-idle-${Date.now()}`,
-                                role: 'assistant',
-                                content: `${timeContext} 시간에 등록된 일정이 없네요!\n\n${activities}\n\n일정 추가하실래요?`,
-                                timestamp: now,
-                            };
-                            setMessages(prev => [...prev, message]);
-                        });
-                    }
-                }
-            }
-        };
-
-        // 1분마다 체크
-        const interval = setInterval(checkAndSendScheduleMessages, 60000);
-        // 초기 실행
-        checkAndSendScheduleMessages();
-
-        return () => clearInterval(interval);
-    }, [session, todaySchedules, userProfile, trendBriefings]);
-
+    // Auto-send schedule-based messages (extracted to useAutoMessages hook)
     // Fetch AI recommendations (when idle)
     useEffect(() => {
         if (appState !== "idle" || !session?.user?.email) return;
@@ -1500,229 +487,7 @@ export default function HomePage() {
         fetchRecommendations();
     }, [appState, session]);
 
-    // Helper to convert time string to minutes
-    const timeToMinutes = (time: string) => {
-        const [hours, minutes] = time.split(':').map(Number);
-        return hours * 60 + minutes;
-    };
-
-    // Find current/next schedule
-    const getCurrentSchedule = () => {
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-        console.log('[Home] Current time:', `${now.getHours()}:${now.getMinutes()}`, 'Minutes:', currentMinutes);
-        console.log('[Home] Today schedules:', todaySchedules.map(s => ({
-            text: s.text,
-            startTime: s.startTime,
-            startMinutes: timeToMinutes(s.startTime)
-        })));
-
-        const currentSchedule = todaySchedules.find((s) => {
-            const startMinutes = timeToMinutes(s.startTime);
-            const endMinutes = s.endTime ? timeToMinutes(s.endTime) : startMinutes + 60; // 기본 1시간
-
-            const isInProgress = startMinutes <= currentMinutes && currentMinutes < endMinutes;
-            console.log(`[Home] Checking "${s.text}": start=${startMinutes}, end=${endMinutes}, current=${currentMinutes}, inProgress=${isInProgress}`);
-
-            return isInProgress;
-        });
-
-        if (currentSchedule) {
-            console.log('[Home] Found current schedule:', currentSchedule.text);
-            return { schedule: currentSchedule, status: 'in-progress' as const };
-        }
-
-        // Find next schedule that hasn't started yet
-        const nextSchedule = todaySchedules
-            .filter(s => !s.completed && !s.skipped) // 완료/놓친 일정 제외
-            .find((s) => {
-                const startMinutes = timeToMinutes(s.startTime);
-                const isUpcoming = startMinutes > currentMinutes;
-                console.log(`[Home] Checking next "${s.text}": start=${startMinutes}, current=${currentMinutes}, upcoming=${isUpcoming}`);
-                return isUpcoming;
-            });
-
-        if (nextSchedule) {
-            console.log('[Home] Found next schedule:', nextSchedule.text);
-            return { schedule: nextSchedule, status: 'upcoming' as const };
-        }
-
-        console.log('[Home] No current or upcoming schedule found');
-        return null;
-    };
-
-    const currentScheduleInfo = getCurrentSchedule();
-
-    // Debug: log schedule color
-    if (currentScheduleInfo) {
-        console.log('[Home] Current schedule color:', currentScheduleInfo.schedule.color);
-    }
-
-    // Map activity labels to icons - EXACTLY matching dashboard DailyRhythmTimeline
-    const activityIcons: Record<string, any> = {
-        '기상': Sun,
-        '업무 시작': Briefcase,
-        '업무/수업 시작': Briefcase,
-        '업무 종료': Briefcase,
-        '업무/수업 종료': Briefcase,
-        '취침': Moon,
-        '아침 식사': Coffee,
-        '점심 식사': Coffee,
-        '저녁 식사': Coffee,
-        '운동': Dumbbell,
-        '독서': BookOpen,
-        '자기계발': Target,
-        '병원': Heart,
-        '휴식/여가': Gamepad2,
-    };
-
-    // Get icon for schedule - comprehensive mapping matching dashboard
-    const getScheduleIcon = (text: string) => {
-        // 1. Try exact match first (like dashboard)
-        if (activityIcons[text]) {
-            return activityIcons[text];
-        }
-
-        // 2. Fallback to keyword matching for custom schedules (same as dashboard)
-        const lowerText = text.toLowerCase();
-
-        // 식사 (아침, 점심, 저녁 포함)
-        if (lowerText.includes('식사') || lowerText.includes('아침') || lowerText.includes('점심') || lowerText.includes('저녁')) {
-            return Utensils;
-        }
-        // 수면
-        if (lowerText.includes('기상') || lowerText.includes('일어나')) {
-            return Sun;
-        }
-        if (lowerText.includes('취침') || lowerText.includes('잠')) {
-            return Moon;
-        }
-        // 업무 (시작/종료 포함)
-        if (lowerText.includes('업무') || lowerText.includes('수업') || lowerText.includes('출근')) {
-            if (lowerText.includes('종료')) {
-                return CheckCircle2; // 종료는 체크 아이콘
-            }
-            return Briefcase;
-        }
-        // 운동
-        if (lowerText.includes('운동') || lowerText.includes('헬스')) {
-            return Dumbbell;
-        }
-        if (lowerText.includes('요가')) {
-            return Activity;
-        }
-        // 건강
-        if (lowerText.includes('병원') || lowerText.includes('진료')) {
-            return Hospital;
-        }
-        if (lowerText.includes('거북목') || lowerText.includes('스트레칭')) {
-            return Activity;
-        }
-        if (lowerText.includes('산책')) {
-            return TreePine;
-        }
-        // 학습
-        if (lowerText.includes('독서') || lowerText.includes('책') || lowerText.includes('읽기')) {
-            return BookOpen;
-        }
-        if (lowerText.includes('공부') || lowerText.includes('학습')) {
-            return Pen;
-        }
-        if (lowerText.includes('자기계발')) {
-            return Lightbulb;
-        }
-        // 휴식
-        if (lowerText.includes('휴식')) {
-            return Coffee;
-        }
-        // 엔터테인먼트 (각 유형별 고유 아이콘)
-        if (lowerText === '게임' || lowerText.includes('게임')) {
-            return Gamepad2;
-        }
-        if (lowerText === '영화' || lowerText.includes('영화')) {
-            return Film;
-        }
-        if (lowerText === '드라마' || lowerText.includes('드라마') || lowerText.includes('tv')) {
-            return Tv;
-        }
-        if (lowerText.includes('음악')) {
-            return Music;
-        }
-        // 여가 (일반)
-        if (lowerText.includes('여가') || lowerText.includes('취미')) {
-            return Heart;
-        }
-        // 프로젝트/스타트업/비즈니스
-        if (lowerText.includes('스타트업') || lowerText.includes('린 스타트업') || lowerText.includes('mvp')) {
-            return Rocket;
-        }
-        if (lowerText.includes('프로젝트') || lowerText.includes('실습')) {
-            return Code;
-        }
-        if (lowerText.includes('ai') || lowerText.includes('알고리즘')) {
-            return Brain;
-        }
-        if (lowerText.includes('분석')) {
-            return BarChart3;
-        }
-        if (lowerText.includes('캠페인') || lowerText.includes('마케팅')) {
-            return Megaphone;
-        }
-        if (lowerText.includes('기획') || lowerText.includes('콘텐츠')) {
-            return FileText;
-        }
-
-        // 기본 아이콘 (매칭되지 않는 경우만)
-        return Target;
-    };
-
-    // Get personalized message for schedule
-    const getScheduleMessage = (text: string, status: 'in-progress' | 'upcoming') => {
-        const lowerText = text.toLowerCase();
-
-        if (status === 'in-progress') {
-            // 집중 중일 때
-            // 종료/마무리 관련 키워드 먼저 체크
-            if (lowerText.includes('종료') || lowerText.includes('마침') || lowerText.includes('끝')) {
-                if (lowerText.includes('업무') || lowerText.includes('작업')) return '업무 마무리 시간이에요! 정리해볼까요? ✅';
-                if (lowerText.includes('회의') || lowerText.includes('미팅')) return '회의 마무리 시간! 결론 정리하세요 📝';
-                return '마무리 시간이에요! 정리해볼까요? ✅';
-            }
-
-            if (lowerText.includes('아침')) return '좋은 아침이에요! 맛있게 드세요 😊';
-            if (lowerText.includes('점심')) return '점심 시간이에요! 맛있게 드세요 🍽️';
-            if (lowerText.includes('저녁') || lowerText.includes('식사')) return '저녁 시간이에요! 맛있게 드세요 ✨';
-            if (lowerText.includes('취침') || lowerText.includes('수면')) return '편안한 밤 되세요! 푹 쉬시길 🌙';
-            if (lowerText.includes('운동') || lowerText.includes('헬스')) return '운동 시간이에요! 파이팅 💪';
-            if (lowerText.includes('요가')) return '요가로 몸과 마음을 편안하게 🧘';
-            if (lowerText.includes('조깅') || lowerText.includes('러닝')) return '달리기 시간이에요! 힘내세요 🏃';
-            if (lowerText.includes('공부') || lowerText.includes('학습')) return '공부 시간이에요! 집중해볼까요? 📚';
-            if (lowerText.includes('독서') || lowerText.includes('책')) return '독서 시간이에요! 좋은 책과 함께 📖';
-            if (lowerText.includes('업무') || lowerText.includes('작업')) return '업무 시간이에요! 오늘도 화이팅 💼';
-            if (lowerText.includes('회의') || lowerText.includes('미팅')) return '회의 시간이에요! 준비되셨나요? 🤝';
-            return '지금 하고 있는 일에 집중하세요! 🎯';
-        } else {
-            // 곧 시작할 때
-            // 종료/마무리 관련 키워드 먼저 체크
-            if (lowerText.includes('종료') || lowerText.includes('마침') || lowerText.includes('끝')) {
-                if (lowerText.includes('업무') || lowerText.includes('작업')) return '곧 업무 마무리 시간! 정리 준비하세요';
-                if (lowerText.includes('회의') || lowerText.includes('미팅')) return '곧 회의 마무리! 요약 준비하세요';
-                return '곧 마무리 시간! 정리 준비하세요';
-            }
-
-            if (lowerText.includes('아침')) return '곧 아침 식사 시간이에요!';
-            if (lowerText.includes('점심')) return '곧 점심 시간이에요!';
-            if (lowerText.includes('저녁') || lowerText.includes('식사')) return '곧 저녁 시간이에요!';
-            if (lowerText.includes('취침') || lowerText.includes('수면')) return '곧 취침 시간이에요. 준비하세요';
-            if (lowerText.includes('운동') || lowerText.includes('헬스') || lowerText.includes('요가')) return '곧 운동 시간! 준비운동 하세요';
-            if (lowerText.includes('공부') || lowerText.includes('학습')) return '곧 학습 시간! 교재를 준비하세요';
-            if (lowerText.includes('독서')) return '곧 독서 시간! 책을 펼쳐보세요';
-            if (lowerText.includes('업무') || lowerText.includes('작업')) return '곧 업무 시작! 파일을 확인하세요';
-            if (lowerText.includes('회의') || lowerText.includes('미팅')) return '곧 회의 시작! 자료를 준비하세요';
-            return '다음 일정이 곧 시작됩니다!';
-        }
-    };
+    const currentScheduleInfo = getCurrentScheduleInfo(todaySchedules);
 
     // Handle send message
     const handleSend = async () => {
@@ -1787,6 +552,7 @@ export default function HomePage() {
 
         } catch (error) {
             console.error("Error sending message:", error);
+            toast.error('메시지 전송에 실패했어요');
             // Show error message
             setMessages((prev) => [
                 ...prev,
@@ -1820,44 +586,40 @@ export default function HomePage() {
                         // Trigger schedule update event
                         window.dispatchEvent(new CustomEvent('schedule-added', { detail: { source: 'ai-chat' } }));
 
-                        // Refetch schedules
-                        const profileRes = await fetch('/api/user/profile');
-                        if (profileRes.ok) {
-                            const profileData = await profileRes.json();
-                            const today = getChatDate(); // Use KST timezone
-                            const todayDateObj = new Date(today + 'T12:00:00');
-                            const currentDay = todayDateObj.getDay();
-                            const allGoals = profileData.profile?.customGoals || [];
-
-                            // 중복 제거: 특정 날짜 일정 우선
-                            const specificDateGoals = allGoals.filter((g: any) => g.specificDate === today);
-                            const recurringGoals = allGoals.filter((g: any) => {
-                                if (g.specificDate) return false;
-                                if (!g.daysOfWeek?.includes(currentDay)) return false;
-                                // startDate~endDate 범위 체크 (목표 기간 제한)
-                                if (g.startDate && today < g.startDate) return false;
-                                if (g.endDate && today > g.endDate) return false;
-                                const hasDuplicate = specificDateGoals.some((sg: any) =>
-                                    sg.text === g.text && sg.startTime === g.startTime
-                                );
-                                return !hasDuplicate;
+                        // 일정 추가 시 리소스 추천
+                        const scheduleName = action.data.text || action.data.title || '';
+                        if (scheduleName) {
+                            fetch('/api/ai-resource-recommend', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    activityName: scheduleName,
+                                    category: action.data.category,
+                                    userProfile: userProfile,
+                                    location: userLocation,
+                                }),
+                            }).then(res => res.json()).then(data => {
+                                if (data.recommendation) {
+                                    const resourceMessage: Message = {
+                                        id: `resource-${Date.now()}`,
+                                        role: 'assistant',
+                                        content: data.recommendation,
+                                        timestamp: new Date(),
+                                        actions: data.actions || [],
+                                    };
+                                    setMessages(prev => [...prev, resourceMessage]);
+                                }
+                            }).catch(err => {
+                                console.error('[Home] Resource recommend failed:', err);
                             });
-                            const todayGoals = [...specificDateGoals, ...recurringGoals];
-
-                            // 서버에 저장된 completed/skipped 상태 사용
-                            const schedulesWithStatus = todayGoals.map((g: any) => ({
-                                ...g,
-                                completed: g.completed || false,
-                                skipped: g.skipped || false
-                            }));
-
-                            setTodaySchedules(schedulesWithStatus.sort((a: any, b: any) =>
-                                (a.startTime || '').localeCompare(b.startTime || '')
-                            ));
                         }
+
+                        // Refetch schedules
+                        await refreshSchedules();
                     }
                 } catch (error) {
                     console.error('[Home] Failed to add schedule from AI:', error);
+                    toast.error('일정 추가에 실패했어요');
                 }
             }
             // Handle add_weekly_goal action
@@ -1883,7 +645,118 @@ export default function HomePage() {
                     }
                 } catch (error) {
                     console.error('[Home] Failed to add weekly goal from AI:', error);
+                    toast.error('목표 추가에 실패했어요');
                 }
+            }
+
+            // Handle delete_schedule action
+            if (action.type === 'delete_schedule' && action.data) {
+                try {
+                    const res = await fetch("/api/user/schedule/delete", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(action.data),
+                    });
+                    if (res.ok) {
+                        setMessages(prev => [...prev, {
+                            id: `system-${Date.now()}`, role: 'assistant',
+                            content: '✅ 일정이 삭제되었습니다!', timestamp: new Date(),
+                        }]);
+                        window.dispatchEvent(new CustomEvent('schedule-added', { detail: { source: 'ai-chat' } }));
+                    }
+                } catch (error) {
+                    console.error('[Home] Failed to delete schedule:', error);
+                    toast.error('일정 삭제에 실패했어요');
+                }
+            }
+
+            // Handle update_schedule action
+            if (action.type === 'update_schedule' && action.data) {
+                try {
+                    const res = await fetch("/api/user/schedule/modify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(action.data),
+                    });
+                    if (res.ok) {
+                        setMessages(prev => [...prev, {
+                            id: `system-${Date.now()}`, role: 'assistant',
+                            content: '✅ 일정이 수정되었습니다!', timestamp: new Date(),
+                        }]);
+                        window.dispatchEvent(new CustomEvent('schedule-added', { detail: { source: 'ai-chat' } }));
+                    }
+                } catch (error) {
+                    console.error('[Home] Failed to update schedule:', error);
+                    toast.error('일정 수정에 실패했어요');
+                }
+            }
+
+            // Handle web_search action
+            if (action.type === 'web_search' && action.data?.query) {
+                const searchQuery = action.data.query;
+                setMessages(prev => [...prev, {
+                    id: `search-${Date.now()}`, role: 'assistant',
+                    content: `🔍 "${searchQuery}" 검색 중...`, timestamp: new Date(),
+                }]);
+                try {
+                    const res = await fetch("/api/ai-web-search", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ query: searchQuery, activity: action.data.activity }),
+                    });
+                    const data = await res.json();
+                    setMessages(prev => {
+                        const updated = [...prev];
+                        const searchIdx = updated.findIndex(m => m.id.startsWith('search-') && m.content.includes(searchQuery));
+                        if (searchIdx !== -1) {
+                            updated[searchIdx] = { ...updated[searchIdx], content: data.result || '검색 결과를 찾지 못했습니다.' };
+                        }
+                        return updated;
+                    });
+                } catch {
+                    console.error('[Home] Web search failed for:', searchQuery);
+                }
+            }
+
+            // Handle save_learning action
+            if (action.type === 'save_learning' && action.data) {
+                try {
+                    const res = await fetch("/api/user/learning/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(action.data),
+                    });
+                    if (res.ok) {
+                        setMessages(prev => [...prev, {
+                            id: `system-${Date.now()}`, role: 'assistant',
+                            content: '📝 성장 기록이 저장되었습니다!', timestamp: new Date(),
+                        }]);
+                    }
+                } catch (error) {
+                    console.error('[Home] Failed to save learning:', error);
+                    toast.error('학습 저장에 실패했어요');
+                }
+            }
+
+            // Handle open_link action
+            if (action.type === 'open_link' && action.data?.url) {
+                window.open(action.data.url, "_blank");
+            }
+
+            // Handle show_goals / show_habits / show_analysis actions
+            if (action.type === 'show_goals') {
+                window.dispatchEvent(new CustomEvent('show-goals-panel', { detail: action.data }));
+            }
+            if (action.type === 'show_habits') {
+                window.dispatchEvent(new CustomEvent('show-habits-panel', { detail: action.data }));
+            }
+            if (action.type === 'show_analysis') {
+                window.dispatchEvent(new CustomEvent('show-analysis-panel', { detail: action.data }));
+            }
+
+            // Handle resolve_conflict action
+            if (action.type === 'resolve_conflict') {
+                window.dispatchEvent(new CustomEvent('show-conflict-resolution', { detail: action.data }));
             }
         }
     };
@@ -2003,56 +876,11 @@ export default function HomePage() {
                         }
 
                         const color = currentScheduleInfo.schedule.color || 'primary';
-                        console.log('[Home] Card color:', color, 'status:', currentScheduleInfo.status);
 
-                        // In-progress: use schedule's color with ring effect (matching dashboard DailyRhythmTimeline)
                         if (currentScheduleInfo.status === 'in-progress') {
-                            const inProgressMap: Record<string, string> = {
-                                yellow: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)] ring-1 ring-yellow-500/50",
-                                purple: "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/50",
-                                green: "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)] ring-1 ring-green-500/50",
-                                blue: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/50",
-                                red: "bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)] ring-1 ring-red-500/50",
-                                orange: "bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.15)] ring-1 ring-orange-500/50",
-                                pink: "bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/50 shadow-[0_0_15px_rgba(236,72,153,0.15)] ring-1 ring-pink-500/50",
-                                // Additional colors from SchedulePopup PRESET_ACTIVITIES
-                                amber: "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/50",
-                                indigo: "bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/50",
-                                cyan: "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/50",
-                                teal: "bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/50 shadow-[0_0_15px_rgba(20,184,166,0.15)] ring-1 ring-teal-500/50",
-                                emerald: "bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/50",
-                                violet: "bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-violet-500/50",
-                                rose: "bg-gradient-to-br from-rose-500/20 to-pink-500/20 border border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/50",
-                                sky: "bg-gradient-to-br from-sky-500/20 to-blue-500/20 border border-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.15)] ring-1 ring-sky-500/50",
-                                primary: "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/50"
-                            };
-                            return inProgressMap[color] || inProgressMap.primary;
+                            return getInProgressCardStyle(color);
                         }
-
-                        // Upcoming: use schedule's color with softer ring (matching dashboard)
-                        const colorMap: Record<string, string> = {
-                            yellow: "bg-gradient-to-br from-yellow-500/15 to-orange-500/15 border border-yellow-500/40 shadow-[0_0_10px_rgba(234,179,8,0.1)]",
-                            purple: "bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]",
-                            green: "bg-gradient-to-br from-green-500/15 to-emerald-500/15 border border-green-500/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]",
-                            blue: "bg-gradient-to-br from-blue-500/15 to-cyan-500/15 border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.1)]",
-                            red: "bg-gradient-to-br from-red-500/15 to-orange-500/15 border border-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
-                            orange: "bg-gradient-to-br from-orange-500/15 to-amber-500/15 border border-orange-500/40 shadow-[0_0_10px_rgba(249,115,22,0.1)]",
-                            pink: "bg-gradient-to-br from-pink-500/15 to-purple-500/15 border border-pink-500/40 shadow-[0_0_10px_rgba(236,72,153,0.1)]",
-                            // Additional colors from SchedulePopup PRESET_ACTIVITIES
-                            amber: "bg-gradient-to-br from-amber-500/15 to-orange-500/15 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.1)]",
-                            indigo: "bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.1)]",
-                            cyan: "bg-gradient-to-br from-cyan-500/15 to-blue-500/15 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.1)]",
-                            teal: "bg-gradient-to-br from-teal-500/15 to-cyan-500/15 border border-teal-500/40 shadow-[0_0_10px_rgba(20,184,166,0.1)]",
-                            emerald: "bg-gradient-to-br from-emerald-500/15 to-green-500/15 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
-                            violet: "bg-gradient-to-br from-violet-500/15 to-purple-500/15 border border-violet-500/40 shadow-[0_0_10px_rgba(139,92,246,0.1)]",
-                            rose: "bg-gradient-to-br from-rose-500/15 to-pink-500/15 border border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.1)]",
-                            sky: "bg-gradient-to-br from-sky-500/15 to-blue-500/15 border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.1)]",
-                            primary: "bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
-                        };
-
-                        const result = colorMap[color] || colorMap.primary;
-                        console.log('[Home] Applied card style:', result);
-                        return result;
+                        return getUpcomingCardStyle(color);
                     })()
                 )}>
                     {/* Collapsed View */}
@@ -2065,31 +893,7 @@ export default function HomePage() {
                                 <>
                                     <div className={cn(
                                         "w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300",
-                                        (() => {
-                                            const color = currentScheduleInfo.schedule.color || 'primary';
-                                            // Match dashboard DailyRhythmTimeline icon styling with ring effect
-                                            const colorMap: Record<string, string> = {
-                                                yellow: "bg-gradient-to-br from-yellow-500 to-orange-500 shadow-yellow-500/30 ring-2 ring-white/20",
-                                                purple: "bg-gradient-to-br from-purple-500 to-pink-500 shadow-purple-500/30 ring-2 ring-white/20",
-                                                green: "bg-gradient-to-br from-green-500 to-emerald-500 shadow-green-500/30 ring-2 ring-white/20",
-                                                blue: "bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/30 ring-2 ring-white/20",
-                                                red: "bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/30 ring-2 ring-white/20",
-                                                orange: "bg-gradient-to-br from-orange-500 to-amber-500 shadow-orange-500/30 ring-2 ring-white/20",
-                                                pink: "bg-gradient-to-br from-pink-500 to-purple-500 shadow-pink-500/30 ring-2 ring-white/20",
-                                                // Additional colors
-                                                amber: "bg-gradient-to-br from-amber-500 to-orange-500 shadow-amber-500/30 ring-2 ring-white/20",
-                                                indigo: "bg-gradient-to-br from-indigo-500 to-purple-500 shadow-indigo-500/30 ring-2 ring-white/20",
-                                                cyan: "bg-gradient-to-br from-cyan-500 to-blue-500 shadow-cyan-500/30 ring-2 ring-white/20",
-                                                teal: "bg-gradient-to-br from-teal-500 to-cyan-500 shadow-teal-500/30 ring-2 ring-white/20",
-                                                emerald: "bg-gradient-to-br from-emerald-500 to-green-500 shadow-emerald-500/30 ring-2 ring-white/20",
-                                                violet: "bg-gradient-to-br from-violet-500 to-purple-500 shadow-violet-500/30 ring-2 ring-white/20",
-                                                rose: "bg-gradient-to-br from-rose-500 to-pink-500 shadow-rose-500/30 ring-2 ring-white/20",
-                                                sky: "bg-gradient-to-br from-sky-500 to-blue-500 shadow-sky-500/30 ring-2 ring-white/20",
-                                                primary: "bg-gradient-to-br from-purple-500 to-pink-500 shadow-purple-500/30 ring-2 ring-white/20"
-                                            };
-
-                                            return colorMap[color] || colorMap.primary;
-                                        })()
+                                        getIconStyle(currentScheduleInfo.schedule.color)
                                     )}>
                                         {(() => {
                                             const ScheduleIcon = getScheduleIcon(currentScheduleInfo.schedule.text);
@@ -2100,60 +904,18 @@ export default function HomePage() {
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={cn(
                                                 "text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border",
-                                                (() => {
-                                                    const color = currentScheduleInfo.schedule.color || 'primary';
-                                                    // Match dashboard DailyRhythmTimeline badge styling
-                                                    if (currentScheduleInfo.status === 'in-progress') {
-                                                        const inProgressMap: Record<string, string> = {
-                                                            yellow: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
-                                                            purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-                                                            green: "bg-green-500/20 text-green-300 border-green-500/30",
-                                                            blue: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-                                                            red: "bg-red-500/20 text-red-300 border-red-500/30",
-                                                            orange: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-                                                            pink: "bg-pink-500/20 text-pink-300 border-pink-500/30",
-                                                            // Additional colors
-                                                            amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-                                                            indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-                                                            cyan: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-                                                            teal: "bg-teal-500/20 text-teal-300 border-teal-500/30",
-                                                            emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-                                                            violet: "bg-violet-500/20 text-violet-300 border-violet-500/30",
-                                                            rose: "bg-rose-500/20 text-rose-300 border-rose-500/30",
-                                                            sky: "bg-sky-500/20 text-sky-300 border-sky-500/30",
-                                                            primary: "bg-purple-500/20 text-purple-300 border-purple-500/30"
-                                                        };
-                                                        return inProgressMap[color] || inProgressMap.primary;
-                                                    }
-
-                                                    const colorMap: Record<string, string> = {
-                                                        yellow: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-                                                        purple: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-                                                        green: "bg-green-500/10 text-green-400 border-green-500/20",
-                                                        blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                                                        red: "bg-red-500/10 text-red-400 border-red-500/20",
-                                                        orange: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-                                                        pink: "bg-pink-500/10 text-pink-400 border-pink-500/20",
-                                                        // Additional colors
-                                                        amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-                                                        indigo: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-                                                        cyan: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-                                                        teal: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-                                                        emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                                                        violet: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-                                                        rose: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-                                                        sky: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-                                                        primary: "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                                                    };
-
-                                                    return colorMap[color] || colorMap.primary;
-                                                })()
+                                                getBadgeStyle(currentScheduleInfo.schedule.color, currentScheduleInfo.status === 'in-progress')
                                             )}>
                                                 {currentScheduleInfo.status === 'in-progress' ? '현재 진행 중' : '예정됨'}
                                             </span>
                                             <span className="text-sm font-mono text-muted-foreground">
                                                 {currentScheduleInfo.schedule.startTime}
                                             </span>
+                                            {streakData && streakData.schedule.current >= 3 && (
+                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30 flex items-center gap-1">
+                                                    🔥 {streakData.schedule.current}일
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="font-bold text-base sm:text-lg mb-0.5 sm:mb-1 line-clamp-1">{currentScheduleInfo.schedule.text}</p>
                                         <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
@@ -2189,7 +951,14 @@ export default function HomePage() {
                                 <>
                                     <FieriLogo className="w-16 h-16 sm:w-20 sm:h-20" />
                                     <div className="text-left flex-1">
-                                        <p className="font-bold text-base sm:text-lg mb-0.5 sm:mb-1">오늘 일정이 없습니다</p>
+                                        <div className="flex items-center gap-2 mb-0.5 sm:mb-1">
+                                            <p className="font-bold text-base sm:text-lg">오늘 일정이 없습니다</p>
+                                            {streakData && streakData.schedule.current >= 3 && (
+                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                                    🔥 {streakData.schedule.current}일
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-muted-foreground hidden sm:block">AI가 추천하는 일정을 추가해보세요</p>
                                     </div>
                                 </>
@@ -2223,83 +992,11 @@ export default function HomePage() {
                                             const isCompleted = schedule.completed || false;
                                             const isSkipped = schedule.skipped || false;
 
-                                            // NOTE: 'primary' is black in our theme, so we normalize to 'purple'
-                                            const normalizedColor = (schedule.color === 'primary' || !schedule.color) ? 'purple' : schedule.color;
-
-                                            // Color maps matching dashboard DailyRhythmTimeline dual-color gradients
-                                            const iconBgMap: Record<string, string> = {
-                                                yellow: "bg-gradient-to-br from-yellow-500 to-orange-500",
-                                                purple: "bg-gradient-to-br from-purple-500 to-pink-500",
-                                                green: "bg-gradient-to-br from-green-500 to-emerald-500",
-                                                blue: "bg-gradient-to-br from-blue-500 to-cyan-500",
-                                                red: "bg-gradient-to-br from-red-500 to-orange-500",
-                                                orange: "bg-gradient-to-br from-orange-500 to-amber-500",
-                                                pink: "bg-gradient-to-br from-pink-500 to-purple-500",
-                                                amber: "bg-gradient-to-br from-amber-500 to-orange-500",
-                                                indigo: "bg-gradient-to-br from-indigo-500 to-purple-500",
-                                                cyan: "bg-gradient-to-br from-cyan-500 to-blue-500",
-                                                teal: "bg-gradient-to-br from-teal-500 to-cyan-500",
-                                                emerald: "bg-gradient-to-br from-emerald-500 to-green-500",
-                                                violet: "bg-gradient-to-br from-violet-500 to-purple-500",
-                                                rose: "bg-gradient-to-br from-rose-500 to-pink-500",
-                                                sky: "bg-gradient-to-br from-sky-500 to-blue-500",
-                                            };
-                                            const cardBgMap: Record<string, string> = {
-                                                yellow: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20",
-                                                purple: "bg-gradient-to-br from-purple-500/20 to-pink-500/20",
-                                                green: "bg-gradient-to-br from-green-500/20 to-emerald-500/20",
-                                                blue: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20",
-                                                red: "bg-gradient-to-br from-red-500/20 to-orange-500/20",
-                                                orange: "bg-gradient-to-br from-orange-500/20 to-amber-500/20",
-                                                pink: "bg-gradient-to-br from-pink-500/20 to-purple-500/20",
-                                                amber: "bg-gradient-to-br from-amber-500/20 to-orange-500/20",
-                                                indigo: "bg-gradient-to-br from-indigo-500/20 to-purple-500/20",
-                                                cyan: "bg-gradient-to-br from-cyan-500/20 to-blue-500/20",
-                                                teal: "bg-gradient-to-br from-teal-500/20 to-cyan-500/20",
-                                                emerald: "bg-gradient-to-br from-emerald-500/20 to-green-500/20",
-                                                violet: "bg-gradient-to-br from-violet-500/20 to-purple-500/20",
-                                                rose: "bg-gradient-to-br from-rose-500/20 to-pink-500/20",
-                                                sky: "bg-gradient-to-br from-sky-500/20 to-blue-500/20",
-                                            };
-                                            const cardBorderMap: Record<string, string> = {
-                                                yellow: "border-yellow-500/50",
-                                                purple: "border-purple-500/50",
-                                                green: "border-green-500/50",
-                                                blue: "border-blue-500/50",
-                                                red: "border-red-500/50",
-                                                orange: "border-orange-500/50",
-                                                pink: "border-pink-500/50",
-                                                amber: "border-amber-500/50",
-                                                indigo: "border-indigo-500/50",
-                                                cyan: "border-cyan-500/50",
-                                                teal: "border-teal-500/50",
-                                                emerald: "border-emerald-500/50",
-                                                violet: "border-violet-500/50",
-                                                rose: "border-rose-500/50",
-                                                sky: "border-sky-500/50",
-                                            };
-                                            const cardShadowMap: Record<string, string> = {
-                                                yellow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
-                                                purple: "shadow-[0_0_15px_rgba(168,85,247,0.15)]",
-                                                green: "shadow-[0_0_15px_rgba(34,197,94,0.15)]",
-                                                blue: "shadow-[0_0_15px_rgba(59,130,246,0.15)]",
-                                                red: "shadow-[0_0_15px_rgba(239,68,68,0.15)]",
-                                                orange: "shadow-[0_0_15px_rgba(249,115,22,0.15)]",
-                                                pink: "shadow-[0_0_15px_rgba(236,72,153,0.15)]",
-                                                amber: "shadow-[0_0_15px_rgba(245,158,11,0.15)]",
-                                                indigo: "shadow-[0_0_15px_rgba(99,102,241,0.15)]",
-                                                cyan: "shadow-[0_0_15px_rgba(6,182,212,0.15)]",
-                                                teal: "shadow-[0_0_15px_rgba(20,184,166,0.15)]",
-                                                emerald: "shadow-[0_0_15px_rgba(16,185,129,0.15)]",
-                                                violet: "shadow-[0_0_15px_rgba(139,92,246,0.15)]",
-                                                rose: "shadow-[0_0_15px_rgba(244,63,94,0.15)]",
-                                                sky: "shadow-[0_0_15px_rgba(14,165,233,0.15)]",
-                                            };
-
-                                            const iconBg = iconBgMap[normalizedColor] || iconBgMap.purple;
-                                            const cardBg = cardBgMap[normalizedColor] || cardBgMap.purple;
-                                            const cardBorder = cardBorderMap[normalizedColor] || cardBorderMap.purple;
-                                            const cardShadow = cardShadowMap[normalizedColor] || cardShadowMap.purple;
+                                            const nc = normalizeColor(schedule.color);
+                                            const iconBg = getIconBg(nc);
+                                            const cardBg = getCardBg(nc);
+                                            const cardBorder = getCardBorder(nc);
+                                            const cardShadow = getCardShadow(nc);
 
                                             return (
                                                 <motion.div
@@ -2457,6 +1154,7 @@ export default function HomePage() {
                                                                             }
                                                                         } catch (error) {
                                                                             console.error('[Home] Failed to save completion to server:', error);
+                                                                            toast.error('완료 상태 저장에 실패했어요');
                                                                         }
                                                                     }}
                                                                     className={`flex-1 h-9 border border-white/10 ${canComplete ? 'bg-white/10 hover:bg-white/20 text-foreground' : 'bg-white/5 text-muted-foreground/50 cursor-not-allowed'}`}
@@ -2495,6 +1193,7 @@ export default function HomePage() {
                                                                             console.log('[Home] Schedule marked as skipped on server');
                                                                         } catch (error) {
                                                                             console.error('[Home] Failed to save skip to server:', error);
+                                                                            toast.error('건너뛰기 저장에 실패했어요');
                                                                         }
                                                                     }}
                                                                     className={`flex-1 h-9 ${canComplete ? 'hover:bg-white/10 text-muted-foreground' : 'text-muted-foreground/50 cursor-not-allowed'}`}
@@ -2574,25 +1273,24 @@ export default function HomePage() {
                                                                     e.preventDefault();
                                                                     console.log('[Home] Action clicked:', action);
 
-                                                                    if (action.type === 'open_briefing') {
-                                                                        console.log('[Home] Available briefings:', trendBriefings.map((b: any) => ({ id: b.id, title: b.title })));
+                                                                    if (action.type === 'open_link' && action.data?.url) {
+                                                                        window.open(action.data.url, '_blank', 'noopener,noreferrer');
+                                                                    } else if (action.type === 'open_briefing') {
                                                                         const briefingId = action.data?.briefingId || action.data?.id;
-                                                                        console.log('[Home] Looking for briefing ID:', briefingId);
+                                                                        const briefingTitle = action.data?.title;
 
-                                                                        if (briefingId) {
-                                                                            // Find the full briefing object from trendBriefings
-                                                                            const fullBriefing = trendBriefings.find(
-                                                                                (b: any) => b.id === briefingId || b.id === parseInt(briefingId)
-                                                                            );
-                                                                            if (fullBriefing) {
-                                                                                console.log('[Home] Opening briefing:', fullBriefing.title);
-                                                                                setSelectedBriefing(fullBriefing);
-                                                                            } else {
-                                                                                console.error('[Home] Briefing not found. ID:', briefingId, 'Available IDs:', trendBriefings.map((b: any) => b.id));
-                                                                            }
+                                                                        const fullBriefing = trendBriefings.find(
+                                                                            (b: any) => b.id === briefingId || b.id === String(briefingId) || (briefingTitle && b.title === briefingTitle)
+                                                                        );
+                                                                        if (fullBriefing) {
+                                                                            setSelectedBriefing(fullBriefing);
                                                                         } else {
-                                                                            console.error('[Home] No briefingId in action.data:', action.data);
+                                                                            // ID 매칭 실패 시 인사이트 페이지로 이동
+                                                                            window.location.href = '/insights';
                                                                         }
+                                                                    } else {
+                                                                        // Delegate to handleMessageActions for all other types
+                                                                        handleMessageActions([action]);
                                                                     }
                                                                 }}
                                                                 className="text-xs h-9 px-4 rounded-full touch-manipulation"
@@ -2755,7 +1453,7 @@ export default function HomePage() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={handleKeyPress}
-                            placeholder={PLACEHOLDER_ROTATION[placeholderIndex]}
+                            placeholder={placeholder}
                             className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
                             disabled={isLoading}
                         />

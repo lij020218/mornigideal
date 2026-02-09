@@ -62,9 +62,7 @@ export async function GET(req: NextRequest) {
             const error = ${JSON.stringify(error)};
 
             console.log('[Gmail Callback] code:', code ? 'exists' : 'missing');
-            console.log('[Gmail Callback] userEmail:', userEmail);
             console.log('[Gmail Callback] error:', error);
-            console.log('[Gmail Callback] window.opener:', window.opener ? 'exists' : 'missing');
 
             if (error) {
                 document.getElementById('status').textContent = '연동 실패';

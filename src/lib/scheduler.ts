@@ -15,7 +15,7 @@ export function initializeScheduler() {
             const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/cron/generate-daily-news`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${process.env.CRON_SECRET || 'dev-secret'}`
+                    'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`
                 }
             });
 

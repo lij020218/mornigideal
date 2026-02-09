@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 export default function VoiceAgent() {
     const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -49,7 +50,7 @@ export default function VoiceAgent() {
             setConnected(true);
         } catch (err) {
             console.error("VoiceAgent start error:", err);
-            alert("음성 연결에 실패했습니다. 콘솔을 확인하세요.");
+            toast.error("음성 연결에 실패했습니다.");
             stop();
         } finally {
             setLoading(false);

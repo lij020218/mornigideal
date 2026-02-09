@@ -242,7 +242,7 @@ export function Sidebar() {
     };
 
     // Hide sidebar on certain pages
-    const hiddenPages = ["/login", "/signup", "/onboarding", "/reset"];
+    const hiddenPages = ["/login", "/signup", "/onboarding", "/reset", "/landing", "/privacy", "/terms"];
     const isLearningPage = pathname?.includes("/learn/");
 
     if (hiddenPages.includes(pathname || "") || isLearningPage) {

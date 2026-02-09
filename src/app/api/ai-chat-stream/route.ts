@@ -167,6 +167,7 @@ export async function POST(request: Request) {
                 ...messages.slice(-10),
             ],
             temperature: 1.0,
+            max_completion_tokens: 4096,
             response_format: { type: "json_object" },
             stream: true,
         });

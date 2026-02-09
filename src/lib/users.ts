@@ -35,6 +35,59 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     }
 }
 
+export async function getUserById(id: string): Promise<User | null> {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No rows returned
+                return null;
+            }
+            console.error('[getUserById] Error:', error);
+            throw error;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[getUserById] Exception:', error);
+        return null;
+    }
+}
+
+export async function updateUserProfileById(userId: string, profileUpdates: any): Promise<User | null> {
+    try {
+        const user = await getUserById(userId);
+        if (!user) return null;
+
+        const updatedProfile = {
+            ...user.profile,
+            ...profileUpdates,
+        };
+
+        const { data, error } = await supabase
+            .from('users')
+            .update({ profile: updatedProfile })
+            .eq('id', userId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[updateUserProfileById] Error:', error);
+            throw error;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[updateUserProfileById] Exception:', error);
+        throw error;
+    }
+}
+
 export async function getUserByUsername(username: string): Promise<User | null> {
     try {
         const { data, error } = await supabase

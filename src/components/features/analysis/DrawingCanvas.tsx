@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Pencil, Eraser, Trash2, Undo, Redo, Highlighter, Plus, Check } from "lucide-react";
+import { toast } from "sonner";
 
 interface DrawingCanvasProps {
     width: number;
@@ -452,7 +453,7 @@ export function DrawingCanvas({ width, height, onSave, storageKey, readOnly = fa
 
     const handleAddCustomColor = () => {
         if (customColors.length >= 5) {
-            alert('최대 5개의 커스텀 색상만 추가할 수 있습니다.');
+            toast.warning('최대 5개의 커스텀 색상만 추가할 수 있습니다.');
             return;
         }
         if (!customColors.includes(tempColor)) {

@@ -1,6 +1,6 @@
 /**
  * Jarvis Mode Type Definitions
- * Max 플랜 전용 AI 비서 시스템
+ * AI 비서 시스템 (선제적 알림: 전 플랜 / Jarvis AI: Max 전용)
  */
 
 // =============================================
@@ -179,7 +179,8 @@ export const PLAN_CONFIGS = {
         features: {
             stateMonitoring: false,
             resourcePrep: false,
-            autoExecution: false
+            autoExecution: false,
+            reactLoop: false
         }
     },
     Standard: {
@@ -191,7 +192,8 @@ export const PLAN_CONFIGS = {
         features: {
             stateMonitoring: true, // 간소화 (에너지, 스트레스만)
             resourcePrep: false,
-            autoExecution: false
+            autoExecution: false,
+            reactLoop: false
         }
     },
     Pro: {
@@ -203,7 +205,8 @@ export const PLAN_CONFIGS = {
         features: {
             stateMonitoring: true, // 전체
             resourcePrep: true,
-            autoExecution: false
+            autoExecution: false,
+            reactLoop: true
         }
     },
     Max: {
@@ -215,7 +218,8 @@ export const PLAN_CONFIGS = {
         features: {
             stateMonitoring: true,
             resourcePrep: true,
-            autoExecution: true
+            autoExecution: true,
+            reactLoop: true
         }
     }
 } as const;
@@ -227,12 +231,10 @@ export type PlanType = keyof typeof PLAN_CONFIGS;
 // =============================================
 
 export const GUARDRAILS = {
-    // 절대 확인 필요한 액션
+    // 절대 확인 필요한 액션 (ActionType enum 값과 일치해야 함)
     REQUIRES_CONFIRMATION: [
-        'delete_schedule',
-        'move_schedule',
-        'send_email',
-        'make_payment'
+        'schedule_moved',
+        'buffer_added',
     ],
 
     // 민감 표현 금지 (자비스가 사용하면 안 되는 단어)

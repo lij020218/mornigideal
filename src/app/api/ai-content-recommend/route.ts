@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
             const user = await getUserByEmail(session.user.email);
             if (user?.profile) {
                 userProfile = user.profile as UserProfile;
-                console.log("[AI Content Recommend] 사용자 프로필 로드:", userProfile);
+                console.log("[AI Content Recommend] 사용자 프로필 로드 완료");
             }
         } catch (error) {
             console.error("[AI Content Recommend] 프로필 로드 실패:", error);

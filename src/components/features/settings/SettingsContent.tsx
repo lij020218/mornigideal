@@ -14,9 +14,11 @@ import {
     Download, Upload, Keyboard, Info, Moon, Monitor, Languages, Brain, Sparkles,
     Volume2, Clock, Calendar, FileText, Database, HelpCircle, ExternalLink,
     ChevronRight, Zap, BookOpen, MessageSquare, Globe, Lock, Key, Smartphone,
-    History, BarChart3, Mic, Type, Lightbulb
+    History, BarChart3, Mic, Type, Lightbulb, Hash, CalendarDays
 } from "lucide-react";
+import { toast } from "sonner";
 import { PlanSettings } from "./PlanSettings";
+import { APIKeySettings } from "./APIKeySettings";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -201,6 +203,14 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
     const [gmailLinking, setGmailLinking] = useState(false);
     const [gmailLinked, setGmailLinked] = useState<string | null>(null);
 
+    // Slack states
+    const [slackLinking, setSlackLinking] = useState(false);
+    const [slackLinked, setSlackLinked] = useState<{ teamName: string; slackUserId: string } | null>(null);
+
+    // Google Calendar states
+    const [gcalLinking, setGcalLinking] = useState(false);
+    const [gcalLinked, setGcalLinked] = useState(false);
+
     // Account deletion states
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deletePassword, setDeletePassword] = useState("");
@@ -209,8 +219,9 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
 
     const isGoogleConnected = session?.user?.email?.includes('@gmail.com') || false;
 
-    // Load settings from localStorage
+    // Load settings from localStorage, then sync from server
     useEffect(() => {
+        // 1. 즉시 localStorage에서 로드 (빠른 초기 렌더)
         const savedProfile = localStorage.getItem("user_profile");
         if (savedProfile) setProfile(JSON.parse(savedProfile));
 
@@ -225,6 +236,40 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
 
         const savedAI = localStorage.getItem("user_ai_settings");
         if (savedAI) setAISettings(JSON.parse(savedAI));
+
+        // 2. 서버에서 최신 프로필 가져와 병합
+        (async () => {
+            try {
+                const res = await fetch('/api/user/profile');
+                if (!res.ok) return;
+                const data = await res.json();
+                const serverSettings = data.profile?.settings;
+                if (!serverSettings) return;
+
+                if (serverSettings.profile) {
+                    setProfile(prev => ({ ...prev, ...serverSettings.profile }));
+                    localStorage.setItem("user_profile", JSON.stringify({ ...JSON.parse(savedProfile || '{}'), ...serverSettings.profile }));
+                }
+                if (serverSettings.notifications) {
+                    setNotifications(prev => ({ ...prev, ...serverSettings.notifications }));
+                    localStorage.setItem("user_notifications", JSON.stringify({ ...JSON.parse(savedNotifications || '{}'), ...serverSettings.notifications }));
+                }
+                if (serverSettings.userSettings) {
+                    setUserSettings(prev => ({ ...prev, ...serverSettings.userSettings }));
+                    localStorage.setItem("user_settings", JSON.stringify({ ...JSON.parse(savedSettings || '{}'), ...serverSettings.userSettings }));
+                }
+                if (serverSettings.appearance) {
+                    setAppearance(prev => ({ ...prev, ...serverSettings.appearance }));
+                    localStorage.setItem("user_appearance", JSON.stringify({ ...JSON.parse(savedAppearance || '{}'), ...serverSettings.appearance }));
+                }
+                if (serverSettings.aiSettings) {
+                    setAISettings(prev => ({ ...prev, ...serverSettings.aiSettings }));
+                    localStorage.setItem("user_ai_settings", JSON.stringify({ ...JSON.parse(savedAI || '{}'), ...serverSettings.aiSettings }));
+                }
+            } catch {
+                // 서버 동기화 실패 시 localStorage 값 유지
+            }
+        })();
     }, []);
 
     // Check Gmail link
@@ -246,24 +291,78 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
         }
     }, [session, isGoogleConnected]);
 
-    const handleSave = useCallback(() => {
+    // Check Slack link
+    useEffect(() => {
+        const checkSlackLinked = async () => {
+            try {
+                const response = await fetch('/api/auth/check-slack-link');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.linked) {
+                        setSlackLinked({ teamName: data.teamName, slackUserId: data.slackUserId });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check Slack link:', error);
+            }
+        };
+
+        if (session?.user?.email) {
+            checkSlackLinked();
+        }
+    }, [session]);
+
+    // Check Google Calendar link (localStorage 캐시 기반)
+    useEffect(() => {
+        if (session?.user?.email) {
+            const cached = localStorage.getItem('gcal_linked');
+            if (cached === 'true') {
+                setGcalLinked(true);
+            }
+        }
+    }, [session]);
+
+    const handleSave = useCallback(async () => {
         setSaving(true);
+        // localStorage 캐시 저장 (오프라인 대비)
         localStorage.setItem("user_profile", JSON.stringify(profile));
         localStorage.setItem("user_notifications", JSON.stringify(notifications));
         localStorage.setItem("user_settings", JSON.stringify(userSettings));
         localStorage.setItem("user_appearance", JSON.stringify(appearance));
         localStorage.setItem("user_ai_settings", JSON.stringify(aiSettings));
 
-        setTimeout(() => {
-            setSaving(false);
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2000);
-        }, 500);
+        // 서버 동기화
+        try {
+            const res = await fetch('/api/user/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    settings: {
+                        profile,
+                        notifications,
+                        userSettings,
+                        appearance,
+                        aiSettings,
+                    }
+                }),
+            });
+            if (res.ok) {
+                toast.success('설정이 저장되었습니다');
+            } else {
+                toast.error('서버 저장에 실패했습니다');
+            }
+        } catch {
+            toast.error('서버 저장에 실패했습니다. 로컬에만 저장됩니다.');
+        }
+
+        setSaving(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
     }, [profile, notifications, userSettings, appearance, aiSettings]);
 
     const handleLinkGmail = async () => {
         if (!session?.user?.email) {
-            alert('로그인이 필요합니다');
+            toast.error('로그인이 필요합니다');
             return;
         }
 
@@ -294,7 +393,7 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                 } else if (event.data.type === 'gmail-link-error') {
                     clearTimeout(safetyTimeout);
                     setGmailLinking(false);
-                    alert('Gmail 연동에 실패했습니다: ' + event.data.error);
+                    toast.error('Gmail 연동에 실패했습니다');
                     window.removeEventListener('message', handleMessage);
                 }
             };
@@ -306,8 +405,112 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
             }, 120000);
         } catch (error) {
             console.error('Link Gmail error:', error);
-            alert('Gmail 연동 중 오류가 발생했습니다');
+            toast.error('Gmail 연동 중 오류가 발생했습니다');
             setGmailLinking(false);
+        }
+    };
+
+    const handleLinkGcal = async () => {
+        if (!session?.user?.email) {
+            toast.error('로그인이 필요합니다');
+            return;
+        }
+
+        setGcalLinking(true);
+        try {
+            const response = await fetch('/api/auth/link-google-calendar');
+            const { authUrl } = await response.json();
+
+            const width = 600;
+            const height = 700;
+            const left = window.screen.width / 2 - width / 2;
+            const top = window.screen.height / 2 - height / 2;
+
+            const popup = window.open(
+                authUrl,
+                'Google 캘린더 연동',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+
+            let safetyTimeout: NodeJS.Timeout;
+
+            const handleMessage = (event: MessageEvent) => {
+                if (event.data.type === 'gcal-link-success') {
+                    clearTimeout(safetyTimeout);
+                    setGcalLinked(true);
+                    localStorage.setItem('gcal_linked', 'true');
+                    setGcalLinking(false);
+                    window.removeEventListener('message', handleMessage);
+                } else if (event.data.type === 'gcal-link-error') {
+                    clearTimeout(safetyTimeout);
+                    setGcalLinking(false);
+                    toast.error('Google 캘린더 연동에 실패했습니다');
+                    window.removeEventListener('message', handleMessage);
+                }
+            };
+
+            window.addEventListener('message', handleMessage);
+            safetyTimeout = setTimeout(() => {
+                setGcalLinking(false);
+                window.removeEventListener('message', handleMessage);
+            }, 120000);
+        } catch (error) {
+            console.error('Link GCal error:', error);
+            toast.error('Google 캘린더 연동 중 오류가 발생했습니다');
+            setGcalLinking(false);
+        }
+    };
+
+    const handleLinkSlack = async () => {
+        if (!session?.user?.email) {
+            toast.error('로그인이 필요합니다');
+            return;
+        }
+
+        setSlackLinking(true);
+        try {
+            const response = await fetch('/api/auth/link-slack');
+            const { authUrl } = await response.json();
+
+            const width = 600;
+            const height = 700;
+            const left = window.screen.width / 2 - width / 2;
+            const top = window.screen.height / 2 - height / 2;
+
+            const popup = window.open(
+                authUrl,
+                '슬랙 연동',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+
+            let safetyTimeout: NodeJS.Timeout;
+
+            const handleMessage = (event: MessageEvent) => {
+                if (event.data.type === 'slack-link-success') {
+                    clearTimeout(safetyTimeout);
+                    setSlackLinked({
+                        teamName: event.data.data.teamName,
+                        slackUserId: event.data.data.slackUserId,
+                    });
+                    setSlackLinking(false);
+                    window.removeEventListener('message', handleMessage);
+                } else if (event.data.type === 'slack-link-error') {
+                    clearTimeout(safetyTimeout);
+                    setSlackLinking(false);
+                    toast.error('슬랙 연동에 실패했습니다');
+                    window.removeEventListener('message', handleMessage);
+                }
+            };
+
+            window.addEventListener('message', handleMessage);
+            safetyTimeout = setTimeout(() => {
+                setSlackLinking(false);
+                window.removeEventListener('message', handleMessage);
+            }, 120000);
+        } catch (error) {
+            console.error('Link Slack error:', error);
+            toast.error('슬랙 연동 중 오류가 발생했습니다');
+            setSlackLinking(false);
         }
     };
 
@@ -329,13 +532,13 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
-            alert('데이터 내보내기에 실패했습니다');
+            toast.error('데이터 내보내기에 실패했습니다');
         }
     };
 
     const handleDeleteAccount = async () => {
         if (!deletePassword) {
-            alert("비밀번호를 입력해주세요.");
+            toast.warning("비밀번호를 입력해주세요.");
             return;
         }
 
@@ -352,11 +555,11 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                 await signOut({ callbackUrl: "/landing" });
             } else {
                 const data = await response.json();
-                alert(data.error || "계정 삭제에 실패했습니다.");
+                toast.error(data.error || "계정 삭제에 실패했습니다.");
             }
         } catch (error) {
             console.error("Account deletion error:", error);
-            alert("계정 삭제 중 오류가 발생했습니다.");
+            toast.error("계정 삭제 중 오류가 발생했습니다.");
         } finally {
             setDeleting(false);
         }
@@ -633,7 +836,7 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                                         body: "알림이 정상적으로 작동합니다!",
                                                     });
                                                 } else {
-                                                    alert("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
+                                                    toast.warning("알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.");
                                                 }
                                             }
                                         }}
@@ -903,13 +1106,26 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                 <SettingsRow
                                     label="선제적 인사이트"
                                     description="AI가 중요한 정보를 미리 알려드립니다"
-                                    badge="Max"
                                 >
                                     <Switch
                                         checked={aiSettings.proactiveInsights}
                                         onCheckedChange={(checked) => setAISettings({ ...aiSettings, proactiveInsights: checked })}
                                     />
                                 </SettingsRow>
+                            </CardContent>
+                        </Card>
+
+                        {/* BYOK - API 키 설정 */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Key className="w-5 h-5 text-primary" />
+                                    API 키 설정 (BYOK)
+                                </CardTitle>
+                                <CardDescription>나만의 API 키로 무제한 AI 사용</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <APIKeySettings />
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -993,6 +1209,112 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                             </CardContent>
                         </Card>
 
+                        {/* Google Calendar Connection */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <CalendarDays className="w-5 h-5 text-primary" />
+                                    Google 캘린더 연동
+                                </CardTitle>
+                                <CardDescription>캘린더 일정을 자동으로 동기화합니다</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {gcalLinked ? (
+                                    <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                <Check className="w-5 h-5 text-green-500" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-green-700 dark:text-green-300">캘린더 연동됨</p>
+                                                <p className="text-sm text-green-600 dark:text-green-400">자동 동기화 활성</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                                            <p className="text-sm mb-3">Google 캘린더 연동 시 사용 가능한 기능:</p>
+                                            <ul className="space-y-2 text-sm">
+                                                <li className="flex items-center gap-2">
+                                                    <Check className="w-4 h-4 text-blue-500" />
+                                                    캘린더 일정 자동 가져오기
+                                                </li>
+                                                <li className="flex items-center gap-2">
+                                                    <Check className="w-4 h-4 text-blue-500" />
+                                                    AI가 추가한 일정 캘린더에 반영
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <Button className="w-full gap-2" onClick={handleLinkGcal} disabled={gcalLinking}>
+                                            {gcalLinking ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <CalendarDays className="w-4 h-4" />
+                                            )}
+                                            {gcalLinking ? "연동 중..." : "Google 캘린더 연동하기"}
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Slack Connection */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Hash className="w-5 h-5 text-primary" />
+                                    슬랙 연동
+                                </CardTitle>
+                                <CardDescription>슬랙 미확인 메시지 요약 및 알림 전송</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {slackLinked ? (
+                                    <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                <Check className="w-5 h-5 text-green-500" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-green-700 dark:text-green-300">슬랙 연동됨</p>
+                                                <p className="text-sm text-green-600 dark:text-green-400">
+                                                    {slackLinked.teamName} 워크스페이스
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button variant="outline" size="sm" className="text-red-500 border-red-500/30 hover:bg-red-500/10">
+                                            <X className="w-4 h-4 mr-2" />
+                                            해제
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                                            <p className="text-sm mb-3">슬랙 연동 시 사용 가능한 기능:</p>
+                                            <ul className="space-y-2 text-sm">
+                                                <li className="flex items-center gap-2">
+                                                    <Check className="w-4 h-4 text-purple-500" />
+                                                    미확인 메시지/DM 아침 요약
+                                                </li>
+                                                <li className="flex items-center gap-2">
+                                                    <Check className="w-4 h-4 text-purple-500" />
+                                                    Fi.eri 알림을 슬랙으로 전송
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <Button className="w-full gap-2" onClick={handleLinkSlack} disabled={slackLinking}>
+                                            {slackLinking ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Hash className="w-4 h-4" />
+                                            )}
+                                            {slackLinking ? "연동 중..." : "슬랙 연동하기"}
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
                         {/* Data Management */}
                         <Card>
                             <CardHeader>
@@ -1013,7 +1335,7 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                                         Object.keys(localStorage).forEach((key) => {
                                             if (key.startsWith("peer_insight_")) localStorage.removeItem(key);
                                         });
-                                        alert("캐시가 삭제되었습니다.");
+                                        toast.success("캐시가 삭제되었습니다.");
                                     }}
                                 >
                                     <Trash2 className="w-4 h-4" />

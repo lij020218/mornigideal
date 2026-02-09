@@ -19,10 +19,23 @@ interface WeatherResponse {
 
 export async function GET(request: Request) {
     try {
-        // Get location from query params
+        // Get location from query params (supports lat/lon or city name)
         const { searchParams } = new URL(request.url);
+        const lat = searchParams.get('lat');
+        const lon = searchParams.get('lon');
         const locationParam = searchParams.get('location') || DEFAULT_CITY;
-        const cacheKey = locationParam.toLowerCase().replace(',kr', '');
+
+        // Build OpenWeather query and cache key
+        let owQuery: string;
+        let cacheKey: string;
+        if (lat && lon) {
+            owQuery = `lat=${lat}&lon=${lon}`;
+            // 소수 2자리까지만 사용 (약 1km 정밀도, 캐시 히트율 향상)
+            cacheKey = `${parseFloat(lat).toFixed(2)},${parseFloat(lon).toFixed(2)}`;
+        } else {
+            owQuery = `q=${locationParam}`;
+            cacheKey = locationParam.toLowerCase().replace(',kr', '');
+        }
 
         // Try to get from cache first (instant loading!)
         const { data: cached } = await supabase
@@ -60,7 +73,7 @@ export async function GET(request: Request) {
         }
 
         const weatherRes = await fetch(
-            `https://api.openweathermap.org/data/2.5/weather?q=${locationParam}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=kr`
+            `https://api.openweathermap.org/data/2.5/weather?${owQuery}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=kr`
         );
 
         if (!weatherRes.ok) {

@@ -4,13 +4,12 @@
  * - POST: 플랜 업그레이드 (관리자/결제 시스템용)
  *
  * 플랜 구조:
- * - Standard (₩4,900): 일일 AI 50회
+ * - Standard (무료): 일일 AI 50회
  * - Pro (₩9,900): 일일 AI 100회 + 리스크 알림, 스마트 브리핑
  * - Max (₩21,900): 무제한 + 장기 기억, 선제적 제안
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import {
     getUserPlan,
     getAiUsageStats,
@@ -19,17 +18,18 @@ import {
     PLAN_DETAILS,
     UserPlanType,
 } from "@/lib/user-plan";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const plan = await getUserPlan(session.user.email);
-        const usage = await getAiUsageStats(session.user.email, 7);
-        const usageLimit = await checkAiUsageLimit(session.user.email);
+        const plan = await getUserPlan(userEmail);
+        const usage = await getAiUsageStats(userEmail, 7);
+        const usageLimit = await checkAiUsageLimit(userEmail);
         const details = PLAN_DETAILS[plan.plan];
 
         return NextResponse.json({

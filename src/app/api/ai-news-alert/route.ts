@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
             const user = await getUserByEmail(session.user.email);
             if (user?.profile) {
                 userProfile = user.profile as UserProfileData;
-                console.log("[AI News Alert] DB에서 프로필 로드:", userProfile);
+                console.log("[AI News Alert] DB에서 프로필 로드 완료");
             }
         } catch (error) {
             console.error("[AI News Alert] 프로필 로드 실패:", error);

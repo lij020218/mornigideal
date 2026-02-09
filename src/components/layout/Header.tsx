@@ -88,7 +88,7 @@ export function Header() {
     };
 
     // Hide on landing, onboarding, login, signup pages
-    const hideHeaderPages = ["/", "/onboarding", "/login", "/signup", "/reset"];
+    const hideHeaderPages = ["/", "/onboarding", "/login", "/signup", "/reset", "/landing", "/privacy", "/terms"];
     if (isLearningPage || hideHeaderPages.includes(pathname || "")) return null;
 
     return (

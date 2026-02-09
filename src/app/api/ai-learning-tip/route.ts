@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -16,10 +16,10 @@ interface LearningData {
     objectives: string[];
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -93,7 +93,7 @@ ${languageInstructions}
             messages: [
                 {
                     role: "system",
-                    content: "당신은 친근하고 유능한 학습 멘토입니다. 학습자에게 실용적이고 도움이 되는 팁을 제공해주세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
+                    content: "당신은 친근하고 유능한 학습 멘토입니다. 학습자에게 실용적이고 도움이 되는 팁을 존댓말로 제공해주세요. 반말 금지. 반드시 유효한 JSON 형식으로만 응답하세요.",
                 },
                 {
                     role: "user",
@@ -119,7 +119,7 @@ ${languageInstructions}
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                userEmail,
                 "gpt-4o-mini-2024-07-18",
                 "ai-learning-tip",
                 usage.prompt_tokens,

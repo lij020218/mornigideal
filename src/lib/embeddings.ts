@@ -107,6 +107,51 @@ export function prepareTextForEmbedding(
 }
 
 /**
+ * Check if a message is meaningful enough to embed
+ * Filters out short/trivial messages to save embedding costs
+ */
+export function isMessageMeaningful(content: string): boolean {
+    const trimmed = content.trim();
+
+    // Too short
+    if (trimmed.length < 5) return false;
+
+    // Korean filler / trivial responses
+    const trivialPatterns = [
+        /^[ㅋㅎㅠㅜㅡ]+$/,           // ㅋㅋㅋ, ㅎㅎ, ㅠㅠ
+        /^[ㅇㅂㄱㄴㄷㅈㅊㅁ]+$/,      // ㅇㅇ, ㅂㅂ
+        /^(네|넵|넹|응|ㅇㅇ|ㅇㅋ|ㄴㄴ|ㄱㅊ|ㄱㄱ|ㅎㅇ)$/,
+        /^(ok|okay|yes|no|ㅇㅋ|ㅇ|nope)$/i,
+        /^(ㅇㅋ|알겠|그래|좋아|됐어|감사|고마워|ㅅㄱ|수고)$/,
+        /^(안녕|하이|헬로|hi|hello|hey)$/i,
+        /^\.+$/,                      // ...
+        /^!+$/,                       // !!!
+        /^[?？]+$/,                   // ???
+    ];
+
+    for (const pattern of trivialPatterns) {
+        if (pattern.test(trimmed)) return false;
+    }
+
+    // Pure emoji only
+    const emojiStripped = trimmed.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim();
+    if (emojiStripped.length === 0) return false;
+
+    return true;
+}
+
+/**
+ * Generate SHA-256 content hash for deduplication
+ */
+export async function generateContentHash(content: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(content.trim().toLowerCase());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Calculate cosine similarity between two vectors
  * Returns value between -1 and 1 (higher = more similar)
  */

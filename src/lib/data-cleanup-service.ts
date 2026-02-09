@@ -62,6 +62,9 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
         // 6. 사용자별 용량 제한 확인
         await enforceUserDataLimits(report, userEmail);
 
+        // 7. user_memory (RAG) 정리
+        await cleanupUserMemory(report, userEmail);
+
     } catch (error: any) {
         console.error('[Data Cleanup] Error:', error);
         report.errors.push(error.message);
@@ -458,6 +461,92 @@ async function enforceUserDataLimits(report: CleanupReport, userEmail?: string):
         }
     } catch (error: any) {
         report.errors.push(`Data limit enforcement failed: ${error.message}`);
+    }
+}
+
+/**
+ * 7. user_memory (RAG) 정리
+ * - 중복 content_hash 제거
+ * - Free/Standard: 90일 이상 오래된 메모리 삭제
+ * - 플랜별 용량 초과 시 오래된 것부터 삭제
+ */
+async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Promise<void> {
+    try {
+        let totalDeleted = 0;
+
+        // 1. content_hash NULL인 중복 제거 (같은 사용자, 같은 content)
+        const dedupResult = await db.query(`
+            DELETE FROM user_memory a
+            USING user_memory b
+            WHERE a.id < b.id
+              AND a.user_id = b.user_id
+              AND a.content = b.content
+              ${userEmail ? `AND a.user_id = (SELECT id FROM users WHERE email = $1)` : ''}
+        `, userEmail ? [userEmail] : []);
+        totalDeleted += dedupResult.rowCount || 0;
+
+        // 2. Free/Standard 사용자: 90일 이상 오래된 메모리 삭제
+        const cutoff90Days = new Date();
+        cutoff90Days.setDate(cutoff90Days.getDate() - 90);
+
+        const ageResult = await db.query(`
+            DELETE FROM user_memory
+            WHERE created_at < $1
+              AND user_id IN (
+                  SELECT u.id FROM users u
+                  LEFT JOIN user_subscriptions s ON u.id = s.user_id
+                  WHERE COALESCE(s.plan, 'standard') IN ('standard')
+                  ${userEmail ? `AND u.email = $2` : ''}
+              )
+        `, userEmail ? [cutoff90Days.toISOString(), userEmail] : [cutoff90Days.toISOString()]);
+        totalDeleted += ageResult.rowCount || 0;
+
+        // 3. 플랜별 용량 초과 사용자 정리 (오래된 것부터 삭제)
+        const planLimits = [
+            { plan: 'standard', limitMb: 50 },
+            { plan: 'pro', limitMb: 100 },
+            { plan: 'max', limitMb: 1000 },
+        ];
+
+        for (const { plan, limitMb } of planLimits) {
+            const overLimitUsers = await db.query(`
+                SELECT m.user_id,
+                       SUM(octet_length(m.content) + octet_length(m.metadata::text) + 6144)::float / (1024 * 1024) AS size_mb
+                FROM user_memory m
+                JOIN user_subscriptions s ON m.user_id = s.user_id
+                WHERE s.plan = $1
+                ${userEmail ? `AND m.user_id = (SELECT id FROM users WHERE email = $2)` : ''}
+                GROUP BY m.user_id
+                HAVING SUM(octet_length(m.content) + octet_length(m.metadata::text) + 6144)::float / (1024 * 1024) > $${userEmail ? '3' : '2'}
+            `, userEmail ? [plan, userEmail, limitMb] : [plan, limitMb]);
+
+            for (const row of overLimitUsers.rows) {
+                // 초과량에 해당하는 오래된 레코드 삭제
+                const excessMb = row.size_mb - limitMb;
+                const estimatedRowsToDelete = Math.ceil(excessMb / 0.007); // ~7KB per row
+
+                const deleteResult = await db.query(`
+                    DELETE FROM user_memory
+                    WHERE id IN (
+                        SELECT id FROM user_memory
+                        WHERE user_id = $1
+                        ORDER BY created_at ASC
+                        LIMIT $2
+                    )
+                `, [row.user_id, estimatedRowsToDelete]);
+
+                totalDeleted += deleteResult.rowCount || 0;
+            }
+        }
+
+        report.byTable['user_memory'] = { deleted: totalDeleted, aggregated: 0 };
+        report.totalRecordsDeleted += totalDeleted;
+
+        if (totalDeleted > 0) {
+            console.log(`[Data Cleanup] user_memory: deleted ${totalDeleted} records`);
+        }
+    } catch (error: any) {
+        report.errors.push(`User memory cleanup failed: ${error.message}`);
     }
 }
 

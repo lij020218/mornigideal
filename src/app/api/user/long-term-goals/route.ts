@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { getUserByEmail, updateUserProfile } from "@/lib/users";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserByEmail, getUserById, updateUserProfile, updateUserProfileById } from "@/lib/users";
+import { getUserEmailWithAuth, getUserIdFromRequest } from "@/lib/auth-utils";
 
 // 장기 목표 타입 정의
 export interface LongTermGoal {
@@ -24,14 +24,22 @@ export interface LongTermGoals {
 }
 
 // GET: 장기 목표 조회
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userId = await getUserIdFromRequest(request);
+        const userEmail = await getUserEmailWithAuth(request);
+
+        if (!userId && !userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const user = await getUserByEmail(session.user.email);
+        let user;
+        if (userId) {
+            user = await getUserById(userId);
+        } else if (userEmail) {
+            user = await getUserByEmail(userEmail);
+        }
+
         if (!user) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
@@ -50,10 +58,12 @@ export async function GET(request: Request) {
 }
 
 // POST: 장기 목표 추가/수정/삭제
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userId = await getUserIdFromRequest(request);
+        const userEmail = await getUserEmailWithAuth(request);
+
+        if (!userId && !userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -63,7 +73,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Goal data required" }, { status: 400 });
         }
 
-        const user = await getUserByEmail(session.user.email);
+        let user;
+        if (userId) {
+            user = await getUserById(userId);
+        } else if (userEmail) {
+            user = await getUserByEmail(userEmail);
+        }
+
         if (!user) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
@@ -80,6 +96,15 @@ export async function POST(request: Request) {
         if (!["weekly", "monthly", "yearly"].includes(goalType)) {
             return NextResponse.json({ error: "Invalid goal type" }, { status: 400 });
         }
+
+        // 프로필 업데이트 헬퍼 함수
+        const updateProfile = async (updates: any) => {
+            if (userId) {
+                await updateUserProfileById(userId, updates);
+            } else if (userEmail) {
+                await updateUserProfile(userEmail, updates);
+            }
+        };
 
         if (action === "add") {
             // 새 목표 추가
@@ -169,7 +194,7 @@ export async function POST(request: Request) {
             currentGoals.weekly = [];
 
             // 아카이브 저장
-            await updateUserProfile(session.user.email, {
+            await updateProfile({
                 longTermGoals: currentGoals,
                 archivedWeeklyGoals: archivedWeeklyGoals,
             });
@@ -182,7 +207,7 @@ export async function POST(request: Request) {
         }
 
         // 프로필 업데이트
-        await updateUserProfile(session.user.email, { longTermGoals: currentGoals });
+        await updateProfile({ longTermGoals: currentGoals });
 
         return NextResponse.json({ success: true, goals: currentGoals });
     } catch (error) {

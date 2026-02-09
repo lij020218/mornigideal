@@ -5,9 +5,9 @@
  * - AI 사용량 모니터링
  *
  * 플랜 구조:
- * - Standard (₩4,900): 일일 AI 50회
+ * - Standard (무료): 일일 AI 50회
  * - Pro (₩9,900): 일일 AI 100회 + 리스크 알림, 스마트 브리핑
- * - Max (₩21,900): 무제한 + 장기 기억, 선제적 제안
+ * - Max (₩21,900): 무제한 + 장기 기억
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -107,8 +107,8 @@ export function useUserPlan(): UseUserPlanReturn {
                 expiresAt: null,
                 name: "Standard",
                 nameKo: "스탠다드",
-                price: 4900,
-                monthlyPrice: "₩4,900/월",
+                price: 0,
+                monthlyPrice: "무료",
                 featureList: [],
                 highlights: [],
             });
@@ -163,7 +163,7 @@ export function useCanUseFeature(feature: keyof PlanFeatures): {
         jarvis_memory: "맥스",
         risk_alerts: "프로",
         smart_briefing: "프로",
-        proactive_suggestions: "맥스",
+        proactive_suggestions: "스탠다드",
     };
 
     return {

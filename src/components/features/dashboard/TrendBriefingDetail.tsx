@@ -7,6 +7,7 @@ import { X, ExternalLink, Loader2, BookOpen, Lightbulb, CheckCircle, ArrowRight,
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from "rehype-raw";
@@ -367,7 +368,7 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                                                                                 }, 500);
                                                                             }
 
-                                                                            alert(`✅ "${action}" 일정이 추가되었습니다!`);
+                                                                            toast.success(`"${action}" 일정이 추가되었습니다`);
                                                                         }
                                                                     } catch (e) {
                                                                         console.error("Failed to add schedule:", e);

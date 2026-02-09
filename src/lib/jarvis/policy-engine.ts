@@ -68,8 +68,8 @@ export class PolicyEngine {
             return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['cooldown'], score: 0 };
         }
 
-        // 7. 개입 점수 계산 (규칙 기반)
-        const { score, reasonCodes } = this.calculateInterventionScore(state);
+        // 7. 개입 점수 계산 (규칙 기반 + 피드백 가중치)
+        const { score, reasonCodes } = await this.calculateInterventionScore(state);
 
         console.log('[PolicyEngine] Intervention score:', score, reasonCodes);
 
@@ -91,37 +91,64 @@ export class PolicyEngine {
     }
 
     /**
-     * 개입 점수 계산 (규칙 기반 - LLM 없이)
+     * 개입 점수 계산 (규칙 기반 + 피드백 가중치)
      */
-    private calculateInterventionScore(state: any): { score: number; reasonCodes: string[] } {
+    private async calculateInterventionScore(state: any): Promise<{ score: number; reasonCodes: string[] }> {
         let score = 0;
         const reasonCodes: string[] = [];
+        const weights = await this.getFeedbackWeights();
 
         // 스트레스 높음
         if (state.stress_level > GUARDRAILS.THRESHOLDS.HIGH_STRESS) {
-            score += state.stress_level * 0.3;
+            score += state.stress_level * 0.3 * (weights['notification_sent'] ?? 1.0);
             reasonCodes.push(REASON_CODES.HIGH_STRESS);
         }
 
         // 루틴 이탈
         if (state.routine_deviation_score > GUARDRAILS.THRESHOLDS.HIGH_ROUTINE_DEVIATION) {
-            score += state.routine_deviation_score * 0.2;
+            score += state.routine_deviation_score * 0.2 * (weights['reminder_sent'] ?? 1.0);
             reasonCodes.push(REASON_CODES.ROUTINE_BREAK);
         }
 
         // 마감 압박
         if (state.deadline_pressure_score > GUARDRAILS.THRESHOLDS.HIGH_DEADLINE_PRESSURE) {
-            score += state.deadline_pressure_score * 0.4;
+            score += state.deadline_pressure_score * 0.4 * (weights['notification_sent'] ?? 1.0);
             reasonCodes.push(REASON_CODES.DEADLINE_SOON);
         }
 
         // 에너지 낮음
         if (state.energy_level < GUARDRAILS.THRESHOLDS.LOW_ENERGY) {
-            score += (100 - state.energy_level) * 0.2;
+            score += (100 - state.energy_level) * 0.2 * (weights['schedule_suggested'] ?? 1.0);
             reasonCodes.push(REASON_CODES.LOW_ENERGY);
         }
 
         return { score: Math.min(100, score), reasonCodes };
+    }
+
+    /**
+     * 사용자별 피드백 가중치 조회
+     * - intervention_feedback_stats에서 action_type별 weight_multiplier 가져옴
+     * - 데이터 없으면 기본값 1.0 (콜드스타트 보호)
+     */
+    private async getFeedbackWeights(): Promise<Record<string, number>> {
+        try {
+            const { data, error } = await supabase
+                .from('intervention_feedback_stats')
+                .select('action_type, weight_multiplier')
+                .eq('user_email', this.userEmail);
+
+            if (error || !data || data.length === 0) {
+                return {};
+            }
+
+            const weights: Record<string, number> = {};
+            data.forEach((row: any) => {
+                weights[row.action_type] = Number(row.weight_multiplier) || 1.0;
+            });
+            return weights;
+        } catch {
+            return {};
+        }
     }
 
     /**

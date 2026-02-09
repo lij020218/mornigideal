@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { generateWeeklyReport, generateWeeklyReportNarrative } from "@/lib/weeklyReportGenerator";
 import db from "@/lib/db";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 /**
  * Weekly Report API
@@ -47,12 +47,10 @@ function getTargetWeekNumber(): number {
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-
-        const userEmail = session.user.email;
         const supabase = db.client;
 
         console.log(`[Weekly Report API] Fetching report for ${userEmail}`);

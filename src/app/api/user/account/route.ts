@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import bcrypt from "bcryptjs";
 
 export async function DELETE(request: Request) {
     try {
@@ -12,16 +13,16 @@ export async function DELETE(request: Request) {
         const { password } = await request.json();
 
         if (!password) {
-            return NextResponse.json({ error: "Password is required" }, { status: 400 });
+            return NextResponse.json({ error: "비밀번호를 입력해주세요." }, { status: 400 });
         }
 
         const userEmail = session.user.email;
-        console.log(`[Account Delete] Starting account deletion for: ${userEmail}`);
+        console.log(`[Account Delete] Starting account deletion`);
 
-        // Get user ID from public.users table
+        // Get user from public.users table (include password for verification)
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
-            .select("id")
+            .select("id, password")
             .eq("email", userEmail)
             .single();
 
@@ -30,48 +31,60 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
+        // Verify password
+        if (userData.password) {
+            let isValid = false;
+            if (userData.password.startsWith("$2")) {
+                isValid = await bcrypt.compare(password, userData.password);
+            } else {
+                isValid = password === userData.password;
+            }
+            if (!isValid) {
+                return NextResponse.json({ error: "비밀번호가 일치하지 않습니다." }, { status: 403 });
+            }
+        }
+
         const userId = userData.id;
         console.log(`[Account Delete] Found user ID: ${userId}`);
 
         // Delete all user data from various tables
-        // Order matters due to foreign key constraints
+        const deleteTasks: { table: string; filter: { column: string; value: string } }[] = [
+            { table: "daily_briefings", filter: { column: "user_id", value: userId } },
+            { table: "daily_goals", filter: { column: "user_id", value: userId } },
+            { table: "user_curriculum", filter: { column: "user_id", value: userEmail } },
+            { table: "user_profiles", filter: { column: "user_id", value: userEmail } },
+            { table: "user_subscriptions", filter: { column: "user_id", value: userId } },
+            { table: "ai_usage_daily", filter: { column: "user_id", value: userId } },
+            { table: "user_memories", filter: { column: "user_id", value: userId } },
+            { table: "user_memory", filter: { column: "user_id", value: userId } },
+            { table: "user_daily_logs", filter: { column: "user_id", value: userId } },
+            { table: "user_events", filter: { column: "user_id", value: userId } },
+            { table: "risk_alerts", filter: { column: "user_id", value: userId } },
+            { table: "jarvis_notifications", filter: { column: "user_id", value: userId } },
+            { table: "learning_progress", filter: { column: "user_id", value: userId } },
+            { table: "push_tokens", filter: { column: "user_id", value: userId } },
+            { table: "slack_tokens", filter: { column: "user_id", value: userId } },
+            { table: "schedule_memos", filter: { column: "user_id", value: userId } },
+            { table: "folders", filter: { column: "email", value: userEmail } },
+            { table: "gmail_tokens", filter: { column: "user_email", value: userEmail } },
+            { table: "schedules", filter: { column: "user_id", value: userEmail } },
+        ];
 
-        // 1. Delete daily briefings
-        const { error: briefingError } = await supabaseAdmin
-            .from("daily_briefings")
-            .delete()
-            .eq("user_id", userId);
-        if (briefingError) console.error("[Account Delete] Error deleting briefings:", briefingError);
+        for (const task of deleteTasks) {
+            const { error } = await supabaseAdmin
+                .from(task.table)
+                .delete()
+                .eq(task.filter.column, task.filter.value);
+            if (error) console.error(`[Account Delete] Error deleting ${task.table}:`, error);
+        }
 
-        // 2. Delete daily goals
-        const { error: goalsError } = await supabaseAdmin
-            .from("daily_goals")
-            .delete()
-            .eq("user_id", userId);
-        if (goalsError) console.error("[Account Delete] Error deleting goals:", goalsError);
-
-        // 3. Delete user curriculum
-        const { error: curriculumError } = await supabaseAdmin
-            .from("user_curriculum")
-            .delete()
-            .eq("user_id", userEmail);
-        if (curriculumError) console.error("[Account Delete] Error deleting curriculum:", curriculumError);
-
-        // 4. Delete user profile
-        const { error: profileError } = await supabaseAdmin
-            .from("user_profiles")
-            .delete()
-            .eq("user_id", userEmail);
-        if (profileError) console.error("[Account Delete] Error deleting profile:", profileError);
-
-        // 5. Delete materials (and their storage files)
+        // Delete materials (and their storage files)
         const { data: materials } = await supabaseAdmin
             .from("materials")
             .select("id, file_url")
             .eq("user_id", userEmail);
 
         if (materials && materials.length > 0) {
-            // Delete storage files
             for (const material of materials) {
                 if (material.file_url) {
                     try {
@@ -84,37 +97,10 @@ export async function DELETE(request: Request) {
                     }
                 }
             }
-
-            // Delete material records
-            const { error: materialsError } = await supabaseAdmin
-                .from("materials")
-                .delete()
-                .eq("user_id", userEmail);
-            if (materialsError) console.error("[Account Delete] Error deleting materials:", materialsError);
+            await supabaseAdmin.from("materials").delete().eq("user_id", userEmail);
         }
 
-        // 6. Delete folders
-        const { error: foldersError } = await supabaseAdmin
-            .from("folders")
-            .delete()
-            .eq("email", userEmail);
-        if (foldersError) console.error("[Account Delete] Error deleting folders:", foldersError);
-
-        // 7. Delete gmail tokens
-        const { error: tokensError } = await supabaseAdmin
-            .from("gmail_tokens")
-            .delete()
-            .eq("user_email", userEmail);
-        if (tokensError) console.error("[Account Delete] Error deleting gmail tokens:", tokensError);
-
-        // 8. Delete schedules
-        const { error: schedulesError } = await supabaseAdmin
-            .from("schedules")
-            .delete()
-            .eq("user_id", userEmail);
-        if (schedulesError) console.error("[Account Delete] Error deleting schedules:", schedulesError);
-
-        // 9. Finally, delete the user from public.users
+        // Finally, delete the user from public.users
         const { error: deleteUserError } = await supabaseAdmin
             .from("users")
             .delete()
@@ -124,7 +110,7 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Failed to delete user account" }, { status: 500 });
         }
 
-        console.log(`[Account Delete] Successfully deleted account for: ${userEmail}`);
+        console.log(`[Account Delete] Successfully deleted account`);
 
         return NextResponse.json({ success: true, message: "Account deleted successfully" });
     } catch (error: any) {

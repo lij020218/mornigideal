@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { generateEmbedding, prepareTextForEmbedding } from "@/lib/embeddings";
+import { generateEmbedding, prepareTextForEmbedding, generateContentHash } from "@/lib/embeddings";
+
+// 플랜별 RAG 설정
+const RAG_PLAN_CONFIG: Record<string, { threshold: number; limit: number; maxAgeDays: number | null; storageMb: number }> = {
+    Free: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
+    Standard: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
+    Pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 100 },
+    Max: { threshold: 0.7, limit: 10, maxAgeDays: null, storageMb: 1000 },
+};
 
 export interface MemoryEntry {
     id: string;
@@ -51,12 +59,33 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // RAG is Max plan only
-        if (userData.plan !== "Max") {
+        // 플랜별 용량 한도 체크
+        const userPlan = userData.plan || "Free";
+        const planConfig = RAG_PLAN_CONFIG[userPlan] || RAG_PLAN_CONFIG.Free;
+
+        const { data: storageData } = await supabaseAdmin.rpc('get_user_memory_size_mb', {
+            p_user_id: userData.id,
+        }).maybeSingle() as { data: { size_mb: number } | null };
+
+        const currentSizeMb = storageData?.size_mb || 0;
+        if (currentSizeMb >= planConfig.storageMb) {
             return NextResponse.json(
-                { error: "RAG feature is Max plan only" },
-                { status: 403 }
+                { error: `Storage limit exceeded (${planConfig.storageMb}MB for ${userPlan} plan)` },
+                { status: 429 }
             );
+        }
+
+        // 중복 체크 (content_hash)
+        const contentHash = await generateContentHash(content);
+        const { data: existing } = await supabaseAdmin
+            .from("user_memory")
+            .select("id")
+            .eq("user_id", userData.id)
+            .eq("content_hash", contentHash)
+            .maybeSingle();
+
+        if (existing) {
+            return NextResponse.json({ success: true, memory: existing, deduplicated: true });
         }
 
         // Prepare text and generate embedding
@@ -70,7 +99,8 @@ export async function POST(request: Request) {
                 user_id: userData.id,
                 content_type: contentType,
                 content: content,
-                embedding: JSON.stringify(embedding), // pgvector accepts array as string
+                embedding: JSON.stringify(embedding),
+                content_hash: contentHash,
                 metadata: metadata || {},
             })
             .select()
@@ -126,13 +156,13 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // RAG is Max plan only
-        if (userData.plan !== "Max") {
-            return NextResponse.json(
-                { error: "RAG feature is Max plan only" },
-                { status: 403 }
-            );
-        }
+        // 플랜별 차등 검색 설정
+        const userPlan = userData.plan || "Free";
+        const planConfig = RAG_PLAN_CONFIG[userPlan] || RAG_PLAN_CONFIG.Free;
+
+        // 클라이언트 파라미터 대신 플랜 설정 우선 적용
+        const effectiveThreshold = Math.max(threshold, planConfig.threshold);
+        const effectiveLimit = Math.min(limit, planConfig.limit);
 
         // Generate embedding for query
         const { embedding: queryEmbedding } = await generateEmbedding(query);
@@ -143,8 +173,8 @@ export async function GET(request: Request) {
             {
                 query_embedding: JSON.stringify(queryEmbedding),
                 match_user_id: userData.id,
-                match_threshold: threshold,
-                match_count: limit,
+                match_threshold: effectiveThreshold,
+                match_count: effectiveLimit,
             }
         );
 
@@ -161,6 +191,16 @@ export async function GET(request: Request) {
         if (contentType) {
             filteredMemories = filteredMemories.filter(
                 (m: SimilarMemory) => m.content_type === contentType
+            );
+        }
+
+        // 플랜별 기간 필터 (Free/Standard: 최근 30일만)
+        if (planConfig.maxAgeDays) {
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - planConfig.maxAgeDays);
+            const cutoffStr = cutoff.toISOString();
+            filteredMemories = filteredMemories.filter(
+                (m: SimilarMemory) => m.created_at >= cutoffStr
             );
         }
 

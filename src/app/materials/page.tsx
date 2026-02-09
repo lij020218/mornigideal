@@ -10,6 +10,7 @@ import { MaterialUploadDialog } from "@/components/features/dashboard/MaterialUp
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Material {
   id: string;
@@ -485,11 +486,11 @@ export default function MaterialsPage() {
                                     fetchMaterials();
                                   }
                                 } else {
-                                  alert("삭제에 실패했습니다.");
+                                  toast.error("삭제에 실패했습니다.");
                                 }
                               } catch (err) {
                                 console.error("Error deleting material:", err);
-                                alert("삭제 중 오류가 발생했습니다.");
+                                toast.error("삭제 중 오류가 발생했습니다.");
                               }
                             }
                           }}

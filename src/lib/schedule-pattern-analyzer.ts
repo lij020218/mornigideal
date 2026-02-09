@@ -42,7 +42,7 @@ export interface SchedulePattern {
  * 사용자의 최근 4주 일정을 분석하여 패턴 추출
  */
 export async function analyzeSchedulePatterns(userEmail: string): Promise<SchedulePattern> {
-    console.log(`[Schedule Analyzer] Analyzing patterns for ${userEmail}`);
+    console.log(`[Schedule Analyzer] Analyzing patterns`);
 
     const fourWeeksAgo = new Date();
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);

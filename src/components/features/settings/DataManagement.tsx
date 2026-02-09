@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Database, Trash2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 
 interface DataStats {
     totalEvents: number;
@@ -62,14 +63,14 @@ export function DataManagement() {
             if (response.ok) {
                 const data = await response.json();
                 setLastCleanup(new Date().toISOString());
-                alert(`정리 완료!\n삭제: ${data.report.totalRecordsDeleted}개\n집계: ${data.report.totalRecordsAggregated}개`);
+                toast.success(`정리 완료! 삭제: ${data.report.totalRecordsDeleted}개, 집계: ${data.report.totalRecordsAggregated}개`);
                 fetchStats(); // 통계 새로고침
             } else {
-                alert('데이터 정리에 실패했습니다.');
+                toast.error('데이터 정리에 실패했습니다.');
             }
         } catch (error) {
             console.error('Cleanup failed:', error);
-            alert('오류가 발생했습니다.');
+            toast.error('오류가 발생했습니다.');
         } finally {
             setCleaning(false);
         }

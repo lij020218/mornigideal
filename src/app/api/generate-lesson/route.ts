@@ -167,7 +167,7 @@ JSON 형식으로만 응답하세요. 예시:
                         title: "오늘의 학습 목표",
                         content: `${curriculumTitle}의 핵심 개념을 이해합니다.`,
                         bulletPoints: ["기본 개념 이해", "실무 적용 방법", "핵심 포인트 정리"],
-                        tip: "천천히 따라오세요!"
+                        tip: "천천히 따라와 주세요!"
                     },
                     {
                         slideNumber: 2,

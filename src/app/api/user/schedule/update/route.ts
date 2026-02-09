@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 interface LongTermGoal {
     id: string;
@@ -92,10 +92,10 @@ function calculateGoalProgress(
     return Math.round((completedCount / totalCount) * 100);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const { data: user, error: fetchError } = await supabase
             .from('users')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', userEmail)
             .single();
 
         if (fetchError || !user?.profile?.customGoals) {
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
         const { error: updateError } = await supabase
             .from('users')
             .update({ profile: updatedProfile })
-            .eq('email', session.user.email);
+            .eq('email', userEmail);
 
         if (updateError) {
             throw updateError;

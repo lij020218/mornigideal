@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { generateEmbedding, prepareTextForEmbedding } from "@/lib/embeddings";
+import { generateEmbeddingsBatch, prepareTextForEmbedding, isMessageMeaningful, generateContentHash } from "@/lib/embeddings";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 export interface ChatMessage {
     id: string;
@@ -21,10 +21,10 @@ export interface ChatSession {
 }
 
 // GET: 채팅 기록 조회 (날짜별 또는 목록)
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (userError || !userData) {
@@ -88,10 +88,10 @@ export async function GET(request: Request) {
 }
 
 // POST: 채팅 저장/업데이트
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (userError || !userData) {
@@ -143,50 +143,59 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Failed to save chat" }, { status: 500 });
         }
 
-        // Auto-embed for Max plan users (RAG)
+        // Auto-embed for all plan users (RAG)
         try {
-            // Get user plan
-            const { data: planData } = await supabaseAdmin
-                .from("users")
-                .select("profile")
-                .eq("id", userData.id)
-                .single();
-
-            const userPlan = planData?.profile?.plan || "Free";
-
-            if (userPlan === "Max" && messages && messages.length > 0) {
-                // Generate embeddings for user messages only (not assistant responses)
+            if (messages && messages.length > 0) {
                 const userMessages = messages.filter((m: ChatMessage) => m.role === 'user');
 
-                for (const msg of userMessages) {
-                    // Skip if message is too short (less than 10 chars)
-                    if (msg.content.length < 10) continue;
+                // 1. 무의미 메시지 필터
+                const meaningfulMessages = userMessages.filter((msg: ChatMessage) =>
+                    isMessageMeaningful(msg.content)
+                );
 
-                    // Prepare text with context
-                    const preparedText = prepareTextForEmbedding(
-                        msg.content,
-                        'chat',
-                        { date, timestamp: msg.timestamp }
-                    );
+                if (meaningfulMessages.length > 0) {
+                    // 2. content_hash 생성 + 중복 체크
+                    const hashMap = new Map<string, ChatMessage>();
+                    for (const msg of meaningfulMessages) {
+                        const hash = await generateContentHash(msg.content);
+                        hashMap.set(hash, msg);
+                    }
 
-                    // Generate embedding
-                    const { embedding } = await generateEmbedding(preparedText);
+                    const hashes = Array.from(hashMap.keys());
+                    const { data: existingRows } = await supabaseAdmin
+                        .from("user_memory")
+                        .select("content_hash")
+                        .eq("user_id", userData.id)
+                        .in("content_hash", hashes);
 
-                    // Store in user_memory
-                    await supabaseAdmin.from("user_memory").insert({
-                        user_id: userData.id,
-                        content_type: 'chat',
-                        content: msg.content,
-                        embedding: JSON.stringify(embedding),
-                        metadata: {
-                            date,
-                            timestamp: msg.timestamp,
-                            chatTitle: chatTitle,
-                        },
-                    });
+                    const existingHashes = new Set((existingRows || []).map((r: any) => r.content_hash));
+                    const newEntries = hashes
+                        .filter(h => !existingHashes.has(h))
+                        .map(h => ({ hash: h, msg: hashMap.get(h)! }));
+
+                    if (newEntries.length > 0) {
+                        // 3. 배치 embedding 생성
+                        const textsToEmbed = newEntries.map(e =>
+                            prepareTextForEmbedding(e.msg.content, 'chat', { date, timestamp: e.msg.timestamp })
+                        );
+
+                        const embeddings = await generateEmbeddingsBatch(textsToEmbed);
+
+                        // 4. 배치 insert
+                        const rows = newEntries.map((e, i) => ({
+                            user_id: userData.id,
+                            content_type: 'chat' as const,
+                            content: e.msg.content,
+                            embedding: JSON.stringify(embeddings[i].embedding),
+                            content_hash: e.hash,
+                            metadata: { date, timestamp: e.msg.timestamp, chatTitle },
+                        }));
+
+                        await supabaseAdmin.from("user_memory").insert(rows);
+
+                        console.log(`[Chat History] Auto-embedded ${rows.length}/${userMessages.length} messages (filtered: ${userMessages.length - meaningfulMessages.length}, dedup: ${meaningfulMessages.length - newEntries.length})`);
+                    }
                 }
-
-                console.log(`[Chat History] Auto-embedded ${userMessages.length} messages for Max user`);
             }
         } catch (embeddingError) {
             // Don't fail the whole request if embedding fails
@@ -201,10 +210,10 @@ export async function POST(request: Request) {
 }
 
 // DELETE: 30일 지난 채팅 자동 삭제 또는 특정 채팅 삭제
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -216,7 +225,7 @@ export async function DELETE(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (userError || !userData) {

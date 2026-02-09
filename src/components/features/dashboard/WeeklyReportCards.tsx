@@ -5,6 +5,7 @@ import { motion, AnimatePresence, PanInfo } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, Calendar, BookOpen, Award, Flame, Target, Sparkles, TrendingUp, Clock, Share2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { WeeklyReportStoryShare } from "./WeeklyReportStoryShare";
 
 // Fieri Logo - Amber color (complete logo with all 4 paths)
 const FieriLogo = ({ className = "" }: { className?: string }) => (
@@ -195,6 +196,7 @@ interface WeeklyReportCardsProps {
 
 export function WeeklyReportCards({ isOpen, onClose, reportData }: WeeklyReportCardsProps) {
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [showStoryShare, setShowStoryShare] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     if (!reportData) return null;
@@ -459,6 +461,16 @@ export function WeeklyReportCards({ isOpen, onClose, reportData }: WeeklyReportC
                         className="fixed top-20 left-4 right-4 bottom-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[380px] sm:h-[680px] z-50 flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
+                        {/* Story Share Button */}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setShowStoryShare(true)}
+                            className="absolute top-3 left-3 sm:-top-2 sm:-left-12 text-white hover:bg-white/20 z-20"
+                        >
+                            <Share2 className="w-5 h-5" />
+                        </Button>
+
                         {/* Close Button - inside card on mobile, outside on desktop */}
                         <Button
                             variant="ghost"
@@ -530,6 +542,12 @@ export function WeeklyReportCards({ isOpen, onClose, reportData }: WeeklyReportC
                             ))}
                         </div>
                     </motion.div>
+                    {/* Story Share Modal */}
+                    <WeeklyReportStoryShare
+                        isOpen={showStoryShare}
+                        onClose={() => setShowStoryShare(false)}
+                        reportData={reportData}
+                    />
                 </>
             )}
         </AnimatePresence>

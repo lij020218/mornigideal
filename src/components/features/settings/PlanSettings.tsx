@@ -25,6 +25,7 @@ import {
     ChevronRight
 } from "lucide-react";
 import { useUserPlan, UserPlanType, PlanFeatures } from "@/hooks/useUserPlan";
+import { toast } from "sonner";
 
 // 플랜별 아이콘 및 색상
 const PLAN_STYLES: Record<UserPlanType, {
@@ -64,7 +65,7 @@ const PLAN_INFO: Record<UserPlanType, {
     standard: {
         name: "Standard",
         nameKo: "스탠다드",
-        price: "₩4,900",
+        price: "무료",
         description: "기본 AI 비서 기능",
         features: [
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 50회" },
@@ -93,7 +94,7 @@ const PLAN_INFO: Record<UserPlanType, {
         features: [
             { icon: <Infinity className="w-4 h-4 text-amber-500" />, text: "무제한 AI 호출", highlight: true },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "Pro의 모든 기능" },
-            { icon: <Brain className="w-4 h-4 text-purple-500" />, text: "자비스 장기 기억 (RAG)", highlight: true },
+            { icon: <Brain className="w-4 h-4 text-purple-500" />, text: "AI 장기 기억 (RAG)", highlight: true },
             { icon: <Sparkles className="w-4 h-4 text-amber-500" />, text: "선제적 인사이트 제안", highlight: true },
         ],
     },
@@ -143,7 +144,7 @@ export function PlanSettings() {
 
     const handleConfirmUpgrade = async () => {
         // 실제 결제 시스템 연동 전까지는 안내 메시지만 표시
-        alert(`${PLAN_INFO[selectedPlan!].nameKo} 플랜으로 업그레이드하려면 결제가 필요합니다.\n\n결제 시스템은 준비 중입니다.`);
+        toast.info(`${PLAN_INFO[selectedPlan!].nameKo} 플랜으로 업그레이드하려면 결제가 필요합니다. 결제 시스템은 준비 중입니다.`);
         setShowUpgradeModal(false);
         setSelectedPlan(null);
     };

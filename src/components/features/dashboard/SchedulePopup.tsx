@@ -6,6 +6,7 @@ import { X, Plus, Trash2, Clock, Sun, Moon, Coffee, Briefcase, Dumbbell, BookOpe
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Schedule {
     wakeUp: string;
@@ -380,7 +381,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, undefined, targetDayOfWeek)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
@@ -415,7 +416,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, targetDate)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
@@ -467,7 +468,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, targetDate)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
@@ -491,7 +492,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         } else if (viewMode === 'daily-detail' && selectedDate) {
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
@@ -526,7 +527,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         if (viewMode === 'weekly') {
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, undefined, selectedDayOfWeek)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
@@ -551,7 +552,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         } else if (viewMode === 'daily-detail' && selectedDate) {
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, selectedDate)) {
-                alert('해당 시간대에 이미 일정이 있습니다. 다른 시간을 선택해주세요.');
+                toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 

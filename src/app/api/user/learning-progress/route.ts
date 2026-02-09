@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {
@@ -54,10 +54,10 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", userEmail)
             .single();
 
         if (!userData) {

@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, TrendingUp, BookOpen, Calendar, Award, Target, ArrowUpRight, ArrowDownRight, Minus, Flame, Clock } from "lucide-react";
+import { X, TrendingUp, BookOpen, Calendar, Award, Target, ArrowUpRight, ArrowDownRight, Minus, Flame, Clock, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
+import { WeeklyReportStoryShare } from "./WeeklyReportStoryShare";
 
 // Donut Chart Component
 function DonutChart({
@@ -144,6 +145,7 @@ interface WeeklyReportPopupProps {
 export function WeeklyReportPopup({ isOpen, onClose }: WeeklyReportPopupProps) {
     const [reportData, setReportData] = useState<WeeklyReportData | null>(null);
     const [loading, setLoading] = useState(false);
+    const [showStoryShare, setShowStoryShare] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -218,14 +220,26 @@ export function WeeklyReportPopup({ isOpen, onClose }: WeeklyReportPopupProps) {
                                         </p>
                                     )}
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={onClose}
-                                    className="text-white hover:bg-white/20 rounded-full"
-                                >
-                                    <X className="w-5 h-5" />
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    {reportData && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setShowStoryShare(true)}
+                                            className="text-white hover:bg-white/20 rounded-full"
+                                        >
+                                            <Share2 className="w-5 h-5" />
+                                        </Button>
+                                    )}
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={onClose}
+                                        className="text-white hover:bg-white/20 rounded-full"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 
@@ -446,6 +460,13 @@ export function WeeklyReportPopup({ isOpen, onClose }: WeeklyReportPopupProps) {
                             </Button>
                         </div>
                     </motion.div>
+
+                    {/* Story Share Modal */}
+                    <WeeklyReportStoryShare
+                        isOpen={showStoryShare}
+                        onClose={() => setShowStoryShare(false)}
+                        reportData={reportData}
+                    />
                 </>
             )}
         </AnimatePresence>

@@ -57,7 +57,7 @@ export interface UserContext {
  * 사용자 컨텍스트 생성
  */
 export async function generateUserContext(userEmail: string): Promise<UserContext> {
-    console.log(`[Context Service] Generating context for ${userEmail}`);
+    console.log(`[Context Service] Generating context`);
 
     // Supabase direct client 사용
     const supabase = db.client;
@@ -245,12 +245,12 @@ export async function getCachedOrGenerateContext(userEmail: string): Promise<Use
     );
 
     if (cacheResult.rows.length > 0) {
-        console.log(`[Context Service] Cache hit for ${userEmail}`);
+        console.log(`[Context Service] Cache hit`);
         return cacheResult.rows[0].context_data;
     }
 
     // 캐시 없으면 생성
-    console.log(`[Context Service] Cache miss, generating for ${userEmail}`);
+    console.log(`[Context Service] Cache miss, generating`);
     const context = await generateUserContext(userEmail);
 
     // 캐시 저장 (1시간 TTL)

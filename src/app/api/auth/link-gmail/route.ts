@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
         }
 
-        console.log("[Link Gmail] Successfully linked Gmail:", gmailEmail, "to user:", userEmail);
+        console.log("[Link Gmail] Successfully linked Gmail for user");
 
         return NextResponse.json({
             success: true,

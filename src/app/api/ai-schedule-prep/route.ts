@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { resolvePersonaStyle } from "@/lib/prompts/persona";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -176,7 +177,13 @@ export async function POST(request: Request) {
             messages: [
                 {
                     role: "system",
-                    content: "당신은 일정 알림 비서입니다. 주어진 형식 그대로 따라하세요. 일정 시간 알림 + 준비 체크리스트 2-3개만 작성. 추가 조언이나 응원 문구 금지."
+                    content: (() => {
+                        const style = resolvePersonaStyle(userProfile);
+                        const base = "일정 시간 알림 + 준비 체크리스트 2-3개만 작성.";
+                        if (style === 'professional') return `당신은 효율적인 일정 비서입니다. ${base} 간결한 완료형으로 작성.`;
+                        if (style === 'brief') return `${base} 추가 문구 일체 금지.`;
+                        return `당신은 친근한 일정 알림 비서입니다. ${base} 자연스러운 존댓말로 작성.`;
+                    })()
                 },
                 {
                     role: "user",
