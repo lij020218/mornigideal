@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import crypto from "crypto";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +16,38 @@ const supabase = createClient(
 );
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+
+function generateOAuthState(email: string): string {
+    const timestamp = Date.now().toString();
+    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+    const payload = `${email}:${timestamp}`;
+    const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+    return Buffer.from(`${payload}:${signature}`).toString('base64url');
+}
+
+function verifyOAuthState(state: string): string | null {
+    try {
+        const decoded = Buffer.from(state, 'base64url').toString();
+        const parts = decoded.split(':');
+        if (parts.length < 3) return null;
+
+        const signature = parts.pop()!;
+        const timestamp = parts.pop()!;
+        const email = parts.join(':');
+
+        const age = Date.now() - parseInt(timestamp);
+        if (isNaN(age) || age > 10 * 60 * 1000) return null;
+
+        const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+        const payload = `${email}:${timestamp}`;
+        const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+        if (signature !== expectedSig) return null;
+
+        return email;
+    } catch {
+        return null;
+    }
+}
 
 // GET: OAuth URL 생성
 export async function GET(request: NextRequest) {
@@ -35,11 +68,13 @@ export async function GET(request: NextRequest) {
       'users:read',
     ].join(',');
 
+    const state = generateOAuthState(userEmail);
+
     const params = new URLSearchParams({
       client_id: process.env.SLACK_CLIENT_ID!,
       user_scope: scopes,
       redirect_uri: `${BASE_URL}/api/auth/link-slack/callback`,
-      state: userEmail,
+      state,
     });
 
     const authUrl = `https://slack.com/oauth/v2/authorize?${params.toString()}`;
@@ -54,10 +89,26 @@ export async function GET(request: NextRequest) {
 // POST: 코드 교환 + 토큰 저장
 export async function POST(request: NextRequest) {
   try {
-    const { code, userEmail } = await request.json();
+    const { code, state } = await request.json();
 
-    if (!code || !userEmail) {
-      return NextResponse.json({ error: "Missing code or userEmail" }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: "Missing authorization code" }, { status: 400 });
+    }
+
+    // Verify state to get authenticated user email
+    let userEmail: string | null = null;
+
+    if (state) {
+        userEmail = verifyOAuthState(state);
+    }
+
+    // Fallback: verify via JWT/session
+    if (!userEmail) {
+        userEmail = await getUserEmailWithAuth(request);
+    }
+
+    if (!userEmail) {
+        return NextResponse.json({ error: "Unauthorized - invalid state" }, { status: 401 });
     }
 
     // Slack OAuth v2 토큰 교환
@@ -81,10 +132,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to exchange code for tokens" }, { status: 500 });
     }
 
-    // user token (xoxp-) 추출
     const authedUser = tokenData.authed_user;
     if (!authedUser?.access_token) {
-      console.error("[Link Slack] No user token in response");
       return NextResponse.json({ error: "No user token received" }, { status: 500 });
     }
 
@@ -123,8 +172,6 @@ export async function POST(request: NextRequest) {
     const displayName = userInfo.ok
       ? (userInfo.user?.real_name || userInfo.user?.name || authedUser.id)
       : authedUser.id;
-
-    console.log("[Link Slack] Successfully linked Slack, team:", tokenData.team?.name);
 
     return NextResponse.json({
       success: true,

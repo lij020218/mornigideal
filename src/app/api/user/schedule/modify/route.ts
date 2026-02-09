@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
+import { isValidString, isValidTime } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
     try {
@@ -25,6 +26,16 @@ export async function POST(request: NextRequest) {
                 { error: "scheduleId or originalText is required" },
                 { status: 400 }
             );
+        }
+
+        if (newText && !isValidString(newText, 500)) {
+            return NextResponse.json({ error: "newText too long (max 500)" }, { status: 400 });
+        }
+        if (newStartTime && !isValidTime(newStartTime)) {
+            return NextResponse.json({ error: "Invalid newStartTime (HH:MM)" }, { status: 400 });
+        }
+        if (newEndTime && !isValidTime(newEndTime)) {
+            return NextResponse.json({ error: "Invalid newEndTime (HH:MM)" }, { status: 400 });
         }
 
         // Get current user profile

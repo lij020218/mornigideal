@@ -27,7 +27,13 @@ function getOriginIfAllowed(request: NextRequest): string | null {
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
+    // 로그인/회원가입: 5회/분 (브루트포스 방지)
+    authLogin: { max: 5, windowMs: 60_000 },
+    // 기타 인증 API: 10회/분
     auth: { max: 10, windowMs: 60_000 },
+    // AI API: 30회/분
+    ai: { max: 30, windowMs: 60_000 },
+    // 일반 API: 60회/분
     default: { max: 60, windowMs: 60_000 },
 };
 
@@ -42,12 +48,19 @@ function cleanupStaleEntries() {
     }
 }
 
+function getRateLimitCategory(path: string): string {
+    if (path === '/api/auth/login' || path === '/api/auth/register' || path === '/api/auth/signup') return 'authLogin';
+    if (path.startsWith('/api/auth')) return 'auth';
+    if (path.startsWith('/api/ai-') || path.startsWith('/api/ai_')) return 'ai';
+    return 'default';
+}
+
 function checkRateLimit(ip: string, path: string): { allowed: boolean; remaining: number } {
     cleanupStaleEntries();
 
-    const isAuth = path.startsWith('/api/auth');
-    const limit = isAuth ? RATE_LIMITS.auth : RATE_LIMITS.default;
-    const key = `${ip}:${isAuth ? 'auth' : 'default'}`;
+    const category = getRateLimitCategory(path);
+    const limit = RATE_LIMITS[category];
+    const key = `${ip}:${category}`;
 
     const now = Date.now();
     const entry = rateLimitMap.get(key);

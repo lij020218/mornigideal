@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
+import { isValidDate } from "@/lib/validation";
 
 // GET /api/user/goals?date=2025-11-23 - Get goals for specific date
 export async function GET(request: NextRequest) {
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const date = searchParams.get('date') || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const dateParam = searchParams.get('date');
+        const date = (dateParam && isValidDate(dateParam)) ? dateParam : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // Get user ID from email
         const { data: userData, error: userError } = await supabase
@@ -78,9 +80,9 @@ export async function POST(request: NextRequest) {
 
         const { date, completed_goals, read_trends } = await request.json();
 
-        if (!date) {
+        if (!date || !isValidDate(date)) {
             return NextResponse.json(
-                { error: "Missing date" },
+                { error: "Missing or invalid date (YYYY-MM-DD)" },
                 { status: 400 }
             );
         }

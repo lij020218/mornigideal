@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
+import { isValidDate } from '@/lib/validation';
 
 // 오늘 일정 조회
 export async function GET(request: NextRequest) {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
 
-    const targetDate = dateParam ? new Date(dateParam) : new Date();
+    const targetDate = (dateParam && isValidDate(dateParam)) ? new Date(dateParam) : new Date();
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);

@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ code, userEmail }),
+                    body: JSON.stringify({ code, state: ${JSON.stringify(state)} }),
                 });
 
                 const data = await response.json();

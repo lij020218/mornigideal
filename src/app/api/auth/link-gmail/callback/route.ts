@@ -92,13 +92,13 @@ export async function GET(req: NextRequest) {
 
             try {
                 console.log('[Gmail Callback] Exchanging code for tokens...');
-                // Exchange code for tokens via our API
+                // Exchange code for tokens via our API (pass state for CSRF verification)
                 const response = await fetch('/api/auth/link-gmail', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ code, userEmail }),
+                    body: JSON.stringify({ code, state: ${JSON.stringify(state)} }),
                 });
 
                 const data = await response.json();

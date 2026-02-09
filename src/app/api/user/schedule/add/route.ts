@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
+import { isValidString, isValidTime, isValidDate } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
     try {
@@ -12,11 +13,21 @@ export async function POST(request: NextRequest) {
         const scheduleData = await request.json();
         const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo, linkedGoalId, linkedGoalType } = scheduleData;
 
-        if (!text) {
+        if (!text || !isValidString(text, 500)) {
             return NextResponse.json(
-                { error: "text is required" },
+                { error: "text is required (max 500 characters)" },
                 { status: 400 }
             );
+        }
+
+        if (startTime && !isValidTime(startTime)) {
+            return NextResponse.json({ error: "Invalid startTime format (HH:MM)" }, { status: 400 });
+        }
+        if (endTime && !isValidTime(endTime)) {
+            return NextResponse.json({ error: "Invalid endTime format (HH:MM)" }, { status: 400 });
+        }
+        if (specificDate && !isValidDate(specificDate)) {
+            return NextResponse.json({ error: "Invalid specificDate format (YYYY-MM-DD)" }, { status: 400 });
         }
 
         // Get current user profile

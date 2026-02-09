@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { generateEmbeddingsBatch, prepareTextForEmbedding, isMessageMeaningful, generateContentHash } from "@/lib/embeddings";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { isValidDate } from "@/lib/validation";
 
 export interface ChatMessage {
     id: string;
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const date = searchParams.get('date');
+        const dateParam = searchParams.get('date');
+        const date = (dateParam && isValidDate(dateParam)) ? dateParam : null;
         const listOnly = searchParams.get('list') === 'true';
 
         // Get user ID
