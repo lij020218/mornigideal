@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { getUserByEmail } from "@/lib/users";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -56,8 +56,8 @@ export async function POST(request: NextRequest) {
     try {
         console.log("[AI Resource Recommend] API 호출 시작");
 
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         let userProfile: UserProfileData = providedProfile || {};
         if (!providedProfile || Object.keys(providedProfile).length === 0) {
             try {
-                const user = await getUserByEmail(session.user.email);
+                const user = await getUserByEmail(email);
                 if (user?.profile) {
                     userProfile = user.profile as UserProfileData;
                 }
@@ -111,7 +111,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
         // RAG 컨텍스트 조회 (사용자 ID 필요)
         let ragContext = "";
         try {
-            const user = await getUserByEmail(session.user.email);
+            const user = await getUserByEmail(email);
             if (user?.id) {
                 ragContext = await fetchRagForActivity(targetActivity, user.id);
             }
@@ -158,7 +158,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email, modelName, "ai-resource-recommend",
+                email, modelName, "ai-resource-recommend",
                 usage.prompt_tokens, usage.completion_tokens
             );
         }
@@ -171,9 +171,9 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
             context,
         });
     } catch (error: any) {
-        console.error("[AI Resource Recommend] Error:", error.message);
+        console.error("[AI Resource Recommend] Error:", error);
         return NextResponse.json(
-            { error: "Failed to generate resource recommendation", details: error.message },
+            { error: "Failed to generate resource recommendation" },
             { status: 500 }
         );
     }

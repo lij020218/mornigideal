@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 
@@ -18,10 +18,10 @@ interface ScheduleRecommendation {
     color: string;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -244,7 +244,7 @@ daysOfWeek 코드: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                email,
                 "gpt-4o-mini-2024-07-18",
                 "ai-goal-schedule",
                 usage.prompt_tokens,

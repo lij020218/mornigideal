@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -13,10 +13,10 @@ const supabase = createClient(
     }
 );
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
         const { data: materials, count, error } = await supabase
             .from("materials")
             .select("*", { count: 'exact' })
-            .eq("user_id", session.user.email)
+            .eq("user_id", email)
             .order("created_at", { ascending: false })
             .range(from, to);
 
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         const { data: folderData } = await supabase
             .from("materials")
             .select("folder_id")
-            .eq("user_id", session.user.email)
+            .eq("user_id", email)
             .limit(1000);
 
         const folderCounts: Record<string, number> = {};
@@ -71,10 +71,10 @@ export async function GET(request: Request) {
     }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -89,7 +89,7 @@ export async function PATCH(request: Request) {
             .from("materials")
             .update({ folder_id: folder_id || null })
             .eq("id", id)
-            .eq("user_id", session.user.email)
+            .eq("user_id", email)
             .select()
             .single();
 
@@ -105,10 +105,10 @@ export async function PATCH(request: Request) {
     }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -117,14 +117,14 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: "Material ID is required" }, { status: 400 });
         }
 
-        console.log(`[Materials API] Deleting material ${id} for user ${session.user.email}`);
+        console.log(`[Materials API] Deleting material ${id}`);
 
         // 1. Get file_url to delete from storage
         const { data: material, error: fetchError } = await supabase
             .from("materials")
             .select("file_url")
             .eq("id", id)
-            .eq("user_id", session.user.email)
+            .eq("user_id", email)
             .single();
 
         if (fetchError) {
@@ -137,7 +137,7 @@ export async function DELETE(request: Request) {
             .from("materials")
             .delete()
             .eq("id", id)
-            .eq("user_id", session.user.email);
+            .eq("user_id", email);
 
         if (deleteError) {
             console.error("[Materials API] Error deleting material:", deleteError);

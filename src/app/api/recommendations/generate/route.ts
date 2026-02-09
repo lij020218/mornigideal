@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getUserByEmail } from "@/lib/users";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -21,16 +21,16 @@ interface UserProfileData {
   level?: string;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     let { job, goal, interests, exclude = [], excludeIds = [] } = await request.json();
 
     // If profile data not provided, fetch from database
     if (!job || !goal || !interests || interests.length === 0) {
-      const session = await auth();
-      if (session?.user?.email) {
+      const email = await getUserEmailWithAuth(request);
+      if (email) {
         try {
-          const user = await getUserByEmail(session.user.email);
+          const user = await getUserByEmail(email);
           if (user?.profile) {
             const profile = user.profile as UserProfileData;
 

@@ -290,8 +290,7 @@ export async function POST(request: Request) {
     }).eq('batch_id', batchId);
 
     return NextResponse.json({
-      error: "Batch job failed",
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: "Batch job failed"
     }, { status: 500 });
   }
 }

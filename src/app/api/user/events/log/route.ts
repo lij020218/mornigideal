@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import db from "@/lib/db";
 
 /**
@@ -11,8 +11,8 @@ import db from "@/lib/db";
  */
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
              VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5)
              RETURNING *`,
             [
-                session.user.email,
+                email,
                 eventType,
                 startAt ? new Date(startAt) : null,
                 endAt ? new Date(endAt) : null,
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
             ]
         );
 
-        console.log(`[Event Log] ${session.user.email}: ${eventType}`, metadata);
+        console.log(`[Event Log] Event logged: ${eventType}`);
 
         // 특정 이벤트는 즉시 feature 업데이트 트리거
         if (['workout_completed', 'workout_skipped', 'sleep_logged'].includes(eventType)) {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error("[Event Log] Error:", error);
         return NextResponse.json(
-            { error: "Failed to log event", details: error.message },
+            { error: "Failed to log event" },
             { status: 500 }
         );
     }

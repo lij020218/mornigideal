@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[Cron Weekly Report] Fatal error:", error);
         return NextResponse.json(
-            { error: "Weekly report generation failed", details: error.message },
+            { error: "Weekly report generation failed" },
             { status: 500 }
         );
     }

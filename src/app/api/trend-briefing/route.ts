@@ -497,11 +497,8 @@ Write in Korean. Be practical and specific for senior ${job}.`;
 
     } catch (error) {
         console.error("[API] Error fetching trends:", error);
-        console.error("[API] Error stack:", error instanceof Error ? error.stack : 'No stack');
-        console.error("[API] Error message:", error instanceof Error ? error.message : String(error));
         return NextResponse.json({
-            error: "Failed to fetch trends",
-            details: error instanceof Error ? error.message : String(error)
+            error: "Failed to fetch trends"
         }, { status: 500 });
     }
 }
@@ -650,11 +647,8 @@ Write in Korean.`;
         });
     } catch (error) {
         console.error("[API] Error generating briefing detail:", error);
-        console.error("[API] Error stack:", error instanceof Error ? error.stack : 'No stack');
-        console.error("[API] Error message:", error instanceof Error ? error.message : String(error));
         return NextResponse.json({
-            error: "Failed to generate briefing detail",
-            details: error instanceof Error ? error.message : String(error)
+            error: "Failed to generate briefing detail"
         }, { status: 500 });
     }
 }

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[User Preferences GET] Error:", error);
         return NextResponse.json(
-            { error: "Failed to get preferences", details: error.message },
+            { error: "Failed to get preferences" },
             { status: 500 }
         );
     }
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
             savedConstraints = result.rows[0];
         }
 
-        console.log(`[User Preferences] Updated for ${email}`);
+        console.log(`[User Preferences] Updated successfully`);
 
         // 컨텍스트 캐시 무효화
         await db.query(
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error("[User Preferences POST] Error:", error);
         return NextResponse.json(
-            { error: "Failed to save preferences", details: error.message },
+            { error: "Failed to save preferences" },
             { status: 500 }
         );
     }

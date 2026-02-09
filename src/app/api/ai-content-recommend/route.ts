@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { getUserByEmail } from "@/lib/users";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     try {
         console.log("[AI Content Recommend] API 호출 시작");
 
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             console.error("[AI Content Recommend] Unauthorized access attempt");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         // Get user profile from database
         let userProfile: UserProfile = {};
         try {
-            const user = await getUserByEmail(session.user.email);
+            const user = await getUserByEmail(email);
             if (user?.profile) {
                 userProfile = user.profile as UserProfile;
                 console.log("[AI Content Recommend] 사용자 프로필 로드 완료");
@@ -222,7 +222,7 @@ ${context ? `추가 컨텍스트: ${context}` : ""}
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                email,
                 "gpt-4o-mini",
                 "ai-content-recommend",
                 usage.prompt_tokens,
@@ -248,14 +248,12 @@ ${context ? `추가 컨텍스트: ${context}` : ""}
             return NextResponse.json({
                 success: false,
                 error: "Failed to parse AI response",
-                rawResponse: responseText,
             }, { status: 500 });
         }
     } catch (error: any) {
-        console.error("[AI Content Recommend] 에러 발생:", error);
-        console.error("[AI Content Recommend] 에러 상세:", error.message);
+        console.error("[AI Content Recommend] Error:", error);
         return NextResponse.json(
-            { error: "Failed to generate content recommendation", details: error.message },
+            { error: "Failed to generate content recommendation" },
             { status: 500 }
         );
     }

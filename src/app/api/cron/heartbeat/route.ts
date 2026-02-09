@@ -324,7 +324,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[Heartbeat] Fatal error:', error);
         return NextResponse.json(
-            { error: 'Heartbeat failed', details: String(error) },
+            { error: 'Heartbeat failed' },
             { status: 500 }
         );
     }

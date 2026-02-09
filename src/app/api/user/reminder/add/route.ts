@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to add reminder" }, { status: 500 });
         }
 
-        console.log(`[Reminder Add] Added: "${message}" at ${targetTime} for ${email}`);
+        console.log(`[Reminder Add] Added: "${message}" at ${targetTime}`);
 
         return NextResponse.json({
             success: true,

@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to modify schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Modify] Updated: ${existingSchedule.text} -> ${newText || existingSchedule.text} for ${email}`);
+        console.log(`[Schedule Modify] Updated: ${existingSchedule.text} -> ${newText || existingSchedule.text}`);
 
         return NextResponse.json({
             success: true,

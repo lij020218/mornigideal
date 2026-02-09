@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,13 +10,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 export const maxDuration = 60; // 60 seconds
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         console.log('[generate-curriculum] Starting curriculum generation');
 
         // 1. Authenticate User
-        const session = await auth();
-        if (!session || !session.user || !session.user.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -108,11 +108,11 @@ export async function POST(request: Request) {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
-            console.error("[generate-curriculum] User not found for email:", session.user.email);
+            console.error("[generate-curriculum] User not found for email:", email);
             // We still return the curriculum to the frontend even if save fails, but log error
         } else {
             const curriculumId = uuidv4();
@@ -135,15 +135,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ curriculum });
 
     } catch (error: any) {
-        console.error("[generate-curriculum] Error:", {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+        console.error("[generate-curriculum] Error:", error);
         return NextResponse.json({
-            error: "Failed to generate curriculum",
-            details: error.message,
-            errorType: error.name
+            error: "Failed to generate curriculum"
         }, { status: 500 });
     }
 }

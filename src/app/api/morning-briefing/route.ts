@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { generateUserContext } from "@/lib/user-context-service";
 import db from "@/lib/db";
@@ -25,12 +25,10 @@ export async function POST(request: NextRequest) {
         console.log("[Morning Briefing] API 호출 시작");
 
         // 인증 확인
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-
-        const userEmail = session.user.email;
 
         // 1. 날씨 정보 가져오기
         console.log("[Morning Briefing] 날씨 정보 조회 중...");
@@ -266,7 +264,6 @@ ${songRecommendation.reason}
         return NextResponse.json(
             {
                 error: "Failed to generate morning briefing",
-                details: error.message,
                 // Fallback message
                 message: "안녕하세요! 좋은 아침입니다 ☀️\n\n오늘 하루를 의미있게 시작해보세요. 오늘 꼭 해야 할 일 5가지를 정해서 일정에 추가해보시는 건 어떨까요?\n\n목표를 명확히 하면 하루가 더 생산적이고 보람차게 느껴질 거예요! 💪"
             },

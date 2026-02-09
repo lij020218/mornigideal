@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
         }
 
-        console.log("[Link GCal] Successfully linked Google Calendar for:", userEmail);
+        console.log("[Link GCal] Successfully linked Google Calendar");
 
         return NextResponse.json({
             success: true,

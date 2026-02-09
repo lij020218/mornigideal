@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import bcrypt from "bcryptjs";
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -15,8 +15,6 @@ export async function DELETE(request: Request) {
         if (!password) {
             return NextResponse.json({ error: "비밀번호를 입력해주세요." }, { status: 400 });
         }
-
-        const userEmail = session.user.email;
         console.log(`[Account Delete] Starting account deletion`);
 
         // Get user from public.users table (include password for verification)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 
@@ -29,8 +29,8 @@ interface EssayResult {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -120,7 +120,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
       const usage = grading.usage;
       if (usage) {
         await logOpenAIUsage(
-          session.user!.email!,
+          email,
           FINAL_MODEL,
           "grade-quiz/essay",
           usage.prompt_tokens,
@@ -208,7 +208,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     const adviceUsage = adviceResult.usage;
     if (adviceUsage) {
       await logOpenAIUsage(
-        session.user.email,
+        email,
         FINAL_MODEL,
         "grade-quiz/advice",
         adviceUsage.prompt_tokens,
@@ -242,8 +242,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     console.error("[GRADING ERROR]", error);
     return NextResponse.json(
       {
-        error: "Grading failed",
-        details: error.message,
+        error: "Grading failed"
       },
       { status: 500 }
     );

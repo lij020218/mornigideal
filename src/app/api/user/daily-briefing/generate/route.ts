@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { generateDailyBriefings } from "@/lib/dailyBriefingGenerator";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -16,10 +16,10 @@ export async function POST(request: Request) {
         // Fetch the generated briefing for current user using Admin client
         // CRITICAL: Always lookup by email to ensure we match the public.users ID used by the generator
         // (Session ID might be different depending on auth provider)
-        const { data: u } = await supabaseAdmin.from('users').select('id').eq('email', session.user.email!).single();
+        const { data: u } = await supabaseAdmin.from('users').select('id').eq('email', email).single();
         const userId = u?.id;
 
-        console.log(`[GenerateRoute] Lookup for User: ${session.user.email} -> ID: ${userId}`);
+        console.log(`[GenerateRoute] User lookup completed, ID found: ${!!userId}`);
 
         if (userId) {
             const date = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });

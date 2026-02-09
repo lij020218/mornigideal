@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -27,8 +27,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -119,7 +119,7 @@ ${fullContent}`;
     const usage = response.usage;
     if (usage) {
       await logOpenAIUsage(
-        session.user.email,
+        email,
         MINI_MODEL,
         "generate-concepts",
         usage.prompt_tokens,

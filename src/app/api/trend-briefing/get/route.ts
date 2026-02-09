@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         }
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        console.log(`[trend-briefing/get] Fetching briefing for ${userEmail} on ${today}`);
+        // Fetching briefing for today
 
         // Fetch pre-generated trend briefing from Supabase
         const { data, error } = await supabase
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         if (error) {
             if (error.code === 'PGRST116') {
                 // No briefing found
-                console.log(`[trend-briefing/get] No pre-generated briefing found for ${userEmail}`);
+                // No pre-generated briefing found
                 return NextResponse.json({ trends: null });
             }
             console.error('[trend-briefing/get] Error fetching briefing:', error);
@@ -36,11 +36,11 @@ export async function GET(request: NextRequest) {
         }
 
         if (!data) {
-            console.log(`[trend-briefing/get] No briefing data for ${userEmail}`);
+            // No briefing data found
             return NextResponse.json({ trends: null });
         }
 
-        console.log(`[trend-briefing/get] Found pre-generated briefing for ${userEmail}`);
+        // Found pre-generated briefing
 
         // Return in the format expected by the frontend
         return NextResponse.json({
@@ -51,8 +51,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[trend-briefing/get] Unexpected error:', error);
         return NextResponse.json({
-            error: 'Failed to fetch briefing',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'Failed to fetch briefing'
         }, { status: 500 });
     }
 }

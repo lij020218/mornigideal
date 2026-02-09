@@ -181,15 +181,9 @@ JSON 형식으로만 응답하세요. 예시:
         }
 
     } catch (error: any) {
-        console.error("[generate-lesson] Error:", {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+        console.error("[generate-lesson] Error:", error);
         return NextResponse.json({
-            error: "Failed to generate lesson content",
-            details: error.message,
-            errorType: error.name
+            error: "Failed to generate lesson content"
         }, { status: 500 });
     }
 }

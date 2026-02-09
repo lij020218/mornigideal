@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import {
     analyzeScheduleRisk,
     getUnreadAlerts,
@@ -17,13 +17,13 @@ import { canUseFeature } from "@/lib/user-plan";
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // 프로/맥스 플랜 체크
-        const hasAccess = await canUseFeature(session.user.email, "risk_alerts");
+        const hasAccess = await canUseFeature(email, "risk_alerts");
         if (!hasAccess) {
             return NextResponse.json(
                 { error: "이 기능은 프로 이상 플랜에서만 사용 가능합니다.", alerts: [] },
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const alerts = await getUnreadAlerts(session.user.email);
+        const alerts = await getUnreadAlerts(email);
         return NextResponse.json({ alerts });
     } catch (error: any) {
         console.error("[Risk Alerts API] GET Error:", error);
@@ -44,13 +44,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // 프로/맥스 플랜 체크
-        const hasAccess = await canUseFeature(session.user.email, "risk_alerts");
+        const hasAccess = await canUseFeature(email, "risk_alerts");
         if (!hasAccess) {
             return NextResponse.json({ alerts: [] });  // 무료 플랜은 빈 배열
         }
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         }
 
         const alerts = await analyzeScheduleRisk(
-            session.user.email,
+            email,
             newSchedule,
             existingSchedules || []
         );
@@ -82,8 +82,8 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -99,9 +99,9 @@ export async function PATCH(request: NextRequest) {
         let success = false;
 
         if (action === "read") {
-            success = await markAlertAsRead(session.user.email, alertId);
+            success = await markAlertAsRead(email, alertId);
         } else if (action === "dismiss") {
-            success = await dismissAlert(session.user.email, alertId);
+            success = await dismissAlert(email, alertId);
         } else {
             return NextResponse.json(
                 { error: "action은 'read' 또는 'dismiss'여야 합니다." },

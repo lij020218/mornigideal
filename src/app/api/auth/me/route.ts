@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 사용자 조회
-    console.log('[auth/me] Looking for userId:', decoded.userId, 'email:', decoded.email);
+    // Looking up user by token claims
 
     // 먼저 userId로 조회, 실패하면 email로 조회
     let user = null;
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     // userId로 못 찾으면 email로 시도
     if (!user && decoded.email) {
-      console.log('[auth/me] userId not found, trying email:', decoded.email);
+      // userId not found, trying email lookup
       const result = await supabaseAdmin
         .from('users')
         .select('id, email, name, created_at')
@@ -54,11 +54,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (error || !user) {
-      console.log('[auth/me] User not found, error:', error);
+      console.log('[auth/me] User not found');
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    console.log('[auth/me] Found user:', user.email);
+    // User found successfully
 
     return NextResponse.json({
       user: {

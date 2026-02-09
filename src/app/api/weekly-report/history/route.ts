@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import db from "@/lib/db";
 
 /**
@@ -21,12 +21,12 @@ const PLAN_LIMITS = {
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const userEmail = session.user.email;
+        const userEmail = email;
         const supabase = db.client;
 
         // Get user's plan
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[Weekly Report History] Error:", error);
         return NextResponse.json(
-            { error: "Failed to fetch weekly report history", details: error.message },
+            { error: "Failed to fetch weekly report history" },
             { status: 500 }
         );
     }

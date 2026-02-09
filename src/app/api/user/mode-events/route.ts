@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -17,8 +17,8 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         const { data, error } = await supabase
             .from('user_events')
             .insert({
-                email: session.user.email,
+                email: email,
                 event_type: eventType,
                 metadata: metadata || {},
                 created_at: new Date().toISOString(),
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to log event" }, { status: 500 });
         }
 
-        console.log(`[Mode Events] Logged ${eventType} for ${session.user.email}`);
+        console.log(`[Mode Events] Logged ${eventType}`);
 
         return NextResponse.json({
             success: true,
@@ -67,14 +67,14 @@ export async function POST(request: NextRequest) {
 
     } catch (error: any) {
         console.error('[Mode Events] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
         let query = supabase
             .from('user_events')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', email)
             .order('created_at', { ascending: false });
 
         // Filter by event type (focus or sleep related)
@@ -180,6 +180,6 @@ export async function GET(request: NextRequest) {
 
     } catch (error: any) {
         console.error('[Mode Events] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

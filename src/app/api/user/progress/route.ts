@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 // GET /api/user/progress?curriculum_id=xxx - Get progress for specific curriculum
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session || !session.user || !session.user.email) {
+        if (!email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
@@ -72,11 +72,11 @@ export async function GET(request: Request) {
 }
 
 // POST /api/user/progress - Update progress
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session || !session.user || !session.user.email) {
+        if (!email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {

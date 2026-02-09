@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -18,8 +18,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -29,7 +29,7 @@ export async function GET(
       .from("materials")
       .select("*")
       .eq("id", id)
-      .eq("user_id", session.user.email)
+      .eq("user_id", email)
       .single();
 
     if (error || !material) {
@@ -43,7 +43,7 @@ export async function GET(
   } catch (error: any) {
     console.error("[GET MATERIAL ERROR]", error);
     return NextResponse.json(
-      { error: "Failed to fetch material", details: error.message },
+      { error: "Failed to fetch material" },
       { status: 500 }
     );
   }

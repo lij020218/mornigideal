@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -110,15 +110,15 @@ OUTPUT JSON (ONE item only):
     }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session?.user?.email) {
+        if (!email) {
             return NextResponse.json({ cards: getDefaultCards() });
         }
 
-        const userEmail = session.user.email;
+        const userEmail = email;
         const { getUserByEmail } = await import("@/lib/users");
         const user = await getUserByEmail(userEmail);
 

@@ -335,8 +335,7 @@ Select now.`;
     } catch (error) {
         console.error('[CRON] Error in trend briefing generation:', error);
         return NextResponse.json({
-            error: 'Failed to generate trend briefings',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'Failed to generate trend briefings'
         }, { status: 500 });
     }
 }

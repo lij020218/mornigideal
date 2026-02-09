@@ -192,8 +192,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("[schedule/update] Error:", error);
         return NextResponse.json({
-            error: "Failed to update schedule",
-            details: error instanceof Error ? error.message : "Unknown error"
+            error: "Failed to update schedule"
         }, { status: 500 });
     }
 }

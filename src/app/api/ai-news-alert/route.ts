@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getUserByEmail } from "@/lib/users";
 
@@ -21,8 +21,8 @@ export async function POST(request: NextRequest) {
         console.log("[AI News Alert] API 호출 시작");
 
         // Check authentication
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             console.error("[AI News Alert] Unauthorized access attempt");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         // Get user profile from database
         let userProfile: UserProfileData = {};
         try {
-            const user = await getUserByEmail(session.user.email);
+            const user = await getUserByEmail(email);
             if (user?.profile) {
                 userProfile = user.profile as UserProfileData;
                 console.log("[AI News Alert] DB에서 프로필 로드 완료");
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error("[AI News Alert] 에러 발생:", error);
         return NextResponse.json(
-            { error: "Failed to fetch news", details: error.message },
+            { error: "Failed to fetch news" },
             { status: 500 }
         );
     }

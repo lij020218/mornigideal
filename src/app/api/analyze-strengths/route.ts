@@ -100,15 +100,9 @@ JSON 형식으로만 응답하세요:
         }
 
     } catch (error: any) {
-        console.error("[analyze-strengths] Error:", {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+        console.error("[analyze-strengths] Error:", error);
         return NextResponse.json({
-            error: "Failed to analyze strengths",
-            details: error.message,
-            errorType: error.name
+            error: "Failed to analyze strengths"
         }, { status: 500 });
     }
 }

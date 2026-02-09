@@ -4,19 +4,19 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { generateSmartBriefing } from "@/lib/jarvis-smart-briefing";
 import { canUseFeature, recordAiUsage } from "@/lib/user-plan";
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // 프로/맥스 플랜 체크
-        const hasAccess = await canUseFeature(session.user.email, "smart_briefing");
+        const hasAccess = await canUseFeature(email, "smart_briefing");
         if (!hasAccess) {
             return NextResponse.json(
                 { error: "이 기능은 프로 이상 플랜에서만 사용 가능합니다." },
@@ -34,13 +34,13 @@ export async function POST(request: NextRequest) {
         }
 
         const briefing = await generateSmartBriefing(
-            session.user.email,
+            email,
             news,
             userProfile || {}
         );
 
         // 사용량 기록
-        await recordAiUsage(session.user.email, "jarvis");
+        await recordAiUsage(email, "jarvis");
 
         if (!briefing) {
             return NextResponse.json(

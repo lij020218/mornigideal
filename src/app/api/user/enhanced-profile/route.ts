@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -11,10 +11,10 @@ import { supabase } from "@/lib/supabase";
  * - AI-friendly insights for personalization
  */
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', email)
             .single();
 
         if (profileError) {
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         const { data: activities, error: activitiesError } = await supabase
             .from('user_activity_logs')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .gte('timestamp', thirtyDaysAgo.toISOString());
 
         const analytics = analyzeUserBehavior(activities || []);
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
         const { data: schedules } = await supabase
             .from('custom_goals')
             .select('*')
-            .eq('user_email', session.user.email);
+            .eq('user_email', email);
 
         const scheduleInsights = analyzeSchedulePatterns(schedules || []);
 
@@ -100,7 +100,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ profile: enhancedProfile });
     } catch (error: any) {
         console.error('[Enhanced Profile] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 

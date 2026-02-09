@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         }
         const supabase = db.client;
 
-        console.log(`[Weekly Report API] Fetching report for ${userEmail}`);
+        console.log(`[Weekly Report API] Fetching report`);
 
         // 빠른 주차 번호 계산 (DB 쿼리 없이)
         const targetWeekNumber = getTargetWeekNumber();
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[Weekly Report API] Error:", error);
         return NextResponse.json(
-            { error: "Failed to generate weekly report", details: error.message },
+            { error: "Failed to generate weekly report" },
             { status: 500 }
         );
     }

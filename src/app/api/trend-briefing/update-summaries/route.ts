@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -10,18 +10,18 @@ const supabase = createClient(
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
-export async function POST() {
+export async function POST(request: NextRequest) {
     try {
         // Authenticate user
-        const session = await auth();
-        if (!session || !session.user || !session.user.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const userEmail = session.user.email;
+        const userEmail = email;
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        console.log(`[update-summaries] Updating summaries for ${userEmail} on ${today}`);
+        console.log(`[update-summaries] Updating summaries for ${today}`);
 
         // Fetch existing trend briefing
         const { data, error } = await supabase
@@ -150,8 +150,7 @@ Convert all ${trends.length} summaries now.`;
     } catch (error) {
         console.error('[update-summaries] Unexpected error:', error);
         return NextResponse.json({
-            error: 'Failed to update summaries',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'Failed to update summaries'
         }, { status: 500 });
     }
 }

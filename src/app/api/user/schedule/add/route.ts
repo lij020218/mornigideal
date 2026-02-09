@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to add schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime} for ${email}`);
+        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime}`);
 
         return NextResponse.json({
             success: true,

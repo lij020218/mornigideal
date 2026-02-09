@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 
@@ -223,29 +223,20 @@ async function refreshAccessToken(refreshToken: string, userEmail: string): Prom
     }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        console.log('[Gmail Summary] Session:', JSON.stringify(session, null, 2));
-
-        if (!session?.user?.email) {
+        if (!email) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
         }
 
-        const userEmail = session.user.email;
+        const userEmail = email;
         let accessToken: string | null = null;
 
-        // First, try to get token from session (for Google login users)
-        // @ts-ignore - NextAuth token access
-        const sessionToken = session.accessToken;
-
-        if (sessionToken) {
-            console.log('[Gmail Summary] Using session token (Google login)');
-            accessToken = sessionToken;
-        } else {
-            // Try to get token from database (for linked Gmail accounts)
-            console.log('[Gmail Summary] Checking database for linked Gmail');
+        // Try to get token from database (for linked Gmail accounts)
+        {
+            // Check database for linked Gmail account
             const { data, error } = await supabase
                 .from("gmail_tokens")
                 .select("*")
@@ -253,7 +244,7 @@ export async function GET() {
                 .single();
 
             if (error || !data) {
-                console.log('[Gmail Summary] No linked Gmail account found');
+                // No linked Gmail account found
                 return NextResponse.json({
                     error: "Gmail not linked",
                     message: "Google 계정을 연동해주세요"
@@ -263,7 +254,7 @@ export async function GET() {
             // Check if token is expired
             const now = Date.now();
             if (data.expires_at < now) {
-                console.log('[Gmail Summary] Token expired, refreshing...');
+                // Token expired, refreshing
 
                 if (!data.refresh_token) {
                     return NextResponse.json({
@@ -284,8 +275,8 @@ export async function GET() {
                 accessToken = data.access_token;
             }
 
-            console.log('[Gmail Summary] Using database token (linked account)');
-        }
+            // Using database token (linked account)
+        }  // end of token retrieval block
 
         if (!accessToken) {
             return NextResponse.json({
@@ -299,7 +290,7 @@ export async function GET() {
         try {
             const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/user/profile`, {
                 headers: {
-                    Cookie: `authjs.session-token=${session.user.email}` // Simplified, adjust based on your auth setup
+                    Cookie: `authjs.session-token=${userEmail}` // Simplified, adjust based on your auth setup
                 }
             });
             if (profileResponse.ok) {

@@ -28,7 +28,7 @@ interface MediaItem {
 
 async function generateRecommendationsForUser(email: string, job: string, goal: string, interests: string[]) {
     try {
-        console.log(`[CRON] Generating recommendations for ${email}...`);
+        console.log(`[CRON] Generating recommendations for a user...`);
 
         // 1. Generate Search Queries using Gemini
         const model = genAI.getGenerativeModel({
@@ -106,11 +106,11 @@ Make queries:
         // Select top 3 videos
         const recommendations = allVideos.slice(0, 3);
 
-        console.log(`[CRON] Generated ${recommendations.length} recommendations for ${email}`);
+        console.log(`[CRON] Generated ${recommendations.length} recommendations`);
         return recommendations;
 
     } catch (error) {
-        console.error(`[CRON] Error generating recommendations for ${email}:`, error);
+        console.error(`[CRON] Error generating recommendations:`, error);
         return null;
     }
 }
@@ -234,8 +234,7 @@ export async function GET(request: Request) {
     } catch (error) {
         console.error('[CRON] Error in recommendations generation:', error);
         return NextResponse.json({
-            error: 'Failed to generate recommendations',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'Failed to generate recommendations'
         }, { status: 500 });
     }
 }

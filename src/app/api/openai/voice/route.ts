@@ -1,17 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getUserByEmail } from "@/lib/users";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         if (!process.env.OPENAI_API_KEY) {
             return NextResponse.json({ error: "OPENAI_API_KEY is not set" }, { status: 500 });
         }
 
         // Authenticate user for any state-changing actions
-        const session = await auth();
-        const userEmail = session?.user?.email;
+        const userEmail = await getUserEmailWithAuth(request);
 
         const formData = await request.formData();
         const audio = formData.get("audio");

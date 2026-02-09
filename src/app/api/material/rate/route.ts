@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -10,8 +10,8 @@ import { supabase } from "@/lib/supabase";
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (material.user_id !== session.user.email) {
+    if (material.user_id !== email) {
       return NextResponse.json(
         { error: "Unauthorized to rate this material" },
         { status: 403 }
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[RATE] User ${session.user.email} rated material ${materialId} as ${rating}`);
+    console.log(`[RATE] Material ${materialId} rated as ${rating}`);
 
     return NextResponse.json({
       success: true,
@@ -90,8 +90,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
       .from("materials")
       .select("quality_rating")
       .eq("id", materialId)
-      .eq("user_id", session.user.email)
+      .eq("user_id", email)
       .single();
 
     if (error || !material) {

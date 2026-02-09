@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     try {
-      const session = await auth();
-      if (!session?.user?.email) {
+      const email = await getUserEmailWithAuth(request);
+      if (!email) {
         await sendEvent("error", { error: "Unauthorized" });
         await writer.close();
         return;
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = Buffer.from(await blobResponse.arrayBuffer());
       const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
-      const fileName = `${session.user.email}/${fileHash}.pdf`;
+      const fileName = `${email}/${fileHash}.pdf`;
 
       // Upload to Supabase
       let fileUrl = "";
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
       console.log('[DB] Creating material record...');
 
       const material = {
-        user_id: session.user.email,
+        user_id: email,
         title: originalFileName.replace(/\.(pdf|txt|doc|docx)$/i, ''),
         content: extractedText.substring(0, 50000),
         type,
@@ -427,7 +427,7 @@ ${normalizedText}
         const conversionUsage = conversionResponse.usage;
         if (conversionUsage) {
           await logOpenAIUsage(
-            session.user!.email!,
+            email,
             ADVANCED_MODEL,
             "analyze-material-stream/convert",
             conversionUsage.prompt_tokens,
@@ -488,7 +488,7 @@ ${converted}
           const mathFixUsage = mathFixResponse.usage;
           if (mathFixUsage) {
             await logOpenAIUsage(
-              session.user!.email!,
+              email,
               MINI_MODEL,
               "analyze-material-stream/math-fix",
               mathFixUsage.prompt_tokens,
@@ -533,7 +533,7 @@ ${converted}`;
         const enhanceUsage = miniResponse.usage;
         if (enhanceUsage) {
           await logOpenAIUsage(
-            session.user!.email!,
+            email,
             MINI_MODEL,
             "analyze-material-stream/enhance",
             enhanceUsage.prompt_tokens,
@@ -699,7 +699,7 @@ ${fullContent.substring(0, 30000)}
           const conceptsUsage = conceptsResponse.usage;
           if (conceptsUsage) {
             await logOpenAIUsage(
-              session.user!.email!,
+              email,
               MINI_MODEL,
               "analyze-material-stream/concepts",
               conceptsUsage.prompt_tokens,
@@ -740,7 +740,7 @@ ${fullContent.substring(0, 30000)}
       await writer.close();
     } catch (error: any) {
       console.error("[ERROR]", error);
-      await sendEvent("error", { error: error.message });
+      await sendEvent("error", { error: "Analysis failed" });
       await writer.close();
     }
   })();

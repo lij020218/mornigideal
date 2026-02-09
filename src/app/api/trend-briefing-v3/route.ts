@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -18,10 +18,10 @@ const openai = new OpenAI({
  * - Filters out uninteresting topics
  */
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -30,13 +30,13 @@ export async function GET(request: Request) {
         const goal = searchParams.get('goal') || '';
         const interests = searchParams.get('interests')?.split(',').filter(Boolean) || [];
 
-        console.log('[Trend Briefing v3] Generating personalized briefings for:', session.user.email);
+        console.log('[Trend Briefing v3] Generating personalized briefings');
 
         // Fetch user behavioral data
         const { data: activities } = await supabase
             .from('user_activity_logs')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .eq('activity_type', 'briefing_read')
             .order('timestamp', { ascending: false })
             .limit(50);
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         const { data: existingBriefings } = await supabase
             .from('trend_briefings')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .gte('created_at', `${today}T00:00:00`)
             .lte('created_at', `${today}T23:59:59`);
 
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                email,
                 modelName,
                 '/api/trend-briefing-v3',
                 usage.prompt_tokens,
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
 
         // Save to database
         const briefingsToSave = trends.map((trend: any) => ({
-            user_email: session.user.email,
+            user_email: email,
             title: trend.title,
             summary: trend.summary,
             category: trend.category || 'uncategorized',
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ trends: briefingsToSave });
     } catch (error: any) {
         console.error('[Trend Briefing v3] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 

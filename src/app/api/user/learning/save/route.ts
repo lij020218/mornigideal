@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to save learning" }, { status: 500 });
         }
 
-        console.log(`[Learning Save] Saved: "${content.substring(0, 50)}..." (${finalCategory}) for ${userEmail}`);
+        console.log(`[Learning Save] Saved: "${content.substring(0, 50)}..." (${finalCategory})`);
 
         // Category labels for response
         const categoryLabels: Record<string, string> = {

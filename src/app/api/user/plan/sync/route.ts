@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log(`[Plan Sync] ${userEmail} → ${plan}`);
+        console.log(`[Plan Sync] Plan synced: ${plan}`);
 
         return NextResponse.json({ success: true, plan });
     } catch (error: any) {

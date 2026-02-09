@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
                     ? Math.ceil((event.expiration_at_ms - Date.now()) / (1000 * 60 * 60 * 24))
                     : 31;
                 await upgradePlan(userEmail, plan, durationDays);
-                console.log(`[RevenueCat Webhook] Upgraded ${userEmail} → ${plan} (${durationDays}d)`);
+                console.log(`[RevenueCat Webhook] Upgraded user → ${plan} (${durationDays}d)`);
                 break;
             }
 
@@ -100,10 +100,10 @@ export async function POST(request: NextRequest) {
                 // 만료/취소 시 Standard로 다운그레이드
                 if (event.type === "EXPIRATION" || (event.expiration_at_ms && event.expiration_at_ms < Date.now())) {
                     await upgradePlan(userEmail, "standard");
-                    console.log(`[RevenueCat Webhook] Downgraded ${userEmail} → standard`);
+                    console.log(`[RevenueCat Webhook] Downgraded user → standard`);
                 } else {
                     // 취소했지만 아직 만료 전이면 현재 플랜 유지
-                    console.log(`[RevenueCat Webhook] Cancelled but still active for ${userEmail}`);
+                    console.log(`[RevenueCat Webhook] Cancelled but still active`);
                 }
                 break;
             }
@@ -111,12 +111,12 @@ export async function POST(request: NextRequest) {
             case "PRODUCT_CHANGE": {
                 const newPlan = productIdToPlan(event.product_id);
                 await upgradePlan(userEmail, newPlan);
-                console.log(`[RevenueCat Webhook] Plan changed ${userEmail} → ${newPlan}`);
+                console.log(`[RevenueCat Webhook] Plan changed → ${newPlan}`);
                 break;
             }
 
             case "BILLING_ISSUE_DETECTED": {
-                console.log(`[RevenueCat Webhook] Billing issue for ${userEmail}`);
+                console.log(`[RevenueCat Webhook] Billing issue detected`);
                 break;
             }
 

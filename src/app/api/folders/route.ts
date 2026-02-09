@@ -1,19 +1,19 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 // GET - Fetch all folders for the current user
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { data: folders, error } = await supabase
             .from('folders')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', email)
             .order('created_at', { ascending: true });
 
         if (error) {
@@ -29,10 +29,10 @@ export async function GET() {
 }
 
 // POST - Create a new folder
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
         const { data: folder, error } = await supabase
             .from('folders')
             .insert({
-                email: session.user.email,
+                email: email,
                 name: name.trim(),
                 color
             })
@@ -66,10 +66,10 @@ export async function POST(request: Request) {
 }
 
 // PATCH - Update folder name or color
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -89,7 +89,7 @@ export async function PATCH(request: Request) {
             .from('folders')
             .update(updates)
             .eq('id', id)
-            .eq('email', session.user.email)
+            .eq('email', email)
             .select()
             .single();
 
@@ -106,10 +106,10 @@ export async function PATCH(request: Request) {
 }
 
 // DELETE - Delete a folder
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -125,7 +125,7 @@ export async function DELETE(request: Request) {
             .from('folders')
             .delete()
             .eq('id', id)
-            .eq('email', session.user.email);
+            .eq('email', email);
 
         if (error) {
             console.error('[Folders API] Error deleting folder:', error);

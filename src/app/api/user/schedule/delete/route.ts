@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Delete] Deleted: ${deletedSchedule.text} at ${deletedSchedule.startTime} for ${email}`);
+        console.log(`[Schedule Delete] Deleted: ${deletedSchedule.text} at ${deletedSchedule.startTime}`);
 
         return NextResponse.json({
             success: true,

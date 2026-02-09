@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getUserByEmail } from "@/lib/users";
 
 type IntentResult = {
@@ -13,15 +13,14 @@ type IntentResult = {
     };
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
         const { text } = await request.json();
         if (!text || typeof text !== "string") {
             return NextResponse.json({ error: "Invalid text" }, { status: 400 });
         }
 
-        const session = await auth();
-        const userEmail = session?.user?.email;
+        const userEmail = await getUserEmailWithAuth(request);
 
         const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

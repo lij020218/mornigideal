@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -19,22 +19,22 @@ import { supabase } from "@/lib/supabase";
  *   metadata: { messageCount, topic }
  */
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { activityType, metadata } = await request.json();
 
-        console.log('[Activity Log] Recording activity:', { activityType, metadata });
+        console.log('[Activity Log] Recording activity:', activityType);
 
         // Store activity in database
         const { data, error } = await supabase
             .from('user_activity_logs')
             .insert({
-                user_email: session.user.email,
+                user_email: email,
                 activity_type: activityType,
                 metadata: metadata,
                 timestamp: new Date().toISOString(),
@@ -44,23 +44,23 @@ export async function POST(request: Request) {
 
         if (error) {
             console.error('[Activity Log] Database error:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to log activity" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, activity: data });
     } catch (error: any) {
         console.error('[Activity Log] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 
 /**
  * Get user activity analytics
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -74,14 +74,14 @@ export async function GET(request: Request) {
         const { data: activities, error } = await supabase
             .from('user_activity_logs')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .gte('timestamp', startDate.toISOString())
             .order('timestamp', { ascending: false })
             .limit(500);
 
         if (error) {
             console.error('[Activity Log] Query error:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch activity log" }, { status: 500 });
         }
 
         // Analyze activities
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ activities, analytics });
     } catch (error: any) {
         console.error('[Activity Log] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { generateUserContext } from "@/lib/user-context-service";
 import { detectDailyState, getStressReliefSuggestions, getEnergyBoostSuggestions } from "@/lib/stress-detector";
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
         console.log("[AI Suggest Schedules] API 호출 시작");
 
         // 인증 확인
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         console.log("[AI Suggest Schedules] 현재 시간:", currentHour);
 
         // Check cache first (with hour to avoid stale recommendations)
-        const cacheKey = `${session.user.email}-${requestCount}-${currentHour}`;
+        const cacheKey = `${email}-${requestCount}-${currentHour}`;
         const cachedResult = getCachedSuggestions(cacheKey, requestCount);
         if (cachedResult) {
             return NextResponse.json(cachedResult);
@@ -65,15 +65,15 @@ export async function POST(request: NextRequest) {
 
         // Context 생성 (캐시 사용하지 않고 항상 최신 데이터 가져오기)
         console.log("[AI Suggest Schedules] User context 생성 중...");
-        const context = await generateUserContext(session.user.email); // 캐시 대신 직접 생성
+        const context = await generateUserContext(email); // 캐시 대신 직접 생성
 
         // 스트레스/에너지 레벨 자동 감지
         console.log("[AI Suggest Schedules] 스트레스/에너지 레벨 감지 중...");
-        const dailyState = await detectDailyState(session.user.email);
+        const dailyState = await detectDailyState(email);
 
         // 업무-휴식 균형 분석
         console.log("[AI Suggest Schedules] 업무-휴식 균형 분석 중...");
-        const workRestBalance = await analyzeWorkRestBalance(session.user.email);
+        const workRestBalance = await analyzeWorkRestBalance(email);
         const balanceRecommendations = getRecommendationsByType(workRestBalance.recommendationType);
 
         // Get current context
@@ -374,7 +374,7 @@ ${addedSchedulesText}
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(
-                session.user.email,
+                email,
                 "gpt-4o-mini",
                 "ai-suggest-schedules",
                 usage.prompt_tokens,
@@ -407,10 +407,9 @@ ${addedSchedulesText}
 
         return NextResponse.json(responseData);
     } catch (error: any) {
-        console.error("[AI Suggest Schedules] 에러 발생:", error);
-        console.error("[AI Suggest Schedules] 에러 상세:", error.message);
+        console.error("[AI Suggest Schedules] Error:", error);
         return NextResponse.json(
-            { error: "Failed to generate schedule suggestions", details: error.message },
+            { error: "Failed to generate schedule suggestions" },
             { status: 500 }
         );
     }

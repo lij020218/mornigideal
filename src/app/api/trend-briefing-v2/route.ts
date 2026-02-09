@@ -167,8 +167,7 @@ ${JSON.stringify(newsForPrompt, null, 2)}
   } catch (error) {
     console.error("[API V2] Error:", error);
     return NextResponse.json({
-      error: "Failed to fetch trends",
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: "Failed to fetch trends"
     }, { status: 500 });
   }
 }
@@ -241,8 +240,7 @@ URL: ${originalUrl}
   } catch (error) {
     console.error("[API V2 POST] Error:", error);
     return NextResponse.json({
-      error: "Failed to generate briefing detail",
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: "Failed to generate briefing detail"
     }, { status: 500 });
   }
 }

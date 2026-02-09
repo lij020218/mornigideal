@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -7,10 +7,10 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         let query = supabase
             .from('user_events')
             .select('*')
-            .eq('user_email', session.user.email);
+            .eq('user_email', email);
 
         if (type) {
             query = query.eq('event_type', type);
@@ -52,8 +52,7 @@ export async function GET(request: Request) {
     } catch (error) {
         console.error('[user/events] Unexpected error:', error);
         return NextResponse.json({
-            error: 'Failed to fetch events',
-            details: error instanceof Error ? error.message : 'Unknown error'
+            error: 'Failed to fetch events'
         }, { status: 500 });
     }
 }

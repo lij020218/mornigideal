@@ -1,4 +1,5 @@
-import { auth } from "@/auth";
+import { NextRequest } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { routeChatRequest } from "@/lib/smart-chat-router";
@@ -7,10 +8,10 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
         let scheduleContext = "";
         try {
             const { getUserByEmail } = await import("@/lib/users");
-            const user = await getUserByEmail(session.user.email);
+            const user = await getUserByEmail(email);
             if (user?.profile) {
                 const p = user.profile;
                 userContext = `
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
                     // Log usage after stream completes
                     if (inputTokens > 0 || outputTokens > 0) {
                         await logOpenAIUsage(
-                            session.user.email!,
+                            email,
                             modelName,
                             '/api/ai-chat-stream',
                             inputTokens,

@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
           .from('users')
           .update({ password: hashedPassword })
           .eq('id', user.id);
-        console.log(`[Auth] Migrated plaintext password to bcrypt for user ${user.id}`);
+        console.log(`[Auth] Migrated plaintext password to bcrypt for a user`);
       }
     }
 

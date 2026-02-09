@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
         console.error("[AI Web Search] Tavily 에러:", error.message);
         return NextResponse.json({
             success: false,
-            result: `검색 중 오류가 발생했습니다. 직접 검색해보세요.\n\n🔍 추천 검색어: "${request.body ? '' : ''}"`,
-            error: error.message
+            result: `검색 중 오류가 발생했습니다. 직접 검색해보세요.`,
+            error: "Search failed"
         }, { status: 500 });
     }
 }

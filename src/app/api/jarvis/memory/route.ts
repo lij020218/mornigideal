@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import {
     saveMemory,
     searchMemories,
@@ -18,13 +18,13 @@ import { canUseFeature, recordAiUsage } from "@/lib/user-plan";
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // 맥스 플랜 체크
-        const hasAccess = await canUseFeature(session.user.email, "jarvis_memory");
+        const hasAccess = await canUseFeature(email, "jarvis_memory");
         if (!hasAccess) {
             return NextResponse.json(
                 { error: "이 기능은 맥스 플랜에서만 사용 가능합니다." },
@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
 
         if (query) {
             // 검색 모드
-            const result = await searchMemories(session.user.email, query, { limit });
+            const result = await searchMemories(email, query, { limit });
 
             // 사용량 기록
-            await recordAiUsage(session.user.email, "memory_search");
+            await recordAiUsage(email, "memory_search");
 
             if (!result.success) {
                 return NextResponse.json({ error: result.error }, { status: 500 });
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ memories: result.memories });
         } else {
             // 최근 기억 조회 모드
-            const result = await getRecentMemories(session.user.email, limit);
+            const result = await getRecentMemories(email, limit);
 
             if (!result.success) {
                 return NextResponse.json({ error: result.error }, { status: 500 });
@@ -69,13 +69,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         // 맥스 플랜 체크
-        const hasAccess = await canUseFeature(session.user.email, "jarvis_memory");
+        const hasAccess = await canUseFeature(email, "jarvis_memory");
         if (!hasAccess) {
             return NextResponse.json(
                 { error: "이 기능은 맥스 플랜에서만 사용 가능합니다." },
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         }
 
         const result = await saveMemory(
-            session.user.email,
+            email,
             content,
             type as MemoryType,
             metadata,
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         );
 
         // 사용량 기록
-        await recordAiUsage(session.user.email, "memory_search");
+        await recordAiUsage(email, "memory_search");
 
         if (!result.success) {
             return NextResponse.json({ error: result.error }, { status: 500 });
@@ -125,8 +125,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        const result = await deleteMemory(session.user.email, memoryId);
+        const result = await deleteMemory(email, memoryId);
 
         if (!result.success) {
             return NextResponse.json({ error: result.error }, { status: 500 });

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[Cron Daily Cleanup] Fatal error:", error);
         return NextResponse.json(
-            { error: "Cleanup failed", details: error.message },
+            { error: "Cleanup failed" },
             { status: 500 }
         );
     }

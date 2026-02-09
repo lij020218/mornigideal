@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -12,10 +12,10 @@ import { supabase } from "@/lib/supabase";
  * - Wellness insights and recommendations
  */
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
         const { data: schedules, error: schedulesError } = await supabase
             .from('custom_goals')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .gte('created_at', startDate.toISOString());
 
         if (schedulesError) {
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         const { data: activities, error: activitiesError } = await supabase
             .from('user_activity_logs')
             .select('*')
-            .eq('user_email', session.user.email)
+            .eq('user_email', email)
             .in('activity_type', ['schedule_complete', 'schedule_skip'])
             .gte('timestamp', startDate.toISOString());
 
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ analytics });
     } catch (error: any) {
         console.error('[Schedule Analytics] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 

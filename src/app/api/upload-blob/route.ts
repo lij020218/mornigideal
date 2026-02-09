@@ -1,11 +1,17 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Authenticate upfront before processing the upload
+  const userEmail = await getUserEmailWithAuth(request);
+  if (!userEmail) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const body = (await request.json()) as HandleUploadBody;
 
   try {
@@ -20,17 +26,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
-        // Check authentication before generating token
-        const session = await auth();
-        console.log('[upload-blob] Session:', session?.user?.email);
-
-        if (!session?.user?.email) {
-          console.error('[upload-blob] Unauthorized - no session');
-          throw new Error('Unauthorized');
-        }
-
         // Keep original filename to allow reuse of existing files (cost savings)
-        console.log('[upload-blob] Generating token for:', pathname);
 
         return {
           allowedContentTypes: [
@@ -40,7 +36,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           ],
           tokenPayload: JSON.stringify({
-            userEmail: session.user.email,
+            userEmail: userEmail,
           }),
           // Allow overwriting existing files to reuse them
           allowOverwrite: true,
@@ -55,7 +51,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(jsonResponse);
   } catch (error: any) {
     console.error('[upload-blob] Error:', error);
-    console.error('[upload-blob] Error stack:', error.stack);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: "Upload failed" }, { status: 400 });
   }
 }

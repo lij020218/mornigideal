@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -94,7 +94,7 @@ ${context}
   } catch (error: any) {
     console.error("[ONBOARDING QUIZ ERROR]:", error);
     return NextResponse.json(
-      { error: "Onboarding quiz generation failed", details: error.message },
+      { error: "Onboarding quiz generation failed" },
       { status: 500 }
     );
   }
@@ -102,8 +102,8 @@ ${context}
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const email = await getUserEmailWithAuth(request);
+    if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -266,7 +266,7 @@ ${allContent}
     // Log usage for all three quiz generations
     if (tfResult.usage) {
       await logOpenAIUsage(
-        session.user.email,
+        email,
         MINI_MODEL,
         "generate-quiz/tf",
         tfResult.usage.prompt_tokens,
@@ -275,7 +275,7 @@ ${allContent}
     }
     if (mcResult.usage) {
       await logOpenAIUsage(
-        session.user.email,
+        email,
         MINI_MODEL,
         "generate-quiz/mc",
         mcResult.usage.prompt_tokens,
@@ -284,7 +284,7 @@ ${allContent}
     }
     if (essayResult.usage) {
       await logOpenAIUsage(
-        session.user.email,
+        email,
         FINAL_MODEL,
         "generate-quiz/essay",
         essayResult.usage.prompt_tokens,
@@ -342,19 +342,10 @@ ${allContent}
 
     return NextResponse.json({ quiz, success: true, cached: false, cost: totalQuizCost });
   } catch (error: any) {
-    console.error("[QUIZ ERROR] Full error:", error);
-    console.error("[QUIZ ERROR] Error message:", error.message);
-    console.error("[QUIZ ERROR] Stack trace:", error.stack);
-    if (error.response) {
-      console.error("[QUIZ ERROR] API Response:", error.response.data);
-      console.error("[QUIZ ERROR] API Status:", error.response.status);
-    }
+    console.error("[QUIZ ERROR]:", error);
     return NextResponse.json(
       {
-        error: "Quiz generation failed",
-        details: error.message,
-        stack: error.stack,
-        apiError: error.response?.data || null
+        error: "Quiz generation failed"
       },
       { status: 500 }
     );

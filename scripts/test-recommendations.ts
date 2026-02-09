@@ -18,8 +18,10 @@ async function testRecommendations() {
             goal: "Master React",
             interests: ["React Server Components", "Performance"],
             exclude: []
-        })
-    } as Request;
+        }),
+        headers: new Headers(),
+        nextUrl: new URL("http://localhost:3000/api/recommendations/generate"),
+    } as any;
 
     try {
         const response = await POST(mockRequest);

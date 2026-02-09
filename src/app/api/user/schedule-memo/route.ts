@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
         const { data: userData } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (!userData) {

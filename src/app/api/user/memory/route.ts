@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { generateEmbedding, prepareTextForEmbedding, generateContentHash } from "@/lib/embeddings";
 
@@ -32,10 +32,10 @@ export interface SimilarMemory {
 }
 
 // POST: Store new memory with embedding
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id, plan")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
@@ -125,10 +125,10 @@ export async function POST(request: Request) {
 }
 
 // GET: Retrieve similar memories by semantic search
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id, plan")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
@@ -218,10 +218,10 @@ export async function GET(request: Request) {
 }
 
 // DELETE: Remove old memories (cleanup)
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -233,7 +233,7 @@ export async function DELETE(request: Request) {
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
