@@ -9,7 +9,7 @@
 // Types
 // ============================================
 
-export type UserIntent = 'schedule' | 'search' | 'goal' | 'chat' | 'analysis';
+export type UserIntent = 'schedule' | 'search' | 'goal' | 'chat' | 'analysis' | 'settings';
 
 export interface ChatAction {
     type:
@@ -26,7 +26,8 @@ export interface ChatAction {
         | "show_analysis"
         | "set_reminder"
         | "save_learning"
-        | "resolve_conflict";
+        | "resolve_conflict"
+        | "update_settings";
     label: string;
     data: Record<string, any>;
 }
@@ -157,6 +158,7 @@ export function classifyIntent(messages: any[]): UserIntent {
         { keywords: ['시간 분석', '시간 패턴', '수면 패턴', '운동 패턴', '생활 패턴', '어떻게 보냈'], intent: 'analysis' },
         { keywords: ['목표 달성', '목표 진행', '완료율', '성과 분석', '주간 리포트', '월간 리포트'], intent: 'goal' },
         { keywords: ['일정 추가', '일정 삭제', '일정 수정', '일정 변경', '일정 등록'], intent: 'schedule' },
+        { keywords: ['설정 변경', '설정 바꿔', '글자 크기', '글꼴 크기', '폰트 크기', '알림 소리', '알림 설정 바꿔', '응답 스타일', '학습 난이도', '컴팩트 모드', '방해 금지 시간'], intent: 'settings' },
     ];
 
     for (const rule of compoundRules) {
@@ -165,7 +167,11 @@ export function classifyIntent(messages: any[]): UserIntent {
         }
     }
 
-    // 2단계: 검색 의도 (schedule보다 먼저 - "추천", "찾아" 등은 검색 우선)
+    // 2단계: 설정 변경 의도
+    const settingsKeywords = ['글씨 크게', '글씨 작게', '글씨 보통', '폰트 크게', '폰트 작게', '소리 꺼', '소리 켜', '진동 꺼', '진동 켜', '간결하게', '상세하게', '컴팩트'];
+    if (settingsKeywords.some(k => text.includes(k))) return 'settings';
+
+    // 3단계: 검색 의도 (schedule보다 먼저 - "추천", "찾아" 등은 검색 우선)
     const searchKeywords = ['찾아줘', '검색해', '알려줘', '뭐야', '어디야', '추천해', '틀어', '영상', '카페', '맛집', '근처', '뉴스', '최신'];
     if (searchKeywords.some(k => text.includes(k))) return 'search';
 
@@ -217,6 +223,11 @@ type Action =
   | { type: "open_briefing"; label: string; data: { briefingId: string; title: string } }`;
     }
 
+    if (intent === 'settings' || intent === 'chat') {
+        schema += `
+  | { type: "update_settings"; label: string; data: { category: "appearance"|"notifications"|"ai"; settings: { fontSize?: "small"|"medium"|"large"; compactMode?: boolean; animationsEnabled?: boolean; scheduleReminders?: boolean; dailyBriefing?: boolean; weeklyReport?: boolean; goalNudges?: boolean; soundEnabled?: boolean; vibrationEnabled?: boolean; quietHoursEnabled?: boolean; responseStyle?: "concise"|"balanced"|"detailed"; learningDifficulty?: "easy"|"moderate"|"challenging"; autoSuggestions?: boolean; proactiveInsights?: boolean } } }`;
+    }
+
     if (intent === 'schedule' || intent === 'chat') {
         schema += `
   | { type: "open_link"; label: string; data: { url?: string; app?: string; query?: string; target?: string } }`;
@@ -266,8 +277,23 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - **목표 조회**: show_goals
 - **성장 기록**: save_learning`,
 
+        settings: `## 행동 가이드
+- **즉시 실행**: 설정 변경 요청 → 바로 update_settings 액션에 포함. 확인 질문 금지.
+- **카테고리 분류**:
+  - 글자 크기/컴팩트 모드/애니메이션 → category: "appearance"
+  - 알림 소리/진동/브리핑/리마인더 → category: "notifications"
+  - 응답 스타일/학습 난이도/자동 제안 → category: "ai"
+- **부분 업데이트**: 변경 요청된 설정만 settings에 포함. 나머지는 생략.
+- **값 매핑**:
+  - 크게/키워줘 → "large", 보통/기본 → "medium", 작게/줄여줘 → "small"
+  - 켜줘/활성화 → true, 꺼줘/비활성화 → false
+  - 간결하게/짧게 → "concise", 균형있게/보통 → "balanced", 상세하게/자세하게 → "detailed"
+  - 쉽게 → "easy", 적당히 → "moderate", 어렵게/도전적 → "challenging"
+- **확인 메시지**: "~으로 변경했어요" 형태로 변경 내용을 명확히 알려주세요.`,
+
         chat: `## 행동 가이드
 - 일정 관련 요청이 섞여 있으면 바로 actions에 포함
+- 설정 변경 요청이 섞여 있으면 바로 update_settings 액션에 포함
 - 일상 대화에는 actions 빈 배열 OK
 - **트렌드 브리핑 추천 요청 시**: Context에 있는 트렌드 브리핑 목록에서만 골라 소개하세요. 목록에 없는 브리핑을 만들어내지 마세요. open_briefing 액션의 briefingId는 목록의 ID 문자열을 그대로 사용하세요. 웹 검색(web_search)을 하지 마세요.`,
     };
@@ -301,6 +327,18 @@ User: "근처 맛집 추천해줘" (📍 위치: 성수동)
 {"message": "성수동 근처 맛집을 찾아볼게요! 🍽️ 성수동은 트렌디한 레스토랑이 많아서 선택지가 다양할 거예요.", "actions": [{"type": "open_link", "label": "🗺️ 지도에서 보기", "data": {"app": "naver_map", "query": "성수동 맛집"}}]}`;
     }
 
+    if (intent === 'settings') {
+        return `## Examples
+User: "글자 크기 크게 해줘"
+{"message": "글자 크기를 '크게'로 변경했어요! 📝", "actions": [{"type": "update_settings", "label": "글자 크기 변경", "data": {"category": "appearance", "settings": {"fontSize": "large"}}}]}
+
+User: "알림 소리 꺼줘"
+{"message": "알림 소리를 꺼드렸어요. 🔇", "actions": [{"type": "update_settings", "label": "알림 소리 끄기", "data": {"category": "notifications", "settings": {"soundEnabled": false}}}}]}
+
+User: "응답 스타일을 간결하게 바꿔줘"
+{"message": "응답 스타일을 '간결하게'로 변경했어요! ⚡", "actions": [{"type": "update_settings", "label": "응답 스타일 변경", "data": {"category": "ai", "settings": {"responseStyle": "concise"}}}]}`;
+    }
+
     return '';
 }
 
@@ -310,6 +348,18 @@ User: "근처 맛집 추천해줘" (📍 위치: 성수동)
 
 export function postProcessActions(actions: ChatAction[], currentTime: string): ChatAction[] {
     return actions.map(action => {
+        if (action.type === "update_settings" && action.data) {
+            const validCategories = ['appearance', 'notifications', 'ai'];
+            if (!validCategories.includes(action.data.category)) {
+                return null;
+            }
+            const s = action.data.settings;
+            if (!s || typeof s !== 'object') return null;
+            if (s.fontSize && !['small', 'medium', 'large'].includes(s.fontSize)) delete s.fontSize;
+            if (s.responseStyle && !['concise', 'balanced', 'detailed'].includes(s.responseStyle)) delete s.responseStyle;
+            if (s.learningDifficulty && !['easy', 'moderate', 'challenging'].includes(s.learningDifficulty)) delete s.learningDifficulty;
+            if (Object.keys(s).length === 0) return null;
+        }
         if (action.type === "add_schedule" && action.data) {
             if (action.data.text) {
                 action.data.text = normalizeScheduleName(action.data.text);
@@ -352,6 +402,11 @@ export function assembleContextBlocks(params: {
     // 항상 포함: 날짜/시간, 사용자 기본 정보
     blocks.push(params.currentDateContext);
     blocks.push(params.userContext);
+
+    // settings 의도는 최소 컨텍스트만 (날짜+사용자 정보)
+    if (params.intent === 'settings') {
+        return blocks;
+    }
 
     // 일정: schedule/chat만 전체, 나머지는 개수 요약
     if (params.intent === 'schedule' || params.intent === 'chat') {
@@ -465,7 +520,7 @@ export function getRequiredDataSources(intent: UserIntent, userPlan: string): {
 } {
     return {
         needsEventLogs: userPlan === "Max" && ['schedule', 'analysis', 'goal'].includes(intent),
-        needsRag: true,
+        needsRag: intent !== 'settings',
         needsTrend: ['chat', 'search'].includes(intent),
         needsFullSchedule: ['schedule', 'chat'].includes(intent),
     };
