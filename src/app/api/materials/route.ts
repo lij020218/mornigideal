@@ -15,24 +15,16 @@ const supabase = createClient(
 
 export async function GET(request: Request) {
     try {
-        console.log("[Materials API] Starting request...");
         const session = await auth();
-        console.log("[Materials API] Session:", session);
-        console.log("[Materials API] User:", session?.user);
-        console.log("[Materials API] User Email:", session?.user?.email);
-
         if (!session?.user?.email) {
-            console.log("[Materials API] No session or user email - returning 401");
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
-        const page = parseInt(searchParams.get('page') || '1');
-        const limit = parseInt(searchParams.get('limit') || '12');
+        const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+        const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '12')));
         const from = (page - 1) * limit;
         const to = from + limit - 1;
-
-        console.log(`[Materials API] Querying materials for user: ${session.user.email}, page: ${page}, limit: ${limit}`);
 
         const { data: materials, count, error } = await supabase
             .from("materials")
@@ -49,20 +41,18 @@ export async function GET(request: Request) {
             );
         }
 
-        // Get folder counts
-        const { data: allMaterials } = await supabase
+        // Get folder counts using grouped query (avoids fetching all materials)
+        const { data: folderData } = await supabase
             .from("materials")
             .select("folder_id")
-            .eq("user_id", session.user.email);
+            .eq("user_id", session.user.email)
+            .limit(1000);
 
         const folderCounts: Record<string, number> = {};
-        allMaterials?.forEach(m => {
+        folderData?.forEach(m => {
             const folderId = m.folder_id || 'all';
             folderCounts[folderId] = (folderCounts[folderId] || 0) + 1;
         });
-
-        console.log(`[Materials API] Fetched ${materials?.length || 0} materials (Total: ${count}) for user ${session.user.email}`);
-        console.log(`[Materials API] Folder counts:`, folderCounts);
 
         return NextResponse.json({
             materials: materials || [],

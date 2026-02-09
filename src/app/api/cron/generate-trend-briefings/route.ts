@@ -142,58 +142,66 @@ export async function GET(request: Request) {
             }, { status: 500 });
         }
 
-        // Step 2: Get all users with profiles
-        const { data: users, error: usersError } = await supabase
-            .from('users')
-            .select('email, profile')
-            .not('profile', 'is', null);
+        // Step 2: Get users with profiles (paginated)
+        const USER_BATCH_SIZE = 50;
+        let userOffset = 0;
+        let allUsers: { email: string; profile: any }[] = [];
 
-        if (usersError || !users || users.length === 0) {
-            console.error('[CRON] No users found:', usersError);
-            return NextResponse.json({
-                success: true,
-                message: 'No users to process'
-            });
+        while (true) {
+            const { data: batch, error: usersError } = await supabase
+                .from('users')
+                .select('email, profile')
+                .not('profile', 'is', null)
+                .range(userOffset, userOffset + USER_BATCH_SIZE - 1);
+
+            if (usersError) {
+                console.error('[CRON] Error fetching users:', usersError);
+                break;
+            }
+            if (!batch || batch.length === 0) break;
+            allUsers = allUsers.concat(batch);
+            if (batch.length < USER_BATCH_SIZE) break;
+            userOffset += USER_BATCH_SIZE;
         }
 
-        console.log(`[CRON] Found ${users.length} users to generate trend briefings for`);
+        if (allUsers.length === 0) {
+            return NextResponse.json({ success: true, message: 'No users to process' });
+        }
+
+        console.log(`[CRON] Found ${allUsers.length} users to generate trend briefings for`);
 
         const selectionModel = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const results = [];
+        // Pre-sort and prepare articles once (not per user)
+        const sortedArticles = rssArticles.sort((a, b) => a.ageInDays - b.ageInDays);
+        const articlesForPrompt = sortedArticles.slice(0, 100).map((article, index) => ({
+            id: index,
+            title: article.title,
+            source: article.sourceName,
+            category: article.category,
+            age: `${article.ageInDays.toFixed(1)} days ago`,
+            snippet: article.description?.slice(0, 200) || ""
+        }));
 
-        // Step 3: Generate personalized trend briefings for each user
-        for (const user of users) {
-            try {
-                const userEmail = user.email;
-                const userProfile = user.profile as any;
+        const results: any[] = [];
 
-                console.log(`[CRON] Generating trend briefing for: ${userEmail}`);
+        // Step 3: Process users in parallel batches of 3 (Gemini API rate limits)
+        const CONCURRENCY = 3;
+        for (let i = 0; i < allUsers.length; i += CONCURRENCY) {
+            const userBatch = allUsers.slice(i, i + CONCURRENCY);
+            const batchResults = await Promise.allSettled(
+                userBatch.map(async (user) => {
+                    const userProfile = user.profile as any;
+                    const job = userProfile.job || 'Professional';
+                    const goal = userProfile.goal || 'Growth';
+                    const interests = userProfile.interests || [];
+                    const level = userProfile.level || 'Intermediate';
+                    const interestList = interests.join(', ');
 
-                const job = userProfile.job || 'Professional';
-                const goal = userProfile.goal || 'Growth';
-                const interests = userProfile.interests || [];
-                const level = userProfile.level || 'Intermediate';
-
-                // Sort by recency
-                const sortedArticles = rssArticles.sort((a, b) => a.ageInDays - b.ageInDays);
-
-                // Prepare articles for Gemini selection
-                const articlesForPrompt = sortedArticles.slice(0, 100).map((article, index) => ({
-                    id: index,
-                    title: article.title,
-                    source: article.sourceName,
-                    category: article.category,
-                    age: `${article.ageInDays.toFixed(1)} days ago`,
-                    snippet: article.description?.slice(0, 200) || ""
-                }));
-
-                const interestList = interests.join(', ');
-
-                const selectionPrompt = `You are curating news for a ${level} ${job}.
+                    const selectionPrompt = `You are curating news for a ${level} ${job}.
 
 USER PROFILE:
 - Job: ${job}
@@ -233,94 +241,83 @@ Requirements:
 
 Select now.`;
 
-                const result = await selectionModel.generateContent(selectionPrompt);
-                const response = await result.response;
-                const text = response.text();
+                    const result = await selectionModel.generateContent(selectionPrompt);
+                    const response = await result.response;
+                    const text = response.text();
 
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (parseError) {
-                    console.error(`[CRON] Failed to parse Gemini response for ${userEmail}:`, parseError);
-                    continue;
-                }
-
-                const selectedArticles = data.selectedArticles || [];
-
-                if (selectedArticles.length === 0) {
-                    console.error(`[CRON] No articles selected for ${userEmail}`);
-                    continue;
-                }
-
-                // Map selected articles back to original RSS articles
-                const trends = selectedArticles.map((selected: any) => {
-                    const filteredArticle = articlesForPrompt[selected.id];
-                    const originalArticle = rssArticles.find(article =>
-                        article.title === filteredArticle?.title &&
-                        article.sourceName === filteredArticle?.source
-                    );
-                    const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
-
-                    return {
-                        id: generateTrendId(selected.title_korean),
-                        title: selected.title_korean,
-                        category: selected.category || "General",
-                        summary: selected.summary_korean,
-                        time: pubDate,
-                        imageColor: "bg-blue-500/20",
-                        originalUrl: originalArticle?.link || "",
-                        imageUrl: "",
-                        source: originalArticle?.sourceName || "Unknown",
-                        relevance: selected.relevance_korean
-                    };
-                });
-
-                console.log(`[CRON] Selected ${trends.length} articles for ${userEmail}, generating detailed briefings...`);
-
-                // Step 4: Generate detailed briefings for all 6 trends in parallel
-                const detailPromises = trends.map(async (trend: any) => {
+                    let data;
                     try {
-                        const detail = await generateDetailedBriefing(trend, job);
-                        await saveDetailCache(trend.id, detail, userEmail);
-                        console.log(`[CRON] Cached detail for: ${trend.title}`);
-                        return { success: true };
-                    } catch (error) {
-                        console.error(`[CRON] Error generating detail for ${trend.title}:`, error);
-                        return { success: false };
+                        data = JSON.parse(text);
+                    } catch {
+                        console.error(`[CRON] Failed to parse Gemini response for ${user.email}`);
+                        return { email: user.email, status: 'parse_error' };
                     }
-                });
 
-                await Promise.all(detailPromises);
+                    const selectedArticles = data.selectedArticles || [];
+                    if (selectedArticles.length === 0) {
+                        return { email: user.email, status: 'no_articles' };
+                    }
 
-                // Step 5: Save trends to cache
-                const { error: saveError } = await supabase
-                    .from('trends_cache')
-                    .upsert({
-                        email: userEmail,
-                        date: today,
-                        trends: trends,
-                        created_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'email,date'
+                    const trends = selectedArticles.map((selected: any) => {
+                        const filteredArticle = articlesForPrompt[selected.id];
+                        const originalArticle = rssArticles.find(article =>
+                            article.title === filteredArticle?.title &&
+                            article.sourceName === filteredArticle?.source
+                        );
+                        const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+
+                        return {
+                            id: generateTrendId(selected.title_korean),
+                            title: selected.title_korean,
+                            category: selected.category || "General",
+                            summary: selected.summary_korean,
+                            time: pubDate,
+                            imageColor: "bg-blue-500/20",
+                            originalUrl: originalArticle?.link || "",
+                            imageUrl: "",
+                            source: originalArticle?.sourceName || "Unknown",
+                            relevance: selected.relevance_korean
+                        };
                     });
 
-                if (saveError) {
-                    console.error(`[CRON] Error saving trends for ${userEmail}:`, saveError);
+                    // Generate detailed briefings in parallel
+                    await Promise.all(trends.map(async (trend: any) => {
+                        try {
+                            const detail = await generateDetailedBriefing(trend, job);
+                            await saveDetailCache(trend.id, detail, user.email);
+                        } catch (error) {
+                            console.error(`[CRON] Error generating detail for ${trend.title}:`, error);
+                        }
+                    }));
+
+                    const { error: saveError } = await supabase
+                        .from('trends_cache')
+                        .upsert({
+                            email: user.email,
+                            date: today,
+                            trends,
+                            created_at: new Date().toISOString()
+                        }, { onConflict: 'email,date' });
+
+                    if (saveError) {
+                        return { email: user.email, status: 'error', error: saveError.message };
+                    }
+                    return { email: user.email, status: 'success', trends: trends.length };
+                })
+            );
+
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled') {
+                    results.push(result.value);
                 } else {
-                    console.log(`[CRON] Successfully generated and cached trends + details for ${userEmail}`);
-                    results.push({ email: userEmail, status: 'success', trends: trends.length });
+                    const email = userBatch[batchResults.indexOf(result)]?.email || 'unknown';
+                    results.push({ email, status: 'error', error: result.reason?.message });
                 }
+            }
 
-                // Rate limiting delay
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-            } catch (error) {
-                console.error(`[CRON] Error processing user ${user.email}:`, error);
-                results.push({
-                    email: user.email,
-                    status: 'error',
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
+            // Rate limiting between batches
+            if (i + CONCURRENCY < allUsers.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
@@ -328,7 +325,7 @@ Select now.`;
 
         return NextResponse.json({
             success: true,
-            processed: users.length,
+            processed: allUsers.length,
             successful: results.filter(r => r.status === 'success').length,
             failed: results.filter(r => r.status === 'error').length,
             results,

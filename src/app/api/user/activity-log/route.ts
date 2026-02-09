@@ -70,13 +70,14 @@ export async function GET(request: Request) {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
 
-        // Fetch recent activities
+        // Fetch recent activities (capped at 500 for performance)
         const { data: activities, error } = await supabase
             .from('user_activity_logs')
             .select('*')
             .eq('user_email', session.user.email)
             .gte('timestamp', startDate.toISOString())
-            .order('timestamp', { ascending: false });
+            .order('timestamp', { ascending: false })
+            .limit(500);
 
         if (error) {
             console.error('[Activity Log] Query error:', error);

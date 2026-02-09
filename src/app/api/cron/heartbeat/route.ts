@@ -179,18 +179,29 @@ export async function GET(request: NextRequest) {
     console.log(`[Heartbeat] Starting at KST ${kstHour}:00, date: ${todayStr}`);
 
     try {
-        // 1. 최근 7일 이내에 활동한 사용자 조회
+        // 1. 최근 7일 이내에 활동한 사용자 조회 (paginated, email only)
         const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const { data: activeUsers, error: usersError } = await supabase
-            .from('users')
-            .select('email, profile')
-            .gte('updated_at', sevenDaysAgo.toISOString());
+        const PAGE_SIZE = 50;
+        let pageOffset = 0;
+        let activeUsers: { email: string }[] = [];
 
-        if (usersError || !activeUsers) {
-            console.error('[Heartbeat] Failed to get users:', usersError);
-            return NextResponse.json({ error: 'Failed to get users' }, { status: 500 });
+        while (true) {
+            const { data: batch, error: usersError } = await supabase
+                .from('users')
+                .select('email')
+                .gte('updated_at', sevenDaysAgo.toISOString())
+                .range(pageOffset, pageOffset + PAGE_SIZE - 1);
+
+            if (usersError) {
+                console.error('[Heartbeat] Failed to get users:', usersError);
+                return NextResponse.json({ error: 'Failed to get users' }, { status: 500 });
+            }
+            if (!batch || batch.length === 0) break;
+            activeUsers = activeUsers.concat(batch);
+            if (batch.length < PAGE_SIZE) break;
+            pageOffset += PAGE_SIZE;
         }
 
         console.log(`[Heartbeat] Processing ${activeUsers.length} active users`);

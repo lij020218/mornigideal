@@ -142,77 +142,81 @@ export async function GET(request: Request) {
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        // Get all users with profiles
-        const { data: users, error: usersError } = await supabase
-            .from('users')
-            .select('email, profile')
-            .not('profile', 'is', null);
+        // Get users with profiles (paginated)
+        const BATCH_SIZE = 50;
+        let offset = 0;
+        let allUsers: { email: string; profile: any }[] = [];
 
-        if (usersError || !users || users.length === 0) {
-            console.error('[CRON] No users found:', usersError);
-            return NextResponse.json({
-                success: true,
-                message: 'No users to process'
-            });
+        while (true) {
+            const { data: batch, error: usersError } = await supabase
+                .from('users')
+                .select('email, profile')
+                .not('profile', 'is', null)
+                .range(offset, offset + BATCH_SIZE - 1);
+
+            if (usersError) {
+                console.error('[CRON] Error fetching users:', usersError);
+                break;
+            }
+            if (!batch || batch.length === 0) break;
+            allUsers = allUsers.concat(batch);
+            if (batch.length < BATCH_SIZE) break;
+            offset += BATCH_SIZE;
         }
 
-        console.log(`[CRON] Found ${users.length} users to generate recommendations for`);
+        if (allUsers.length === 0) {
+            return NextResponse.json({ success: true, message: 'No users to process' });
+        }
 
-        const results = [];
+        console.log(`[CRON] Found ${allUsers.length} users to generate recommendations for`);
 
-        // Generate recommendations for each user
-        for (const user of users) {
-            try {
-                const userEmail = user.email;
-                const userProfile = user.profile as any;
+        const results: any[] = [];
 
-                const job = userProfile.job || 'Professional';
-                const goal = userProfile.goal || 'Growth';
-                const interests = userProfile.interests || [];
+        // Process users in parallel batches of 3 (YouTube API rate limits)
+        const CONCURRENCY = 3;
+        for (let i = 0; i < allUsers.length; i += CONCURRENCY) {
+            const batch = allUsers.slice(i, i + CONCURRENCY);
+            const batchResults = await Promise.allSettled(
+                batch.map(async (user) => {
+                    const userProfile = user.profile as any;
+                    const job = userProfile.job || 'Professional';
+                    const goal = userProfile.goal || 'Growth';
+                    const interests = userProfile.interests || [];
 
-                const recommendations = await generateRecommendationsForUser(
-                    userEmail,
-                    job,
-                    goal,
-                    interests
-                );
+                    const recommendations = await generateRecommendationsForUser(user.email, job, goal, interests);
 
-                if (!recommendations || recommendations.length === 0) {
-                    console.log(`[CRON] No recommendations generated for ${userEmail}`);
-                    results.push({ email: userEmail, status: 'no_recommendations' });
-                    continue;
-                }
+                    if (!recommendations || recommendations.length === 0) {
+                        return { email: user.email, status: 'no_recommendations' };
+                    }
 
-                // Save to cache
-                const { error: saveError } = await supabase
-                    .from('recommendations_cache')
-                    .upsert({
-                        email: userEmail,
-                        date: today,
-                        recommendations: recommendations,
-                        created_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'email,date'
-                    });
+                    const { error: saveError } = await supabase
+                        .from('recommendations_cache')
+                        .upsert({
+                            email: user.email,
+                            date: today,
+                            recommendations,
+                            created_at: new Date().toISOString()
+                        }, { onConflict: 'email,date' });
 
-                if (saveError) {
-                    console.error(`[CRON] Error saving recommendations for ${userEmail}:`, saveError);
-                    results.push({ email: userEmail, status: 'error', error: saveError.message });
+                    if (saveError) {
+                        return { email: user.email, status: 'error', error: saveError.message };
+                    }
+                    return { email: user.email, status: 'success', count: recommendations.length };
+                })
+            );
+
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled') {
+                    results.push(result.value);
                 } else {
-                    console.log(`[CRON] Successfully saved recommendations for ${userEmail}`);
-                    results.push({ email: userEmail, status: 'success', count: recommendations.length });
+                    const email = batch[batchResults.indexOf(result)]?.email || 'unknown';
+                    results.push({ email, status: 'error', error: result.reason?.message });
                 }
+            }
 
-                // Rate limiting delay
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-            } catch (error) {
-                console.error(`[CRON] Error processing user ${user.email}:`, error);
-                results.push({
-                    email: user.email,
-                    status: 'error',
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
+            // Rate limiting between batches
+            if (i + CONCURRENCY < allUsers.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
@@ -220,7 +224,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: true,
-            processed: users.length,
+            processed: allUsers.length,
             successful: results.filter(r => r.status === 'success').length,
             failed: results.filter(r => r.status === 'error').length,
             results,

@@ -21,90 +21,89 @@ export async function GET(request: NextRequest) {
 
         console.log('[Cron Weekly Report] Starting weekly report generation for all users...');
 
-        // Get all users
+        // Get all users (paginated to avoid memory issues)
         const supabase = db.client;
-        const { data: users, error } = await supabase
-            .from('users')
-            .select('email, profile');
+        const BATCH_SIZE = 50;
+        let offset = 0;
+        let allUsers: { email: string; profile: any }[] = [];
 
-        if (error || !users) {
-            console.error('[Cron Weekly Report] Failed to fetch users:', error);
-            return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+        while (true) {
+            const { data: batch, error } = await supabase
+                .from('users')
+                .select('email, profile')
+                .range(offset, offset + BATCH_SIZE - 1);
+
+            if (error) {
+                console.error('[Cron Weekly Report] Failed to fetch users:', error);
+                return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+            }
+            if (!batch || batch.length === 0) break;
+            allUsers = allUsers.concat(batch);
+            if (batch.length < BATCH_SIZE) break;
+            offset += BATCH_SIZE;
         }
 
-        console.log(`[Cron Weekly Report] Found ${users.length} users`);
+        console.log(`[Cron Weekly Report] Found ${allUsers.length} users`);
 
-        const results = [];
+        const results: any[] = [];
         let successCount = 0;
         let errorCount = 0;
 
-        // Generate report for each user
-        for (const user of users) {
-            try {
-                console.log(`[Cron Weekly Report] Processing report for ${user.email}`);
+        // Process users in parallel batches of 5
+        const CONCURRENCY = 5;
+        for (let i = 0; i < allUsers.length; i += CONCURRENCY) {
+            const batch = allUsers.slice(i, i + CONCURRENCY);
+            const batchResults = await Promise.allSettled(
+                batch.map(async (user) => {
+                    const reportData = await generateWeeklyReport(user.email);
+                    const targetWeekNumber = reportData.period.weekNumber;
 
-                const reportData = await generateWeeklyReport(user.email);
-                const targetWeekNumber = reportData.period.weekNumber;
+                    // 해당 주차의 리포트가 이미 존재하는지 확인
+                    const { data: existingReport } = await supabase
+                        .from('user_events')
+                        .select('id')
+                        .eq('user_email', user.email)
+                        .eq('event_type', 'weekly_report_generated')
+                        .eq('metadata->>week_number', targetWeekNumber.toString())
+                        .limit(1)
+                        .maybeSingle();
 
-                // 해당 주차의 리포트가 이미 존재하는지 확인
-                const { data: existingReport } = await supabase
-                    .from('user_events')
-                    .select('id')
-                    .eq('user_email', user.email)
-                    .eq('event_type', 'weekly_report_generated')
-                    .eq('metadata->>week_number', targetWeekNumber.toString())
-                    .limit(1)
-                    .maybeSingle();
+                    if (existingReport) {
+                        return { email: user.email, success: true, week: targetWeekNumber, skipped: true };
+                    }
 
-                if (existingReport) {
-                    console.log(`[Cron Weekly Report] Report already exists for ${user.email} week ${targetWeekNumber}, skipping`);
-                    results.push({
-                        email: user.email,
-                        success: true,
-                        week: targetWeekNumber,
-                        skipped: true,
+                    const narrative = await generateWeeklyReportNarrative(reportData, user.profile || {});
+
+                    await supabase.from('user_events').insert({
+                        id: `weekly-report-${user.email}-week${targetWeekNumber}-${Date.now()}`,
+                        user_email: user.email,
+                        event_type: 'weekly_report_generated',
+                        start_at: new Date().toISOString(),
+                        metadata: {
+                            week_number: targetWeekNumber,
+                            period_start: reportData.period.start,
+                            period_end: reportData.period.end,
+                            completion_rate: reportData.scheduleAnalysis.completionRate,
+                            total_read: reportData.trendBriefingAnalysis.totalRead,
+                            narrative,
+                            report_data: reportData,
+                        },
                     });
+
+                    return { email: user.email, success: true, week: targetWeekNumber, skipped: false };
+                })
+            );
+
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled') {
+                    results.push(result.value);
                     successCount++;
-                    continue;
+                } else {
+                    const email = batch[batchResults.indexOf(result)]?.email || 'unknown';
+                    console.error(`[Cron Weekly Report] Failed for ${email}:`, result.reason);
+                    results.push({ email, success: false, error: result.reason?.message });
+                    errorCount++;
                 }
-
-                console.log(`[Cron Weekly Report] Generating new report for ${user.email} week ${targetWeekNumber}`);
-
-                const narrative = await generateWeeklyReportNarrative(reportData, user.profile || {});
-
-                // Save report to user_events
-                await supabase.from('user_events').insert({
-                    id: `weekly-report-${user.email}-week${targetWeekNumber}-${Date.now()}`,
-                    user_email: user.email,
-                    event_type: 'weekly_report_generated',
-                    start_at: new Date().toISOString(),
-                    metadata: {
-                        week_number: targetWeekNumber,
-                        period_start: reportData.period.start,
-                        period_end: reportData.period.end,
-                        completion_rate: reportData.scheduleAnalysis.completionRate,
-                        total_read: reportData.trendBriefingAnalysis.totalRead,
-                        narrative,
-                        report_data: reportData,
-                    },
-                });
-
-                results.push({
-                    email: user.email,
-                    success: true,
-                    week: targetWeekNumber,
-                    skipped: false,
-                });
-
-                successCount++;
-            } catch (userError: any) {
-                console.error(`[Cron Weekly Report] Failed for ${user.email}:`, userError);
-                results.push({
-                    email: user.email,
-                    success: false,
-                    error: userError.message,
-                });
-                errorCount++;
             }
         }
 
@@ -113,7 +112,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             summary: {
-                total: users.length,
+                total: allUsers.length,
                 success: successCount,
                 errors: errorCount,
             },
