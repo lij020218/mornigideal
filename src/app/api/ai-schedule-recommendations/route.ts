@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -19,10 +19,10 @@ const openai = new OpenAI({
  * - User goals and interests
  */
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         const { data: profile } = await supabase
             .from('user_profiles')
             .select('*')
-            .eq('email', session.user.email)
+            .eq('email', userEmail)
             .single();
 
         // Fetch enhanced profile with behavioral insights
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
             enhancedProfile,
             scheduleGaps,
             targetDate,
-            session.user.email
+            userEmail
         );
 
         return NextResponse.json({ recommendations });

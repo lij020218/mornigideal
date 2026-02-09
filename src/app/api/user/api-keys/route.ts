@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 import {
     saveUserAPIKey,
     deleteUserAPIKey,
@@ -19,12 +19,12 @@ import {
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const keys = await getUserAPIKeys(session.user.email);
+        const keys = await getUserAPIKeys(email);
 
         // 마스킹된 형태로 반환
         const maskedKeys: Record<string, { masked: string; hasKey: boolean }> = {};
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const result = await saveUserAPIKey(session.user.email, provider as AIProvider, key);
+        const result = await saveUserAPIKey(email, provider as AIProvider, key);
 
         if (!result.success) {
             return NextResponse.json(
@@ -88,8 +88,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -102,7 +102,7 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        const result = await deleteUserAPIKey(session.user.email, provider as AIProvider);
+        const result = await deleteUserAPIKey(email, provider as AIProvider);
 
         if (!result.success) {
             return NextResponse.json(

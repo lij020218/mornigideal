@@ -1,30 +1,24 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserIdWithAuth, getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.id && !session?.user?.email) {
+        let userId = await getUserIdWithAuth(request);
+
+        if (!userId) {
+            const email = await getUserEmailWithAuth(request);
+            if (email) {
+                const { data: u } = await supabase.from('users').select('id').eq('email', email).single();
+                userId = u?.id;
+            }
+        }
+
+        if (!userId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const date = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // Today YYYY-MM-DD
-
-        // We need user ID. First try session.user.id, else fetch by email logic
-        let userId = session.user.id;
-
-        // If next-auth session id isn't the user table id (sometimes it's different depending on adapter),
-        // fetch it. Assuming NextAuth adapter is used and IDs match, but checking email is safer if unsure.
-        // Actually, let's trust supabase lookup by email if needed.
-        if (!userId) {
-            const { data: u } = await supabase.from('users').select('id').eq('email', session.user.email!).single();
-            userId = u?.id;
-        }
-
-        if (!userId) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
 
         const { data, error } = await supabase
             .from('daily_briefings')
@@ -46,11 +40,11 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     // Mark as read
     try {
-        const session = await auth();
-        if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const email = await getUserEmailWithAuth(request);
+        if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const { briefingId } = await request.json();
 

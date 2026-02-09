@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import db from "@/lib/db";
 
 /**
@@ -9,19 +9,19 @@ import db from "@/lib/db";
 // GET: 현재 설정 조회
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const preferences = await db.query(
             `SELECT * FROM user_preferences WHERE user_email = $1`,
-            [session.user.email]
+            [email]
         );
 
         const constraints = await db.query(
             `SELECT * FROM user_constraints WHERE user_email = $1`,
-            [session.user.email]
+            [email]
         );
 
         return NextResponse.json({
@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
 // POST: 설정 저장/업데이트
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING *`,
                 [
-                    session.user.email,
+                    email,
                     JSON.stringify(preferences.preferredWorkoutTypes || []),
                     preferences.workoutFrequencyGoal || 3,
                     preferences.preferredWorkoutDuration || 30,
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING *`,
                 [
-                    session.user.email,
+                    email,
                     JSON.stringify(constraints.blockedTimeRanges || []),
                     JSON.stringify(constraints.workoutRestrictions || {}),
                     JSON.stringify(constraints.travelTimes || {}),
@@ -117,12 +117,12 @@ export async function POST(request: NextRequest) {
             savedConstraints = result.rows[0];
         }
 
-        console.log(`[User Preferences] Updated for ${session.user.email}`);
+        console.log(`[User Preferences] Updated for ${email}`);
 
         // 컨텍스트 캐시 무효화
         await db.query(
             `DELETE FROM user_context_cache WHERE user_email = $1`,
-            [session.user.email]
+            [email]
         );
 
         return NextResponse.json({

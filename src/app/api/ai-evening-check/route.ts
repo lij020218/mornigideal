@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
 import { saveDailyLog, extractMemoryFromConversation, updateUserMemory } from "@/lib/memoryService";
@@ -23,14 +23,13 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const userEmail = session.user.email;
         const { todaySchedules, completedScheduleIds, userProfile, todayMessages } = await request.json();
 
         // 완료된 일정과 미완료 일정 분리

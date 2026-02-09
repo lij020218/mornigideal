@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { executeDataCleanup, getUserDataStats } from "@/lib/data-cleanup-service";
+
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+
+function isAdmin(email: string): boolean {
+    return ADMIN_EMAILS.includes(email);
+}
 
 /**
  * 데이터 정리 API
@@ -14,24 +20,19 @@ import { executeDataCleanup, getUserDataStats } from "@/lib/data-cleanup-service
  */
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { targetUser, dryRun = false } = await request.json();
 
-        // 관리자 권한 확인 (프로덕션에서는 실제 관리자 체크 필요)
-        const isAdmin = session.user.email.includes('admin') ||
-                       process.env.ADMIN_EMAILS?.includes(session.user.email);
-
         // 일반 사용자는 자기 자신의 데이터만 정리 가능
-        const cleanupTarget = isAdmin && targetUser ? targetUser : session.user.email;
+        const cleanupTarget = isAdmin(email) && targetUser ? targetUser : email;
 
         console.log(`[Data Cleanup API] Starting cleanup for: ${cleanupTarget}${dryRun ? ' (DRY RUN)' : ''}`);
 
         if (dryRun) {
-            // Dry run: 실제 삭제 없이 통계만 조회
             const stats = await getUserDataStats(cleanupTarget);
             return NextResponse.json({
                 dryRun: true,
@@ -40,7 +41,6 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // 실제 정리 실행
         const report = await executeDataCleanup(cleanupTarget);
 
         return NextResponse.json({
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error("[Data Cleanup API] Error:", error);
         return NextResponse.json(
-            { error: "Failed to cleanup data", details: error.message },
+            { error: "Failed to cleanup data" },
             { status: 500 }
         );
     }
@@ -61,19 +61,15 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
         const targetUser = searchParams.get('user');
 
-        // 관리자 권한 확인
-        const isAdmin = session.user.email.includes('admin') ||
-                       process.env.ADMIN_EMAILS?.includes(session.user.email);
-
-        const statsTarget = isAdmin && targetUser ? targetUser : session.user.email;
+        const statsTarget = isAdmin(email) && targetUser ? targetUser : email;
 
         const stats = await getUserDataStats(statsTarget);
 
@@ -89,7 +85,7 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
         console.error("[Data Cleanup API] Error:", error);
         return NextResponse.json(
-            { error: "Failed to get data stats", details: error.message },
+            { error: "Failed to get data stats" },
             { status: 500 }
         );
     }

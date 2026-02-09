@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -7,15 +7,12 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        // Authenticate user
-        const session = await auth();
-        if (!session || !session.user || !session.user.email) {
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-
-        const userEmail = session.user.email;
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         console.log(`[trend-briefing/get] Fetching briefing for ${userEmail} on ${today}`);

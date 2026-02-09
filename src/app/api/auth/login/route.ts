@@ -24,28 +24,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Supabase에서 사용자 조회
-    console.log('로그인 시도:', email.toLowerCase());
     const { data: user, error } = await supabaseAdmin
       .from('users')
       .select('id, email, name, password')
       .eq('email', email.toLowerCase())
       .single();
 
-    console.log('사용자 조회 결과:', { user: user ? 'found' : 'not found', error });
-
     if (error || !user) {
-      console.log('사용자 없음 또는 에러:', error);
       return NextResponse.json(
         { error: '이메일 또는 비밀번호가 올바르지 않습니다.' },
         { status: 401 }
       );
     }
-
-    console.log('비밀번호 비교:', {
-      stored: user.password?.substring(0, 10) + '...',
-      input: password.substring(0, 3) + '...',
-      startsWithHash: user.password?.startsWith('$2')
-    });
 
     // 비밀번호가 없으면 (OAuth로만 가입한 사용자)
     if (!user.password) {

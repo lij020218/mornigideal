@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     if (decoded.userId) {
       const result = await supabaseAdmin
         .from('users')
-        .select('id, email, name, job, created_at')
+        .select('id, email, name, created_at')
         .eq('id', decoded.userId)
         .single();
       user = result.data;
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       console.log('[auth/me] userId not found, trying email:', decoded.email);
       const result = await supabaseAdmin
         .from('users')
-        .select('id, email, name, job, created_at')
+        .select('id, email, name, created_at')
         .eq('email', decoded.email)
         .single();
       user = result.data;
@@ -66,7 +66,6 @@ export async function GET(request: NextRequest) {
         email: user.email,
         name: user.name,
         profileImage: null,
-        job: user.job,
         createdAt: user.created_at,
       },
     });

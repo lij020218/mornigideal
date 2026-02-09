@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         const { data: userData, error: fetchError } = await supabase
             .from("users")
             .select("profile")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (fetchError || !userData) {
@@ -315,14 +315,14 @@ export async function POST(request: Request) {
         const { error: updateError } = await supabase
             .from("users")
             .update({ profile: updatedProfile })
-            .eq("email", session.user.email);
+            .eq("email", email);
 
         if (updateError) {
             console.error("[Schedule Add] Update error:", updateError);
             return NextResponse.json({ error: "Failed to add schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime} for ${session.user.email}`);
+        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime} for ${email}`);
 
         return NextResponse.json({
             success: true,

@@ -21,6 +21,12 @@ interface WeatherData {
 // Cron job to pre-generate weather data every hour
 export async function GET(request: Request) {
     try {
+        // 인증 체크
+        const authHeader = request.headers.get('authorization');
+        if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         console.log('[Weather Cron] Starting hourly weather update...');
 
         if (!OPENWEATHER_API_KEY) {
@@ -119,7 +125,6 @@ export async function GET(request: Request) {
             success: false,
             weather: fallbackWeather,
             message: 'Using fallback weather data',
-            error: String(error)
         });
     }
 }

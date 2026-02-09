@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 import { supabase } from '@/lib/supabase';
 import OpenAI from 'openai';
 import { logOpenAIUsage } from '@/lib/openai-usage';
@@ -17,14 +17,12 @@ interface SchedulePattern {
     category: 'exercise' | 'productivity' | 'balance' | 'consistency';
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
-        const email = session.user.email;
 
         // Check cache first (6 hour cache)
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });

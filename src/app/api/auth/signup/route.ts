@@ -1,76 +1,71 @@
 import { NextResponse } from "next/server";
 import { createUser, getUserByEmail, getUserByUsername } from "@/lib/users";
+import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
     try {
-        console.log('[Signup API] Starting signup process');
-
         const body = await request.json();
-        console.log('[Signup API] Request body:', {
-            hasName: !!body.name,
-            hasUsername: !!body.username,
-            hasEmail: !!body.email,
-            hasPassword: !!body.password
-        });
-
         const { name, username, email, password } = body;
 
-        // Basic validation
         if (!name || !username || !email || !password) {
-            console.error('[Signup API] Missing required fields');
             return NextResponse.json(
                 { error: "모든 필드를 입력해주세요." },
                 { status: 400 }
             );
         }
 
-        console.log('[Signup API] Checking existing email:', email);
-        // Check if email already exists
+        // 이메일 형식 확인
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return NextResponse.json(
+                { error: "올바른 이메일 형식이 아닙니다." },
+                { status: 400 }
+            );
+        }
+
+        // 비밀번호 길이 확인
+        if (password.length < 8) {
+            return NextResponse.json(
+                { error: "비밀번호는 8자 이상이어야 합니다." },
+                { status: 400 }
+            );
+        }
+
         const existingEmail = await getUserByEmail(email);
         if (existingEmail) {
-            console.log('[Signup API] Email already exists');
             return NextResponse.json(
                 { error: "이미 가입된 이메일입니다." },
                 { status: 409 }
             );
         }
 
-        console.log('[Signup API] Checking existing username:', username);
-        // Check if username already exists
         const existingUsername = await getUserByUsername(username);
         if (existingUsername) {
-            console.log('[Signup API] Username already exists');
             return NextResponse.json(
                 { error: "이미 사용 중인 사용자명입니다." },
                 { status: 409 }
             );
         }
 
-        console.log('[Signup API] Creating new user');
-        // Create user
+        // 비밀번호 해싱
+        const hashedPassword = await bcrypt.hash(password, 12);
+
         const newUser = await createUser({
             name,
             username,
-            email,
-            password, // Note: In production, hash this password!
+            email: email.toLowerCase(),
+            password: hashedPassword,
         });
 
-        console.log('[Signup API] User created successfully:', newUser.id);
-        return NextResponse.json(newUser, { status: 201 });
+        return NextResponse.json({
+            id: newUser.id,
+            email: newUser.email,
+            name: newUser.name,
+        }, { status: 201 });
     } catch (error: any) {
-        console.error("[Signup API] Error:", {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-            stack: error.stack
-        });
+        console.error("[Signup API] Error:", error);
         return NextResponse.json(
-            {
-                error: "회원가입 처리 중 오류가 발생했습니다.",
-                details: error.message,
-                code: error.code
-            },
+            { error: "회원가입 처리 중 오류가 발생했습니다." },
             { status: 500 }
         );
     }

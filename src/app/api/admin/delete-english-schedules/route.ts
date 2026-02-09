@@ -1,89 +1,69 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
-export async function POST() {
-    const userEmail = 'lij020218@naver.com';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 
+function isAdmin(email: string): boolean {
+    return ADMIN_EMAILS.includes(email);
+}
+
+export async function POST(request: NextRequest) {
     try {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        if (!isAdmin(email)) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
+        const { targetEmail } = await request.json();
+        if (!targetEmail) {
+            return NextResponse.json({ error: "targetEmail is required" }, { status: 400 });
+        }
+
         // Get user profile
         const { data: userData, error: fetchError } = await supabase
             .from('users')
             .select('*')
-            .eq('email', userEmail)
+            .eq('email', targetEmail)
             .single();
 
-        if (fetchError) {
-            return NextResponse.json(
-                { error: 'Failed to fetch user', details: fetchError },
-                { status: 500 }
-            );
-        }
-
-        if (!userData || !userData.profile) {
-            return NextResponse.json(
-                { error: 'No profile found for user' },
-                { status: 404 }
-            );
+        if (fetchError || !userData?.profile) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
         const profile = userData.profile;
         const customGoals = profile.customGoals || [];
 
-        console.log(`[DeleteEnglishSchedules] Total schedules before: ${customGoals.length}`);
-
         // Filter out English study schedules on Saturday (6) and Sunday (0)
-        const deletedSchedules: any[] = [];
         const filteredGoals = customGoals.filter((goal: any) => {
             const isEnglish = goal.text?.includes('영어');
             const hasWeekendDays = goal.daysOfWeek?.includes(0) || goal.daysOfWeek?.includes(6);
-
-            if (isEnglish && hasWeekendDays) {
-                console.log(`[DeleteEnglishSchedules] Deleting: ${goal.text} (${goal.id}) - days: ${goal.daysOfWeek}`);
-                deletedSchedules.push(goal);
-                return false; // Filter out
-            }
-            return true; // Keep
+            return !(isEnglish && hasWeekendDays);
         });
 
-        console.log(`[DeleteEnglishSchedules] Total schedules after: ${filteredGoals.length}`);
-        console.log(`[DeleteEnglishSchedules] Deleted: ${customGoals.length - filteredGoals.length} schedules`);
+        const deletedCount = customGoals.length - filteredGoals.length;
 
         // Update profile with filtered goals
         const { error: updateError } = await supabase
             .from('users')
-            .update({
-                profile: {
-                    ...profile,
-                    customGoals: filteredGoals
-                }
-            })
-            .eq('email', userEmail);
+            .update({ profile: { ...profile, customGoals: filteredGoals } })
+            .eq('email', targetEmail);
 
         if (updateError) {
-            return NextResponse.json(
-                { error: 'Failed to update profile', details: updateError },
-                { status: 500 }
-            );
+            console.error('[DeleteEnglishSchedules] Update error:', updateError);
+            return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
         }
 
         return NextResponse.json({
             success: true,
-            message: 'Successfully deleted English schedules on weekends',
-            deletedCount: deletedSchedules.length,
-            deletedSchedules: deletedSchedules.map(s => ({
-                id: s.id,
-                text: s.text,
-                daysOfWeek: s.daysOfWeek,
-                startTime: s.startTime,
-                endTime: s.endTime
-            }))
+            deletedCount,
         });
-
     } catch (error: any) {
         console.error('[DeleteEnglishSchedules] Error:', error);
-        return NextResponse.json(
-            { error: 'Internal server error', details: error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

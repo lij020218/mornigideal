@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabase } from "@/lib/supabase";
 
 // GET /api/user/curriculum - Get all curriculums for current user
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session || !session.user || !session.user.email) {
+        if (!email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -18,7 +18,7 @@ export async function GET() {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
@@ -56,11 +56,11 @@ export async function GET() {
 }
 
 // POST /api/user/curriculum - Save a new curriculum
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session || !session.user || !session.user.email) {
+        if (!email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
@@ -125,11 +125,11 @@ export async function POST(request: Request) {
 }
 
 // DELETE /api/user/curriculum - Remove a curriculum
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
     try {
-        const session = await auth();
+        const email = await getUserEmailWithAuth(request);
 
-        if (!session || !session.user || !session.user.email) {
+        if (!email) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -149,7 +149,7 @@ export async function DELETE(request: Request) {
         const { data: userData, error: userError } = await supabase
             .from("users")
             .select("id")
-            .eq("email", session.user.email)
+            .eq("email", email)
             .single();
 
         if (userError || !userData) {
