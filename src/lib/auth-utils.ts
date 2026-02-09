@@ -44,7 +44,7 @@ export function verifyToken(token: string): { userId?: string; email?: string } 
  * JWT 토큰 생성
  */
 export function signToken(payload: { userId: string; email: string }, expiresIn: string = '30d'): string {
-    return jwt.sign(payload, getJwtSecret(), { expiresIn });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn } as jwt.SignOptions);
 }
 
 /**

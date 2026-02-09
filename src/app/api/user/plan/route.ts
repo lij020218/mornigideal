@@ -57,8 +57,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.email) {
+        const email = await getUserEmailWithAuth(request);
+        if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         }
 
         const success = await upgradePlan(
-            session.user.email,
+            email,
             newPlan as UserPlanType,
             durationDays
         );
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const updatedPlan = await getUserPlan(session.user.email);
+        const updatedPlan = await getUserPlan(email);
         const details = PLAN_DETAILS[updatedPlan.plan];
 
         return NextResponse.json({

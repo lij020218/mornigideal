@@ -82,11 +82,32 @@ function setCorsHeaders(response: NextResponse, origin: string | null) {
 }
 
 // ============================================
+// 웹사이트 공개 페이지 (나머지는 앱 전용)
+// ============================================
+
+const PUBLIC_PAGES = ['/', '/landing', '/login', '/signup', '/reset', '/privacy', '/terms'];
+
+function isPublicPage(path: string): boolean {
+    return PUBLIC_PAGES.includes(path);
+}
+
+// ============================================
 // Middleware
 // ============================================
 
 export function middleware(request: NextRequest) {
     const origin = getOriginIfAllowed(request);
+    const path = request.nextUrl.pathname;
+
+    // 앱 기능 페이지 접근 시 랜딩으로 리다이렉트
+    if (!path.startsWith('/api') && !path.startsWith('/_next') && !isPublicPage(path)) {
+        return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    // /landing 접근 시 루트로 리다이렉트 (루트가 랜딩 페이지)
+    if (path === '/landing') {
+        return NextResponse.redirect(new URL('/', request.url));
+    }
 
     // Preflight 요청
     if (request.method === 'OPTIONS') {
@@ -99,34 +120,38 @@ export function middleware(request: NextRequest) {
         return response;
     }
 
-    // 레이트 리미팅
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-        || request.headers.get('x-real-ip')
-        || 'unknown';
-    const path = request.nextUrl.pathname;
+    // API 요청에만 레이트 리미팅 적용
+    if (path.startsWith('/api')) {
+        const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+            || request.headers.get('x-real-ip')
+            || 'unknown';
 
-    const { allowed, remaining } = checkRateLimit(ip, path);
+        const { allowed, remaining } = checkRateLimit(ip, path);
 
-    if (!allowed) {
-        const response = NextResponse.json(
-            { error: 'Too many requests. Please try again later.' },
-            { status: 429 }
-        );
+        if (!allowed) {
+            const response = NextResponse.json(
+                { error: 'Too many requests. Please try again later.' },
+                { status: 429 }
+            );
+            setCorsHeaders(response, origin);
+            setSecurityHeaders(response);
+            response.headers.set('Retry-After', '60');
+            return response;
+        }
+
+        const response = NextResponse.next();
         setCorsHeaders(response, origin);
         setSecurityHeaders(response);
-        response.headers.set('Retry-After', '60');
+        response.headers.set('X-RateLimit-Remaining', String(remaining));
         return response;
     }
 
-    // 일반 요청
+    // 공개 페이지 요청
     const response = NextResponse.next();
-    setCorsHeaders(response, origin);
     setSecurityHeaders(response);
-    response.headers.set('X-RateLimit-Remaining', String(remaining));
-
     return response;
 }
 
 export const config = {
-    matcher: '/api/:path*',
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)'],
 };

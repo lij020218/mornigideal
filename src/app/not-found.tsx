@@ -17,20 +17,12 @@ export default function NotFound() {
             <p className="text-lg text-gray-500 mb-8">
                 페이지를 찾을 수 없습니다
             </p>
-            <div className="flex gap-3">
-                <Link
-                    href="/"
-                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-sm font-medium hover:shadow-lg hover:shadow-amber-500/25 transition-all"
-                >
-                    홈으로
-                </Link>
-                <Link
-                    href="/landing"
-                    className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-50 transition-all"
-                >
-                    소개 페이지
-                </Link>
-            </div>
+            <Link
+                href="/"
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-sm font-medium hover:shadow-lg hover:shadow-amber-500/25 transition-all"
+            >
+                홈으로
+            </Link>
         </div>
     );
 }
