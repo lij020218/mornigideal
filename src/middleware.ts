@@ -14,9 +14,10 @@ const ALLOWED_ORIGINS = [
 function getOriginIfAllowed(request: NextRequest): string | null {
     const origin = request.headers.get('origin');
     if (!origin) return null;
-    // 허용된 origin 또는 로컬 네트워크 (모바일 앱 개발용)
     if (ALLOWED_ORIGINS.includes(origin)) return origin;
-    if (/^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin)) return origin;
+    // 로컬 네트워크 허용: 개발 환경에서만 (모바일 앱 Expo Go 테스트용)
+    if (process.env.NODE_ENV === 'development' &&
+        /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin)) return origin;
     return null;
 }
 
