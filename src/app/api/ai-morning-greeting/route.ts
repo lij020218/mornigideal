@@ -7,16 +7,13 @@ import { isSlackConnected, getUnreadSummary } from "@/lib/slackService";
 import { resolvePersonaStyle, getPersonaBlock } from "@/lib/prompts/persona";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getTrendInsightsForAI } from "@/lib/multiDayTrendService";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function POST(request: NextRequest) {
     try {
@@ -94,7 +91,6 @@ export async function POST(request: NextRequest) {
                 ).join('\n')}`;
             }
         } catch (e) {
-            console.log('[AI Morning Greeting] 트렌드 캐시 조회 실패:', e);
         }
 
         // 멀티데이 트렌드 인사이트
@@ -102,7 +98,6 @@ export async function POST(request: NextRequest) {
         try {
             multiDayTrendContext = await getTrendInsightsForAI(userEmail);
         } catch (e) {
-            console.log('[AI Morning Greeting] 트렌드 분석 실패:', e);
         }
 
         // 주간 목표 체크 (월요일)
@@ -131,7 +126,6 @@ export async function POST(request: NextRequest) {
                 }
             }
         } catch (e) {
-            console.log('[AI Morning Greeting] Slack summary failed:', e);
         }
 
         // 새벽 시간대 체크
@@ -218,8 +212,7 @@ ${isLateNight ? '**새벽 시간이므로: 일정 요약만 간단히 하고, �
 - 마크다운 **볼드** 사용 가능
 - 각 섹션을 줄바꿈으로 구분`;
 
-        const modelName = "gpt-5-mini-2025-08-07";
-        console.log('[AI Morning Greeting] Generating, schedules:', todaySchedules.length, 'important:', importantSchedules.length);
+        const modelName = MODELS.GPT_5_MINI;
 
         const completion = await openai.chat.completions.create({
             model: modelName,
@@ -258,7 +251,7 @@ ${isLateNight ? '**새벽 시간이므로: 일정 요약만 간단히 하고, �
     } catch (error: any) {
         console.error("[AI Morning Greeting] Error:", error?.message || error);
         return NextResponse.json(
-            { error: error?.message || "Failed to generate morning greeting" },
+            { error: "Failed to generate morning greeting" },
             { status: 500 }
         );
     }

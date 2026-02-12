@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
         }
 
-        console.log(`[Push Token] Registered (${platform})`);
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('[Push Token] Error:', error);

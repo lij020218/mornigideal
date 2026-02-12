@@ -32,7 +32,6 @@ export async function extractAndAnalyzeImages(
   apiKey: string
 ): Promise<ImageAnalysis[]> {
   try {
-    console.log('[PDF Image Extractor] Starting image analysis...');
 
     // Load PDF.js dynamically
     const pdf = await loadPdfJs();
@@ -47,7 +46,6 @@ export async function extractAndAnalyzeImages(
     const pdfDoc = await loadingTask.promise;
     const numPages = pdfDoc.numPages;
 
-    console.log(`[PDF Image Extractor] Processing ${numPages} pages`);
 
     const results: ImageAnalysis[] = [];
 
@@ -67,14 +65,12 @@ export async function extractAndAnalyzeImages(
 
         // Canvas API가 없는 서버 환경에서는 스킵
         // 실제 이미지 렌더링은 복잡하므로, 우선 텍스트만 추출
-        console.log(`[PDF Image Extractor] Page ${i}: Skipping render (server-side)`);
 
       } catch (pageError) {
         console.error(`[PDF Image Extractor] Error processing page ${i}:`, pageError);
       }
     }
 
-    console.log(`[PDF Image Extractor] Analysis complete. Found ${results.length} images`);
     return results;
   } catch (error) {
     console.error('[PDF Image Extractor] Error:', error);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * Log user activity for personalization
@@ -28,10 +28,9 @@ export async function POST(request: NextRequest) {
 
         const { activityType, metadata } = await request.json();
 
-        console.log('[Activity Log] Recording activity:', activityType);
 
         // Store activity in database
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('user_activity_logs')
             .insert({
                 user_email: email,
@@ -71,7 +70,7 @@ export async function GET(request: NextRequest) {
         startDate.setDate(startDate.getDate() - days);
 
         // Fetch recent activities (capped at 500 for performance)
-        const { data: activities, error } = await supabase
+        const { data: activities, error } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*')
             .eq('user_email', email)

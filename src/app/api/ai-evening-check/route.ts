@@ -11,17 +11,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { saveDailyLog, extractMemoryFromConversation, updateUserMemory } from "@/lib/memoryService";
 import { saveStateSnapshot } from "@/lib/multiDayTrendService";
 import { resolvePersonaStyle, getPersonaBlock, completionRateToTone } from "@/lib/prompts/persona";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function POST(request: NextRequest) {
     try {
@@ -167,7 +163,7 @@ ${tomorrowSchedules.length > 0
     } catch (error: any) {
         console.error("[Evening Check API] Error:", error?.message || error);
         return NextResponse.json(
-            { error: error?.message || "Failed to generate evening check" },
+            { error: "Failed to generate evening check" },
             { status: 500 }
         );
     }

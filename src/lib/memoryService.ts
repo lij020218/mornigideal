@@ -7,13 +7,8 @@
  * - Daily logs: 일별 대화 요약
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
@@ -118,11 +113,11 @@ export async function updateUserMemory(
 ): Promise<boolean> {
     try {
         // 기존 메모리 가져오기
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
             .from('user_memory')
             .select('*')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         const currentMemory: UserMemory = existing?.memory || {
             preferences: {},
@@ -202,7 +197,7 @@ export async function updateUserMemory(
         }
 
         // 저장
-        await supabase
+        await supabaseAdmin
             .from('user_memory')
             .upsert({
                 user_email: userEmail,
@@ -227,7 +222,7 @@ export async function saveDailyLog(
     try {
         const today = new Date().toISOString().split('T')[0];
 
-        await supabase
+        await supabaseAdmin
             .from('user_daily_logs')
             .upsert({
                 user_email: userEmail,
@@ -252,11 +247,11 @@ export async function saveDailyLog(
  */
 export async function getUserMemory(userEmail: string): Promise<UserMemory | null> {
     try {
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from('user_memory')
             .select('memory')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         return data?.memory || null;
     } catch (error) {
@@ -276,7 +271,7 @@ export async function getRecentDailyLogs(
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
 
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from('user_daily_logs')
             .select('*')
             .eq('user_email', userEmail)

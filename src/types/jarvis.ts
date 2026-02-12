@@ -171,35 +171,39 @@ export interface PreparedResource {
 
 export const PLAN_CONFIGS = {
     Free: {
-        enabled: false,
-        checkIntervalMinutes: 0,
-        maxInterventionLevel: InterventionLevel.L0_OBSERVE,
-        hasLongTermMemory: false,
-        aiCallsPerMonth: 10,
-        features: {
-            stateMonitoring: false,
-            resourcePrep: false,
-            autoExecution: false,
-            reactLoop: false
-        }
-    },
-    Standard: {
         enabled: true,
         checkIntervalMinutes: 60,
         maxInterventionLevel: InterventionLevel.L2_SOFT,
+        hasEventLogging: true,    // 이벤트 기록 (상태 계산용)
+        hasLongTermMemory: false, // 장기 기억 RAG (Max 전용)
+        aiCallsPerMonth: 50,
+        features: {
+            stateMonitoring: true,
+            resourcePrep: false,
+            autoExecution: false,
+            reactLoop: true   // GPT-5-mini 2단계 제한 (저비용)
+        }
+    },
+    Standard: {
+        // 레거시 호환 — Free와 동일
+        enabled: true,
+        checkIntervalMinutes: 60,
+        maxInterventionLevel: InterventionLevel.L2_SOFT,
+        hasEventLogging: true,
         hasLongTermMemory: false,
         aiCallsPerMonth: 50,
         features: {
-            stateMonitoring: true, // 간소화 (에너지, 스트레스만)
+            stateMonitoring: true,
             resourcePrep: false,
             autoExecution: false,
-            reactLoop: false
+            reactLoop: true
         }
     },
     Pro: {
         enabled: true,
         checkIntervalMinutes: 30,
         maxInterventionLevel: InterventionLevel.L2_SOFT,
+        hasEventLogging: true,
         hasLongTermMemory: false,
         aiCallsPerMonth: 100,
         features: {
@@ -213,6 +217,7 @@ export const PLAN_CONFIGS = {
         enabled: true,
         checkIntervalMinutes: 10,
         maxInterventionLevel: InterventionLevel.L4_AUTO,
+        hasEventLogging: true,
         hasLongTermMemory: true,
         aiCallsPerMonth: -1, // 무제한
         features: {

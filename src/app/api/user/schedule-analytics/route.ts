@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * Deep Schedule Pattern Analysis
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         startDate.setDate(startDate.getDate() - days);
 
         // Fetch user's schedules (custom goals)
-        const { data: schedules, error: schedulesError } = await supabase
+        const { data: schedules, error: schedulesError } = await supabaseAdmin
             .from('custom_goals')
             .select('*')
             .eq('user_email', email)
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch schedule completion activities
-        const { data: activities, error: activitiesError } = await supabase
+        const { data: activities, error: activitiesError } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*')
             .eq('user_email', email)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { isValidDate } from "@/lib/validation";
 
 // GET /api/user/goals?date=2025-11-23 - Get goals for specific date
@@ -20,11 +20,11 @@ export async function GET(request: NextRequest) {
         const date = (dateParam && isValidDate(dateParam)) ? dateParam : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -34,12 +34,12 @@ export async function GET(request: NextRequest) {
         }
 
         // Get goals for this date
-        const { data: goals, error } = await supabase
+        const { data: goals, error } = await supabaseAdmin
             .from("daily_goals")
             .select("*")
             .eq("user_id", userData.id)
             .eq("date", date)
-            .single();
+            .maybeSingle();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
             console.error("[Goals API] Error:", error);
@@ -88,11 +88,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
             updateData.read_trends = read_trends;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("daily_goals")
             .upsert(updateData, {
                 onConflict: 'user_id,date'

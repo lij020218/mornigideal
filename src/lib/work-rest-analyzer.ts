@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * 업무-휴식 균형 분석기
@@ -39,21 +39,19 @@ export interface WorkRestBalance {
  * 오늘의 업무-휴식 균형 분석
  */
 export async function analyzeWorkRestBalance(userEmail: string): Promise<WorkRestBalance> {
-    const supabase = db.client;
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const todayStart = `${today}T00:00:00`;
     const todayEnd = `${today}T23:59:59`;
     const currentHour = now.getHours();
 
-    console.log(`[Work-Rest Analyzer] Analyzing balance for ${userEmail}`);
 
     // 사용자 프로필 가져오기 (customGoals에 일정 저장됨)
-    const { data: userData } = await supabase
+    const { data: userData } = await supabaseAdmin
         .from('users')
         .select('profile')
         .eq('email', userEmail)
-        .single();
+        .maybeSingle();
 
     const profile = userData?.profile || {};
     const customGoals = profile.customGoals || [];
@@ -68,7 +66,6 @@ export async function analyzeWorkRestBalance(userEmail: string): Promise<WorkRes
         return false;
     });
 
-    console.log(`[Work-Rest Analyzer] Found ${todayEvents.length} events for today`);
 
     // 업무 vs 휴식 일정 분류
     const workCategories = ['업무', '회의', '작업', '공부', '학습', '개발', '미팅', 'work', 'meeting'];
@@ -143,10 +140,13 @@ export async function analyzeWorkRestBalance(userEmail: string): Promise<WorkRes
 
     // 주말/연휴 판단
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHoliday = false; // TODO: 실제 공휴일 API 연동
+    const isHoliday = isKoreanHoliday(today);
 
-    // 다가오는 긴 휴식 (3일 이상)
-    const upcomingLongBreak = dayOfWeek === 5; // 금요일이면 주말 다가옴
+    // 다가오는 긴 휴식: 금요일 또는 연휴 전날
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const upcomingLongBreak = dayOfWeek === 5 || isKoreanHoliday(tomorrowStr);
 
     // 추천 방향 결정
     let recommendationType: WorkRestBalance['recommendationType'];
@@ -189,17 +189,6 @@ export async function analyzeWorkRestBalance(userEmail: string): Promise<WorkRes
         recommendationType,
         reason,
     };
-
-    console.log('[Work-Rest Analyzer] Analysis result:', balance);
-
-    // 분석 결과를 이벤트로 기록
-    await supabase.from('user_events').insert({
-        id: crypto.randomUUID(),
-        user_email: userEmail,
-        event_type: 'work_rest_analyzed',
-        start_at: new Date().toISOString(),
-        metadata: balance,
-    });
 
     return balance;
 }
@@ -279,4 +268,37 @@ export function getRecommendationsByType(type: WorkRestBalance['recommendationTy
                 priority: 'medium',
             };
     }
+}
+
+/**
+ * 한국 공휴일 판단 (고정 공휴일)
+ * 음력 공휴일(설날, 추석)은 매년 달라지므로 연도별 하드코딩
+ */
+function isKoreanHoliday(dateStr: string): boolean {
+    const mmdd = dateStr.slice(5); // "MM-DD"
+    const year = dateStr.slice(0, 4);
+
+    // 고정 공휴일
+    const fixedHolidays = [
+        '01-01', // 신정
+        '03-01', // 삼일절
+        '05-05', // 어린이날
+        '06-06', // 현충일
+        '08-15', // 광복절
+        '10-03', // 개천절
+        '10-09', // 한글날
+        '12-25', // 성탄절
+    ];
+
+    if (fixedHolidays.includes(mmdd)) return true;
+
+    // 음력 공휴일 (설날/추석 ±1일) — 연도별
+    const lunarHolidays: Record<string, string[]> = {
+        '2025': ['01-28', '01-29', '01-30', '05-05', '10-05', '10-06', '10-07'],
+        '2026': ['02-16', '02-17', '02-18', '05-24', '09-24', '09-25', '09-26'],
+        '2027': ['02-05', '02-06', '02-07', '05-13', '10-13', '10-14', '10-15'],
+    };
+
+    const yearHolidays = lunarHolidays[year] || [];
+    return yearHolidays.includes(mmdd);
 }

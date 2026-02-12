@@ -2,9 +2,9 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: 'A.Ideal - AI 기반 개인 성장 OS',
-        short_name: 'A.Ideal',
-        description: 'AI와 함께하는 나만의 성장 러닝메이트',
+        name: 'Fi.eri - AI 일정 비서',
+        short_name: 'Fi.eri',
+        description: '대화로 일정을 관리하는 AI 비서',
         start_url: '/dashboard',
         display: 'standalone',
         background_color: '#000000',

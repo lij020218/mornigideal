@@ -13,8 +13,6 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
     try {
-        console.log('[generate-lesson] Starting lesson generation');
-        console.log('[generate-lesson] API Key present:', !!process.env.GEMINI_API_KEY);
 
         if (!process.env.GEMINI_API_KEY) {
             console.error("[generate-lesson] GEMINI_API_KEY is missing");
@@ -25,7 +23,6 @@ export async function POST(request: Request) {
         }
 
         const { curriculumTitle, curriculumSubtitle, dayNumber, totalDays, userLevel, userJob } = await request.json();
-        console.log('[generate-lesson] Request params:', { curriculumTitle, dayNumber, totalDays, userLevel });
 
         if (!curriculumTitle) {
             console.error('[generate-lesson] Missing curriculum title');
@@ -110,7 +107,6 @@ JSON 형식으로만 응답하세요. 예시:
 - summary는 반드시 정확히 3개 항목으로 구성하세요
 - bulletPoints는 3-5개로 구성하세요`;
 
-        console.log('[generate-lesson] Calling Gemini API...');
 
         let result;
         try {
@@ -131,7 +127,6 @@ JSON 형식으로만 응답하세요. 예시:
         const response = await result.response;
         const text = response.text();
 
-        console.log("[generate-lesson] Raw Gemini response:", text.substring(0, 500));
 
         // Extract JSON from response
         let jsonText = text.trim();
@@ -149,7 +144,6 @@ JSON 형식으로만 응답하세요. 예시:
                 throw new Error("Invalid slides format");
             }
 
-            console.log("✅ Generated", data.slides.length, "slides");
 
             return NextResponse.json({
                 lessonTitle: data.lessonTitle,

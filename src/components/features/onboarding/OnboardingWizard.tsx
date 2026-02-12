@@ -135,7 +135,6 @@ export function OnboardingWizard() {
                         }),
                     });
 
-                    console.log('Successfully saved curriculum and profile to database');
                 } catch (apiError) {
                     console.error("Failed to save to database:", apiError);
                 }

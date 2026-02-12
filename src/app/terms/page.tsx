@@ -67,9 +67,9 @@ export default function TermsPage() {
                     <table>
                         <thead><tr><th>플랜</th><th>가격</th><th>주요 기능</th></tr></thead>
                         <tbody>
-                            <tr><td>Standard</td><td>무료</td><td>일일 AI 50회, 기본 일정 관리, 학습 팁</td></tr>
-                            <tr><td>Pro</td><td>₩9,900/월</td><td>일일 AI 100회, 리스크 알림, 스마트 브리핑, ReAct 추론</td></tr>
-                            <tr><td>Max</td><td>₩21,900/월</td><td>무제한 AI, 장기 기억(RAG), 선제적 전략, 자동 실행</td></tr>
+                            <tr><td>Free</td><td>무료</td><td>일일 AI 30회, AI 일정 관리, 컨텍스트 융합, 선제적 알림</td></tr>
+                            <tr><td>Pro</td><td>₩6,900/월</td><td>일일 AI 100회, ReAct 에이전트, 리스크 알림, 스마트 브리핑</td></tr>
+                            <tr><td>Max</td><td>₩14,900/월</td><td>무제한 AI, 장기 기억(RAG), 자동 실행</td></tr>
                         </tbody>
                     </table>
 
@@ -106,7 +106,7 @@ export default function TermsPage() {
                     <ul>
                         <li>천재지변, 시스템 장애, 정기 점검 등 불가피한 사유로 서비스가 일시 중단될 수 있습니다.</li>
                         <li>서비스 내용, 기능, UI는 개선을 위해 변경될 수 있으며, 중요 변경 시 사전 공지합니다.</li>
-                        <li>무료 서비스(Standard)의 경우 서비스 변경·중단에 대해 별도 보상하지 않습니다.</li>
+                        <li>무료 서비스(Free)의 경우 서비스 변경·중단에 대해 별도 보상하지 않습니다.</li>
                     </ul>
 
                     <h2>제10조 (계정 탈퇴 및 데이터 삭제)</h2>
@@ -125,7 +125,7 @@ export default function TermsPage() {
 
                     <h2>제12조 (손해배상 및 면책)</h2>
                     <ul>
-                        <li>서비스는 무료(Standard) 또는 유료(Pro/Max) 형태로 제공되며, 서비스 이용으로 발생한 간접적·부수적 손해에 대해 책임지지 않습니다.</li>
+                        <li>서비스는 무료(Free) 또는 유료(Pro/Max) 형태로 제공되며, 서비스 이용으로 발생한 간접적·부수적 손해에 대해 책임지지 않습니다.</li>
                         <li>유료 서비스의 경우 귀책사유에 의한 서비스 장애 시 이용 기간 연장 또는 환불로 보상합니다.</li>
                         <li>이용자의 귀책사유(비밀번호 유출, 부정 이용 등)로 인한 손해는 서비스 제공자가 책임지지 않습니다.</li>
                     </ul>

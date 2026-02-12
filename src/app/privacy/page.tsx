@@ -97,8 +97,8 @@ export default function PrivacyPage() {
                         <thead><tr><th>데이터 유형</th><th>보유 기간</th></tr></thead>
                         <tbody>
                             <tr><td>계정 정보(이메일, 이름)</td><td>탈퇴 시까지</td></tr>
-                            <tr><td>채팅 기록</td><td>Standard: 30일 / Pro·Max: 탈퇴 시까지</td></tr>
-                            <tr><td>AI 기억(임베딩)</td><td>Standard: 30일 / Pro: 무제한 / Max: 무제한</td></tr>
+                            <tr><td>채팅 기록</td><td>Free: 30일 / Pro·Max: 탈퇴 시까지</td></tr>
+                            <tr><td>AI 기억(임베딩)</td><td>Free: 30일 / Pro: 무제한 / Max: 무제한</td></tr>
                             <tr><td>일정·이벤트 로그</td><td>7일 (자동 정리)</td></tr>
                             <tr><td>날씨 캐시</td><td>1시간</td></tr>
                             <tr><td>OAuth 토큰</td><td>연동 해제 시까지</td></tr>

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserEmailWithAuth } from '@/lib/auth-utils';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from 'openai';
 import { logOpenAIUsage } from '@/lib/openai-usage';
+import { MODELS } from "@/lib/models";
 
 export const revalidate = 21600; // Cache for 6 hours
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
 
         // Check cache first (6 hour cache)
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
-        const { data: cachedData, error: cacheError } = await supabase
+        const { data: cachedData, error: cacheError } = await supabaseAdmin
             .from('habit_insights_cache')
             .select('insights, created_at')
             .eq('email', email)
@@ -43,11 +44,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Get user profile for context
-        const { data: user } = await supabase
+        const { data: user } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         const profile = user?.profile || {};
         const customGoals = profile.customGoals || [];
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
 }`;
 
         const response = await openai.chat.completions.create({
-            model: 'gpt-5-mini-2025-08-07',
+            model: MODELS.GPT_5_MINI,
             messages: [
                 { role: 'system', content: '당신은 전문 개인 비서입니다. 정중하고 격식있는 말투로 사용자의 일정을 분석합니다. 항상 JSON 형식으로만 응답하세요.' },
                 { role: 'user', content: prompt }
@@ -149,7 +150,7 @@ export async function GET(request: NextRequest) {
         if (usage) {
             await logOpenAIUsage(
                 email,
-                'gpt-5-mini-2025-08-07',
+                MODELS.GPT_5_MINI,
                 'habit-analysis',
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -163,7 +164,7 @@ export async function GET(request: NextRequest) {
                 const result: SchedulePattern = JSON.parse(jsonMatch[0]);
 
                 // Save to cache
-                await supabase
+                await supabaseAdmin
                     .from('habit_insights_cache')
                     .upsert({
                         email,
@@ -214,7 +215,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Save fallback result to cache
-        await supabase
+        await supabaseAdmin
             .from('habit_insights_cache')
             .upsert({
                 email,

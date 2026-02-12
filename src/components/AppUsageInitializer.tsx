@@ -12,7 +12,7 @@ import { initializeAppTracking } from "@/lib/appUsageTracking";
 export function AppUsageInitializer() {
     useEffect(() => {
         // Initialize app usage tracking
-        initializeAppTracking('a.ideal');
+        initializeAppTracking('fieri');
 
         // Cleanup function
         return () => {

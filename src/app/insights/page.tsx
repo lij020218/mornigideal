@@ -36,7 +36,6 @@ export default function InsightsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ profile }),
             });
-            console.log('[Insights] Profile saved to Supabase');
         } catch (error) {
             console.error('[Insights] Failed to save profile to Supabase:', error);
         }
@@ -48,7 +47,6 @@ export default function InsightsPage() {
 
         const currentInterests = userProfile.interests || [];
         if (currentInterests.includes(interest)) {
-            console.log('[Insights] Interest already exists:', interest);
             return;
         }
 
@@ -59,7 +57,6 @@ export default function InsightsPage() {
         localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
         saveProfileToSupabase(updatedProfile);
 
-        console.log('[Insights] Interest added:', interest);
     }, [userProfile, saveProfileToSupabase]);
 
     // Handle removing interest
@@ -74,7 +71,6 @@ export default function InsightsPage() {
         localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
         saveProfileToSupabase(updatedProfile);
 
-        console.log('[Insights] Interest removed:', interest);
     }, [userProfile, saveProfileToSupabase]);
 
     // Handle adding interest from input

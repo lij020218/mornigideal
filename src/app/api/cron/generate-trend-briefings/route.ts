@@ -1,16 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateTrendId, saveDetailCache } from "@/lib/newsCache";
 import Parser from 'rss-parser';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
 const RSS_FEEDS = [
@@ -52,7 +47,6 @@ async function fetchRSSArticles() {
 
     for (const feed of RSS_FEEDS) {
         try {
-            console.log(`[CRON] Fetching RSS from ${feed.name}...`);
             const rss = await parser.parseURL(feed.url);
 
             for (const item of rss.items) {
@@ -127,13 +121,11 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[CRON] Starting trend briefing generation at 4:30 AM...');
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         // Step 1: Fetch all RSS articles
         const rssArticles = await fetchRSSArticles();
-        console.log(`[CRON] Fetched ${rssArticles.length} articles from RSS feeds`);
 
         if (rssArticles.length === 0) {
             return NextResponse.json({
@@ -148,7 +140,7 @@ export async function GET(request: Request) {
         let allUsers: { email: string; profile: any }[] = [];
 
         while (true) {
-            const { data: batch, error: usersError } = await supabase
+            const { data: batch, error: usersError } = await supabaseAdmin
                 .from('users')
                 .select('email, profile')
                 .not('profile', 'is', null)
@@ -168,7 +160,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, message: 'No users to process' });
         }
 
-        console.log(`[CRON] Found ${allUsers.length} users to generate trend briefings for`);
 
         const selectionModel = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
@@ -290,7 +281,7 @@ Select now.`;
                         }
                     }));
 
-                    const { error: saveError } = await supabase
+                    const { error: saveError } = await supabaseAdmin
                         .from('trends_cache')
                         .upsert({
                             email: user.email,
@@ -321,7 +312,6 @@ Select now.`;
             }
         }
 
-        console.log('[CRON] Trend briefing generation completed');
 
         return NextResponse.json({
             success: true,

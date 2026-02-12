@@ -71,7 +71,6 @@ export default function MaterialsPage() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[Materials] Fetched from API:', data.materials?.length || 0, 'materials');
         setMaterials(data.materials || []);
         setTotalPages(data.totalPages || 1);
         setTotalMaterials(data.total || 0);

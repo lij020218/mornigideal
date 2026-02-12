@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * POST /api/material/rate
@@ -32,11 +32,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the material belongs to the user
-    const { data: material, error: fetchError } = await supabase
+    const { data: material, error: fetchError } = await supabaseAdmin
       .from("materials")
       .select("id, user_id")
       .eq("id", materialId)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !material) {
       return NextResponse.json(
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the quality rating
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from("materials")
       .update({ quality_rating: rating })
       .eq("id", materialId);
@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[RATE] Material ${materialId} rated as ${rating}`);
 
     return NextResponse.json({
       success: true,
@@ -105,12 +104,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: material, error } = await supabase
+    const { data: material, error } = await supabaseAdmin
       .from("materials")
       .select("quality_rating")
       .eq("id", materialId)
       .eq("user_id", email)
-      .single();
+      .maybeSingle();
 
     if (error || !material) {
       return NextResponse.json(

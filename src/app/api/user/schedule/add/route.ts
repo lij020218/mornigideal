@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { isValidString, isValidTime, isValidDate } from "@/lib/validation";
+import { dualWriteAdd } from "@/lib/schedule-dual-write";
 
 export async function POST(request: NextRequest) {
     try {
@@ -31,11 +32,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get current user profile
-        const { data: userData, error: fetchError } = await supabase
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from("users")
             .select("profile")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !userData) {
             console.error("[Schedule Add] Fetch error:", fetchError);
@@ -70,14 +71,12 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            console.log(`[Schedule Add] Parsed duration: ${durationMinutes} minutes from "${estimatedDuration}"`);
 
             // Find next available slot starting from current hour or 9 AM (whichever is later)
             const now = new Date();
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            console.log(`[Schedule Add] Current time: ${currentHour}:${currentMinute}`);
 
             // Start from next half-hour slot after current time, or 9 AM if earlier
             let startHour = currentHour;
@@ -95,7 +94,6 @@ export async function POST(request: NextRequest) {
                 startMinute = 0;
             }
 
-            console.log(`[Schedule Add] Starting search from: ${startHour}:${startMinute}`);
 
             const endHour = 22;
 
@@ -145,7 +143,6 @@ export async function POST(request: NextRequest) {
                 calculatedEndTime = `${defaultEndHour.toString().padStart(2, '0')}:${defaultEndMinute.toString().padStart(2, '0')}`;
             }
 
-            console.log(`[Schedule Add] Slot found: ${calculatedStartTime} - ${calculatedEndTime} (${durationMinutes} min)`);
         }
 
         // Smart sleep/wake time adjustment
@@ -172,7 +169,6 @@ export async function POST(request: NextRequest) {
                 // Set sleep end time to wake-up start time
                 const wakeTime = wakeSchedule.startTime;
                 if (wakeTime && calculatedEndTime) {
-                    console.log(`[Schedule Add] Adjusting sleep end time to match wake time: ${wakeTime}`);
                     calculatedEndTime = wakeTime;
                 }
             }
@@ -216,7 +212,6 @@ export async function POST(request: NextRequest) {
                         ...customGoals[sleepIndex],
                         endTime: calculatedStartTime
                     };
-                    console.log(`[Schedule Add] Updated existing sleep schedule (${sleepSchedule.specificDate}) end time to: ${calculatedStartTime}`);
                 }
             }
         }
@@ -323,7 +318,7 @@ export async function POST(request: NextRequest) {
         const updatedProfile = { ...profile, customGoals: updatedCustomGoals };
 
         // Save to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("users")
             .update({ profile: updatedProfile })
             .eq("email", email);
@@ -333,7 +328,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to add schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Add] Added: ${text} at ${calculatedStartTime || startTime}`);
+
+        // Dual-write to schedules table
+        await dualWriteAdd(email, newGoal, newGoal.specificDate);
 
         return NextResponse.json({
             success: true,

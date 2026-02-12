@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
         const { profile } = body;
 
         // Update user profile in database
-        const { supabase } = await import("@/lib/supabase");
+        const { supabaseAdmin } = await import("@/lib/supabase-admin");
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("users")
             .update({ profile })
             .eq("email", email)
@@ -133,9 +133,9 @@ export async function PUT(request: NextRequest) {
         };
 
         // Update user profile in database
-        const { supabase } = await import("@/lib/supabase");
+        const { supabaseAdmin } = await import("@/lib/supabase-admin");
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("users")
             .update({ profile: updatedProfile })
             .eq("email", email)

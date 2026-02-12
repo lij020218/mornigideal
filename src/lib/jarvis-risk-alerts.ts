@@ -6,7 +6,7 @@
  * - 프로/맥스 플랜 기능
  */
 
-import { supabase } from "./supabase";
+import { supabaseAdmin } from "./supabase-admin";
 import { canUseFeature } from "./user-plan";
 
 // 리스크 알림 타입
@@ -46,11 +46,11 @@ interface Schedule {
  * 이메일로 사용자 ID 조회
  */
 async function getUserIdByEmail(email: string): Promise<string | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("users")
         .select("id")
         .eq("email", email)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         return null;
@@ -246,7 +246,7 @@ function checkOverwork(schedules: Schedule[]): RiskAlert | null {
  */
 async function saveAlert(userId: string, alert: RiskAlert): Promise<void> {
     try {
-        await supabase.from("risk_alerts").insert({
+        await supabaseAdmin.from("risk_alerts").insert({
             user_id: userId,
             alert_type: alert.alertType,
             title: alert.title,
@@ -269,7 +269,7 @@ export async function getUnreadAlerts(email: string): Promise<RiskAlert[]> {
         const userId = await getUserIdByEmail(email);
         if (!userId) return [];
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("risk_alerts")
             .select("*")
             .eq("user_id", userId)
@@ -301,7 +301,7 @@ export async function markAlertAsRead(
         const userId = await getUserIdByEmail(email);
         if (!userId) return false;
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("risk_alerts")
             .update({ is_read: true })
             .eq("id", alertId)
@@ -325,7 +325,7 @@ export async function dismissAlert(
         const userId = await getUserIdByEmail(email);
         if (!userId) return false;
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("risk_alerts")
             .update({ is_dismissed: true })
             .eq("id", alertId)

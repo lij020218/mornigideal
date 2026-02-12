@@ -6,8 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
+import { dualWriteAdd } from '@/lib/schedule-dual-write';
 import { isValidDate } from '@/lib/validation';
 
 // 오늘 일정 조회
@@ -72,7 +73,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { text, startTime, endTime, date, specificDate, color } = body;
 
-    console.log('[schedules/POST] Request body:', { text, startTime, endTime, specificDate, color });
 
     if (!text || !startTime) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -96,13 +96,12 @@ export async function POST(request: NextRequest) {
       ...(color ? { color } : {}),
     };
 
-    console.log('[schedules/POST] Looking up user');
 
     const { data: user, error: fetchError } = await supabaseAdmin
       .from('users')
       .select('profile')
       .eq('email', userEmail)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !user) {
       console.error('[schedules/POST] 사용자 조회 오류:', fetchError);
@@ -113,7 +112,6 @@ export async function POST(request: NextRequest) {
     const customGoals = existingProfile.customGoals || [];
     customGoals.push(newGoal);
 
-    console.log('[schedules/POST] Adding goal, total customGoals:', customGoals.length);
 
     const { error: updateError } = await supabaseAdmin
       .from('users')
@@ -122,8 +120,11 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('[schedules/POST] 일정 추가 오류:', updateError);
-      return NextResponse.json({ error: 'Failed to add schedule', details: updateError.message }, { status: 500 });
+      return NextResponse.json({ error: '일정 추가에 실패했습니다.' }, { status: 500 });
     }
+
+    // Dual-write to schedules table
+    await dualWriteAdd(userEmail, newGoal, scheduleDate);
 
     return NextResponse.json({
       schedule: {

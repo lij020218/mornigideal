@@ -13,6 +13,8 @@ import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { PLAN_CONFIGS, type PlanType } from "@/types/jarvis";
 import { ReActBrain, isComplexRequest, isSimpleResponse } from "@/lib/jarvis/brain-react";
 import { getFusedContextForAI } from "@/lib/contextFusionService";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -24,16 +26,10 @@ const openai = new OpenAI({
 
 async function fetchEventLogs(userEmail: string): Promise<string> {
     try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const { data: events, error } = await supabase
+        const { data: events, error } = await supabaseAdmin
             .from('event_logs')
             .select('*')
             .eq('user_email', userEmail)
@@ -140,18 +136,11 @@ async function fetchRagContext(messages: any[], userEmail: string): Promise<stri
 
         const query = lastUserMessage.content;
 
-        // Direct DB query instead of self-referencing HTTP call
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id, plan")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) return "";
 
@@ -167,7 +156,7 @@ async function fetchRagContext(messages: any[], userEmail: string): Promise<stri
         };
         const { threshold, limit } = planThresholds[userPlan] || planThresholds.Free;
 
-        const { data: memories, error } = await supabase.rpc(
+        const { data: memories, error } = await supabaseAdmin.rpc(
             'search_similar_memories',
             {
                 query_embedding: JSON.stringify(queryEmbedding),
@@ -179,7 +168,6 @@ async function fetchRagContext(messages: any[], userEmail: string): Promise<stri
 
         if (error || !memories || memories.length === 0) return "";
 
-        console.log('[AI Chat] RAG retrieved', memories.length, 'similar memories');
 
         return `
 🧠 **과거 대화 컨텍스트 (RAG):**
@@ -281,7 +269,6 @@ ${longTermGoalsContext}
         let scheduleContext = "";
 
         if (context?.schedules && context.schedules.length > 0) {
-            console.log('[AI Chat] Using schedules from context:', context.currentDate);
             scheduleContext = `
 오늘의 일정 (${context.currentDate}):
 ${context.schedules.map((g: any) => `- ${g.startTime}: ${g.text}${g.completed ? ' ✓ 완료' : g.skipped ? ' ⊘ 건너뜀' : ''}`).join('\n')}
@@ -462,7 +449,6 @@ export async function POST(request: NextRequest) {
         // 4. 사용자 프로필 + 일정 (항상 필요)
         const { userContext, scheduleContext, userPlan, profile } = await buildUserAndScheduleContext(userEmail, context);
 
-        console.log('[AI Chat] Intent:', intent, '| Plan:', userPlan);
 
         // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청)
         const planConfig = PLAN_CONFIGS[userPlan as PlanType];
@@ -471,7 +457,6 @@ export async function POST(request: NextRequest) {
             && (intent !== 'chat' || isComplexRequest(messages));
 
         if (shouldUseReAct) {
-            console.log('[AI Chat] → ReAct agent mode');
             try {
                 const reactBrain = new ReActBrain(userEmail, userPlan as PlanType);
                 const result = await reactBrain.run({
@@ -492,7 +477,6 @@ export async function POST(request: NextRequest) {
                     await logOpenAIUsage(userEmail, 'react-agent', 'ai-chat-react', 0, 0);
                 }
 
-                console.log(`[AI Chat] ReAct done: ${result.steps.length} steps, ${result.totalLlmCalls} LLM calls, early=${result.wasTerminatedEarly}`);
 
                 return NextResponse.json({
                     message: result.message,
@@ -601,7 +585,7 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
         });
 
         // 8. LLM 호출
-        const modelName = "gpt-5-mini-2025-08-07";
+        const modelName = MODELS.GPT_5_MINI;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [
@@ -623,24 +607,21 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
         }
 
         if (finishReason === 'length') {
-            console.warn('[AI Chat] Response truncated (finish_reason: length)');
         }
-        console.log('[AI Chat] Raw AI Response:', responseContent);
 
         // 10. 응답 파싱 + 후처리
         try {
             const parsed = JSON.parse(responseContent);
-            console.log('[AI Chat] Parsed Response:', JSON.stringify(parsed, null, 2));
-            console.log('[AI Chat] Actions included:', parsed.actions?.length || 0);
 
             const currentTime = context?.currentTime || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const processedActions = postProcessActions(parsed.actions || [], currentTime);
+            const { actions: processedActions, conflictWarning, focusSuggestion } = postProcessActions(parsed.actions || [], currentTime);
 
-            console.log('[AI Chat] Processed Actions:', processedActions.length);
 
             return NextResponse.json({
                 message: parsed.message || "응답을 처리하지 못했습니다.",
                 actions: processedActions,
+                ...(conflictWarning && { conflictWarning }),
+                ...(focusSuggestion && { focusSuggestion }),
             });
         } catch (e) {
             console.error('[AI Chat] JSON parse error:', e);
@@ -678,7 +659,7 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
         }
 
         return NextResponse.json(
-            { error: "Failed to generate response", message: error?.message || "알 수 없는 오류가 발생했습니다." },
+            { error: "Failed to generate response", message: "알 수 없는 오류가 발생했습니다." },
             { status: 500 }
         );
     }

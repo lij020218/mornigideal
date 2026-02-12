@@ -93,7 +93,6 @@ export function WeeklyGoalsSummary() {
             const lastResetWeek = localStorage.getItem('weekly_goals_last_reset_week');
 
             if (currentWeek !== lastResetWeek) {
-                console.log('[WeeklyGoalsSummary] New week detected! Resetting weekly goals:', { currentWeek, lastResetWeek });
                 localStorage.setItem('weekly_goals_last_reset_week', currentWeek);
 
                 try {
@@ -105,7 +104,6 @@ export function WeeklyGoalsSummary() {
                             action: 'resetWeekly',
                         }),
                     });
-                    console.log('[WeeklyGoalsSummary] Weekly goals reset completed');
                 } catch (error) {
                     console.error('[WeeklyGoalsSummary] Failed to reset weekly goals:', error);
                     localStorage.removeItem('weekly_goals_last_reset_week');

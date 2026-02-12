@@ -18,7 +18,6 @@ interface UserProfileData {
 
 export async function POST(request: NextRequest) {
     try {
-        console.log("[AI News Alert] API 호출 시작");
 
         // Check authentication
         const email = await getUserEmailWithAuth(request);
@@ -33,7 +32,6 @@ export async function POST(request: NextRequest) {
             const user = await getUserByEmail(email);
             if (user?.profile) {
                 userProfile = user.profile as UserProfileData;
-                console.log("[AI News Alert] DB에서 프로필 로드 완료");
             }
         } catch (error) {
             console.error("[AI News Alert] 프로필 로드 실패:", error);
@@ -120,7 +118,6 @@ export async function POST(request: NextRequest) {
         const text = response.text();
         const cleanText = text.replace(/```json\n?|\n?```/g, "").trim();
 
-        console.log("[AI News Alert] Gemini 응답:", cleanText);
 
         try {
             const newsData = JSON.parse(cleanText);

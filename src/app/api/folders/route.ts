@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET - Fetch all folders for the current user
 export async function GET(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: folders, error } = await supabase
+        const { data: folders, error } = await supabaseAdmin
             .from('folders')
             .select('*')
             .eq('email', email)
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
         }
 
-        const { data: folder, error } = await supabase
+        const { data: folder, error } = await supabaseAdmin
             .from('folders')
             .insert({
                 email: email,
@@ -85,7 +85,7 @@ export async function PATCH(request: NextRequest) {
         if (color !== undefined) updates.color = color;
         updates.updated_at = new Date().toISOString();
 
-        const { data: folder, error } = await supabase
+        const { data: folder, error } = await supabaseAdmin
             .from('folders')
             .update(updates)
             .eq('id', id)
@@ -121,7 +121,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         // Materials will have their folder_id set to NULL due to ON DELETE SET NULL
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('folders')
             .delete()
             .eq('id', id)

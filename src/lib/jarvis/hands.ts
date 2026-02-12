@@ -3,7 +3,7 @@
  * 실제 액션 실행
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     InterventionLevel,
     ActionType,
@@ -110,7 +110,6 @@ export class Hands {
                     break;
 
                 default:
-                    console.log('[Hands] Silent action type not implemented:', plan.actionType);
             }
 
             const logId = await this.createInterventionLog(
@@ -262,7 +261,7 @@ export class Hands {
         reasonCodes: string[],
         feedback?: UserFeedback
     ): Promise<string> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('intervention_logs')
             .insert({
                 user_email: this.userEmail,
@@ -288,7 +287,7 @@ export class Hands {
      * 알림 저장 (UI에서 표시)
      */
     private async saveNotification(notification: any): Promise<void> {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('jarvis_notifications')
             .insert({
                 user_email: this.userEmail,
@@ -305,7 +304,7 @@ export class Hands {
      * 확인 요청 저장 (L3)
      */
     private async saveConfirmationRequest(request: any): Promise<void> {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('jarvis_confirmation_requests')
             .insert({
                 user_email: this.userEmail,
@@ -324,7 +323,7 @@ export class Hands {
      */
     private async prepareResources(payload: any): Promise<any> {
         // 준비된 리소스를 jarvis_resources 테이블에 저장
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('jarvis_resources')
             .insert({
                 user_email: this.userEmail,
@@ -345,7 +344,7 @@ export class Hands {
      * 체크리스트 생성
      */
     private async createChecklist(payload: any): Promise<any> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('jarvis_resources')
             .insert({
                 user_email: this.userEmail,
@@ -372,13 +371,13 @@ export class Hands {
         const { scheduleId, newDate, newTime } = payload;
 
         // customGoals에서 일정 찾아서 업데이트
-        const { data: userData, error: fetchError } = await supabase
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
-        if (fetchError) throw fetchError;
+        if (fetchError || !userData) throw fetchError || new Error('User not found');
 
         const customGoals = userData.profile?.customGoals || [];
         const updatedGoals = customGoals.map((goal: any) => {
@@ -392,7 +391,7 @@ export class Hands {
             return goal;
         });
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({
                 profile: {
@@ -413,7 +412,6 @@ export class Hands {
     private async addBuffer(payload: any): Promise<any> {
         // 일정 사이에 버퍼 시간 추가 로직
         // 구현 생략 (복잡도 높음)
-        console.log('[Hands] Add buffer not fully implemented:', payload);
         return payload;
     }
 
@@ -422,7 +420,7 @@ export class Hands {
      */
     private async suggestSchedule(payload: any): Promise<any> {
         // 제안된 일정을 jarvis_resources에 저장
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('jarvis_resources')
             .insert({
                 user_email: this.userEmail,
@@ -442,7 +440,7 @@ export class Hands {
      * 사용자 피드백 업데이트
      */
     async updateFeedback(interventionLogId: string, feedback: UserFeedback): Promise<void> {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('intervention_logs')
             .update({
                 user_feedback: feedback,

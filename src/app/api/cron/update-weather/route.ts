@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[Weather Cron] Starting hourly weather update...');
 
         if (!OPENWEATHER_API_KEY) {
             console.error('[Weather Cron] OPENWEATHER_API_KEY not set');
@@ -84,7 +83,7 @@ export async function GET(request: Request) {
         };
 
         // Save to Supabase cache
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('weather_cache')
             .upsert({
                 location: 'seoul',
@@ -99,7 +98,6 @@ export async function GET(request: Request) {
             throw error;
         }
 
-        console.log('[Weather Cron] Weather cached successfully:', cachedWeather);
 
         return NextResponse.json({
             success: true,

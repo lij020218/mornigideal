@@ -386,32 +386,32 @@ const FEATURE_DETAILS = [
 
 const PLANS = [
     {
-        name: "Standard",
-        nameKo: "스탠더드",
+        name: "Free",
+        nameKo: "무료",
         price: "무료",
         period: "",
-        description: "기본 AI 비서 기능",
-        features: ["일일 AI 호출 50회", "AI 채팅 및 일정 관리", "아침 인사 & 학습 팁", "유튜브 리소스 추천", "선제적 알림"],
+        description: "AI 일정 비서 + 선제적 알림",
+        features: ["일일 AI 호출 30회", "AI 채팅 + 일정 관리", "컨텍스트 융합 (날씨+일정)", "선제적 알림 + 메모리 서피싱", "주간 리포트"],
         highlight: false,
         badge: null,
     },
     {
         name: "Pro",
         nameKo: "프로",
-        price: "₩9,900",
+        price: "₩6,900",
         period: "/월",
-        description: "스마트 알림 & 브리핑",
-        features: ["일일 AI 호출 100회", "Standard의 모든 기능", "리스크 알림 (충돌/마감 감지)", "스마트 뉴스 브리핑", "ReAct 에이전트 추론"],
+        description: "ReAct 에이전트 + 스마트 알림",
+        features: ["일일 AI 호출 100회", "Free의 모든 기능", "리스크 알림 (충돌/마감 감지)", "스마트 뉴스 브리핑", "ReAct 다단계 에이전트"],
         highlight: true,
         badge: "인기",
     },
     {
         name: "Max",
         nameKo: "맥스",
-        price: "₩21,900",
+        price: "₩14,900",
         period: "/월",
         description: "AI가 당신을 기억합니다",
-        features: ["무제한 AI 호출", "Pro의 모든 기능", "AI 장기 기억 (RAG)", "선제적 전략 제안", "자동 실행 모드"],
+        features: ["무제한 AI 호출", "Pro의 모든 기능", "AI 장기 기억 (RAG)", "자동 실행 모드", "1GB 메모리 저장소"],
         highlight: false,
         badge: "최고",
     },
@@ -483,26 +483,24 @@ export default function LandingPage() {
 
                     <motion.div variants={fadeUp} custom={3} className="flex flex-col items-center gap-6 mt-12">
                         <div className="flex flex-col sm:flex-row items-center gap-4">
-                            <a
-                                href="#"
-                                className="group flex items-center gap-3 bg-black text-white font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-800 transition shadow-lg"
+                            <span
+                                className="group flex items-center gap-3 bg-black/70 text-white/80 font-semibold px-6 py-3.5 rounded-xl cursor-default shadow-lg"
                             >
                                 <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                                 <div className="text-left">
                                     <p className="text-[10px] leading-tight opacity-80">Download on the</p>
                                     <p className="text-base font-bold leading-tight">App Store</p>
                                 </div>
-                            </a>
-                            <a
-                                href="#"
-                                className="group flex items-center gap-3 bg-black text-white font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-800 transition shadow-lg"
+                            </span>
+                            <span
+                                className="group flex items-center gap-3 bg-black/70 text-white/80 font-semibold px-6 py-3.5 rounded-xl cursor-default shadow-lg"
                             >
                                 <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302c.659.439.659 1.282 0 1.722l-2.302 2.302L15.095 12l2.603-2.492zM3.864 1.667L14.801 7.99l-2.302 2.302L3.864 1.667z"/></svg>
                                 <div className="text-left">
                                     <p className="text-[10px] leading-tight opacity-80">GET IT ON</p>
                                     <p className="text-base font-bold leading-tight">Google Play</p>
                                 </div>
-                            </a>
+                            </span>
                         </div>
                         <Link
                             href="/signup"
@@ -633,7 +631,7 @@ export default function LandingPage() {
                             무료로 시작, 필요하면 업그레이드
                         </motion.h2>
                         <motion.p variants={fadeUp} custom={2} className="text-gray-500 mt-4 text-lg">
-                            Standard 플랜은 영구 무료입니다
+                            Free 플랜은 영구 무료입니다
                         </motion.p>
                     </motion.div>
 
@@ -711,26 +709,24 @@ export default function LandingPage() {
                     </motion.p>
                     <motion.div variants={fadeUp} custom={3} className="flex flex-col items-center gap-4">
                         <div className="flex flex-col sm:flex-row items-center gap-4">
-                            <a
-                                href="#"
-                                className="group flex items-center gap-3 bg-black text-white font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-800 transition shadow-lg"
+                            <span
+                                className="group flex items-center gap-3 bg-black/70 text-white/80 font-semibold px-6 py-3.5 rounded-xl cursor-default shadow-lg"
                             >
                                 <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                                 <div className="text-left">
                                     <p className="text-[10px] leading-tight opacity-80">App Store</p>
                                     <p className="text-sm font-bold leading-tight">다운로드</p>
                                 </div>
-                            </a>
-                            <a
-                                href="#"
-                                className="group flex items-center gap-3 bg-black text-white font-semibold px-6 py-3.5 rounded-xl hover:bg-gray-800 transition shadow-lg"
+                            </span>
+                            <span
+                                className="group flex items-center gap-3 bg-black/70 text-white/80 font-semibold px-6 py-3.5 rounded-xl cursor-default shadow-lg"
                             >
                                 <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302c.659.439.659 1.282 0 1.722l-2.302 2.302L15.095 12l2.603-2.492zM3.864 1.667L14.801 7.99l-2.302 2.302L3.864 1.667z"/></svg>
                                 <div className="text-left">
                                     <p className="text-[10px] leading-tight opacity-80">Google Play</p>
                                     <p className="text-sm font-bold leading-tight">다운로드</p>
                                 </div>
-                            </a>
+                            </span>
                         </div>
                     </motion.div>
                 </motion.div>

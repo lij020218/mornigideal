@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWeeklyReport, generateWeeklyReportNarrative } from "@/lib/weeklyReportGenerator";
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * Weekly Report Cron Job
@@ -19,16 +19,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        console.log('[Cron Weekly Report] Starting weekly report generation for all users...');
 
         // Get all users (paginated to avoid memory issues)
-        const supabase = db.client;
         const BATCH_SIZE = 50;
         let offset = 0;
         let allUsers: { email: string; profile: any }[] = [];
 
         while (true) {
-            const { data: batch, error } = await supabase
+            const { data: batch, error } = await supabaseAdmin
                 .from('users')
                 .select('email, profile')
                 .range(offset, offset + BATCH_SIZE - 1);
@@ -43,7 +41,6 @@ export async function GET(request: NextRequest) {
             offset += BATCH_SIZE;
         }
 
-        console.log(`[Cron Weekly Report] Found ${allUsers.length} users`);
 
         const results: any[] = [];
         let successCount = 0;
@@ -59,7 +56,7 @@ export async function GET(request: NextRequest) {
                     const targetWeekNumber = reportData.period.weekNumber;
 
                     // 해당 주차의 리포트가 이미 존재하는지 확인
-                    const { data: existingReport } = await supabase
+                    const { data: existingReport } = await supabaseAdmin
                         .from('user_events')
                         .select('id')
                         .eq('user_email', user.email)
@@ -74,7 +71,7 @@ export async function GET(request: NextRequest) {
 
                     const narrative = await generateWeeklyReportNarrative(reportData, user.profile || {});
 
-                    await supabase.from('user_events').insert({
+                    await supabaseAdmin.from('user_events').insert({
                         id: `weekly-report-${user.email}-week${targetWeekNumber}-${Date.now()}`,
                         user_email: user.email,
                         event_type: 'weekly_report_generated',
@@ -107,7 +104,6 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        console.log(`[Cron Weekly Report] Completed: ${successCount} success, ${errorCount} errors`);
 
         return NextResponse.json({
             success: true,

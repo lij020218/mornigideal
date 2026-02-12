@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * Schedule Pattern Analyzer
@@ -42,13 +42,12 @@ export interface SchedulePattern {
  * 사용자의 최근 4주 일정을 분석하여 패턴 추출
  */
 export async function analyzeSchedulePatterns(userEmail: string): Promise<SchedulePattern> {
-    console.log(`[Schedule Analyzer] Analyzing patterns`);
 
     const fourWeeksAgo = new Date();
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
 
     // 사용자의 프로필에서 customGoals 가져오기 (최근 4주)
-    const supabase = db.client;
+    const supabase = supabaseAdmin;
     const { data: userData, error } = await supabase
         .from('users')
         .select('profile')
@@ -56,7 +55,6 @@ export async function analyzeSchedulePatterns(userEmail: string): Promise<Schedu
         .maybeSingle();
 
     if (error || !userData) {
-        console.log(`[Schedule Analyzer] No user data found:`, error?.message);
         return getEmptyPattern();
     }
 
@@ -85,11 +83,9 @@ export async function analyzeSchedulePatterns(userEmail: string): Promise<Schedu
         .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (scheduleData.length === 0) {
-        console.log(`[Schedule Analyzer] No schedule data found`);
         return getEmptyPattern();
     }
 
-    console.log(`[Schedule Analyzer] Found ${scheduleData.length} schedules`);
 
     // 1. 기상/취침 시간 분석
     const { wakeUpTime, sleepTime } = analyzeWakeSleepTimes(scheduleData);
@@ -125,14 +121,6 @@ export async function analyzeSchedulePatterns(userEmail: string): Promise<Schedu
         relaxedDays,
     };
 
-    console.log(`[Schedule Analyzer] Pattern analysis complete:`, {
-        wakeUpTime,
-        sleepTime,
-        workStartTime,
-        workEndTime,
-        busyDaysCount: busyDays.length,
-        recurringSchedulesCount: recurringSchedules.length,
-    });
 
     return pattern;
 }

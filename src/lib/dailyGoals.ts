@@ -72,7 +72,6 @@ export function getDailyGoals(): DailyGoals {
             goals.trendBriefing = Array.isArray(readIds) ? readIds.length : 0;
         }
     } catch (e) {
-        console.warn('[DailyGoals] Failed to load read briefings:', e);
     }
 
     return goals;
@@ -118,7 +117,6 @@ async function syncToApi(goals: DailyGoals) {
             })
         });
     } catch (e) {
-        console.warn('Failed to sync goals to API', e);
     }
 }
 

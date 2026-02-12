@@ -15,14 +15,13 @@ export async function DELETE(request: NextRequest) {
         if (!password) {
             return NextResponse.json({ error: "비밀번호를 입력해주세요." }, { status: 400 });
         }
-        console.log(`[Account Delete] Starting account deletion`);
 
         // Get user from public.users table (include password for verification)
         const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id, password")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             console.error("[Account Delete] User not found:", userError);
@@ -35,7 +34,15 @@ export async function DELETE(request: NextRequest) {
             if (userData.password.startsWith("$2")) {
                 isValid = await bcrypt.compare(password, userData.password);
             } else {
-                isValid = password === userData.password;
+                // Plaintext fallback: verify then migrate to bcrypt
+                if (password === userData.password) {
+                    isValid = true;
+                    const hashedPassword = await bcrypt.hash(password, 12);
+                    await supabaseAdmin
+                        .from("users")
+                        .update({ password: hashedPassword })
+                        .eq("id", userData.id);
+                }
             }
             if (!isValid) {
                 return NextResponse.json({ error: "비밀번호가 일치하지 않습니다." }, { status: 403 });
@@ -43,7 +50,6 @@ export async function DELETE(request: NextRequest) {
         }
 
         const userId = userData.id;
-        console.log(`[Account Delete] Found user ID: ${userId}`);
 
         // Delete all user data from various tables
         const deleteTasks: { table: string; filter: { column: string; value: string } }[] = [
@@ -108,7 +114,6 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: "Failed to delete user account" }, { status: 500 });
         }
 
-        console.log(`[Account Delete] Successfully deleted account`);
 
         return NextResponse.json({ success: true, message: "Account deleted successfully" });
     } catch (error: any) {
@@ -139,7 +144,7 @@ export async function PUT(request: NextRequest) {
             .from("users")
             .select("id, password")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -150,6 +155,7 @@ export async function PUT(request: NextRequest) {
         if (userData.password.startsWith("$2")) {
             isValid = await bcrypt.compare(currentPassword, userData.password);
         } else {
+            // Plaintext fallback: verify (new hash will be set below anyway)
             isValid = currentPassword === userData.password;
         }
 

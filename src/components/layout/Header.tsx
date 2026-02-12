@@ -70,7 +70,6 @@ export function Header() {
         const handleProfileUpdate = () => {
             const savedProfile = localStorage.getItem("user_profile");
             if (savedProfile) {
-                console.log("[Header] Profile updated, reloading from localStorage");
                 setUserProfile(JSON.parse(savedProfile));
             }
         };

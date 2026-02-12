@@ -5,12 +5,7 @@
  * https://docs.expo.dev/push-notifications/sending-notifications/
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -37,7 +32,7 @@ interface ExpoPushTicket {
  * 사용자의 활성 푸시 토큰 조회
  */
 export async function getUserPushTokens(userEmail: string): Promise<string[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('push_tokens')
         .select('token')
         .eq('user_email', userEmail)
@@ -95,16 +90,14 @@ export async function sendPushNotification(
         for (let i = 0; i < tickets.length; i++) {
             const ticket = tickets[i];
             if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
-                await supabase
+                await supabaseAdmin
                     .from('push_tokens')
                     .update({ active: false, updated_at: new Date().toISOString() })
                     .eq('token', tokens[i]);
-                console.log(`[PushService] Deactivated stale token`);
             }
         }
 
         const successCount = tickets.filter(t => t.status === 'ok').length;
-        console.log(`[PushService] Sent: ${successCount}/${tokens.length} success`);
         return successCount > 0;
     } catch (error) {
         console.error('[PushService] Send error:', error);
@@ -126,7 +119,7 @@ export async function sendBulkPushNotifications(
 ): Promise<{ sent: number; failed: number }> {
     // 모든 사용자의 토큰 한 번에 조회
     const emails = [...new Set(notifications.map(n => n.userEmail))];
-    const { data: allTokens } = await supabase
+    const { data: allTokens } = await supabaseAdmin
         .from('push_tokens')
         .select('user_email, token')
         .in('user_email', emails)
@@ -194,6 +187,5 @@ export async function sendBulkPushNotifications(
         }
     }
 
-    console.log(`[PushService] Bulk send: ${sent} sent, ${failed} failed`);
     return { sent, failed };
 }

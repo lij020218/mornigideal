@@ -24,7 +24,6 @@ export function GlobalScheduleNotificationManager() {
                     const data = await response.json();
                     const goals = data.profile?.customGoals || [];
                     setCustomGoals(goals);
-                    console.log('[GlobalScheduleNotificationManager] Loaded goals:', goals.length);
                 }
             } catch (error) {
                 console.error('[GlobalScheduleNotificationManager] Failed to fetch goals:', error);

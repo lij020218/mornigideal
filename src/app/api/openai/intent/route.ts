@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getUserByEmail } from "@/lib/users";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { MODELS } from "@/lib/models";
 
 type IntentResult = {
     intent: "schedule_update" | "briefing" | "chat";
@@ -26,7 +28,7 @@ export async function POST(request: NextRequest) {
 
         // 1) Parse intent
         const intentResp = await client.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: MODELS.GPT_4O_MINI_SHORT,
             response_format: { type: "json_object" },
             messages: [
                 {
@@ -51,7 +53,6 @@ export async function POST(request: NextRequest) {
         try {
             parsed = JSON.parse(intentResp.choices[0].message.content || "{}");
         } catch (err) {
-            console.warn("[Intent] JSON parse failed", err);
         }
 
         // 2) Act on intent
@@ -82,8 +83,7 @@ export async function POST(request: NextRequest) {
                         ];
                     }
 
-                    const { supabase } = await import("@/lib/supabase");
-                    const { error } = await supabase.from("users").update({ profile }).eq("email", userEmail);
+                    const { error } = await supabaseAdmin.from("users").update({ profile }).eq("email", userEmail);
                     if (error) {
                         console.error("[Intent] schedule update failed:", error);
                     } else {

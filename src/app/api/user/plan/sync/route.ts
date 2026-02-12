@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
         const { plan } = await request.json();
 
-        if (!plan || !["standard", "pro", "max"].includes(plan)) {
+        if (!plan || !["free", "pro", "max"].includes(plan)) {
             return NextResponse.json(
                 { error: "유효한 플랜을 선택해주세요." },
                 { status: 400 }
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log(`[Plan Sync] Plan synced: ${plan}`);
 
         return NextResponse.json({ success: true, plan });
     } catch (error: any) {

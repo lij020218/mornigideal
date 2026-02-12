@@ -7,12 +7,7 @@
  * - 컨텍스트 기반 추천
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export interface ProactiveNotification {
     id: string;
@@ -70,7 +65,6 @@ export async function generateProactiveNotifications(context: UserContext): Prom
     const currentMinutes = currentTime.getMinutes();
     const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}`;
 
-    console.log('[ProactiveNotification] Generating notifications. Hour:', currentHour, 'Uncompleted:', uncompletedGoals.length);
 
     // 0. 중요 일정 사전 준비 (2-3시간 전)
     try {
@@ -81,10 +75,8 @@ export async function generateProactiveNotifications(context: UserContext): Prom
             notifications.push(formatPrepNotification(prep) as any);
         }
         if (prepWorthy.length > 0) {
-            console.log('[ProactiveNotification] Schedule prep notifications:', prepWorthy.length);
         }
     } catch (e) {
-        console.log('[ProactiveNotification] Schedule prep skipped:', e);
     }
 
     // 1. 일정 시작 전 미리 알림 (10분, 20분 전)
@@ -145,21 +137,33 @@ export async function generateProactiveNotifications(context: UserContext): Prom
     if (context.userMemory || context.recurringPatterns?.length) {
         const memoryNotifications = getMemoryBasedNotifications(context);
         notifications.push(...memoryNotifications);
-        console.log('[ProactiveNotification] Memory-based notifications:', memoryNotifications.length);
     }
 
     // 6. 반복 일정 전환 제안
     const recurringNotifications = getRecurringConversionNotifications(context);
     notifications.push(...recurringNotifications);
     if (recurringNotifications.length > 0) {
-        console.log('[ProactiveNotification] Recurring conversion suggestions:', recurringNotifications.length);
     }
 
     // 7. 주말/연휴/기념일 맛집·여행 추천
     const lifestyleNotifications = getLifestyleRecommendNotifications(context);
     notifications.push(...lifestyleNotifications);
     if (lifestyleNotifications.length > 0) {
-        console.log('[ProactiveNotification] Lifestyle recommendations:', lifestyleNotifications.length);
+    }
+
+    // 9. 패턴 기반 제안 ("목요일 운동 자주 건너뛰시네요")
+    const patternSuggestions = getSkippedPatternSuggestions(context);
+    notifications.push(...patternSuggestions);
+    if (patternSuggestions.length > 0) {
+    }
+
+    // 10. 메모리 서피싱 — 과거 일정/이벤트 후속 확인
+    try {
+        const memorySurfacing = await getMemorySurfacingNotifications(context);
+        notifications.push(...memorySurfacing);
+        if (memorySurfacing.length > 0) {
+        }
+    } catch (e) {
     }
 
     // 8. 컨텍스트 융합 신호 기반 알림 (critical/warning만)
@@ -179,13 +183,10 @@ export async function generateProactiveNotifications(context: UserContext): Prom
             }
         }
         if (fused.signals.length > 0) {
-            console.log('[ProactiveNotification] Context fusion signals:', fused.signals.length);
         }
     } catch (e) {
-        console.log('[ProactiveNotification] Context fusion skipped:', e);
     }
 
-    console.log('[ProactiveNotification] Generated notifications:', notifications.length);
 
     return notifications;
 }
@@ -911,6 +912,178 @@ export function isImportantSchedule(text: string): boolean {
     );
 }
 
+// ============================================================
+// 메모리 서피싱 — 과거 일정에 대한 후속 질문
+// ============================================================
+
+/**
+ * 최근 2-7일 전 중요 일정을 찾아 후속 질문 생성
+ * "지난주 치과 예약은 잘 다녀오셨나요?"
+ */
+async function getMemorySurfacingNotifications(context: UserContext): Promise<ProactiveNotification[]> {
+    const notifications: ProactiveNotification[] = [];
+    const currentTime = context.currentTime;
+    const currentHour = currentTime.getHours();
+
+    // 아침/오전에만 (7-11시)
+    if (currentHour < 7 || currentHour > 11) return notifications;
+
+    const customGoals = context.allCustomGoals || [];
+    const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
+
+    // 과거 일정 키워드: 후속 확인이 의미 있는 일정
+    const FOLLOWUP_KEYWORDS: Array<{ keywords: string[]; question: string }> = [
+        { keywords: ['치과', '병원', '진료', '검진', '안과', '피부과'], question: '진료 결과는 괜찮으셨나요?' },
+        { keywords: ['면접', '인터뷰'], question: '면접 결과는 어떠셨나요?' },
+        { keywords: ['시험', '테스트', '자격증'], question: '시험은 잘 보셨나요?' },
+        { keywords: ['발표', '프레젠테이션', 'PT'], question: '발표는 잘 되셨나요?' },
+        { keywords: ['여행', '휴가'], question: '여행은 즐거우셨나요?' },
+        { keywords: ['이사', '입주'], question: '새 곳에 잘 정착하셨나요?' },
+        { keywords: ['생일', '기념일', '결혼'], question: '좋은 시간 보내셨나요?' },
+    ];
+
+    // 2-7일 전 일정 검색
+    for (let daysAgo = 2; daysAgo <= 7; daysAgo++) {
+        const pastDate = new Date(currentTime);
+        pastDate.setDate(pastDate.getDate() - daysAgo);
+        const pastDateStr = `${pastDate.getFullYear()}-${String(pastDate.getMonth() + 1).padStart(2, '0')}-${String(pastDate.getDate()).padStart(2, '0')}`;
+        const pastDayOfWeek = pastDate.getDay();
+
+        const pastSchedules = customGoals.filter((g: any) => {
+            if (g.specificDate === pastDateStr) return true;
+            if (g.daysOfWeek?.includes(pastDayOfWeek) && !g.specificDate) return false; // 매주 반복은 제외
+            return false;
+        });
+
+        for (const schedule of pastSchedules) {
+            const text = (schedule.text || '').toLowerCase();
+
+            for (const { keywords, question } of FOLLOWUP_KEYWORDS) {
+                if (keywords.some(kw => text.includes(kw))) {
+                    const dayLabel = daysAgo === 2 ? '그저께' : daysAgo <= 4 ? `${daysAgo}일 전` : '지난주';
+
+                    notifications.push({
+                        id: `memory-surface-${schedule.id || text.substring(0, 10)}-${todayStr}`,
+                        type: 'memory_suggestion',
+                        priority: 'low',
+                        title: '💭 후속 확인',
+                        message: `${dayLabel} "${schedule.text}" 일정이 있었죠. ${question}`,
+                        actionType: 'memory_followup',
+                        actionPayload: {
+                            scheduleName: schedule.text,
+                            scheduleDate: pastDateStr,
+                            daysAgo,
+                        },
+                    });
+
+                    // 한 일정에서 하나만 생성
+                    break;
+                }
+            }
+        }
+    }
+
+    // 최대 1개만
+    return notifications.slice(0, 1);
+}
+
+// ============================================================
+// 패턴 기반 건너뛰기 감지 — "목요일 운동 자주 건너뛰시네요"
+// ============================================================
+
+/**
+ * 반복 일정의 완료/건너뛰기 패턴을 분석하여 제안 생성
+ * 최근 4주간 반복 일정의 요일별 완료율을 비교
+ */
+function getSkippedPatternSuggestions(context: UserContext): ProactiveNotification[] {
+    const notifications: ProactiveNotification[] = [];
+    const customGoals = context.allCustomGoals || [];
+    const currentTime = context.currentTime;
+    const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
+
+    // 아침/오전 시간대에만 표시 (6-11시)
+    if (currentTime.getHours() < 6 || currentTime.getHours() > 11) return notifications;
+
+    // 반복 일정만 추출 (daysOfWeek가 있는 것)
+    const recurringGoals = customGoals.filter((g: any) =>
+        g.daysOfWeek && g.daysOfWeek.length > 0 && g.daysOfWeek.length <= 4
+    );
+
+    // 매일 하는 루틴은 제외
+    const ROUTINE_KEYWORDS = ['기상', '취침', '잠', '식사', '아침', '점심', '저녁', '출근', '퇴근'];
+
+    // 일회성 일정들에서 완료/건너뛰기 이력 분석
+    // specificDate가 있는 일정에서 같은 텍스트의 completed/skipped 패턴 확인
+    const oneTimeGoals = customGoals.filter((g: any) => g.specificDate);
+
+    // 4주 전 날짜
+    const fourWeeksAgo = new Date(currentTime);
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+    const fourWeeksAgoStr = `${fourWeeksAgo.getFullYear()}-${String(fourWeeksAgo.getMonth() + 1).padStart(2, '0')}-${String(fourWeeksAgo.getDate()).padStart(2, '0')}`;
+
+    for (const goal of recurringGoals) {
+        const activityLower = (goal.text || '').toLowerCase();
+        if (ROUTINE_KEYWORDS.some(kw => activityLower.includes(kw))) continue;
+
+        // 이 반복 일정이 오늘 요일에 해당하는지
+        const todayDayOfWeek = currentTime.getDay();
+        if (!goal.daysOfWeek.includes(todayDayOfWeek)) continue;
+
+        // 최근 4주간 같은 텍스트의 일회성 인스턴스 찾기
+        const normalizedText = (goal.text || '').trim().toLowerCase();
+        const recentInstances = oneTimeGoals.filter((g: any) => {
+            if (g.specificDate < fourWeeksAgoStr) return false;
+            if (g.specificDate >= todayStr) return false;
+            const gDay = new Date(g.specificDate + 'T00:00:00').getDay();
+            if (!goal.daysOfWeek.includes(gDay)) return false;
+            return (g.text || '').trim().toLowerCase() === normalizedText;
+        });
+
+        if (recentInstances.length < 2) continue; // 데이터 부족
+
+        const skippedCount = recentInstances.filter((g: any) => g.skipped === true || (!g.completed && !g.skipped)).length;
+        const completedCount = recentInstances.filter((g: any) => g.completed === true).length;
+        const total = recentInstances.length;
+        const skipRate = skippedCount / total;
+
+        // 50% 이상 건너뛰면 패턴 감지
+        if (skipRate >= 0.5 && skippedCount >= 2) {
+            const dayName = DAY_NAMES_KR[todayDayOfWeek];
+
+            let message: string;
+            let suggestion: string;
+
+            if (skipRate >= 0.75) {
+                message = `최근 4주간 ${dayName}요일 "${goal.text}" 일정을 ${skippedCount}/${total}회 건너뛰셨어요.`;
+                suggestion = '다른 요일로 변경하거나, 시간을 조정해볼까요?';
+            } else {
+                message = `${dayName}요일 "${goal.text}" 일정 완료율이 ${Math.round((completedCount / total) * 100)}%예요.`;
+                suggestion = '오늘은 꼭 해보시는 건 어떨까요?';
+            }
+
+            notifications.push({
+                id: `skip-pattern-${normalizedText.replace(/\s/g, '')}-${todayDayOfWeek}-${todayStr}`,
+                type: 'pattern_reminder',
+                priority: 'medium',
+                title: '📊 패턴 인사이트',
+                message: `${message} ${suggestion}`,
+                actionType: 'adjust_schedule',
+                actionPayload: {
+                    goalText: goal.text,
+                    dayOfWeek: todayDayOfWeek,
+                    skipRate: Math.round(skipRate * 100),
+                    completedCount,
+                    skippedCount,
+                    total,
+                },
+            });
+        }
+    }
+
+    // 최대 2개만 반환
+    return notifications.slice(0, 2);
+}
+
 /**
  * DB에 알림 저장 (jarvis_notifications 테이블 사용)
  */
@@ -922,7 +1095,7 @@ export async function saveProactiveNotification(
         // notification.id는 문자열 (e.g. "schedule-10min-goal_123") 이므로
         // UUID PK인 jarvis_notifications.id에는 넣지 않고 자동생성에 맡김
         // 대신 notification.id를 action_payload에 포함하여 추적 가능하게 함
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('jarvis_notifications')
             .insert({
                 user_email: userEmail,
@@ -959,14 +1132,13 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
         const todayStr = `${kstTime.getFullYear()}-${String(kstTime.getMonth() + 1).padStart(2, '0')}-${String(kstTime.getDate()).padStart(2, '0')}`;
         const dayOfWeek = kstTime.getDay();
 
-        console.log('[ProactiveNotification] Getting context for:', userEmail, 'KST:', todayStr, 'dayOfWeek:', dayOfWeek);
 
         // 사용자 프로필 가져오기
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
             .select('id, profile')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             console.error('[ProactiveNotification] User not found:', userError);
@@ -976,7 +1148,6 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
         const profile = userData.profile || {};
         const customGoals = profile.customGoals || [];
 
-        console.log('[ProactiveNotification] Total customGoals:', customGoals.length);
 
         // 오늘 일정 필터링
         const todaySchedules = customGoals.filter((goal: any) => {
@@ -989,7 +1160,6 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             return false;
         });
 
-        console.log('[ProactiveNotification] Today schedules:', todaySchedules.length);
 
         // 어제 날짜 계산 (KST)
         const yesterday = new Date(kstTime);
@@ -997,7 +1167,6 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
         const yesterdayStr = yesterday.toISOString().split('T')[0];
         const yesterdayDayOfWeek = yesterday.getDay();
 
-        console.log('[ProactiveNotification] Yesterday:', yesterdayStr, 'dayOfWeek:', yesterdayDayOfWeek);
 
         // 어제 일정이었던 customGoals 중 미완료 항목 찾기
         const uncompletedGoals = customGoals.filter((goal: any) => {
@@ -1012,17 +1181,15 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             // completed 필드가 없거나 false인 경우 미완료로 간주
             const isCompleted = goal.completed === true;
 
-            console.log('[ProactiveNotification] Goal:', goal.text, 'wasYesterday:', wasScheduledYesterday, 'completed:', isCompleted);
 
             return !isCompleted;
         });
 
-        console.log('[ProactiveNotification] Uncompleted goals from yesterday:', uncompletedGoals.length);
 
         // 메모리 데이터 가져오기 (user_memory 테이블은 user_id UUID 기반)
         let userMemory = null;
         try {
-            const { data: memoryRows } = await supabase
+            const { data: memoryRows } = await supabaseAdmin
                 .from('user_memory')
                 .select('content_type, content, metadata')
                 .eq('user_id', userData.id)
@@ -1041,15 +1208,12 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
                     }
                 }
                 userMemory = { preferences, patterns };
-                console.log('[ProactiveNotification] User memory loaded:', memoryRows.length, 'entries');
             }
         } catch (memoryError) {
-            console.log('[ProactiveNotification] No user memory found (this is OK)');
         }
 
         // 반복 패턴 감지
         const recurringPatterns = detectRecurringPatterns(customGoals);
-        console.log('[ProactiveNotification] Recurring patterns:', recurringPatterns.length);
 
         return {
             userEmail,

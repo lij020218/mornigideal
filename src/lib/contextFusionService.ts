@@ -7,14 +7,11 @@
  * LLM 호출 없음 — 순수 규칙 엔진
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { analyzeTrends } from '@/lib/multiDayTrendService';
 import { isImportantSchedule } from '@/lib/proactiveNotificationService';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { detectDailyState, type DailyState } from '@/lib/stress-detector';
+import { analyzeWorkRestBalance, type WorkRestBalance } from '@/lib/work-rest-analyzer';
 
 // ============================================
 // Types
@@ -30,6 +27,8 @@ export interface FusedContext {
     signals: ContextSignal[];
     suggestions: string[];
     urgencyScore: number; // 0-100
+    dailyState?: DailyState;
+    workRestBalance?: WorkRestBalance;
 }
 
 interface WeatherData {
@@ -69,13 +68,20 @@ export async function fuseContext(userEmail: string): Promise<FusedContext> {
     const suggestions: string[] = [];
 
     // 병렬로 데이터 수집
-    const [weather, todaySchedules, userState, trends, profile] = await Promise.all([
+    const [weather, todaySchedules, dailyState, workRest, trends, profile] = await Promise.all([
         getWeatherData(),
         getTodaySchedules(userEmail),
-        getUserState(userEmail),
+        detectDailyState(userEmail).catch(() => null),
+        analyzeWorkRestBalance(userEmail).catch(() => null),
         analyzeTrends(userEmail, '7d').catch(() => null),
         getUserProfile(userEmail),
     ]);
+
+    // dailyState를 userState 형식으로 변환 (기존 규칙과 호환)
+    const userState = dailyState ? {
+        stress_level: dailyState.stress_level * 10, // 1-10 → 1-100 스케일
+        energy_level: dailyState.energy_level * 10,
+    } : null;
 
     const now = new Date();
     const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
@@ -257,10 +263,51 @@ export async function fuseContext(userEmail: string): Promise<FusedContext> {
         suggestions.push('주말에는 업무 관련 알림을 줄이고 충분히 쉬세요.');
     }
 
+    // ============================================
+    // Rule 9: 업무-휴식 균형 기반 알림
+    // ============================================
+    if (workRest) {
+        if (workRest.restStatus === 'critical') {
+            signals.push({
+                type: 'energy_schedule',
+                severity: 'critical',
+                message: `오늘 업무 일정이 ${workRest.workEventsToday}개인데 휴식이 없습니다. 지금 5분이라도 쉬세요.`,
+            });
+            suggestions.push(workRest.reason);
+        } else if (workRest.restStatus === 'insufficient' && workRest.hoursSinceRest > 3) {
+            signals.push({
+                type: 'energy_schedule',
+                severity: 'warning',
+                message: `마지막 휴식 후 ${workRest.hoursSinceRest}시간이 지났습니다. 짧은 휴식을 권합니다.`,
+            });
+        }
+
+        if (workRest.hasEmptySlots && workRest.recommendationType === 'productivity') {
+            suggestions.push(`오늘 약 ${Math.round(workRest.emptyHoursToday)}시간 여유가 있습니다. ${workRest.reason}`);
+        }
+    }
+
+    // ============================================
+    // Rule 10: 스트레스/에너지 세밀 알림
+    // ============================================
+    if (dailyState) {
+        if (dailyState.stress_level >= 8 && dailyState.skipped_count >= 2) {
+            signals.push({
+                type: 'stress_deadline',
+                severity: 'warning',
+                message: `스트레스가 높고 ${dailyState.skipped_count}개 일정을 건너뛰었습니다. 남은 일정을 줄이거나 조정하세요.`,
+            });
+        }
+
+        if (dailyState.energy_level <= 3 && dailyState.activity_count > 0) {
+            suggestions.push('에너지가 낮은 상태입니다. 가벼운 간식이나 짧은 산책을 추천합니다.');
+        }
+    }
+
     // 종합 긴급도 점수 계산
     const urgencyScore = calculateUrgencyScore(signals);
 
-    return { signals, suggestions, urgencyScore };
+    return { signals, suggestions, urgencyScore, dailyState: dailyState || undefined, workRestBalance: workRest || undefined };
 }
 
 // ============================================
@@ -313,11 +360,11 @@ export async function getFusedContextForAI(userEmail: string): Promise<string> {
 async function getWeatherData(): Promise<WeatherData | null> {
     try {
         // weather_cache 테이블에서 직접 읽기 (자기 서버 fetch 대신 DB 캐시 사용)
-        const { data: cached } = await supabase
+        const { data: cached } = await supabaseAdmin
             .from('weather_cache')
             .select('weather_data, updated_at')
             .eq('location', 'seoul')
-            .single();
+            .maybeSingle();
 
         if (cached?.weather_data) {
             const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
@@ -334,11 +381,11 @@ async function getWeatherData(): Promise<WeatherData | null> {
 
 async function getTodaySchedules(userEmail: string): Promise<ScheduleItem[]> {
     try {
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
 
         const customGoals = userData?.profile?.customGoals || [];
         const now = new Date();
@@ -360,26 +407,13 @@ async function getTodaySchedules(userEmail: string): Promise<ScheduleItem[]> {
     }
 }
 
-async function getUserState(userEmail: string): Promise<any | null> {
-    try {
-        const { data } = await supabase
-            .from('user_states')
-            .select('stress_level, energy_level, focus_window_score')
-            .eq('user_email', userEmail)
-            .single();
-        return data;
-    } catch {
-        return null;
-    }
-}
-
 async function getUserProfile(userEmail: string): Promise<any | null> {
     try {
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
         return data?.profile || null;
     } catch {
         return null;

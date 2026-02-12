@@ -343,11 +343,103 @@ User: "응답 스타일을 간결하게 바꿔줘"
 }
 
 // ============================================
+// 일정 충돌 감지
+// ============================================
+
+interface ExistingSchedule {
+    text: string;
+    startTime?: string;
+    endTime?: string;
+    completed?: boolean;
+    skipped?: boolean;
+}
+
+function timeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + (m || 0);
+}
+
+function detectConflicts(
+    newAction: ChatAction,
+    existingSchedules: ExistingSchedule[]
+): ExistingSchedule[] {
+    if (newAction.type !== 'add_schedule' || !newAction.data?.startTime) return [];
+
+    const newStart = timeToMinutes(newAction.data.startTime);
+    const newEnd = newAction.data.endTime
+        ? timeToMinutes(newAction.data.endTime)
+        : newStart + 60; // 기본 1시간
+
+    return existingSchedules.filter(s => {
+        if (s.completed || s.skipped || !s.startTime) return false;
+        const existStart = timeToMinutes(s.startTime);
+        const existEnd = s.endTime ? timeToMinutes(s.endTime) : existStart + 60;
+        // 시간 겹침: newStart < existEnd && newEnd > existStart
+        return newStart < existEnd && newEnd > existStart;
+    });
+}
+
+const BUFFER_MINUTES = 10;
+
+function detectBackToBack(
+    newAction: ChatAction,
+    existingSchedules: ExistingSchedule[]
+): ExistingSchedule | null {
+    if (newAction.type !== 'add_schedule' || !newAction.data?.startTime) return null;
+
+    const newStart = timeToMinutes(newAction.data.startTime);
+    const newEnd = newAction.data.endTime
+        ? timeToMinutes(newAction.data.endTime)
+        : newStart + 60;
+
+    for (const s of existingSchedules) {
+        if (s.completed || s.skipped || !s.startTime) continue;
+        const existStart = timeToMinutes(s.startTime);
+        const existEnd = s.endTime ? timeToMinutes(s.endTime) : existStart + 60;
+
+        // 이전 일정 끝 → 새 일정 시작 사이 간격이 BUFFER_MINUTES 미만
+        const gapAfterExisting = newStart - existEnd;
+        if (gapAfterExisting >= 0 && gapAfterExisting < BUFFER_MINUTES) {
+            return s;
+        }
+        // 새 일정 끝 → 다음 일정 시작 사이 간격이 BUFFER_MINUTES 미만
+        const gapBeforeExisting = existStart - newEnd;
+        if (gapBeforeExisting >= 0 && gapBeforeExisting < BUFFER_MINUTES) {
+            return s;
+        }
+    }
+    return null;
+}
+
+// ============================================
+// 집중 모드 권장 감지
+// ============================================
+
+const FOCUS_KEYWORDS = [
+    '업무', '회의', '미팅', '개발', '코딩', '작업', '프로젝트',
+    '공부', '학습', '강의', '수업', '시험', '과제', '리뷰',
+    '독서', '읽기', '글쓰기', '보고서', '기획', '분석',
+    'work', 'study', 'focus', 'coding', 'meeting', 'reading',
+];
+
+function isFocusWorthy(text: string): boolean {
+    const lower = text.toLowerCase();
+    return FOCUS_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+// ============================================
 // 액션 후처리 (LLM 응답 정규화)
 // ============================================
 
-export function postProcessActions(actions: ChatAction[], currentTime: string): ChatAction[] {
-    return actions.map(action => {
+export function postProcessActions(
+    actions: ChatAction[],
+    currentTime: string,
+    existingSchedules?: ExistingSchedule[]
+): { actions: ChatAction[]; conflictWarning: string | null; focusSuggestion: string | null } {
+    let conflictWarning: string | null = null;
+    let focusSuggestion: string | null = null;
+
+    const processed = actions.map(action => {
         if (action.type === "update_settings" && action.data) {
             const validCategories = ['appearance', 'notifications', 'ai'];
             if (!validCategories.includes(action.data.category)) {
@@ -367,17 +459,34 @@ export function postProcessActions(actions: ChatAction[], currentTime: string): 
             if (action.data.startTime && currentTime) {
                 const adjusted = validateAndAdjustTime(action.data.startTime, currentTime);
                 if (adjusted === "") {
-                    console.log(`[AI Chat] Filtered out past time action: ${action.data.startTime}`);
                     return null;
                 }
                 if (adjusted !== action.data.startTime) {
-                    console.log(`[AI Chat] Adjusted time: ${action.data.startTime} -> ${adjusted}`);
                     action.data.startTime = adjusted;
                 }
+            }
+            // 충돌 및 버퍼 감지
+            if (existingSchedules && existingSchedules.length > 0) {
+                const conflicts = detectConflicts(action, existingSchedules);
+                if (conflicts.length > 0) {
+                    const conflictNames = conflicts.map(c => `${c.startTime} ${c.text}`).join(', ');
+                    conflictWarning = `⚠️ 시간이 겹치는 일정이 있어요: ${conflictNames}`;
+                } else {
+                    const adjacent = detectBackToBack(action, existingSchedules);
+                    if (adjacent) {
+                        conflictWarning = `💡 "${adjacent.text}" 일정과 연속이에요. 사이에 여유 시간을 두는 건 어떨까요?`;
+                    }
+                }
+            }
+            // 집중 모드 권장 감지
+            if (!focusSuggestion && action.data.text && isFocusWorthy(action.data.text)) {
+                focusSuggestion = action.data.text;
             }
         }
         return action;
     }).filter(Boolean) as ChatAction[];
+
+    return { actions: processed, conflictWarning, focusSuggestion };
 }
 
 // ============================================
@@ -485,6 +594,7 @@ ${contextBlocks.join('\n')}
 
 ## Response Style
 ${responseStyle}
+${getResponseLengthGuide(intent)}
 
 ## Core Rules
 1. **즉시 실행**: 요청 → 바로 actions에 포함. 불필요한 질문 금지.
@@ -509,6 +619,22 @@ ${getExamplesForIntent(intent, currentDate)}
 }
 
 // ============================================
+// 의도별 응답 길이 프롬프트 가이드
+// ============================================
+
+function getResponseLengthGuide(intent: UserIntent): string {
+    const guides: Record<UserIntent, string> = {
+        schedule: '**응답 길이**: message는 1-2문장으로 짧게. 핵심 확인만. 절대 3문장 넘기지 마세요.',
+        settings: '**응답 길이**: message는 1문장. 변경 완료 확인만. 설명 불필요.',
+        search: '**응답 길이**: message는 2-3문장. 검색 결과 요약만 간결하게.',
+        goal: '**응답 길이**: message는 3-4문장 이내. 수치와 핵심 인사이트만.',
+        analysis: '**응답 길이**: message는 3-5문장 이내. 데이터 기반 요약만.',
+        chat: '**응답 길이**: message는 2-4문장. 자연스럽되 간결하게.',
+    };
+    return guides[intent];
+}
+
+// ============================================
 // 의도별 필요한 데이터 조회 결정
 // ============================================
 
@@ -520,7 +646,7 @@ export function getRequiredDataSources(intent: UserIntent, userPlan: string): {
 } {
     return {
         needsEventLogs: userPlan === "Max" && ['schedule', 'analysis', 'goal'].includes(intent),
-        needsRag: intent !== 'settings',
+        needsRag: ['chat', 'analysis', 'goal', 'search'].includes(intent),
         needsTrend: ['chat', 'search'].includes(intent),
         needsFullSchedule: ['schedule', 'chat'].includes(intent),
     };

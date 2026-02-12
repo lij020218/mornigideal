@@ -4,34 +4,28 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 import { PLAN_CONFIGS, PlanType } from '@/types/jarvis';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userEmail = searchParams.get('email');
-
+        const userEmail = await getUserEmailWithAuth(request);
         if (!userEmail) {
             return NextResponse.json(
-                { error: 'email parameter required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
 
         // 사용자 플랜 조회
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -55,7 +49,7 @@ export async function GET(request: NextRequest) {
         }
 
         // AI 사용량 조회
-        const { data: usageData, error: usageError } = await supabase.rpc('get_ai_usage', {
+        const { data: usageData, error: usageError } = await supabaseAdmin.rpc('get_ai_usage', {
             p_user_email: userEmail
         });
 
@@ -84,7 +78,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[Usage API] Exception:', error);
         return NextResponse.json(
-            { error: String(error) },
+            { error: 'Internal server error' },
             { status: 500 }
         );
     }

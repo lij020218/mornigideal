@@ -50,13 +50,11 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
         // Rate limiting: 최소 10초 간격
         const now = Date.now();
         if (now - lastFetchTimeRef.current < 10000) {
-            console.log('[TodaySuggestions] Rate limit: 너무 빠른 요청 차단 (마지막 요청 후', Math.round((now - lastFetchTimeRef.current) / 1000), '초 경과)');
             return;
         }
 
         // Prevent concurrent requests
         if (isFetchingRef.current) {
-            console.log('[TodaySuggestions] 이미 요청 진행 중, 중복 요청 차단');
             return;
         }
 
@@ -64,7 +62,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
             isFetchingRef.current = true;
             lastFetchTimeRef.current = now;
             setLoading(true);
-            console.log('[TodaySuggestions] AI 추천 요청 시작');
 
             const response = await fetch("/api/ai-suggest-schedules", {
                 method: "POST",
@@ -80,12 +77,10 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('[TodaySuggestions] AI 추천 응답:', data);
 
                 if (data.suggestions && data.suggestions.length > 0) {
                     setSuggestions(data.suggestions);
                 } else {
-                    console.warn('[TodaySuggestions] AI 추천 결과가 비어있음');
                     setSuggestions([]);
                 }
             } else {
@@ -120,7 +115,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
         // Listen for schedule deletions to update "Added" status
         const handleScheduleDeleted = (event: CustomEvent) => {
             const { scheduleText } = event.detail;
-            console.log('[TodaySuggestions] 일정 삭제 이벤트 수신:', scheduleText);
 
             // Remove from state only - don't fetch new suggestions
             setAddedSuggestions(prev => {
@@ -141,7 +135,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
     const hasInitializedRef = useRef(false);
     useEffect(() => {
         if (userProfile && !hasInitializedRef.current) {
-            console.log('[TodaySuggestions] 초기 로드: AI 추천 가져오기 (한 번만)');
             hasInitializedRef.current = true;
             fetchAISuggestions();
         }
@@ -191,7 +184,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                 const storedKey = `added_suggestions_${today}`;
                 localStorage.setItem(storedKey, JSON.stringify(Array.from(newAddedSet)));
 
-                console.log('[TodaySuggestions] 카드 추가됨:', selectedSuggestion.action);
 
                 // 이벤트 로깅: AI 추천 수락 (피드백 수집)
                 try {
@@ -212,13 +204,11 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                             },
                         }),
                     });
-                    console.log('[TodaySuggestions] AI 추천 수락 로깅 완료');
                 } catch (error) {
                     console.error('[TodaySuggestions] 이벤트 로깅 실패:', error);
                 }
 
                 // Fetch ONE new suggestion to replace this one
-                console.log('[TodaySuggestions] 1개의 새로운 추천 요청');
 
                 const newSuggestionResponse = await fetch("/api/ai-suggest-schedules", {
                     method: "POST",
@@ -235,25 +225,20 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
                 if (newSuggestionResponse.ok) {
                     const newData = await newSuggestionResponse.json();
-                    console.log('[TodaySuggestions] 새 추천 응답:', newData);
 
                     if (newData.suggestions && newData.suggestions.length > 0) {
                         // Replace the added suggestion with the new one
                         setSuggestions(prevSuggestions => {
                             const index = prevSuggestions.findIndex(s => s.id === selectedSuggestion.id);
-                            console.log('[TodaySuggestions] 대체할 카드 인덱스:', index);
 
                             if (index !== -1) {
                                 const newSuggestions = [...prevSuggestions];
                                 newSuggestions[index] = newData.suggestions[0];
-                                console.log('[TodaySuggestions] 카드 대체 완료:', newData.suggestions[0]);
                                 return newSuggestions;
                             }
-                            console.warn('[TodaySuggestions] 대체할 카드를 찾을 수 없음');
                             return prevSuggestions;
                         });
                     } else {
-                        console.warn('[TodaySuggestions] 새 추천이 비어있음, 전체 목록 새로고침');
                         // If no new suggestion, refresh all suggestions
                         fetchAISuggestions();
                     }
@@ -264,11 +249,9 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                 }
 
                 // Notify Dashboard to refresh schedule
-                console.log("[TodaySuggestions] 일정 업데이트 이벤트 발송");
                 window.dispatchEvent(new CustomEvent('schedule-updated'));
 
                 // Get AI resource recommendations
-                console.log("[TodaySuggestions] 일정 추가 성공, AI 리소스 요청 시작:", selectedSuggestion.action);
                 const resourceResponse = await fetch("/api/ai-resource-recommend", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -278,15 +261,12 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                     }),
                 });
 
-                console.log("[TodaySuggestions] AI 리소스 응답 상태:", resourceResponse.status);
 
                 if (resourceResponse.ok) {
                     const resourceData = await resourceResponse.json();
-                    console.log("[TodaySuggestions] AI 리소스 데이터:", resourceData);
 
                     // Send message to AI chat by dispatching custom event
                     const chatMessage = `✅ "${selectedSuggestion.action}" 일정이 추가되었습니다!\n\n${resourceData.recommendation}`;
-                    console.log("[TodaySuggestions] AI 채팅 이벤트 발송:", chatMessage);
 
                     window.dispatchEvent(new CustomEvent('ai-chat-message', {
                         detail: {
@@ -297,7 +277,6 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
                     // Auto-open AI chat after 500ms
                     setTimeout(() => {
-                        console.log("[TodaySuggestions] AI 채팅 오픈 이벤트 발송");
                         window.dispatchEvent(new CustomEvent('ai-chat-open'));
                     }, 500);
                 } else {

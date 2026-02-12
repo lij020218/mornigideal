@@ -12,7 +12,7 @@
 // 스케줄: 매 30분 (KST 06:00~22:00)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     generateProactiveNotifications,
     getUserContext,
@@ -25,22 +25,17 @@ import { sendPushNotification } from '@/lib/pushService';
 export const maxDuration = 300; // 5분 타임아웃
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 // ============================================
 // Slack Push 전송
 // ============================================
 
 async function sendSlackDM(userEmail: string, notification: ProactiveNotification): Promise<boolean> {
     try {
-        const { data: tokenData } = await supabase
+        const { data: tokenData } = await supabaseAdmin
             .from('slack_tokens')
             .select('access_token, slack_user_id')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (!tokenData?.access_token || !tokenData?.slack_user_id) return false;
 
@@ -92,28 +87,28 @@ async function sendSlackDM(userEmail: string, notification: ProactiveNotificatio
 // ============================================
 
 async function getAlreadySentIds(userEmail: string, todayStr: string): Promise<Set<string>> {
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
         .from('user_kv_store')
         .select('value')
         .eq('user_email', userEmail)
         .eq('key', `heartbeat_sent_${todayStr}`)
-        .single();
+        .maybeSingle();
 
     return new Set(data?.value || []);
 }
 
 async function markAsSent(userEmail: string, todayStr: string, notificationId: string): Promise<void> {
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseAdmin
         .from('user_kv_store')
         .select('value')
         .eq('user_email', userEmail)
         .eq('key', `heartbeat_sent_${todayStr}`)
-        .single();
+        .maybeSingle();
 
     const sentIds: string[] = existing?.value || [];
     if (!sentIds.includes(notificationId)) {
         sentIds.push(notificationId);
-        await supabase.from('user_preferences').upsert({
+        await supabaseAdmin.from('user_preferences').upsert({
             user_email: userEmail,
             key: `heartbeat_sent_${todayStr}`,
             value: sentIds,
@@ -127,7 +122,7 @@ async function markAsSent(userEmail: string, todayStr: string, notificationId: s
 // ============================================
 
 async function getSuppressedTypes(userEmail: string): Promise<Set<string>> {
-    const { data: streakRows } = await supabase
+    const { data: streakRows } = await supabaseAdmin
         .from('user_kv_store')
         .select('key, value')
         .eq('user_email', userEmail)
@@ -176,7 +171,6 @@ export async function GET(request: NextRequest) {
 
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
-    console.log(`[Heartbeat] Starting at KST ${kstHour}:00, date: ${todayStr}`);
 
     try {
         // 1. 최근 7일 이내에 활동한 사용자 조회 (paginated, email only)
@@ -188,7 +182,7 @@ export async function GET(request: NextRequest) {
         let activeUsers: { email: string }[] = [];
 
         while (true) {
-            const { data: batch, error: usersError } = await supabase
+            const { data: batch, error: usersError } = await supabaseAdmin
                 .from('users')
                 .select('email')
                 .gte('updated_at', sevenDaysAgo.toISOString())
@@ -204,7 +198,6 @@ export async function GET(request: NextRequest) {
             pageOffset += PAGE_SIZE;
         }
 
-        console.log(`[Heartbeat] Processing ${activeUsers.length} active users`);
 
         let totalSent = 0;
         let totalGenerated = 0;
@@ -215,11 +208,11 @@ export async function GET(request: NextRequest) {
             try {
                 // Google Calendar 동기화 (알림 유무와 무관하게 항상 수행)
                 try {
-                    const { data: gcalToken } = await supabase
+                    const { data: gcalToken } = await supabaseAdmin
                         .from('google_calendar_tokens')
                         .select('user_email')
                         .eq('user_email', user.email)
-                        .single();
+                        .maybeSingle();
 
                     if (gcalToken) {
                         const { GoogleCalendarService } = await import('@/lib/googleCalendarService');
@@ -310,7 +303,6 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        console.log(`[Heartbeat] Done. Generated: ${totalGenerated}, Sent (Slack+Push): ${totalSent}`);
 
         return NextResponse.json({
             success: true,

@@ -14,7 +14,7 @@ interface LearningCurriculumWizardProps {
     isOpen: boolean;
     onClose: () => void;
     onComplete: (curriculum: GeneratedCurriculum) => void;
-    userPlan: "standard" | "pro" | "max";
+    userPlan: "free" | "pro" | "max";
 }
 
 interface WizardData {
@@ -607,7 +607,7 @@ export function LearningCurriculumWizard({
                                                     <Zap className="w-4 h-4 text-blue-400" />
                                                 )}
                                                 <span className="font-medium text-sm">
-                                                    {userPlan === "max" ? "Max 플랜" : userPlan === "pro" ? "Pro 플랜" : "Standard 플랜"}
+                                                    {userPlan === "max" ? "Max 플랜" : userPlan === "pro" ? "Pro 플랜" : "Free 플랜"}
                                                 </span>
                                             </div>
                                             <ul className="space-y-1 text-xs text-muted-foreground">

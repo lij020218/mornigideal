@@ -3,24 +3,18 @@
  * - 플랜 조회, 기능 접근 권한 체크, 사용량 관리
  *
  * 플랜 구조:
- * - Standard (무료): 일일 AI 50회
- * - Pro (₩9,900): 일일 AI 100회 + 리스크 알림, 스마트 브리핑
- * - Max (₩21,900): 무제한 + 장기 기억, 선제적 제안
+ * - Free (무료): 일일 AI 30회 + 컨텍스트 융합, 메모리, 선제적 알림
+ * - Pro (₩6,900): 일일 AI 100회 + ReAct 에이전트, 리스크 알림, 스마트 브리핑
+ * - Max (₩14,900): 무제한 + 장기 기억, 자동 실행
  *
- * 기본 AI 기능 (일일 제한):
- * - 채팅, 일정 추가/수정, 아침 인사, 일정 추천, 학습 팁 등
- *
- * 고급 기능 (플랜별):
- * - 리스크 알림: Pro, Max
- * - 스마트 브리핑: Pro, Max
- * - 장기 기억 (RAG): Max only
- * - 선제적 제안: 전 플랜 (규칙 기반, AI 비용 $0)
+ * 규칙 기반 기능 ($0 비용)은 전 플랜 제공:
+ * - 의도 분류, 컨텍스트 융합, 메모리 컨텍스트, 선제적 알림, 메모리 서피싱
  */
 
-import { supabase } from "./supabase";
+import { supabaseAdmin } from "./supabase-admin";
 
 // 플랜 타입
-export type UserPlanType = "standard" | "pro" | "max";
+export type UserPlanType = "free" | "pro" | "max";
 
 // 플랜별 기능 정의
 export interface PlanFeatures {
@@ -48,17 +42,17 @@ export interface UsageInfo {
     remaining: number | null;
 }
 
-// 기본 플랜 설정 (Standard)
+// 기본 플랜 설정 (Free)
 const DEFAULT_PLAN: UserPlan = {
-    plan: "standard",
+    plan: "free",
     isActive: true,
-    dailyAiCallsLimit: 50,  // Standard: 50회/일
-    memoryStorageMb: 0,
+    dailyAiCallsLimit: 30,  // Free: 30회/일
+    memoryStorageMb: 50,
     features: {
         jarvis_memory: false,
         risk_alerts: false,
         smart_briefing: false,
-        proactive_suggestions: false,
+        proactive_suggestions: true,
     },
     expiresAt: null,
 };
@@ -73,55 +67,53 @@ export const PLAN_DETAILS: Record<UserPlanType, {
     features: string[];
     highlights: string[];
 }> = {
-    standard: {
-        name: "Standard",
-        nameKo: "스탠다드",
+    free: {
+        name: "Free",
+        nameKo: "무료",
         price: 0,
         monthlyPrice: "무료",
-        dailyAiCallsLimit: 50,
+        dailyAiCallsLimit: 30,
         features: [
-            "일일 AI 호출 50회",
-            "AI 채팅",
-            "일정 추가/수정/삭제",
-            "AI 아침 인사",
-            "일정 추천",
-            "학습 팁",
-            "10분 전 준비 알림",
-            "리소스 추천 (유튜브)",
+            "일일 AI 호출 30회",
+            "AI 채팅 + 일정 관리",
+            "컨텍스트 융합 (날씨+일정)",
+            "메모리 서피싱",
             "선제적 알림",
+            "주간 리포트",
+            "50MB 메모리 저장소",
         ],
-        highlights: ["기본 AI 비서 기능", "선제적 일정/목표 알림"],
+        highlights: ["AI 일정 비서", "선제적 알림", "메모리 서피싱"],
     },
     pro: {
         name: "Pro",
         nameKo: "프로",
-        price: 9900,
-        monthlyPrice: "₩9,900/월",
+        price: 6900,
+        monthlyPrice: "₩6,900/월",
         dailyAiCallsLimit: 100,
         features: [
             "일일 AI 호출 100회",
-            "Standard의 모든 기능",
+            "Free의 모든 기능",
+            "ReAct 다단계 에이전트",
             "리스크 알림",
             "스마트 브리핑",
-            "선제적 알림",
             "100MB 메모리 저장소",
         ],
-        highlights: ["일정 충돌/준비시간 부족 경고", "맞춤 뉴스 브리핑", "선제적 일정/목표 알림"],
+        highlights: ["다단계 추론 에이전트", "일정 충돌 경고", "맞춤 브리핑"],
     },
     max: {
         name: "Max",
         nameKo: "맥스",
-        price: 21900,
-        monthlyPrice: "₩21,900/월",
+        price: 14900,
+        monthlyPrice: "₩14,900/월",
         dailyAiCallsLimit: null,  // 무제한
         features: [
             "무제한 AI 호출",
             "Pro의 모든 기능",
             "AI 장기 기억 (RAG)",
-            "선제적 제안",
+            "자동 실행",
             "1GB 메모리 저장소",
         ],
-        highlights: ["AI가 과거 대화/메모 기억", "먼저 인사이트 제안"],
+        highlights: ["AI가 과거 대화 기억", "자동 일정 최적화"],
     },
 };
 
@@ -129,11 +121,11 @@ export const PLAN_DETAILS: Record<UserPlanType, {
  * 이메일로 사용자 ID 조회
  */
 async function getUserIdByEmail(email: string): Promise<string | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("users")
         .select("id")
         .eq("email", email)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         console.error("[UserPlan] Failed to get user ID:", error);
@@ -153,15 +145,15 @@ export async function getUserPlan(email: string): Promise<UserPlan> {
             return DEFAULT_PLAN;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("user_subscriptions")
             .select("*")
             .eq("user_id", userId)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
-            // 구독 정보가 없으면 스탠다드 플랜 생성
-            await createStandardSubscription(userId);
+            // 구독 정보가 없으면 Free 플랜 생성
+            await createFreeSubscription(userId);
             return DEFAULT_PLAN;
         }
 
@@ -180,20 +172,20 @@ export async function getUserPlan(email: string): Promise<UserPlan> {
 }
 
 /**
- * 스탠다드 구독 생성
+ * Free 구독 생성
  */
-async function createStandardSubscription(userId: string): Promise<void> {
+async function createFreeSubscription(userId: string): Promise<void> {
     try {
-        await supabase
+        await supabaseAdmin
             .from("user_subscriptions")
             .upsert({
                 user_id: userId,
-                plan: "standard",
+                plan: "free",
             }, {
                 onConflict: "user_id",
             });
     } catch (error) {
-        console.error("[UserPlan] Error creating standard subscription:", error);
+        console.error("[UserPlan] Error creating free subscription:", error);
     }
 }
 
@@ -234,7 +226,7 @@ export async function checkAiUsageLimit(email: string): Promise<UsageInfo> {
             return {
                 canUse: false,
                 currentUsage: 0,
-                dailyLimit: 50,
+                dailyLimit: 40,
                 remaining: 0,
             };
         }
@@ -253,12 +245,12 @@ export async function checkAiUsageLimit(email: string): Promise<UsageInfo> {
 
         // 오늘 사용량 조회
         const today = new Date().toISOString().split("T")[0];
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from("ai_usage_daily")
             .select("total_calls")
             .eq("user_id", userId)
             .eq("usage_date", today)
-            .single();
+            .maybeSingle();
 
         const currentUsage = data?.total_calls || 0;
         const remaining = Math.max(0, plan.dailyAiCallsLimit - currentUsage);
@@ -274,8 +266,8 @@ export async function checkAiUsageLimit(email: string): Promise<UsageInfo> {
         return {
             canUse: true,  // 에러 시 허용 (UX 우선)
             currentUsage: 0,
-            dailyLimit: 50,
-            remaining: 50,
+            dailyLimit: 40,
+            remaining: 40,
         };
     }
 }
@@ -296,12 +288,12 @@ export async function recordAiUsage(
         const today = new Date().toISOString().split("T")[0];
 
         // Upsert로 오늘 레코드 생성 또는 업데이트
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
             .from("ai_usage_daily")
             .select("*")
             .eq("user_id", userId)
             .eq("usage_date", today)
-            .single();
+            .maybeSingle();
 
         if (existing) {
             // 기존 레코드 업데이트
@@ -318,7 +310,7 @@ export async function recordAiUsage(
                 updates[callTypeColumn] = existing[callTypeColumn] + 1;
             }
 
-            await supabase
+            await supabaseAdmin
                 .from("ai_usage_daily")
                 .update(updates)
                 .eq("id", existing.id);
@@ -336,7 +328,7 @@ export async function recordAiUsage(
             const callTypeColumn = `${callType}_calls`;
             newRecord[callTypeColumn] = 1;
 
-            await supabase
+            await supabaseAdmin
                 .from("ai_usage_daily")
                 .insert(newRecord);
         }
@@ -362,7 +354,7 @@ export async function getAiUsageStats(email: string, days: number = 7): Promise<
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
 
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from("ai_usage_daily")
             .select("*")
             .eq("user_id", userId)
@@ -414,7 +406,7 @@ export async function upgradePlan(
             ? new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString()
             : null;
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("user_subscriptions")
             .upsert({
                 user_id: userId,
@@ -431,7 +423,6 @@ export async function upgradePlan(
             return false;
         }
 
-        console.log(`[UserPlan] User ${email} upgraded to ${newPlan}`);
         return true;
     } catch (error) {
         console.error("[UserPlan] Error upgrading plan:", error);

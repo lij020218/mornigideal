@@ -59,7 +59,7 @@ export default function GrowthPage() {
 
     // Learning states
     const { plan: userPlanInfo, isLoading: isPlanLoading } = useUserPlan();
-    const userPlan = userPlanInfo?.plan || "standard";
+    const userPlan = userPlanInfo?.plan || "free";
     const [curriculums, setCurriculums] = useState<Curriculum[]>([]);
     const [selectedCurriculum, setSelectedCurriculum] = useState<Curriculum | null>(null);
     const [showCurriculumWizard, setShowCurriculumWizard] = useState(false);
@@ -87,12 +87,7 @@ export default function GrowthPage() {
                     setUserProfile(profileData);
                 }
 
-                // Fetch habit insights
-                const insightsRes = await fetch('/api/habit-insights');
-                if (insightsRes.ok) {
-                    const insightsData = await insightsRes.json();
-                    setHabitInsights(insightsData);
-                }
+                // habit-insights: not yet implemented, skip fetch
 
                 // Plan info is now handled by useUserPlan hook
 
@@ -113,7 +108,6 @@ export default function GrowthPage() {
                             try {
                                 const parsedBackup = JSON.parse(backupData);
                                 setCurriculums(parsedBackup);
-                                console.log('[Growth] Restored curriculums from localStorage backup');
                             } catch (e) {
                                 console.error('[Growth] Failed to parse backup:', e);
                             }
@@ -126,7 +120,6 @@ export default function GrowthPage() {
                         try {
                             const parsedBackup = JSON.parse(backupData);
                             setCurriculums(parsedBackup);
-                            console.log('[Growth] Restored curriculums from localStorage backup (API failed)');
                         } catch (e) {
                             console.error('[Growth] Failed to parse backup:', e);
                         }
@@ -140,7 +133,6 @@ export default function GrowthPage() {
                     try {
                         const parsedBackup = JSON.parse(backupData);
                         setCurriculums(parsedBackup);
-                        console.log('[Growth] Restored curriculums from localStorage backup (error)');
                     } catch (e) {
                         console.error('[Growth] Failed to parse backup:', e);
                     }
@@ -156,7 +148,6 @@ export default function GrowthPage() {
     // Listen for open-schedule-popup event from LongTermGoalsWidget
     useEffect(() => {
         const handleOpenSchedulePopup = (event: CustomEvent) => {
-            console.log("GrowthPage: 'open-schedule-popup' event received!", event.detail);
             const { linkedGoalId, linkedGoalTitle, goalType } = event.detail;
 
             setLinkedGoalData({
@@ -223,7 +214,6 @@ export default function GrowthPage() {
                 body: JSON.stringify({ profile: updatedProfile }),
             });
 
-            console.log('[Growth] Added goal-based schedules:', newSchedules);
 
             // Notify other components (chat page, dashboard, calendar)
             window.dispatchEvent(new CustomEvent('schedule-updated'));
@@ -251,7 +241,6 @@ export default function GrowthPage() {
             });
         } else {
             // Just mark as started - could open a simple day view
-            console.log('[Growth] Starting day:', day);
         }
     };
 
@@ -283,7 +272,6 @@ export default function GrowthPage() {
                             currentDay: newCurrentDay,
                         }),
                     });
-                    console.log('[Growth] Learning progress updated:', { curriculumId: selectedCurriculum.id, dayNumber });
 
                     // LearningCurriculumView 컴포넌트가 진행 상태를 새로고침하도록 이벤트 발생
                     window.dispatchEvent(new CustomEvent('learning-progress-updated', {
@@ -322,7 +310,6 @@ export default function GrowthPage() {
                     setSelectedCurriculum(null);
                 }
 
-                console.log('[Growth] Curriculum deleted:', curriculumId);
             } else {
                 console.error('[Growth] Failed to delete curriculum from server');
             }
@@ -405,7 +392,7 @@ export default function GrowthPage() {
                                         )}
                                         <div>
                                             <p className="font-medium text-xs sm:text-sm">
-                                                {userPlan === "max" ? "Max 플랜" : userPlan === "pro" ? "Pro 플랜" : "Standard 플랜"}
+                                                {userPlan === "max" ? "Max 플랜" : userPlan === "pro" ? "Pro 플랜" : "Free 플랜"}
                                             </p>
                                             <p className="text-[10px] sm:text-xs text-muted-foreground">
                                                 {userPlan === "max"

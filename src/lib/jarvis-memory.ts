@@ -6,8 +6,9 @@
  */
 
 import OpenAI from "openai";
-import { supabase } from "./supabase";
+import { supabaseAdmin } from "./supabase-admin";
 import { isMaxPlan, canUseFeature } from "./user-plan";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -42,11 +43,11 @@ export interface MemorySearchResult extends Memory {
  * 이메일로 사용자 ID 조회
  */
 async function getUserIdByEmail(email: string): Promise<string | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("users")
         .select("id")
         .eq("email", email)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         return null;
@@ -60,7 +61,7 @@ async function getUserIdByEmail(email: string): Promise<string | null> {
  */
 async function createEmbedding(text: string): Promise<number[]> {
     const response = await openai.embeddings.create({
-        model: "text-embedding-3-small",
+        model: MODELS.EMBEDDING_SMALL,
         input: text,
     });
 
@@ -98,11 +99,10 @@ export async function saveMemory(
         }
 
         // 임베딩 생성
-        console.log("[JarvisMemory] Creating embedding for:", content.slice(0, 50) + "...");
         const embedding = await createEmbedding(content);
 
         // DB에 저장
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("user_memories")
             .insert({
                 user_id: userId,
@@ -121,7 +121,6 @@ export async function saveMemory(
             return { success: false, error: error.message };
         }
 
-        console.log("[JarvisMemory] Memory saved:", data.id);
         return { success: true, id: data.id };
     } catch (error: any) {
         console.error("[JarvisMemory] Error:", error);
@@ -162,11 +161,10 @@ export async function searchMemories(
         const { limit = 5, memoryTypes, minSimilarity = 0.7 } = options;
 
         // 쿼리 임베딩 생성
-        console.log("[JarvisMemory] Searching for:", query.slice(0, 50) + "...");
         const queryEmbedding = await createEmbedding(query);
 
         // Supabase RPC 호출 (벡터 검색)
-        const { data, error } = await supabase.rpc("search_memories", {
+        const { data, error } = await supabaseAdmin.rpc("search_memories", {
             p_user_id: userId,
             p_query_embedding: JSON.stringify(queryEmbedding),
             p_limit: limit,
@@ -190,7 +188,6 @@ export async function searchMemories(
             createdAt: m.created_at,
         }));
 
-        console.log(`[JarvisMemory] Found ${memories.length} relevant memories`);
         return { success: true, memories };
     } catch (error: any) {
         console.error("[JarvisMemory] Error:", error);
@@ -213,7 +210,7 @@ export async function extractAndSaveInsights(
 
         // GPT로 중요 정보 추출
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -267,7 +264,6 @@ JSON 형식으로 응답:
                 );
             }
 
-            console.log(`[JarvisMemory] Extracted ${insights.length} insights`);
         } catch (parseError) {
             console.error("[JarvisMemory] Failed to parse insights:", parseError);
         }
@@ -318,7 +314,7 @@ export async function deleteMemory(
             return { success: false, error: "사용자를 찾을 수 없습니다." };
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("user_memories")
             .delete()
             .eq("id", memoryId)
@@ -347,7 +343,7 @@ export async function getRecentMemories(
             return { success: false, error: "사용자를 찾을 수 없습니다." };
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("user_memories")
             .select("id, memory_type, content, metadata, importance_score, memory_date, created_at")
             .eq("user_id", userId)

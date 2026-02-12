@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Query is required" }, { status: 400 });
         }
 
-        console.log("[AI Web Search] Tavily 검색:", { query, activity, context });
 
         // Tavily 검색 실행
         const searchResult = await tvly.search(query, {

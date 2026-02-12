@@ -23,7 +23,6 @@ export async function POST(request: Request) {
             );
         }
 
-        console.log(`🔍 Generating achievements for ${job} (${level}) with web search...`);
 
         // Determine if job is student-like or professional
         const isStudent = /학생|대학생|고등학생|중학생|취준생|수험생/i.test(job);
@@ -65,7 +64,6 @@ export async function POST(request: Request) {
             const response = await result.response;
             const text = response.text();
 
-            console.log("📡 Web search response:", text);
 
             // Extract JSON from response
             let jsonText = text.trim();
@@ -77,7 +75,6 @@ export async function POST(request: Request) {
                 jsonText = arrayMatch[0];
                 achievements = JSON.parse(jsonText);
             } else if (text.includes("검색 결과 없음")) {
-                console.log("⚠️ No web search results found, using fallback");
                 throw new Error("No search results");
             }
 
@@ -85,7 +82,6 @@ export async function POST(request: Request) {
                 throw new Error("Invalid achievements array");
             }
 
-            console.log(`✅ Found ${achievements.length} achievements from web search`);
 
         } catch (searchError) {
             console.error("⚠️ Web search failed:", searchError);

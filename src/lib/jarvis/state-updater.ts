@@ -3,7 +3,7 @@
  * EventLog를 기반으로 UserState 수치를 갱신
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { JarvisObserver } from './observer';
 import { EventType, GUARDRAILS, PLAN_CONFIGS, PlanType } from '@/types/jarvis';
 
@@ -25,7 +25,6 @@ export class StateUpdater {
         const planConfig = PLAN_CONFIGS[userPlan as PlanType];
 
         if (!planConfig.features.stateMonitoring) {
-            console.log(`[StateUpdater] State monitoring disabled for ${userPlan} plan`);
             return;
         }
 
@@ -50,18 +49,7 @@ export class StateUpdater {
             updates.routine_deviation_score = routineDeviationScore;
             updates.deadline_pressure_score = deadlinePressureScore;
 
-            console.log(`[StateUpdater] ✅ ${userPlan} - All states updated:`, {
-                energyLevel,
-                stressLevel,
-                focusWindowScore,
-                routineDeviationScore,
-                deadlinePressureScore
-            });
         } else {
-            console.log(`[StateUpdater] ✅ ${userPlan} - Basic states updated:`, {
-                energyLevel,
-                stressLevel
-            });
         }
 
         await this.saveState(updates);
@@ -71,11 +59,11 @@ export class StateUpdater {
      * 사용자 플랜 조회
      */
     private async getUserPlan(): Promise<string> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             return 'Free';
@@ -116,11 +104,11 @@ export class StateUpdater {
      * - 미달성 목표가 있으면 UP (0-30점)
      */
     private async calculateStressLevel(): Promise<number> {
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         const customGoals = userData?.profile?.customGoals || [];
         const now = new Date();
@@ -176,11 +164,11 @@ export class StateUpdater {
      * - 잦은 컨텍스트 전환이 있으면 DOWN (0-20점 감점)
      */
     private async calculateFocusWindowScore(): Promise<number> {
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         const customGoals = userData?.profile?.customGoals || [];
         const now = new Date();
@@ -278,11 +266,11 @@ export class StateUpdater {
      * - 중요 일정 키워드(마감/발표/면접 등) 감지
      */
     private async calculateDeadlinePressure(): Promise<number> {
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         const longTermGoals = userData?.profile?.longTermGoals || {};
         const now = new Date();
@@ -347,7 +335,7 @@ export class StateUpdater {
      * 상태 저장
      */
     private async saveState(updates: Record<string, any>): Promise<void> {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('user_states')
             .upsert({
                 user_email: this.userEmail,
@@ -365,11 +353,11 @@ export class StateUpdater {
      * 현재 상태 조회
      */
     async getCurrentState(): Promise<any> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('user_states')
             .select('*')
             .eq('user_email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[StateUpdater] Failed to get state:', error);

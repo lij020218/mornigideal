@@ -3,7 +3,7 @@
  * 사용자 활동을 감지하고 EventLog에 기록
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { EventType, PLAN_CONFIGS, PlanType } from '@/types/jarvis';
 
 export class JarvisObserver {
@@ -23,22 +23,21 @@ export class JarvisObserver {
     ): Promise<void> {
         try {
             // 사용자 플랜 확인
-            const { data: userData } = await supabase
+            const { data: userData } = await supabaseAdmin
                 .from('users')
                 .select('profile')
                 .eq('email', this.userEmail)
-                .single();
+                .maybeSingle();
 
             const userPlan = userData?.profile?.plan || 'Free';
             const planConfig = PLAN_CONFIGS[userPlan as PlanType];
 
             // 장기 기억이 있는 플랜만 DB에 저장
             if (!planConfig.hasLongTermMemory) {
-                console.log(`[JarvisObserver] ${userPlan} - Event not saved (no long-term memory)`);
                 return;
             }
 
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('event_logs')
                 .insert({
                     user_email: this.userEmail,
@@ -51,7 +50,6 @@ export class JarvisObserver {
             if (error) {
                 console.error('[JarvisObserver] Failed to log event:', error);
             } else {
-                console.log(`[JarvisObserver] ✅ Logged: ${eventType}`);
             }
         } catch (error) {
             console.error('[JarvisObserver] Exception:', error);
@@ -69,7 +67,7 @@ export class JarvisObserver {
             const since = new Date();
             since.setHours(since.getHours() - hours);
 
-            let query = supabase
+            let query = supabaseAdmin
                 .from('event_logs')
                 .select('*')
                 .eq('user_email', this.userEmail)

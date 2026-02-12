@@ -63,7 +63,7 @@ export async function getUserIdFromRequest(request: NextRequest): Promise<string
                 .from('users')
                 .select('id')
                 .eq('email', decoded.email)
-                .single();
+                .maybeSingle();
             return data?.id || null;
         }
     }
@@ -94,7 +94,7 @@ export async function getUserEmailFromRequest(request: NextRequest): Promise<str
                 .from('users')
                 .select('email')
                 .eq('id', decoded.userId)
-                .single();
+                .maybeSingle();
             return data?.email || null;
         }
     }
@@ -109,7 +109,7 @@ export async function getUserEmailFromRequest(request: NextRequest): Promise<str
                 .from('users')
                 .select('email')
                 .eq('id', decoded.userId)
-                .single();
+                .maybeSingle();
             return data?.email || null;
         }
     }
@@ -154,7 +154,7 @@ export async function getUserIdWithAuth(request: NextRequest): Promise<string | 
                 .from('users')
                 .select('id')
                 .eq('email', session.user.email)
-                .single();
+                .maybeSingle();
             return data?.id || null;
         }
     } catch {

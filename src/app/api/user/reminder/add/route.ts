@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,11 +19,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get current user profile
-        const { data: userData, error: fetchError } = await supabase
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from("users")
             .select("profile")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !userData) {
             console.error("[Reminder Add] Fetch error:", fetchError);
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         const updatedProfile = { ...profile, reminders: updatedReminders };
 
         // Save to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("users")
             .update({ profile: updatedProfile })
             .eq("email", email);
@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to add reminder" }, { status: 500 });
         }
 
-        console.log(`[Reminder Add] Added: "${message}" at ${targetTime}`);
 
         return NextResponse.json({
             success: true,

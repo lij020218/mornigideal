@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    console.log('[Jarvis API] Starting Jarvis run...');
 
     try {
         await runJarvisForAllMaxUsers();
@@ -44,7 +43,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
             {
                 success: false,
-                error: String(error),
+                error: 'Jarvis run failed',
                 timestamp: new Date().toISOString()
             },
             { status: 500 }
@@ -80,7 +79,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('[Jarvis API] Running for specific user');
 
         const { JarvisOrchestrator } = await import('@/lib/jarvis');
         const orchestrator = new JarvisOrchestrator(userEmail);
@@ -97,7 +95,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 success: false,
-                error: String(error),
+                error: 'Jarvis run failed',
                 timestamp: new Date().toISOString()
             },
             { status: 500 }

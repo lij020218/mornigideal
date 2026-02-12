@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const FINAL_MODEL = "gpt-5.2-2025-12-11";
+const FINAL_MODEL = MODELS.GPT_5_2;
 
 interface QuizResult {
   question: string;
@@ -36,7 +37,6 @@ export async function POST(request: NextRequest) {
 
     const { quiz, answers, type } = await request.json();
 
-    console.log("[GRADING] Starting quiz grading...");
 
     // Grade T/F (straightforward)
     let tfCorrect = 0;
@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Grade Essay Questions with GPT-5.1
-    console.log("[GRADING] Using GPT-5.1 to grade essay questions...");
 
     const essayGradingPromises = quiz.essay.map(async (q: any, idx: number) => {
       const userAnswer = answers.essay[idx];
@@ -142,7 +141,6 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     const essayResults = await Promise.all(essayGradingPromises);
     const essayTotalScore = essayResults.reduce((sum, r) => sum + r.score, 0);
 
-    console.log("[GRADING] Essay grading complete");
 
     // Calculate total score
     const totalScore = tfCorrect + mcCorrect + (essayTotalScore / 100) * 5;
@@ -175,7 +173,6 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     });
 
     // Generate AI advice
-    console.log("[GRADING] Generating personalized advice with GPT-5.1...");
 
     const advicePrompt = `학생의 퀴즈 결과를 분석하여 맞춤형 학습 조언을 제공하세요.
 
@@ -235,7 +232,6 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
       }
     };
 
-    console.log("[GRADING] Complete:", { score: result.score, percentage: result.percentage });
 
     return NextResponse.json({ result, success: true });
   } catch (error: any) {

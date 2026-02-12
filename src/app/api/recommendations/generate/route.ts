@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
             goal = goal || profile.goal || "self improvement";
             interests = interests?.length > 0 ? interests : (profile.interests || []).map((i: string) => interestMap[i] || i);
 
-            console.log("[Recommendations] Loaded profile from DB:", { job, goal, interests });
           }
         } catch (error) {
           console.error("[Recommendations] Failed to load profile:", error);
@@ -167,7 +166,6 @@ export async function POST(request: NextRequest) {
 
         // If not enough results from last month, expand to 3 months
         if (videoItems.length < 10) {
-          console.log(`[YouTube] Query "${q}": Only ${videoItems.length} recent videos, expanding to 3 months...`);
           const fallbackRes = await youtube.search.list({
             part: ["snippet"],
             q: q,
@@ -181,7 +179,6 @@ export async function POST(request: NextRequest) {
         }
 
         if (videoItems.length === 0) {
-          console.log(`[YouTube] No results for query: "${q}"`);
           continue;
         }
 
@@ -223,7 +220,6 @@ export async function POST(request: NextRequest) {
         // Try 200k+ views first, then fallback to 50k+
         let qualityVideos = filterVideos(MIN_VIEW_COUNT_PRIORITY);
         if (qualityVideos.length === 0) {
-          console.log(`[YouTube] No 200k+ videos for "${q}", trying 50k+...`);
           qualityVideos = filterVideos(MIN_VIEW_COUNT_FALLBACK);
         }
 
@@ -250,12 +246,10 @@ export async function POST(request: NextRequest) {
         const topVideo = sortedVideos[0]?.video;
 
         if (!topVideo) {
-          console.log(`[YouTube] No qualifying videos found for query: "${q}"`);
           continue;
         }
 
         const selectedInfo = sortedVideos[0];
-        console.log(`[YouTube] Selected for "${q}": ${topVideo.snippet?.title} (${selectedInfo.viewCount} views, ${Math.round(selectedInfo.daysOld)} days old)`);
 
         // Add to selected set to prevent duplicates
         selectedVideoIds.add(topVideo.id!);
@@ -276,7 +270,6 @@ export async function POST(request: NextRequest) {
 
     // ENSURE 3 VIDEOS: If we don't have 3 videos, try additional backup queries
     if (videos.length < 3) {
-      console.log(`[YouTube] Only ${videos.length} videos found, trying backup queries...`);
 
       const backupQueries = [
         `${job} tips 2024`,
@@ -330,7 +323,6 @@ export async function POST(request: NextRequest) {
               duration: parseDuration(validVideo.contentDetails?.duration || "PT0M"),
               description: validVideo.snippet?.description?.slice(0, 100) + "..." || "No description available."
             });
-            console.log(`[YouTube] Backup video added: ${validVideo.snippet?.title}`);
           }
         } catch (err) {
           console.error(`YouTube backup search error for "${q}":`, err);

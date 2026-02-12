@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * Get enhanced user profile with behavioral analytics
@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch basic profile
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile, error: profileError } = await supabaseAdmin
             .from('users')
             .select('*')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         if (profileError) {
             console.error('[Enhanced Profile] Profile error:', profileError);
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const { data: activities, error: activitiesError } = await supabase
+        const { data: activities, error: activitiesError } = await supabaseAdmin
             .from('user_activity_logs')
             .select('*')
             .eq('user_email', email)
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         const analytics = analyzeUserBehavior(activities || []);
 
         // Fetch schedule history
-        const { data: schedules } = await supabase
+        const { data: schedules } = await supabaseAdmin
             .from('custom_goals')
             .select('*')
             .eq('user_email', email);

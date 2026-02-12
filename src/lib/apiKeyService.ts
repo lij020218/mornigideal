@@ -7,13 +7,8 @@
  * - 사용량 추적
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import crypto from 'crypto';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // 암호화 키 (환경 변수에서 가져오거나 기본값 사용)
 const ENCRYPTION_KEY = process.env.API_KEY_ENCRYPTION_SECRET || 'fieri-default-encryption-key-2024';
@@ -154,17 +149,17 @@ export async function saveUserAPIKey(
         const encryptedKey = encryptKey(key);
 
         // 기존 키 가져오기
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
             .from('user_api_keys')
             .select('keys')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         const currentKeys = existing?.keys || {};
         currentKeys[provider] = encryptedKey;
 
         // 저장
-        await supabase
+        await supabaseAdmin
             .from('user_api_keys')
             .upsert({
                 user_email: userEmail,
@@ -187,11 +182,11 @@ export async function deleteUserAPIKey(
     provider: AIProvider
 ): Promise<{ success: boolean; error?: string }> {
     try {
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
             .from('user_api_keys')
             .select('keys')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (!existing?.keys) {
             return { success: true };
@@ -200,7 +195,7 @@ export async function deleteUserAPIKey(
         const currentKeys = existing.keys;
         delete currentKeys[provider];
 
-        await supabase
+        await supabaseAdmin
             .from('user_api_keys')
             .update({
                 keys: currentKeys,
@@ -220,11 +215,11 @@ export async function deleteUserAPIKey(
  */
 export async function getUserAPIKeys(userEmail: string): Promise<UserAPIKeys> {
     try {
-        const { data } = await supabase
+        const { data } = await supabaseAdmin
             .from('user_api_keys')
             .select('keys')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (!data?.keys) {
             return {};

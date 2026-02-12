@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { google } from "googleapis";
 
 export const maxDuration = 300; // 5 minutes
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const youtube = google.youtube({
@@ -28,7 +23,6 @@ interface MediaItem {
 
 async function generateRecommendationsForUser(email: string, job: string, goal: string, interests: string[]) {
     try {
-        console.log(`[CRON] Generating recommendations for a user...`);
 
         // 1. Generate Search Queries using Gemini
         const model = genAI.getGenerativeModel({
@@ -106,7 +100,6 @@ Make queries:
         // Select top 3 videos
         const recommendations = allVideos.slice(0, 3);
 
-        console.log(`[CRON] Generated ${recommendations.length} recommendations`);
         return recommendations;
 
     } catch (error) {
@@ -138,7 +131,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[CRON] Starting recommendations generation at 4:45 AM KST...');
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
@@ -148,7 +140,7 @@ export async function GET(request: Request) {
         let allUsers: { email: string; profile: any }[] = [];
 
         while (true) {
-            const { data: batch, error: usersError } = await supabase
+            const { data: batch, error: usersError } = await supabaseAdmin
                 .from('users')
                 .select('email, profile')
                 .not('profile', 'is', null)
@@ -168,7 +160,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, message: 'No users to process' });
         }
 
-        console.log(`[CRON] Found ${allUsers.length} users to generate recommendations for`);
 
         const results: any[] = [];
 
@@ -189,7 +180,7 @@ export async function GET(request: Request) {
                         return { email: user.email, status: 'no_recommendations' };
                     }
 
-                    const { error: saveError } = await supabase
+                    const { error: saveError } = await supabaseAdmin
                         .from('recommendations_cache')
                         .upsert({
                             email: user.email,
@@ -220,7 +211,6 @@ export async function GET(request: Request) {
             }
         }
 
-        console.log('[CRON] Recommendations generation completed');
 
         return NextResponse.json({
             success: true,

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -30,11 +31,11 @@ export async function POST(request: NextRequest) {
         const targetDate = date ? new Date(date) : new Date();
 
         // Fetch user profile
-        const { data: profile } = await supabase
+        const { data: profile } = await supabaseAdmin
             .from('user_profiles')
             .select('*')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
 
         // Fetch enhanced profile with behavioral insights
         let enhancedProfile = null;
@@ -257,7 +258,7 @@ JSON 형식으로만 응답하세요:
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -303,14 +304,12 @@ JSON 형식으로만 응답하세요:
 
                     // Only adjust if within reasonable hours (before 23:00)
                     if (adjustedHour < 23) {
-                        console.log(`[Schedule Recommendations] Fixed past time: ${rec.suggestedStartTime} -> ${String(adjustedHour).padStart(2, '0')}:${String(adjustedMinute).padStart(2, '0')}`);
                         return {
                             ...rec,
                             suggestedStartTime: `${String(adjustedHour).padStart(2, '0')}:${String(adjustedMinute).padStart(2, '0')}`,
                         };
                     }
                     // If too late, filter out this recommendation
-                    console.log(`[Schedule Recommendations] Filtered out past time recommendation: ${rec.suggestedStartTime}`);
                     return null;
                 }
                 return rec;

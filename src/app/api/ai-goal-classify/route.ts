@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Goal text is required" }, { status: 400 });
         }
 
-        console.log(`[GoalClassify] Classifying: "${goalText}"`);
 
         const prompt = `사용자가 입력한 목표를 분류해주세요.
 
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
         const response = await result.response;
         const text = response.text();
 
-        console.log("[GoalClassify] Raw response:", text);
 
         // Parse JSON
         let jsonText = text.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");

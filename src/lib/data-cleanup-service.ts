@@ -1,4 +1,23 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+// Thin wrapper for raw SQL via Supabase RPC
+// These cleanup operations require complex SQL that can't use the query builder
+const db = {
+    async query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount: number }> {
+        try {
+            const { data, error } = await supabaseAdmin.rpc('execute_sql', {
+                query_text: sql,
+                query_params: params || [],
+            });
+            if (error) {
+                return { rows: [], rowCount: 0 };
+            }
+            return { rows: data || [], rowCount: data?.length || 0 };
+        } catch {
+            return { rows: [], rowCount: 0 };
+        }
+    }
+};
 import {
     DATA_RETENTION_POLICIES,
     EVENT_IMPORTANCE_SCORES,
@@ -41,7 +60,6 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
         executionTimeMs: 0,
     };
 
-    console.log(`[Data Cleanup] Starting cleanup${userEmail ? ` for user: ${userEmail}` : ' (all users)'}`);
 
     try {
         // 1. 만료된 캐시 삭제
@@ -71,11 +89,6 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
     }
 
     report.executionTimeMs = Date.now() - startTime;
-    console.log(`[Data Cleanup] Completed in ${report.executionTimeMs}ms:`, {
-        deleted: report.totalRecordsDeleted,
-        aggregated: report.totalRecordsAggregated,
-        errors: report.errors.length,
-    });
 
     return report;
 }
@@ -108,7 +121,6 @@ async function cleanupExpiredCache(report: CleanupReport, userEmail?: string): P
         report.byTable['user_context_cache'] = { deleted: deletedCount, aggregated: 0 };
         report.totalRecordsDeleted += deletedCount;
 
-        console.log(`[Data Cleanup] Deleted ${deletedCount} expired cache entries`);
     } catch (error: any) {
         report.errors.push(`Cache cleanup failed: ${error.message}`);
     }
@@ -129,7 +141,6 @@ async function aggregateAndCleanupOldEvents(report: CleanupReport, userEmail?: s
         if (policy.aggregateBeforeDelete) {
             const aggregated = await aggregateEventsToDaily(cutoffDate, userEmail);
             report.totalRecordsAggregated += aggregated;
-            console.log(`[Data Cleanup] Aggregated ${aggregated} old events to daily features`);
         }
 
         // 중요도 기반 선택적 삭제
@@ -157,7 +168,6 @@ async function aggregateAndCleanupOldEvents(report: CleanupReport, userEmail?: s
         report.byTable['user_events'] = { deleted: deletedCount, aggregated: 0 };
         report.totalRecordsDeleted += deletedCount;
 
-        console.log(`[Data Cleanup] Deleted ${deletedCount} old low-importance events`);
     } catch (error: any) {
         report.errors.push(`Event cleanup failed: ${error.message}`);
     }
@@ -246,7 +256,6 @@ async function aggregateAndCleanupDailyFeatures(report: CleanupReport, userEmail
         if (policy.aggregateBeforeDelete) {
             const aggregated = await aggregateDailyToWeekly(cutoffDate, userEmail);
             report.totalRecordsAggregated += aggregated;
-            console.log(`[Data Cleanup] Aggregated ${aggregated} daily features to weekly`);
         }
 
         // 오래된 daily features 삭제
@@ -267,7 +276,6 @@ async function aggregateAndCleanupDailyFeatures(report: CleanupReport, userEmail
         };
         report.totalRecordsDeleted += deletedCount;
 
-        console.log(`[Data Cleanup] Deleted ${deletedCount} old daily features`);
     } catch (error: any) {
         report.errors.push(`Daily features cleanup failed: ${error.message}`);
     }
@@ -360,7 +368,6 @@ async function deduplicateData(report: CleanupReport, userEmail?: string): Promi
         report.byTable['user_events'].deleted += deletedCount;
         report.totalRecordsDeleted += deletedCount;
 
-        console.log(`[Data Cleanup] Removed ${deletedCount} duplicate events`);
     } catch (error: any) {
         report.errors.push(`Deduplication failed: ${error.message}`);
     }
@@ -404,7 +411,6 @@ async function cleanupOrphanedRecords(report: CleanupReport, userEmail?: string)
                 report.byTable[table].deleted += deletedCount;
                 report.totalRecordsDeleted += deletedCount;
 
-                console.log(`[Data Cleanup] Removed ${deletedCount} orphaned records from ${table}`);
             }
         }
     } catch (error: any) {
@@ -450,7 +456,6 @@ async function enforceUserDataLimits(report: CleanupReport, userEmail?: string):
                 );
 
                 const deletedCount = deleteResult.rowCount || 0;
-                console.log(`[Data Cleanup] Enforced limit for ${row.user_email}: deleted ${deletedCount} events`);
 
                 if (!report.byTable['user_events']) {
                     report.byTable['user_events'] = { deleted: 0, aggregated: 0 };
@@ -543,7 +548,6 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
         report.totalRecordsDeleted += totalDeleted;
 
         if (totalDeleted > 0) {
-            console.log(`[Data Cleanup] user_memory: deleted ${totalDeleted} records`);
         }
     } catch (error: any) {
         report.errors.push(`User memory cleanup failed: ${error.message}`);

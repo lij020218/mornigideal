@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { analyzeSchedulePatterns, SchedulePattern } from "@/lib/schedule-pattern-analyzer";
 
 /**
@@ -57,10 +57,8 @@ export interface UserContext {
  * 사용자 컨텍스트 생성
  */
 export async function generateUserContext(userEmail: string): Promise<UserContext> {
-    console.log(`[Context Service] Generating context`);
 
-    // Supabase direct client 사용
-    const supabase = db.client;
+    const supabase = supabaseAdmin;
 
     // 1. 제약 조회 (테이블 없으면 null)
     const { data: constraintsData, error: constraintsError } = await supabase
@@ -68,7 +66,7 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         .select('*')
         .eq('user_email', userEmail)
         .maybeSingle();
-    if (constraintsError) console.log('[Context] user_constraints 테이블 없음 또는 오류:', constraintsError.message);
+    if (constraintsError) console.error('[Context] user_constraints error:', constraintsError.code);
     const constraints = constraintsData;
 
     // 2. 선호 조회 (테이블 없으면 null)
@@ -77,7 +75,7 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         .select('*')
         .eq('user_email', userEmail)
         .maybeSingle();
-    if (preferencesError) console.log('[Context] user_preferences 테이블 없음 또는 오류:', preferencesError.message);
+    if (preferencesError) console.error('[Context] user_preferences error:', preferencesError.code);
     const preferences = preferencesData;
 
     // 3. 프로필 조회 (users 테이블에서 - 이미 존재하는 테이블)
@@ -86,10 +84,9 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         .select('profile')
         .eq('email', userEmail)
         .maybeSingle();
-    if (userError) console.log('[Context] users 조회 오류:', userError.message);
+    if (userError) console.error('[Context] users query error:', userError.code);
     const profile = userData?.profile || {};
 
-    console.log('[Context] Profile data:', { job: profile.job, goal: profile.goal });
 
     // 4. 이번 주 운동 횟수
     const thisWeekStart = getMonday(new Date());
@@ -173,7 +170,6 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
     const workoutCompletionRate = completed + skipped > 0 ? completed / (completed + skipped) : 0;
 
     // 9. 일정 패턴 분석
-    console.log('[Context Service] Analyzing schedule patterns...');
     const schedulePattern = await analyzeSchedulePatterns(userEmail);
 
     // 10. 컨텍스트 조립
@@ -211,22 +207,7 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         schedulePattern,
     };
 
-    console.log(`[Context Service] Generated context:`, {
-        workoutCount: thisWeekWorkoutCount,
-        avgSleep: avgSleepHours,
-        completionRate: workoutCompletionRate,
-        recentActivitiesCount: recentActivities.length,
-        customGoalsCount: profile.customGoals?.length || 0,
-        constraintsLoaded: !!constraints,
-        preferencesLoaded: !!preferences,
-        successRateEntriesCount: Object.keys(successRateByTimeblock).length,
-    });
 
-    console.log(`[Context Service] Profile data:`, {
-        job: profile.job,
-        goal: profile.goal,
-        totalCustomGoals: profile.customGoals?.length || 0,
-    });
 
     return context;
 }
@@ -235,38 +216,41 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
  * 컨텍스트 캐싱 (1시간 TTL)
  */
 export async function getCachedOrGenerateContext(userEmail: string): Promise<UserContext> {
-    // 캐시 확인
-    const cacheResult = await db.query(
-        `SELECT context_data, expires_at
-         FROM user_context_cache
-         WHERE user_email = $1
-           AND expires_at > NOW()`,
-        [userEmail]
-    );
+    try {
+        // 캐시 확인
+        const { data: cached } = await supabaseAdmin
+            .from('user_context_cache')
+            .select('context_data, expires_at')
+            .eq('user_email', userEmail)
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle();
 
-    if (cacheResult.rows.length > 0) {
-        console.log(`[Context Service] Cache hit`);
-        return cacheResult.rows[0].context_data;
+        if (cached?.context_data) {
+            return cached.context_data;
+        }
+    } catch {
+        // Cache table may not exist yet — fall through to generate
     }
 
     // 캐시 없으면 생성
-    console.log(`[Context Service] Cache miss, generating`);
     const context = await generateUserContext(userEmail);
 
-    // 캐시 저장 (1시간 TTL)
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
+    try {
+        // 캐시 저장 (1시간 TTL)
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 1);
 
-    await db.query(
-        `INSERT INTO user_context_cache (id, user_email, context_data, expires_at)
-         VALUES (gen_random_uuid()::text, $1, $2, $3)
-         ON CONFLICT (user_email)
-         DO UPDATE SET
-             context_data = EXCLUDED.context_data,
-             expires_at = EXCLUDED.expires_at,
-             generated_at = CURRENT_TIMESTAMP`,
-        [userEmail, JSON.stringify(context), expiresAt]
-    );
+        await supabaseAdmin
+            .from('user_context_cache')
+            .upsert({
+                user_email: userEmail,
+                context_data: context,
+                expires_at: expiresAt.toISOString(),
+                generated_at: new Date().toISOString(),
+            }, { onConflict: 'user_email' });
+    } catch {
+        // Cache write failure is non-critical
+    }
 
     return context;
 }

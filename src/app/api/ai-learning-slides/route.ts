@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { isMaxPlan } from "@/lib/user-plan";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -55,11 +56,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user ID for later use
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -81,34 +82,20 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if slides already exist for this user
-        console.log("[AI Learning Slides] POST - Checking for existing slides:", {
-            curriculumId,
-            curriculumIdLength: curriculumId?.length,
-            dayNumber,
-            userId: userData.id
-        });
 
-        const { data: existingSlides, error: checkError } = await supabase
+        const { data: existingSlides, error: checkError } = await supabaseAdmin
             .from("learning_slides")
             .select("*")
             .eq("curriculum_id", curriculumId)
             .eq("day_number", dayNumber)
             .eq("user_id", userData.id)
-            .single();
+            .maybeSingle();
 
-        console.log("[AI Learning Slides] POST - Existing slides check:", {
-            found: !!existingSlides,
-            slidesCount: existingSlides?.slides_data?.length,
-            error: checkError?.message,
-            errorCode: checkError?.code
-        });
 
         if (existingSlides) {
-            console.log("[AI Learning Slides] ✅ Returning cached slides for user:", userData.id);
             return NextResponse.json({ slides: existingSlides.slides_data });
         }
 
-        console.log("[AI Learning Slides] 🔄 No cached slides found, generating new ones...");
 
         const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
         const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
@@ -179,7 +166,7 @@ export async function POST(request: NextRequest) {
 }`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-5.2-2025-12-11",
+            model: MODELS.GPT_5_2,
             messages: [
                 {
                     role: "system",
@@ -222,7 +209,7 @@ export async function POST(request: NextRequest) {
         if (usage) {
             await logOpenAIUsage(
                 userEmail,
-                "gpt-5.2-2025-12-11",
+                MODELS.GPT_5_2,
                 "ai-learning-slides",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -230,7 +217,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Save slides to database
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseAdmin
             .from("learning_slides")
             .insert({
                 curriculum_id: curriculumId,
@@ -244,12 +231,6 @@ export async function POST(request: NextRequest) {
         if (insertError) {
             console.error("[AI Learning Slides] Insert error:", insertError);
         } else {
-            console.log("[AI Learning Slides] Saved slides:", {
-                curriculumId,
-                dayNumber,
-                userId: userData.id,
-                slidesCount: parsed.slides?.length || 0
-            });
         }
 
         return NextResponse.json({
@@ -273,11 +254,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Get user ID
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -291,24 +272,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Missing curriculumId or dayNumber" }, { status: 400 });
         }
 
-        const { data: slides, error: slidesError } = await supabase
+        const { data: slides, error: slidesError } = await supabaseAdmin
             .from("learning_slides")
             .select("*")
             .eq("curriculum_id", curriculumId)
             .eq("day_number", parseInt(dayNumber))
             .eq("user_id", userData.id)
-            .single();
+            .maybeSingle();
 
-        console.log("[AI Learning Slides] GET Query:", {
-            curriculumId,
-            curriculumIdLength: curriculumId?.length,
-            dayNumber: parseInt(dayNumber),
-            userId: userData.id,
-            found: !!slides,
-            slidesDataLength: slides?.slides_data?.length,
-            error: slidesError?.message,
-            errorCode: slidesError?.code
-        });
 
         if (!slides) {
             return NextResponse.json({ slides: null });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 // Vercel Pro allows up to 60 seconds, Free plan is 10 seconds
 export const maxDuration = 30;
@@ -190,7 +191,7 @@ daysOfWeek 코드: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
 **허용된 요일만 사용: [${remainingDays.join(", ")}]**`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -245,7 +246,7 @@ daysOfWeek 코드: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
         if (usage) {
             await logOpenAIUsage(
                 email,
-                "gpt-4o-mini-2024-07-18",
+                MODELS.GPT_4O_MINI,
                 "ai-goal-schedule",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -276,7 +277,7 @@ daysOfWeek 코드: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
         }
 
         return NextResponse.json(
-            { error: `Failed to generate schedule recommendations: ${error?.message || 'Unknown error'}` },
+            { error: "일정 추천 생성에 실패했습니다." },
             { status: 500 }
         );
     }

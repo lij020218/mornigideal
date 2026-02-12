@@ -6,13 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
 
@@ -77,7 +72,7 @@ export async function POST(request: NextRequest) {
         const expiresAt = Date.now() + (tokens.expires_in * 1000);
 
         // DB에 토큰 저장
-        const { error: dbError } = await supabase
+        const { error: dbError } = await supabaseAdmin
             .from("google_calendar_tokens")
             .upsert({
                 user_email: userEmail,
@@ -97,7 +92,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
         }
 
-        console.log("[Link GCal] Successfully linked Google Calendar");
 
         return NextResponse.json({
             success: true,

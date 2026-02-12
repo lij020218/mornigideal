@@ -106,7 +106,6 @@ export function Dashboard({
     // Listen for schedule completion changes from other components/pages
     useEffect(() => {
         const handleCompletionChange = () => {
-            console.log("[Dashboard] Schedule completion changed, refreshing...");
             setCompletionUpdateTrigger(prev => prev + 1);
         };
 
@@ -281,14 +280,11 @@ export function Dashboard({
         fetchBriefing();
 
         const handleOpenDailyBriefing = async () => {
-            console.log("Dashboard: 'open-daily-briefing' event received!");
             const currentData = dailyBriefingDataRef.current;
 
             if (currentData) {
-                console.log("Showing existing briefing data");
                 setShowDailyBriefing(true);
             } else {
-                console.log("No data, starting auto-generation...");
 
                 // Show loading state immediately (Popup handles null data by showing spinner)
                 setShowDailyBriefing(true);
@@ -301,12 +297,10 @@ export function Dashboard({
 
                         // Use the returned briefing directly from generation response
                         if (data.briefing) {
-                            console.log("Briefing generated and received:", data.briefing);
                             setDailyBriefingData(data.briefing);
                             // Popup is already showing loading, it will update to content
                         } else {
                             // Only if not returned in body, try fetching as fallback
-                            console.log("Briefing generated but not in body, trying fetch...");
                             const fetchRes = await fetch('/api/user/daily-briefing');
                             if (fetchRes.ok) {
                                 const fetchData = await fetchRes.json();
@@ -339,7 +333,6 @@ export function Dashboard({
     // Listen for open-schedule-popup event from LongTermGoalsWidget
     useEffect(() => {
         const handleOpenSchedulePopup = (event: CustomEvent) => {
-            console.log("Dashboard: 'open-schedule-popup' event received!", event.detail);
             // Support both old format (linkedGoalId, linkedGoalTitle, goalType) and new format (linkedGoal)
             const { linkedGoal, linkedGoalId, linkedGoalTitle, goalType } = event.detail || {};
 
@@ -460,7 +453,6 @@ export function Dashboard({
                     setUserProfile(data.profile);
                     // Update localStorage as well
                     localStorage.setItem("user_profile", JSON.stringify(data.profile));
-                    console.log("[Dashboard] 프로필 새로고침 완료");
                 }
             }
         } catch (error) {
@@ -471,7 +463,6 @@ export function Dashboard({
     // Listen for schedule updates from TodaySuggestions
     useEffect(() => {
         const handleScheduleUpdate = () => {
-            console.log("[Dashboard] 일정 업데이트 이벤트 수신, 프로필 새로고침");
             refreshUserProfile();
         };
 
@@ -488,11 +479,9 @@ export function Dashboard({
 
     const migrateGoalsToCalendar = (profile: UserProfile): UserProfile => {
         if (!profile.customGoals || profile.customGoals.length === 0) {
-            console.log('[Migration] No customGoals to migrate');
             return profile;
         }
 
-        console.log('[Migration] Starting migration, customGoals count:', profile.customGoals.length);
         const migratedGoals = [...profile.customGoals];
         const today = new Date();
         let hasChanges = false;
@@ -500,7 +489,6 @@ export function Dashboard({
         profile.customGoals.forEach((goal: any) => {
             // If goal has daysOfWeek but no specificDate, it's a template
             if (goal.daysOfWeek && goal.daysOfWeek.length > 0 && !goal.specificDate) {
-                console.log('[Migration] Found template! Converting to calendar events:', goal.text, 'days:', goal.daysOfWeek);
                 hasChanges = true;
 
                 // Generate calendar events for next 8 weeks
@@ -534,14 +522,12 @@ export function Dashboard({
         });
 
         if (hasChanges) {
-            console.log('[Migration] Migration completed! New customGoals count:', migratedGoals.length);
             return {
                 ...profile,
                 customGoals: migratedGoals
             };
         }
 
-        console.log('[Migration] No changes needed');
         return profile;
     };
 
@@ -574,8 +560,6 @@ export function Dashboard({
         saveProfileToSupabase(updatedProfile);
     };
     const handleSaveSchedule = (newSchedule: any, newCustomGoals: any) => {
-        console.log('Saving schedule:', newSchedule);
-        console.log('Saving custom goals:', newCustomGoals);
 
         // Deduplicate newCustomGoals first
         const uniqueGoalsMap = new Map<string, CustomGoal>();
@@ -587,7 +571,6 @@ export function Dashboard({
             }
         });
         const uniqueCustomGoals = Array.from(uniqueGoalsMap.values());
-        console.log(`[Dashboard] Deduplicated goals: ${newCustomGoals.length} -> ${uniqueCustomGoals.length}`);
 
         // Migrate daysOfWeek-only goals to calendar events
         const migratedGoals = [...uniqueCustomGoals];
@@ -672,13 +655,11 @@ export function Dashboard({
         saveProfileToSupabase(updatedProfile);
 
         // Notify Dashboard to refresh schedule
-        console.log('[Dashboard] 일정 업데이트 이벤트 발송 (SchedulePopup)');
         window.dispatchEvent(new CustomEvent('schedule-updated'));
 
         // Notify Header to reload profile
         window.dispatchEvent(new Event('profile-updated'));
 
-        console.log('Updated profile:', updatedProfile);
 
         if (newSchedule.wakeUp !== userSettings.wakeUpTime) {
             const newSettings = { ...userSettings, wakeUpTime: newSchedule.wakeUp };
@@ -727,7 +708,6 @@ export function Dashboard({
         const checkDateChange = () => {
             const todayStr = getTodayStr();
             if (lastCheckedDate && lastCheckedDate !== todayStr) {
-                console.log('[Dashboard] Date changed from', lastCheckedDate, 'to', todayStr, '- refreshing page');
                 window.location.reload();
             }
             setLastCheckedDate(todayStr);
@@ -744,7 +724,6 @@ export function Dashboard({
     // Listen for briefing read events to update dailyGoals in real-time
     useEffect(() => {
         const handleBriefingRead = (event: CustomEvent<{ briefingId: string; readCount: number }>) => {
-            console.log('[Dashboard] Briefing read event:', event.detail);
             setDailyGoals(prev => ({
                 ...prev,
                 trendBriefing: event.detail.readCount
@@ -793,14 +772,11 @@ export function Dashboard({
         // Listen for open daily briefing event from Header
         // Use Ref to access latest data without triggering re-renders of the effect
         const handleOpenDailyBriefing = async () => {
-            console.log("Dashboard: 'open-daily-briefing' event received!");
             const currentData = dailyBriefingDataRef.current;
 
             if (currentData) {
-                console.log("Showing existing briefing data");
                 setShowDailyBriefing(true);
             } else {
-                console.log("No data, starting auto-generation...");
 
                 // Show loading state immediately (Popup handles null data by showing spinner)
                 setShowDailyBriefing(true);
@@ -813,7 +789,6 @@ export function Dashboard({
 
                         // Use the returned briefing directly from generation response
                         if (data.briefing) {
-                            console.log("Briefing generated and received:", data.briefing);
                             setDailyBriefingData(data.briefing);
                         } else {
                             // Fallback fetch
@@ -1528,10 +1503,8 @@ export function Dashboard({
                 isOpen={showGoalModal}
                 onClose={() => setShowGoalModal(false)}
                 onGoalsUpdated={() => {
-                    console.log("[Dashboard] Goals updated");
                 }}
                 onScheduleAdd={(newSchedules) => {
-                    console.log("[Dashboard] Adding goal-based schedules:", newSchedules);
                     const currentGoals = userProfile?.customGoals || [];
                     handleSaveSchedule(userProfile?.schedule || {}, [...currentGoals, ...newSchedules]);
                 }}
@@ -1677,12 +1650,10 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
             });
 
             const targetIndex = activeIndex !== -1 ? activeIndex : nextIndex;
-            console.log('[Timeline] Scrolling to index:', targetIndex, 'activeIndex:', activeIndex, 'nextIndex:', nextIndex, 'totalItems:', timelineItemsForScroll.length);
 
             if (targetIndex !== -1 && scrollContainerRef.current) {
                 // Get all timeline items
                 const items = scrollContainerRef.current.querySelectorAll('[data-timeline-item]');
-                console.log('[Timeline] Found', items.length, 'items in DOM, targeting index:', targetIndex);
 
                 if (items.length > targetIndex) {
                     const targetItem = items[targetIndex] as HTMLElement;
@@ -1694,7 +1665,6 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                     const containerWidth = container.clientWidth;
                     const scrollLeft = Math.max(0, itemLeft - (containerWidth / 2) + (itemWidth / 2));
 
-                    console.log('[Timeline] Scroll calculation: itemLeft=', itemLeft, 'itemWidth=', itemWidth, 'containerWidth=', containerWidth, 'scrollLeft=', scrollLeft);
 
                     container.scrollTo({
                         left: scrollLeft,
@@ -2049,7 +2019,6 @@ function DailyRhythmTimeline({ schedule, customGoals, dailyGoals, toggleCustomGo
                         const colors = getColorClasses(item.color, isActive || isUpcoming);
                         const completion = todayCompletions[item.goalId];
 
-                        console.log(`[Timeline] ${item.label}: color=${item.color}, isActive=${isActive}, isUpcoming=${isUpcoming}, gradient=${colors.activeGradient}`);
 
                         return (
                             <motion.div

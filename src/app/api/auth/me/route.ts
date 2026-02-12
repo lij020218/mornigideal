@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { verifyToken } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (error || !user) {
-      console.log('[auth/me] User not found');
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 

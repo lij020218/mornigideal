@@ -90,7 +90,6 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
         if (!readBriefings.includes(briefingId)) {
             readBriefings.push(briefingId);
             localStorage.setItem(readBriefingsKey, JSON.stringify(readBriefings));
-            console.log('[TrendBriefingDetail] Marked briefing as read:', briefingId);
 
             // Dispatch event so Dashboard can update dailyGoals
             window.dispatchEvent(new CustomEvent('briefing-read', {
@@ -107,14 +106,6 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
 
         try {
             setLoading(true);
-            console.log('[TrendBriefingDetail] Fetching detail for:', briefing.title);
-            console.log('[TrendBriefingDetail] Request payload:', {
-                title: briefing.title,
-                level: userLevel,
-                job: userJob,
-                originalUrl: briefing.originalUrl,
-                trendId: briefing.id
-            });
 
             const response = await fetch("/api/trend-briefing", {
                 method: "POST",
@@ -129,7 +120,6 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
                 })
             });
 
-            console.log('[TrendBriefingDetail] Response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -138,16 +128,6 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
             }
 
             const data = await response.json();
-            console.log('[TrendBriefingDetail] Response data:', data);
-            console.log('[TrendBriefingDetail] Detail structure:', {
-                hasDetail: !!data.detail,
-                hasTitle: !!data.detail?.title,
-                hasContent: !!data.detail?.content,
-                hasKeyTakeaways: !!data.detail?.keyTakeaways,
-                hasActionItems: !!data.detail?.actionItems,
-                keyTakeawaysLength: data.detail?.keyTakeaways?.length,
-                actionItemsLength: data.detail?.actionItems?.length
-            });
 
             setDetail(data.detail);
         } catch (error) {
@@ -332,11 +312,9 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
 
                                                                         if (response.ok) {
                                                                             // Notify Dashboard to refresh schedule
-                                                                            console.log("[TrendBriefing] 일정 업데이트 이벤트 발송");
                                                                             window.dispatchEvent(new CustomEvent('schedule-updated'));
 
                                                                             // Get AI resource recommendations
-                                                                            console.log("[TrendBriefing] AI 리소스 요청 시작:", action);
                                                                             const resourceResponse = await fetch("/api/ai-resource-recommend", {
                                                                                 method: "POST",
                                                                                 headers: { "Content-Type": "application/json" },
@@ -348,11 +326,9 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
 
                                                                             if (resourceResponse.ok) {
                                                                                 const resourceData = await resourceResponse.json();
-                                                                                console.log("[TrendBriefing] AI 리소스 데이터:", resourceData);
 
                                                                                 // Send message to AI chat
                                                                                 const chatMessage = `✅ "${action}" 일정이 추가되었습니다!\n\n${resourceData.recommendation}`;
-                                                                                console.log("[TrendBriefing] AI 채팅 이벤트 발송");
 
                                                                                 window.dispatchEvent(new CustomEvent('ai-chat-message', {
                                                                                     detail: {
@@ -363,7 +339,6 @@ export function TrendBriefingDetail({ briefing, isOpen, onClose, userLevel, user
 
                                                                                 // Auto-open AI chat after 500ms
                                                                                 setTimeout(() => {
-                                                                                    console.log("[TrendBriefing] AI 채팅 오픈 이벤트 발송");
                                                                                     window.dispatchEvent(new CustomEvent('ai-chat-open'));
                                                                                 }, 500);
                                                                             }

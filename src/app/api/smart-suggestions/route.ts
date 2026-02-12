@@ -185,13 +185,13 @@ export async function GET(request: NextRequest) {
         // CARD 2: Trend Briefing (Orange)
         // ============================================
         try {
-            const { supabase } = await import("@/lib/supabase");
-            const { data: briefingData } = await supabase
+            const { supabaseAdmin } = await import("@/lib/supabase-admin");
+            const { data: briefingData } = await supabaseAdmin
                 .from("trends_cache")
                 .select("trends")
                 .eq("email", userEmail)
                 .eq("date", today)
-                .single();
+                .maybeSingle();
 
             if (briefingData?.trends && briefingData.trends.length > 0) {
                 // Pick a random briefing from today's cache
@@ -220,7 +220,6 @@ export async function GET(request: NextRequest) {
                 });
             }
         } catch (e) {
-            console.log('[SmartSuggestions] Briefing fetch skipped:', e);
         }
 
         // Add default briefing card if none found

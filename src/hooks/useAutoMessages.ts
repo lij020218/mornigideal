@@ -97,7 +97,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                     localStorage.setItem(`learning_tips_dismissed_${scheduleId}`, 'true');
                     setLearningTipsShownFor(prev => new Set([...prev, scheduleId]));
 
-                    console.log('[Home] Loaded learning tips for:', learningData.dayTitle);
                 }
             } catch (error) {
                 console.error('[Home] Failed to fetch learning tips:', error);
@@ -110,7 +109,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
     // Auto-send schedule-based messages
     useEffect(() => {
         if (!session?.user) {
-            console.log('[AutoMessage] Skipping - no session');
             return;
         }
 
@@ -133,7 +131,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
             const sendAutoMessage = (message: Message, forceHigh = false): boolean => {
                 const count = parseInt(localStorage.getItem(msgCountKey) || '0');
                 if (count >= MSG_CAP && !forceHigh) {
-                    console.log('[AutoMessage] ⛔ Daily cap reached, skipping:', message.id);
                     return false;
                 }
                 localStorage.setItem(msgCountKey, String(count + 1));
@@ -168,17 +165,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 : completionRate >= 40 ? 'neutral'
                 : completionRate >= 0 ? 'gentle' : 'neutral';
 
-            console.log('[AutoMessage] Checking schedules:', {
-                currentTime: `${kstNow.getHours()}:${kstNow.getMinutes()} KST`,
-                currentMinutes,
-                today,
-                schedulesCount: todaySchedules.length,
-                dayDensity,
-                completionRate,
-                completionStreak,
-                tone,
-                msgCount: parseInt(localStorage.getItem(msgCountKey) || '0'),
-            });
 
             // 0. 아침 인사 메시지 (5-12시 사이 한 번만) - AI 기반
             // Use separate keys for rich AI greeting vs basic greeting
@@ -187,19 +173,11 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
             const alreadySentRichMorning = localStorage.getItem(richGreetingKey);
             const hasLegacyGreeting = localStorage.getItem(legacyKey);
 
-            console.log('[AutoMessage] Morning greeting check:', {
-                hour,
-                inTimeRange: hour >= 5 && hour < 12,
-                alreadySentRich: !!alreadySentRichMorning,
-                hasLegacy: !!hasLegacyGreeting,
-                key: richGreetingKey
-            });
 
             // Send AI greeting if: morning time AND rich greeting not sent yet
             // (legacy key is ignored for new rich greeting)
             if (hour >= 5 && hour < 12 && !alreadySentRichMorning) {
                 localStorage.setItem(richGreetingKey, 'true');
-                console.log('[AutoMessage] ✅ Sending AI morning greeting');
 
                 // AI에게 아침 인사 + 일정 추천 요청
                 fetch('/api/ai-morning-greeting', {
@@ -223,7 +201,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                         return data;
                     })
                     .then(data => {
-                        console.log('[AutoMessage] Received AI morning greeting:', data.greeting?.substring(0, 100) + '...');
                         if (!data.greeting) {
                             console.error('[AutoMessage] No greeting in response:', data);
                             throw new Error('No greeting in response');
@@ -241,7 +218,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                                 (prev[0].content.includes('좋은 아침이에요') || prev[0].content.includes('좋은 오후') ||
                                  prev[0].content.includes('좋은 저녁') || prev[0].content.includes('아직 깨어')) &&
                                 prev[0].content.length < 200) { // Basic greetings are short
-                                console.log('[AutoMessage] Replacing basic greeting with AI greeting');
                                 return [message, ...prev.slice(1)];
                             }
                             return [...prev, message];
@@ -256,7 +232,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                         // Fallback - don't add if there's already a greeting
                         setMessages(prev => {
                             if (prev.length > 0 && prev[0].role === 'assistant') {
-                                console.log('[AutoMessage] Fallback skipped - greeting already exists');
                                 return prev;
                             }
                             const message: Message = {
@@ -279,7 +254,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                     .then(res => res.json())
                     .then(data => {
                         const notifications = data.notifications || [];
-                        console.log('[AutoMessage] Proactive notifications:', notifications.length);
 
                         // 중요한 알림만 메시지로 추가 (high priority만)
                         const importantNotifs = notifications.filter((n: any) =>
@@ -332,7 +306,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
             if (hour >= 21 && hour < 22 && !alreadySentEveningCheck && todaySchedules.length > 0) {
                 localStorage.setItem(eveningCheckKey, 'true');
-                console.log('[AutoMessage] ✅ Sending Evening Check');
 
                 // 완료된 일정 ID 수집
                 const completedIds = todaySchedules
@@ -361,7 +334,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 })
                     .then(res => res.json())
                     .then(data => {
-                        console.log('[AutoMessage] Received Evening Check:', data);
                         const message: Message = {
                             id: `evening-check-${Date.now()}`,
                             role: 'assistant',
@@ -384,33 +356,17 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 const startMinutes = timeToMinutes(schedule.startTime);
                 const endMinutes = schedule.endTime ? timeToMinutes(schedule.endTime) : startMinutes + 60;
 
-                console.log('[AutoMessage] Checking schedule:', {
-                    text: schedule.text,
-                    startTime: schedule.startTime,
-                    startMinutes,
-                    currentMinutes,
-                    diff: startMinutes - currentMinutes
-                });
 
                 // 1. 일정 시작 10분 전 메시지
                 const tenMinutesBefore = startMinutes - 10;
                 const sentBeforeKey = `schedule_before_${schedule.id}_${today}`;
                 const alreadySentBefore = !!localStorage.getItem(sentBeforeKey);
 
-                console.log('[AutoMessage] 10분 전 체크:', {
-                    tenMinutesBefore,
-                    currentMinutes,
-                    inRange: currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes,
-                    alreadySent: alreadySentBefore,
-                    key: sentBeforeKey
-                });
 
                 if (currentMinutes >= tenMinutesBefore && currentMinutes < startMinutes && !alreadySentBefore) {
                     // busy 모드: 중요 일정만 prep 발송
                     if (dayDensity === 'busy' && !isImportantSchedule(schedule.text)) {
-                        console.log('[AutoMessage] ⏭️ Skipping prep (busy day, non-important):', schedule.text);
                     } else {
-                        console.log('[AutoMessage] ✅ Sending 10-15분 전 preparation message for:', schedule.text);
                         localStorage.setItem(sentBeforeKey, 'true');
 
                         const timeUntilStart = startMinutes - currentMinutes;
@@ -464,20 +420,11 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 const sentStartKey = `schedule_start_${schedule.id}_${today}`;
                 const alreadySentStart = !!localStorage.getItem(sentStartKey);
 
-                console.log('[AutoMessage] 시작 시 체크:', {
-                    startMinutes,
-                    currentMinutes,
-                    inRange: currentMinutes >= startMinutes && currentMinutes < startMinutes + 5,
-                    alreadySent: alreadySentStart,
-                    key: sentStartKey
-                });
 
                 if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !alreadySentStart) {
                     // busy 모드: 중요 일정만 start 발송
                     if (dayDensity === 'busy' && !isImportantSchedule(schedule.text)) {
-                        console.log('[AutoMessage] ⏭️ Skipping start (busy day, non-important):', schedule.text);
                     } else {
-                    console.log('[AutoMessage] ✅ Sending 시작 message for:', schedule.text);
                     localStorage.setItem(sentStartKey, 'true');
 
                     // 일정 특성에 맞는 시작 메시지 생성
@@ -588,23 +535,12 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 }
 
                 // 디버그 로그 추가
-                console.log('[AutoMessage] T+30 체크:', {
-                    scheduleText: schedule.text,
-                    startMinutes,
-                    thirtyMinutesAfterStart,
-                    currentMinutes,
-                    shouldSendInsight,
-                    inTimeRange: currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5,
-                    alreadySentInsight,
-                    key: sentInsightKey
-                });
 
                 // Density 게이트: busy → 전부 스킵, normal → 중요 일정만
                 const insightAllowed = dayDensity === 'light'
                     || (dayDensity === 'normal' && isImportantSchedule(schedule.text));
 
                 if (insightAllowed && shouldSendInsight && currentMinutes >= thirtyMinutesAfterStart && currentMinutes < thirtyMinutesAfterStart + 5 && !alreadySentInsight) {
-                    console.log('[AutoMessage] ✅ Sending T+30 insight for:', schedule.text);
                     localStorage.setItem(sentInsightKey, 'true');
 
                     const message: Message = {
@@ -621,7 +557,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 if (currentMinutes >= endMinutes && currentMinutes < endMinutes + 10 && !localStorage.getItem(sentAfterKey)) {
                     // busy 모드: completed 메시지 스킵 (day end summary에서 종합)
                     if (dayDensity === 'busy') {
-                        console.log('[AutoMessage] ⏭️ Skipping completed (busy day, deferred to day end):', schedule.text);
                     } else {
                         localStorage.setItem(sentAfterKey, 'true');
 
@@ -762,8 +697,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                     return aTime.localeCompare(bTime);
                 });
 
-                console.log('[AutoMessage] ✅ Sending AI day summary (21시~24시 사이)');
-                console.log('[AutoMessage] Tomorrow schedules:', tomorrowSchedules.length);
 
                 // AI 하루 마무리 요청 - gpt-5.2 사용
                 fetch('/api/ai-day-summary', {
@@ -787,7 +720,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                         userPlan: userProfile?.plan || 'Free'
                     }),
                 }).then(res => res.json()).then(data => {
-                    console.log('[AutoMessage] Received AI day summary:', data);
                     const summary = data.summary || `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completed}/${total}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
                     const message: Message = {
                         id: `auto-dayend-${Date.now()}`,
@@ -819,7 +751,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
             // 주간 리포트: 하루에 한 번만 전송 (키로 중복 방지)
             const weeklyReportKey = `weekly_report_${today}`;
             if ((isSundayEvening || isMondayMorning) && !localStorage.getItem(weeklyReportKey)) {
-                console.log('[AutoMessage] ✅ Sending weekly report');
                 localStorage.setItem(weeklyReportKey, 'true');
 
                 // Fetch weekly report
@@ -901,7 +832,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
             // 새로운 주이고, 아직 리셋하지 않은 경우
             if (currentWeek !== lastResetWeek) {
-                console.log('[AutoMessage] ✅ New week detected! Resetting weekly goals:', { currentWeek, lastResetWeek });
                 localStorage.setItem('weekly_goals_last_reset_week', currentWeek);
 
                 // Reset weekly goals
@@ -915,7 +845,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                 })
                     .then(res => res.json())
                     .then(data => {
-                        console.log('[AutoMessage] Weekly goals reset:', data);
 
                         const archivedGoals = data.archived?.goals || [];
                         const completedCount = archivedGoals.filter((g: any) => g.completed).length;
@@ -949,7 +878,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
                     if (unreadCount > 0) {
                         localStorage.setItem(briefingReminderKey, 'true');
-                        console.log('[AutoMessage] ✅ Sending briefing reminder:', unreadCount);
 
                         const message: Message = {
                             id: `auto-briefing-reminder-${Date.now()}`,
@@ -976,7 +904,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
                     if (!hasUpcomingSchedule) {
                         localStorage.setItem(idleCheckKey, 'true');
-                        console.log('[AutoMessage] ✅ Fetching smart schedule recommendations');
 
                         // Fetch AI-powered recommendations based on user patterns
                         fetch('/api/ai-schedule-recommendations', {
@@ -994,7 +921,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                             }),
                         }).then(res => res.json()).then(data => {
                             const recommendations = data.recommendations || [];
-                            console.log('[AutoMessage] Received AI recommendations:', recommendations);
 
                             if (recommendations.length > 0) {
                                 // Pick top priority recommendation

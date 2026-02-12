@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
         // 일반 사용자는 자기 자신의 데이터만 정리 가능
         const cleanupTarget = isAdmin(email) && targetUser ? targetUser : email;
 
-        console.log(`[Data Cleanup API] Starting cleanup for: ${cleanupTarget}${dryRun ? ' (DRY RUN)' : ''}`);
 
         if (dryRun) {
             const stats = await getUserDataStats(cleanupTarget);

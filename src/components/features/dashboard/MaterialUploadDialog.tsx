@@ -131,7 +131,6 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                     const [, eventType, dataStr] = eventMatch;
                     const data = JSON.parse(dataStr);
 
-                    console.log(`[STREAM] ${eventType}:`, data);
 
                     switch (eventType) {
                         case "progress":
@@ -149,7 +148,6 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                             }
                             // Auto-navigate on first content chunk
                             if (currentMaterialId) {
-                                console.log("[STREAM] Content streaming started, navigating to:", `/analysis/${currentMaterialId}`);
                                 onOpenChange(false);
                                 router.push(`/analysis/${currentMaterialId}`);
                                 currentMaterialId = null; // Prevent repeated navigation
@@ -157,7 +155,6 @@ export function MaterialUploadDialog({ open, onOpenChange }: MaterialUploadDialo
                             break;
 
                         case "complete":
-                            console.log("[STREAM] Analysis complete");
                             currentMaterialId = data.materialId;
                             setMaterialId(data.materialId);
                             setUploadCompleted(true);

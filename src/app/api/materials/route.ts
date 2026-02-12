@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-        },
-    }
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
     try {
@@ -26,7 +15,7 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * limit;
         const to = from + limit - 1;
 
-        const { data: materials, count, error } = await supabase
+        const { data: materials, count, error } = await supabaseAdmin
             .from("materials")
             .select("*", { count: 'exact' })
             .eq("user_id", email)
@@ -42,7 +31,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Get folder counts using grouped query (avoids fetching all materials)
-        const { data: folderData } = await supabase
+        const { data: folderData } = await supabaseAdmin
             .from("materials")
             .select("folder_id")
             .eq("user_id", email)
@@ -83,9 +72,8 @@ export async function PATCH(request: NextRequest) {
             return NextResponse.json({ error: "Material ID is required" }, { status: 400 });
         }
 
-        console.log(`[Materials API] Moving material ${id} to folder ${folder_id || 'root'}`);
 
-        const { data: material, error } = await supabase
+        const { data: material, error } = await supabaseAdmin
             .from("materials")
             .update({ folder_id: folder_id || null })
             .eq("id", id)
@@ -117,15 +105,14 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: "Material ID is required" }, { status: 400 });
         }
 
-        console.log(`[Materials API] Deleting material ${id}`);
 
         // 1. Get file_url to delete from storage
-        const { data: material, error: fetchError } = await supabase
+        const { data: material, error: fetchError } = await supabaseAdmin
             .from("materials")
             .select("file_url")
             .eq("id", id)
             .eq("user_id", email)
-            .single();
+            .maybeSingle();
 
         if (fetchError) {
             console.error("[Materials API] Error fetching material:", fetchError);
@@ -133,7 +120,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         // 2. Delete from database
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await supabaseAdmin
             .from("materials")
             .delete()
             .eq("id", id)
@@ -149,7 +136,7 @@ export async function DELETE(request: NextRequest) {
             try {
                 const fileName = material.file_url.split("/").pop();
                 if (fileName) {
-                    await supabase.storage.from("materials").remove([fileName]);
+                    await supabaseAdmin.storage.from("materials").remove([fileName]);
                 }
             } catch (storageError) {
                 console.error("[Materials API] Error deleting file from storage:", storageError);

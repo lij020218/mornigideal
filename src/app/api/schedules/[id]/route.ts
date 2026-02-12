@@ -7,8 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
-import { getUserIdFromRequest } from '@/lib/auth-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
+import { dualWriteDelete } from '@/lib/schedule-dual-write';
 
 // 일정 상세 조회
 export async function GET(
@@ -28,7 +29,7 @@ export async function GET(
       .select('*')
       .eq('id', id)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error || !schedule) {
       return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
@@ -117,7 +118,7 @@ export async function DELETE(
         .from('users')
         .select('profile')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (userError || !user) {
         console.error('사용자 조회 오류:', userError);
@@ -150,6 +151,12 @@ export async function DELETE(
       if (updateError) {
         console.error('customGoals 삭제 오류:', updateError);
         return NextResponse.json({ error: 'Failed to delete schedule' }, { status: 500 });
+      }
+
+      // Dual-write: also delete from schedules table
+      const userEmail = await getUserEmailFromRequest(request);
+      if (userEmail) {
+        await dualWriteDelete(userEmail, id);
       }
 
       return NextResponse.json({ success: true });

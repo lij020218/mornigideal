@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET /api/user/curriculum - Get all curriculums for current user
 export async function GET(request: NextRequest) {
@@ -15,11 +15,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Get all curriculums for this user
-        const { data: curriculums, error } = await supabase
+        const { data: curriculums, error } = await supabaseAdmin
             .from("user_curriculums")
             .select("*")
             .eq("user_id", userData.id)
@@ -77,11 +77,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Upsert curriculum (insert or update if exists)
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("user_curriculums")
             .upsert({
                 user_id: userData.id,
@@ -146,11 +146,11 @@ export async function DELETE(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -160,7 +160,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         // Delete curriculum
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("user_curriculums")
             .delete()
             .eq("user_id", userData.id)

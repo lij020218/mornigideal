@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
+import { getUserEmailWithAuth, getJwtSecret } from "@/lib/auth-utils";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import crypto from "crypto";
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getOAuthSecret(): string {
+    return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || getJwtSecret();
+}
 
 function generateOAuthState(email: string): string {
     const timestamp = Date.now().toString();
-    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+    const secret = getOAuthSecret();
     const payload = `${email}:${timestamp}`;
     const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
-    // Base64 encode the whole thing so it's URL-safe
     return Buffer.from(`${payload}:${signature}`).toString('base64url');
 }
 
@@ -26,14 +24,12 @@ function verifyOAuthState(state: string): string | null {
 
         const signature = parts.pop()!;
         const timestamp = parts.pop()!;
-        const email = parts.join(':'); // email might contain colons
+        const email = parts.join(':');
 
-        // Verify timestamp (state expires after 10 minutes)
         const age = Date.now() - parseInt(timestamp);
         if (isNaN(age) || age > 10 * 60 * 1000) return null;
 
-        // Verify signature
-        const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+        const secret = getOAuthSecret();
         const payload = `${email}:${timestamp}`;
         const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
         if (signature !== expectedSig) return null;
@@ -147,7 +143,7 @@ export async function POST(req: NextRequest) {
         const expiresAt = Date.now() + (tokens.expires_in * 1000);
 
         // Store or update tokens in database
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("gmail_tokens")
             .upsert({
                 user_email: userEmail,

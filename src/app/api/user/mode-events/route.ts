@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * Mode Events API
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Insert event into user_events table
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('user_events')
             .insert({
                 email: email,
@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to log event" }, { status: 500 });
         }
 
-        console.log(`[Mode Events] Logged ${eventType}`);
 
         return NextResponse.json({
             success: true,
@@ -83,7 +82,7 @@ export async function GET(request: NextRequest) {
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
 
-        let query = supabase
+        let query = supabaseAdmin
             .from('user_events')
             .select('*')
             .eq('email', email)

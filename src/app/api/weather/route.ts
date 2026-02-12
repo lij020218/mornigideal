@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,11 +38,11 @@ export async function GET(request: Request) {
         }
 
         // Try to get from cache first (instant loading!)
-        const { data: cached } = await supabase
+        const { data: cached } = await supabaseAdmin
             .from('weather_cache')
             .select('weather_data, updated_at')
             .eq('location', cacheKey)
-            .single();
+            .maybeSingle();
 
         if (cached?.weather_data) {
             const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
@@ -50,13 +50,11 @@ export async function GET(request: Request) {
 
             // Return cache if less than 1 hour old
             if (cacheAge < oneHour) {
-                console.log(`[Weather API] Returning cached data for ${cacheKey}`);
                 return NextResponse.json(cached.weather_data);
             }
         }
 
         // Cache miss or expired - fetch fresh data
-        console.log('[Weather API] Cache miss, fetching fresh data...');
 
         if (!OPENWEATHER_API_KEY) {
             // Return fallback if no API key
@@ -111,14 +109,14 @@ export async function GET(request: Request) {
         };
 
         // Update cache in background
-        supabase
+        supabaseAdmin
             .from('weather_cache')
             .upsert({
                 location: cacheKey,
                 weather_data: response,
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'location' })
-            .then(() => console.log(`[Weather API] Cache updated for ${cacheKey}`));
+            .then(() => {});
 
         return NextResponse.json(response);
 

@@ -1,4 +1,5 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { MODELS } from "@/lib/models";
 
 /**
  * Weekly Report Generator
@@ -123,7 +124,6 @@ function getPreviousWeek(weekStart: Date): { start: Date; end: Date } {
  * 항상 가장 최근 완료된 주간(월~일)의 데이터를 분석
  */
 export async function generateWeeklyReport(userEmail: string): Promise<WeeklyReportData> {
-    console.log(`[Weekly Report] Generating report for ${userEmail}`);
 
     // 가장 최근 완료된 주간 (월~일) 계산
     const now = new Date();
@@ -136,10 +136,9 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const twoWeeksAgo = prevWeek.start;
     const twoWeeksAgoEnd = prevWeek.end;
 
-    console.log(`[Weekly Report] Period: ${oneWeekAgo.toISOString().split('T')[0]} ~ ${weekEnd.toISOString().split('T')[0]} (Week ${lastWeek.weekNumber})`);
 
     // Get user profile
-    const supabase = db.client;
+    const supabase = supabaseAdmin;
     const { data: userData } = await supabase
         .from('users')
         .select('profile')
@@ -564,7 +563,7 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
             },
             body: JSON.stringify({
-                model: 'gpt-4o-mini',
+                model: MODELS.GPT_4O_MINI_SHORT,
                 messages: [
                     {
                         role: 'system',

@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { auth } from '@/auth';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserByEmail } from '@/lib/users';
 
 // Cache the user fetching
@@ -14,7 +14,7 @@ export const getCachedUser = cache(async () => {
 export const getCachedMaterials = cache(async (email: string) => {
     if (!email) return [];
 
-    const { data: materials } = await supabase
+    const { data: materials } = await supabaseAdmin
         .from("materials")
         .select("id, title, file_name, file_size, uploaded_at, created_at, type")
         .eq("user_id", email)
@@ -28,7 +28,7 @@ export const getCachedMaterials = cache(async (email: string) => {
 export const getCachedCurriculum = cache(async (userId: string) => {
     if (!userId) return [];
 
-    const { data: curriculums, error } = await supabase
+    const { data: curriculums, error } = await supabaseAdmin
         .from("user_curriculums")
         .select("curriculum_data, created_at")
         .eq("user_id", userId)
@@ -47,7 +47,7 @@ export const getCachedTrendBriefing = cache(async (email: string) => {
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('trends_cache')
         .select('trends')
         .eq('email', email)
@@ -65,7 +65,7 @@ export const getCachedRecommendations = cache(async (email: string) => {
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('recommendations_cache')
         .select('recommendations, created_at')
         .eq('email', email)
@@ -86,7 +86,7 @@ export const getCachedHabitInsights = cache(async (email: string) => {
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('habit_insights_cache')
         .select('insights, created_at')
         .eq('email', email)

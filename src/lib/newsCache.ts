@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabaseAdmin } from './supabase-admin';
 import { auth } from '@/auth';
 
 /**
@@ -33,23 +33,21 @@ export async function getTrendsCache(emailOverride?: string): Promise<{ trends: 
     try {
         const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping cache lookup');
             return null;
         }
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('trends_cache')
             .select('trends, last_updated')
             .eq('email', userEmail)
             .eq('date', today)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
                 // No rows found - normal case
-                console.log('[NewsCache] No cached trends for today');
                 return null;
             }
             throw error;
@@ -75,12 +73,12 @@ export async function getTrendsHistory(date: string): Promise<any[] | null> {
         const userEmail = await getUserEmail();
         if (!userEmail) return null;
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('trends_cache')
             .select('trends')
             .eq('email', userEmail)
             .eq('date', date)
-            .single();
+            .maybeSingle();
 
         if (error || !data) return null;
 
@@ -101,7 +99,6 @@ export async function saveTrendsCache(trends: any[], clearExisting: boolean = fa
     try {
         const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping cache save');
             return;
         }
 
@@ -109,14 +106,14 @@ export async function saveTrendsCache(trends: any[], clearExisting: boolean = fa
 
         // If clearExisting, delete old cache first
         if (clearExisting) {
-            await supabase
+            await supabaseAdmin
                 .from('trends_cache')
                 .delete()
                 .eq('email', userEmail)
                 .eq('date', today);
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('trends_cache')
             .upsert({
                 email: userEmail,
@@ -129,7 +126,6 @@ export async function saveTrendsCache(trends: any[], clearExisting: boolean = fa
 
         if (error) throw error;
 
-        console.log(`[NewsCache] Saved ${trends.length} trends to cache`);
     } catch (error) {
         console.error('[NewsCache] Error saving trends cache:', error);
     }
@@ -144,16 +140,15 @@ export async function getDetailCache(trendId: string, emailOverride?: string): P
     try {
         const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping detail cache lookup');
             return null;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('trend_details')
             .select('detail_data')
             .eq('email', userEmail)
             .eq('trend_id', trendId)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
@@ -180,11 +175,10 @@ export async function saveDetailCache(trendId: string, detail: any, emailOverrid
     try {
         const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping detail cache save');
             return;
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('trend_details')
             .upsert({
                 email: userEmail,
@@ -197,7 +191,6 @@ export async function saveDetailCache(trendId: string, detail: any, emailOverrid
 
         if (error) throw error;
 
-        console.log(`[NewsCache] Saved detail for trend: ${trendId}`);
     } catch (error) {
         console.error('[NewsCache] Error saving detail cache:', error);
     }
@@ -210,23 +203,21 @@ export async function getDailyBriefingCache(): Promise<any | null> {
     try {
         const userEmail = await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping briefing cache lookup');
             return null;
         }
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('daily_briefings')
             .select('briefing_data, created_at')
             .eq('email', userEmail)
             .eq('date', today)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
                 // No rows found - normal case
-                console.log('[NewsCache] No cached daily briefing for today');
                 return null;
             }
             throw error;
@@ -246,13 +237,12 @@ export async function saveDailyBriefingCache(briefingData: any): Promise<void> {
     try {
         const userEmail = await getUserEmail();
         if (!userEmail) {
-            console.warn('[NewsCache] No user email, skipping briefing cache save');
             return;
         }
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('daily_briefings')
             .upsert({
                 email: userEmail,
@@ -265,7 +255,6 @@ export async function saveDailyBriefingCache(briefingData: any): Promise<void> {
 
         if (error) throw error;
 
-        console.log(`[NewsCache] Saved daily briefing to cache for ${userEmail}`);
     } catch (error) {
         console.error('[NewsCache] Error saving daily briefing cache:', error);
     }

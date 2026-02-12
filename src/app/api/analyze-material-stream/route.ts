@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
 import crypto from "crypto";
 import { extractAndAnalyzeImages, formatImageAnalysis } from "@/lib/pdf-image-extractor";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 // Route segment config for large file uploads
 export const maxDuration = 300; // 5 minutes for Vercel Pro
@@ -15,20 +16,10 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
 
 // Model Configuration
-const MINI_MODEL = "gpt-5-mini-2025-08-07";      // Intelligent chunking
-const ADVANCED_MODEL = "gpt-5.2-2025-12-11";    // High-quality conversion
+const MINI_MODEL = MODELS.GPT_5_MINI;      // Intelligent chunking
+const ADVANCED_MODEL = MODELS.GPT_5_2;    // High-quality conversion
 
 /**
  * SMART HYBRID PIPELINE (2025-12-04)
@@ -75,7 +66,6 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      console.log(`[START] Processing ${originalFileName} from blob: ${blobUrl}`);
 
       // ====================
       // STEP 1: Download from Blob & Extract Text
@@ -97,7 +87,7 @@ export async function POST(request: NextRequest) {
 
       // Upload to Supabase
       let fileUrl = "";
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseAdmin.storage
         .from("materials")
         .upload(fileName, buffer, {
           contentType: "application/pdf",
@@ -105,21 +95,18 @@ export async function POST(request: NextRequest) {
         });
 
       if (!uploadError) {
-        const { data: publicUrlData } = supabase.storage.from("materials").getPublicUrl(fileName);
+        const { data: publicUrlData } = supabaseAdmin.storage.from("materials").getPublicUrl(fileName);
         fileUrl = publicUrlData.publicUrl;
-        console.log(`[STORAGE] Uploaded PDF: ${fileUrl}`);
       } else {
         console.error("[STORAGE] Upload error:", uploadError);
         throw new Error("Failed to upload PDF");
       }
 
       // Extract text from PDF
-      console.log('[PDF-EXTRACT] Extracting text...');
       const pdfData = await pdfParse(buffer);
       let extractedText = pdfData.text;
       const pageCount = pdfData.numpages;
 
-      console.log(`[PDF-PARSE] Extracted ${extractedText.length} chars from ${pageCount} pages`);
 
       // Extract and analyze images with Google Cloud Vision
       await sendEvent("progress", {
@@ -127,19 +114,15 @@ export async function POST(request: NextRequest) {
         message: "이미지 분석 중... (Google Cloud Vision)"
       });
 
-      console.log('[IMAGE-EXTRACT] Analyzing images...');
       const apiKey = process.env.GEMINI_API_KEY;
       if (apiKey) {
         const imageAnalyses = await extractAndAnalyzeImages(buffer, apiKey);
         if (imageAnalyses.length > 0) {
           const imageText = formatImageAnalysis(imageAnalyses);
           extractedText = extractedText + imageText;
-          console.log(`[IMAGE-EXTRACT] Added ${imageAnalyses.length} image analyses to text`);
         } else {
-          console.log('[IMAGE-EXTRACT] No images found or analyzed');
         }
       } else {
-        console.warn('[IMAGE-EXTRACT] Skipping - no API key found');
       }
 
       // ====================
@@ -150,7 +133,6 @@ export async function POST(request: NextRequest) {
         message: "최적 청크로 분할 중... (GPT-5 Mini)"
       });
 
-      console.log('[GPT-5 Mini] Smart chunking...');
 
       // Simple character-based chunking (균등 분할)
       const targetChunkSize = Math.ceil(extractedText.length / 3); // 3등분
@@ -180,12 +162,10 @@ export async function POST(request: NextRequest) {
         chunkIndex++;
       }
 
-      console.log(`[CHUNKING] Split into ${chunks.length} chunks (avg ${Math.round(extractedText.length / chunks.length)} chars each)`);
 
       // ====================
       // STEP 3: Save Material to DB
       // ====================
-      console.log('[DB] Creating material record...');
 
       const material = {
         user_id: email,
@@ -201,7 +181,7 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       };
 
-      const { data: insertedMaterial, error: insertError } = await supabase
+      const { data: insertedMaterial, error: insertError } = await supabaseAdmin
         .from("materials")
         .insert(material)
         .select()
@@ -212,7 +192,6 @@ export async function POST(request: NextRequest) {
         throw insertError;
       }
 
-      console.log(`[DB] Material created with ID: ${insertedMaterial.id}`);
 
       // ====================
       // STEP 4: GPT-5.1 순차 변환 (컨텍스트 유지)
@@ -222,7 +201,6 @@ export async function POST(request: NextRequest) {
         message: "A 모드로 변환 중... (GPT-5.1)"
       });
 
-      console.log(`[GPT-5.1 + Mini] Converting and enhancing ${chunks.length} chunks in parallel...`);
 
       // Parallel conversion AND enhancement with Promise.all
       const conversionPromises = chunks.map(async (chunk, i) => {
@@ -435,7 +413,6 @@ ${normalizedText}
           );
         }
 
-        console.log(`[GPT-5.1] Chunk ${i + 1} converted: ${converted.length} chars`);
 
         // 잘못된 LaTeX 쉼표 표기법 수정 (1{,}894 → 1,894)
         converted = converted.replace(/(\d)\{,\}(\d)/g, '$1,$2');
@@ -447,7 +424,6 @@ ${normalizedText}
                               /\$[^$]*_[!"#$%&'()][^$]*\$/.test(converted); // LaTeX 내부의 잘못된 아래첨자
 
         if (hasInvalidMath) {
-          console.log(`[MATH-FIX] Chunk ${i + 1} has invalid math formatting, fixing...`);
 
           const mathFixPrompt = `다음 텍스트에서 수식이 잘못 표현되어 있습니다. 모든 수식을 LaTeX 형식으로 수정하세요.
 
@@ -496,7 +472,6 @@ ${converted}
             );
           }
 
-          console.log(`[MATH-FIX] Chunk ${i + 1} math fixed`);
         }
 
         // Now enhance with Mini model
@@ -547,7 +522,6 @@ ${converted}`;
           .replace(/\n```$/gm, '')
           .trim();
 
-        console.log(`[Mini] Chunk ${i + 1} enhanced: ${enhanced.length} chars`);
 
         return { index: i, content: enhanced };
       });
@@ -559,7 +533,6 @@ ${converted}`;
       convertedChunks.sort((a, b) => a.index - b.index);
       let fullContent = convertedChunks.map(c => c.content).join("\n\n");
 
-      console.log(`[PARALLEL] All chunks converted and enhanced: ${fullContent.length} total chars`);
 
       // Stream all content at once after parallel completion
       for (let i = 0; i < convertedChunks.length; i++) {
@@ -595,7 +568,7 @@ ${converted}`;
         extractedTextLength: extractedText.length,
       };
 
-      await supabase
+      await supabaseAdmin
         .from("materials")
         .update({
           analysis: {
@@ -607,12 +580,10 @@ ${converted}`;
         })
         .eq("id", insertedMaterial.id);
 
-      console.log(`[METRICS] Complete: ${(totalDuration / 1000).toFixed(2)}s, ~$${estimatedCost.toFixed(4)}`);
 
       // ====================
       // STEP 6: Generate Core Concepts (Background)
       // ====================
-      console.log('[CONCEPTS] Starting background generation...');
 
       
       // Generate concepts in background without blocking response
@@ -708,13 +679,13 @@ ${fullContent.substring(0, 30000)}
           }
 
           // Get current analysis first
-          const { data: currentMaterial } = await supabase
+          const { data: currentMaterial } = await supabaseAdmin
             .from("materials")
             .select("analysis")
             .eq("id", insertedMaterial.id)
-            .single();
+            .maybeSingle();
 
-          await supabase
+          await supabaseAdmin
             .from("materials")
             .update({
               analysis: {
@@ -724,7 +695,6 @@ ${fullContent.substring(0, 30000)}
             })
             .eq("id", insertedMaterial.id);
 
-          console.log('[CONCEPTS] Background generation completed');
         } catch (error) {
           console.error('[CONCEPTS] Background generation failed:', error);
           // Don't block main flow if concepts generation fails

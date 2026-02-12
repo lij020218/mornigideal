@@ -116,7 +116,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
 
             // Prevent double fetch if parameters haven't changed and not forcing refresh
             if (!forceRefresh && lastFetchParamsRef.current === currentParamsKey && briefings.length > 0) {
-                console.log('[TrendBriefing] Skipping duplicate fetch for same parameters');
                 return;
             }
 
@@ -128,7 +127,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
             if (cacheTimestamp) {
                 const cacheDate = new Date(cacheTimestamp).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
                 if (cacheDate !== today) {
-                    console.log('[TrendBriefing] Clearing outdated cache from', cacheDate);
                     localStorage.removeItem('trends_cache');
                     localStorage.removeItem('trends_cache_timestamp');
                     lastFetchParamsRef.current = ""; // Reset ref on new day
@@ -137,13 +135,11 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
 
             // 1. forceRefresh가 아니면 먼저 사전 생성된 브리핑 확인
             if (!forceRefresh) {
-                console.log('[TrendBriefing] Checking for pre-generated briefing...');
                 const pregenResponse = await fetch('/api/trend-briefing/get');
 
                 if (pregenResponse.ok) {
                     const pregenData = await pregenResponse.json();
                     if (pregenData.trends && pregenData.trends.length > 0) {
-                        console.log('[TrendBriefing] Found pre-generated briefing!');
 
                         // Check if summaries need updating (old format: too long OR keyword-style)
                         // Keyword-style detection: contains comma/arrow patterns like "키워드, 키워드↑" or missing proper verb endings
@@ -160,7 +156,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                         });
 
                         if (needsUpdate) {
-                            console.log('[TrendBriefing] Detected old format summaries, updating...');
                             try {
                                 const updateResponse = await fetch('/api/trend-briefing/update-summaries', {
                                     method: 'POST'
@@ -168,7 +163,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
 
                                 if (updateResponse.ok) {
                                     const updateData = await updateResponse.json();
-                                    console.log('[TrendBriefing] Summaries updated successfully!');
                                     setBriefings(updateData.trends);
                                 } else {
                                     // If update fails, use old summaries
@@ -192,7 +186,6 @@ export function TrendBriefingSection({ job, goal, interests = [], onSelectBriefi
                         return;
                     }
                 }
-                console.log('[TrendBriefing] No pre-generated briefing, generating on-demand...');
             }
 
             // 2. 실시간 생성 (fallback 또는 forceRefresh)

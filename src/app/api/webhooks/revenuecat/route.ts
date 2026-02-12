@@ -48,31 +48,33 @@ interface RevenueCatWebhookBody {
 function productIdToPlan(productId: string): UserPlanType {
     if (productId.includes("max")) return "max";
     if (productId.includes("pro")) return "pro";
-    return "standard";
+    return "free";
 }
 
 export async function POST(request: NextRequest) {
     try {
-        // Webhook 인증
-        if (WEBHOOK_SECRET) {
-            const authHeader = request.headers.get("authorization");
-            if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-                console.error("[RevenueCat Webhook] Invalid auth");
-                return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-            }
+        // Webhook 인증 — secret 미설정 시 모든 요청 거부
+        if (!WEBHOOK_SECRET) {
+            console.error("[RevenueCat Webhook] REVENUECAT_WEBHOOK_SECRET is not configured");
+            return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+        }
+
+        const authHeader = request.headers.get("authorization");
+        if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
+            console.error("[RevenueCat Webhook] Invalid auth");
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body: RevenueCatWebhookBody = await request.json();
         const { event } = body;
 
-        console.log(`[RevenueCat Webhook] ${event.type} | user: ${event.app_user_id} | product: ${event.product_id}`);
 
         // app_user_id로 사용자 이메일 조회
         const { data: user } = await supabaseAdmin
             .from("users")
             .select("email")
             .eq("id", event.app_user_id)
-            .single();
+            .maybeSingle();
 
         if (!user?.email) {
             console.error("[RevenueCat Webhook] User not found:", event.app_user_id);
@@ -91,19 +93,16 @@ export async function POST(request: NextRequest) {
                     ? Math.ceil((event.expiration_at_ms - Date.now()) / (1000 * 60 * 60 * 24))
                     : 31;
                 await upgradePlan(userEmail, plan, durationDays);
-                console.log(`[RevenueCat Webhook] Upgraded user → ${plan} (${durationDays}d)`);
                 break;
             }
 
             case "EXPIRATION":
             case "CANCELLATION": {
-                // 만료/취소 시 Standard로 다운그레이드
+                // 만료/취소 시 Free로 다운그레이드
                 if (event.type === "EXPIRATION" || (event.expiration_at_ms && event.expiration_at_ms < Date.now())) {
-                    await upgradePlan(userEmail, "standard");
-                    console.log(`[RevenueCat Webhook] Downgraded user → standard`);
+                    await upgradePlan(userEmail, "free");
                 } else {
                     // 취소했지만 아직 만료 전이면 현재 플랜 유지
-                    console.log(`[RevenueCat Webhook] Cancelled but still active`);
                 }
                 break;
             }
@@ -111,17 +110,14 @@ export async function POST(request: NextRequest) {
             case "PRODUCT_CHANGE": {
                 const newPlan = productIdToPlan(event.product_id);
                 await upgradePlan(userEmail, newPlan);
-                console.log(`[RevenueCat Webhook] Plan changed → ${newPlan}`);
                 break;
             }
 
             case "BILLING_ISSUE_DETECTED": {
-                console.log(`[RevenueCat Webhook] Billing issue detected`);
                 break;
             }
 
             default:
-                console.log(`[RevenueCat Webhook] Unhandled event: ${event.type}`);
         }
 
         return NextResponse.json({ success: true });

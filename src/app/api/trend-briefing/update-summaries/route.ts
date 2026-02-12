@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
@@ -21,15 +16,14 @@ export async function POST(request: NextRequest) {
         const userEmail = email;
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        console.log(`[update-summaries] Updating summaries for ${today}`);
 
         // Fetch existing trend briefing
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('trends_cache')
             .select('trends, last_updated')
             .eq('email', userEmail)
             .eq('date', today)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             console.error('[update-summaries] No briefing found:', error);
@@ -42,7 +36,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No trends to update' }, { status: 404 });
         }
 
-        console.log(`[update-summaries] Found ${trends.length} trends to update`);
 
         // Use Gemini to generate short summaries for all trends
         const model = genAI.getGenerativeModel({
@@ -122,10 +115,9 @@ Convert all ${trends.length} summaries now.`;
             return trend;
         });
 
-        console.log('[update-summaries] Updated summaries:', updatedTrends.map((t: any) => t.summary));
 
         // Save back to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from('trends_cache')
             .update({
                 trends: updatedTrends,
@@ -139,7 +131,6 @@ Convert all ${trends.length} summaries now.`;
             return NextResponse.json({ error: 'Failed to update database' }, { status: 500 });
         }
 
-        console.log(`[update-summaries] Successfully updated ${updatedTrends.length} summaries`);
 
         return NextResponse.json({
             success: true,

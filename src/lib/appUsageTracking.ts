@@ -243,7 +243,7 @@ export function cleanOldData(): void {
  * Initialize tracking with Page Visibility API
  * Call this in your main App component
  */
-export function initializeAppTracking(appName: string = 'a.ideal'): void {
+export function initializeAppTracking(appName: string = 'fieri'): void {
     // Start session when app becomes visible
     const handleVisibilityChange = () => {
         if (document.hidden) {

@@ -8,7 +8,7 @@ import { StateUpdater } from './state-updater';
 import { PolicyEngine } from './policy-engine';
 import { Brain, InterventionContext } from './brain';
 import { Hands } from './hands';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { InterventionLevel } from '@/types/jarvis';
 
 export class JarvisOrchestrator {
@@ -36,7 +36,6 @@ export class JarvisOrchestrator {
      * 4. 액션 실행
      */
     async run(): Promise<void> {
-        console.log(`[Jarvis] Starting run for ${this.userEmail}`);
 
         try {
             // 1. 상태 업데이트 (Observer → State)
@@ -46,11 +45,9 @@ export class JarvisOrchestrator {
             const decision = await this.policyEngine.shouldIntervene();
 
             if (!decision.shouldIntervene) {
-                console.log('[Jarvis] No intervention needed');
                 return;
             }
 
-            console.log('[Jarvis] Intervention needed:', decision);
 
             // 3. 컨텍스트 수집
             const context = await this.buildContext(decision);
@@ -59,11 +56,9 @@ export class JarvisOrchestrator {
             const plan = await this.brain.planIntervention(context);
 
             if (!plan) {
-                console.log('[Jarvis] Brain failed to generate plan');
                 return;
             }
 
-            console.log('[Jarvis] Intervention plan:', plan);
 
             // 5. 액션 실행 (Brain → Hands)
             const result = await this.hands.execute(
@@ -77,7 +72,6 @@ export class JarvisOrchestrator {
                 return;
             }
 
-            console.log('[Jarvis] ✅ Intervention executed successfully');
 
             // 6. Last intervention 시간 업데이트
             await this.updateLastIntervention();
@@ -121,11 +115,11 @@ export class JarvisOrchestrator {
      * 다가오는 일정 조회
      */
     private async getUpcomingSchedules(): Promise<any[]> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             console.error('[Jarvis] Failed to get user profile:', error);
@@ -168,11 +162,11 @@ export class JarvisOrchestrator {
      * 사용자 프로필 조회
      */
     private async getUserProfile(): Promise<any> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             console.error('[Jarvis] Failed to get user profile:', error);
@@ -186,11 +180,11 @@ export class JarvisOrchestrator {
      * 사용자 설정 조회
      */
     private async getPreferences(): Promise<any> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('jarvis_preferences')
             .select('*')
             .eq('user_email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             console.error('[Jarvis] Failed to get preferences:', error);
@@ -208,7 +202,7 @@ export class JarvisOrchestrator {
      * Last intervention 시간 업데이트
      */
     private async updateLastIntervention(): Promise<void> {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('user_states')
             .update({
                 last_intervention_at: new Date().toISOString()
@@ -235,11 +229,10 @@ export class JarvisOrchestrator {
  * Standard, Pro, Max 사용자에 대해 Jarvis 실행
  */
 export async function runJarvisForAllMaxUsers(): Promise<void> {
-    console.log('[Jarvis] Running for all eligible users...');
 
     try {
         // Standard, Pro, Max 플랜 사용자 조회
-        const { data: users, error } = await supabase
+        const { data: users, error } = await supabaseAdmin
             .from('users')
             .select('email, profile')
             .in('profile->>plan', ['Standard', 'Pro', 'Max']);
@@ -250,11 +243,9 @@ export async function runJarvisForAllMaxUsers(): Promise<void> {
         }
 
         if (!users || users.length === 0) {
-            console.log('[Jarvis] No eligible users found');
             return;
         }
 
-        console.log(`[Jarvis] Found ${users.length} eligible users (Standard/Pro/Max)`);
 
         // 각 사용자에 대해 병렬 실행
         const promises = users.map(async (user) => {
@@ -269,7 +260,6 @@ export async function runJarvisForAllMaxUsers(): Promise<void> {
 
         await Promise.all(promises);
 
-        console.log('[Jarvis] ✅ Completed run for all Max users');
     } catch (error) {
         console.error('[Jarvis] Critical error in runJarvisForAllMaxUsers:', error);
     }

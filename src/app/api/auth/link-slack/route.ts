@@ -6,20 +6,19 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getUserEmailWithAuth, getJwtSecret } from "@/lib/auth-utils";
 import crypto from "crypto";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
 
+function getOAuthSecret(): string {
+    return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || getJwtSecret();
+}
+
 function generateOAuthState(email: string): string {
     const timestamp = Date.now().toString();
-    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+    const secret = getOAuthSecret();
     const payload = `${email}:${timestamp}`;
     const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
     return Buffer.from(`${payload}:${signature}`).toString('base64url');
@@ -38,7 +37,7 @@ function verifyOAuthState(state: string): string | null {
         const age = Date.now() - parseInt(timestamp);
         if (isNaN(age) || age > 10 * 60 * 1000) return null;
 
-        const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+        const secret = getOAuthSecret();
         const payload = `${email}:${timestamp}`;
         const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
         if (signature !== expectedSig) return null;
@@ -150,7 +149,7 @@ export async function POST(request: NextRequest) {
     const userInfo = await userInfoResponse.json();
 
     // slack_tokens 테이블에 upsert
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from("slack_tokens")
       .upsert({
         user_email: userEmail,

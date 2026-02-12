@@ -5,16 +5,16 @@
  * - AI 사용량 모니터링
  *
  * 플랜 구조:
- * - Standard (무료): 일일 AI 50회
- * - Pro (₩9,900): 일일 AI 100회 + 리스크 알림, 스마트 브리핑
- * - Max (₩21,900): 무제한 + 장기 기억
+ * - Free (무료): 일일 AI 30회 + 컨텍스트 융합, 선제적 알림
+ * - Pro (₩6,900): 일일 AI 100회 + ReAct 에이전트, 리스크 알림, 스마트 브리핑
+ * - Max (₩14,900): 무제한 + 장기 기억, 자동 실행
  */
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 
 // 플랜 타입
-export type UserPlanType = "standard" | "pro" | "max";
+export type UserPlanType = "free" | "pro" | "max";
 
 // 플랜 기능
 export interface PlanFeatures {
@@ -58,7 +58,7 @@ interface UseUserPlanReturn {
     // 편의 함수
     isMaxPlan: boolean;
     isProOrAbove: boolean;
-    isStandard: boolean;
+    isFree: boolean;
     canUseFeature: (feature: keyof PlanFeatures) => boolean;
 }
 
@@ -92,21 +92,21 @@ export function useUserPlan(): UseUserPlanReturn {
             console.error("[useUserPlan] Error:", err);
             setError(err.message);
 
-            // 기본값 설정 (에러 시 스탠다드 플랜으로)
+            // 기본값 설정 (에러 시 Free 플랜으로)
             setPlan({
-                plan: "standard",
+                plan: "free",
                 isActive: true,
-                dailyAiCallsLimit: 50,
-                memoryStorageMb: 0,
+                dailyAiCallsLimit: 30,
+                memoryStorageMb: 50,
                 features: {
                     jarvis_memory: false,
                     risk_alerts: false,
                     smart_briefing: false,
-                    proactive_suggestions: false,
+                    proactive_suggestions: true,
                 },
                 expiresAt: null,
-                name: "Standard",
-                nameKo: "스탠다드",
+                name: "Free",
+                nameKo: "무료",
                 price: 0,
                 monthlyPrice: "무료",
                 featureList: [],
@@ -124,7 +124,7 @@ export function useUserPlan(): UseUserPlanReturn {
     // 편의 함수들
     const isMaxPlan = plan?.plan === "max" && plan?.isActive === true;
     const isProOrAbove = (plan?.plan === "pro" || plan?.plan === "max") && plan?.isActive === true;
-    const isStandard = plan?.plan === "standard" && plan?.isActive === true;
+    const isFree = plan?.plan === "free" && plan?.isActive === true;
 
     const canUseFeature = useCallback(
         (feature: keyof PlanFeatures): boolean => {
@@ -142,7 +142,7 @@ export function useUserPlan(): UseUserPlanReturn {
         refetch: fetchPlan,
         isMaxPlan,
         isProOrAbove,
-        isStandard,
+        isFree,
         canUseFeature,
     };
 }
@@ -163,13 +163,13 @@ export function useCanUseFeature(feature: keyof PlanFeatures): {
         jarvis_memory: "맥스",
         risk_alerts: "프로",
         smart_briefing: "프로",
-        proactive_suggestions: "스탠다드",
+        proactive_suggestions: "무료",
     };
 
     return {
         canUse: canUseFeature(feature),
         isLoading,
-        planName: plan?.nameKo || "스탠다드",
+        planName: plan?.nameKo || "무료",
         requiredPlan: requiredPlanMap[feature],
     };
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * Weekly Report History API
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         }
 
         const userEmail = email;
-        const supabase = db.client;
+        const supabase = supabaseAdmin;
 
         // Get user's plan
         const { data: userData } = await supabase

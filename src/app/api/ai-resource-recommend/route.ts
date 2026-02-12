@@ -6,6 +6,7 @@ import { logOpenAIUsage } from "@/lib/openai-usage";
 import { getPrompt, SYSTEM_PROMPT } from "@/lib/prompts/resource-recommend";
 import { generateEmbedding } from "@/lib/embeddings";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -54,7 +55,6 @@ ${memories.map((m: any, i: number) => `${i + 1}. [${m.content_type}] ${m.content
 
 export async function POST(request: NextRequest) {
     try {
-        console.log("[AI Resource Recommend] API 호출 시작");
 
         const email = await getUserEmailWithAuth(request);
         if (!email) {
@@ -128,7 +128,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
         });
 
         // OpenAI 호출 (JSON 출력 강제)
-        const modelName = "gpt-4.1-mini-2025-04-14";
+        const modelName = MODELS.GPT_4_1_MINI;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [

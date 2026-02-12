@@ -215,7 +215,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
             if (pendingEvent) {
                 try {
                     const eventData = JSON.parse(pendingEvent);
-                    console.log('[SchedulePopup] Adding pending calendar event:', eventData);
 
                     // Add to customGoals
                     const newGoal: CustomGoal = {
@@ -257,7 +256,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     // Handle linkedGoalData prop changes
     useEffect(() => {
         if (linkedGoalData && isOpen) {
-            console.log('[SchedulePopup] Setting linkedGoal from prop:', linkedGoalData);
             setLinkedGoal({ id: linkedGoalData.id, title: linkedGoalData.title, type: linkedGoalData.type });
 
             // Set view mode based on goal type
@@ -438,7 +436,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                     // 목표 기간 내로 제한 (specificDate는 이미 설정되어 있으므로 범위 체크용)
                 }),
             };
-            console.log('[SchedulePopup] Adding schedule with linkedGoal:', linkedGoal, 'newGoal:', newGoal);
             setCustomGoals([...customGoals, newGoal]);
             setLinkedGoal(null); // Clear after adding
         }
@@ -622,9 +619,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
         if (activityToDelete) {
             deletedActivityText = activityToDelete.text;
-            console.log('[SchedulePopup] Deleting activity:', activityToDelete.id, activityToDelete.text, 'deleteAllRecurring:', deleteAllRecurring);
         } else {
-            console.log('[SchedulePopup] No activity found to delete. selectedActivityId:', selectedActivityId, 'selectedTimeSlot:', selectedTimeSlot);
             return;
         }
 
@@ -673,7 +668,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                             detail: { scheduleText: deletedActivityText }
                         }));
 
-                        console.log('[SchedulePopup] AI 추천 일정 삭제 및 localStorage 업데이트:', deletedActivityText);
                     }
                 } catch (error) {
                     console.error('[SchedulePopup] localStorage 업데이트 실패:', error);

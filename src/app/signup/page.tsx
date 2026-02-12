@@ -76,7 +76,7 @@ export default function SignupPage() {
                 <CardHeader className="space-y-1">
                     <CardTitle className="text-2xl font-bold">회원가입</CardTitle>
                     <CardDescription>
-                        A.ideal과 함께 성장을 시작하세요
+                        Fi.eri와 함께 일정 관리를 시작하세요
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

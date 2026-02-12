@@ -225,11 +225,6 @@ export function WeeklyReportContent() {
         const currentWeek = getCurrentWeekRange();
         const currentWeekNum = getCurrentWeekNumber();
 
-        console.log('[WeeklyReportStats] Current week range:', {
-            start: currentWeek.start.toISOString(),
-            end: currentWeek.end.toISOString(),
-            weekNumber: currentWeekNum
-        });
 
         try {
             // 사용자 프로필에서 일정 가져오기
@@ -238,25 +233,10 @@ export function WeeklyReportContent() {
                 throw new Error('Failed to fetch profile');
             }
             const profileData = await profileRes.json();
-            console.log('[WeeklyReportStats] Profile data:', {
-                hasProfile: !!profileData.profile,
-                customGoalsLength: profileData.profile?.customGoals?.length || 0
-            });
 
             const customGoals = profileData.profile?.customGoals || [];
 
             // 디버깅: customGoals 전체 확인
-            console.log('[WeeklyReportStats] All customGoals:', {
-                total: customGoals.length,
-                goals: customGoals.map((g: any) => ({
-                    id: g.id,
-                    text: g.text,
-                    startTime: g.startTime,
-                    endTime: g.endTime,
-                    specificDate: g.specificDate,
-                    daysOfWeek: g.daysOfWeek
-                }))
-            });
 
             // 현재 주(월-일) 각 날짜에 실제로 보이는 일정들을 필터링
             const startDate = new Date(currentWeek.start);
@@ -270,13 +250,11 @@ export function WeeklyReportContent() {
                 // 장기 목표 복제본 필터링: ID가 "-숫자-숫자" 패턴으로 끝나면 스킵
                 // 예: goal-schedule-xxx-5-0, goal-schedule-xxx-6-0
                 if (/-\d+-\d+$/.test(goal.id)) {
-                    console.log(`[WeeklyReportStats] Skipping long-term goal duplicate: ${goal.text} (${goal.id})`);
                     return;
                 }
 
                 // 이미 추가한 일정은 스킵 (duration과 상관없이 각 일정은 1개로 카운트)
                 if (weekSchedulesMap.has(goal.id)) {
-                    console.log(`[WeeklyReportStats] Skipping duplicate: ${goal.text} (${goal.id})`);
                     return;
                 }
 
@@ -308,26 +286,13 @@ export function WeeklyReportContent() {
 
                 // 이번 주에 해당하는 일정만 추가 (한 번만!)
                 if (isInThisWeek) {
-                    console.log(`[WeeklyReportStats] Adding to week: ${goal.text} (${goal.id})`);
                     weekSchedulesMap.set(goal.id, goal);
                 } else {
-                    console.log(`[WeeklyReportStats] NOT in this week: ${goal.text} (${goal.id})`);
                 }
             });
 
             const weekSchedules = Array.from(weekSchedulesMap.values());
 
-            console.log('[WeeklyReportStats] Week schedules:', {
-                totalSchedules: weekSchedules.length,
-                schedules: weekSchedules.map((g: any) => ({
-                    id: g.id,
-                    text: g.text,
-                    specificDate: g.specificDate,
-                    daysOfWeek: g.daysOfWeek,
-                    startDate: g.startDate,
-                    endDate: g.endDate
-                }))
-            });
 
             const totalSchedules = weekSchedules.length;
             const completedGoalsSet = new Set<string>();
@@ -346,7 +311,6 @@ export function WeeklyReportContent() {
                         weekSchedules.forEach((goal: any) => {
                             if (completions[goal.id]?.completed === true && !completedGoalsSet.has(goal.id)) {
                                 completedGoalsSet.add(goal.id);
-                                console.log(`[WeeklyReportStats] Completed: ${goal.text} on ${dateStr}`);
                             }
                         });
                     } catch (e) {
@@ -359,11 +323,6 @@ export function WeeklyReportContent() {
 
             const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
 
-            console.log('[WeeklyReportStats] Final calculations:', {
-                totalSchedules,
-                completedSchedules,
-                completionRate
-            });
 
             // 트렌드 브리핑 읽기 통계 - localStorage에서 직접 읽기
             let totalReadBriefings = 0;
@@ -379,7 +338,6 @@ export function WeeklyReportContent() {
                         const readBriefingsForDay = JSON.parse(readBriefingsStr);
                         if (Array.isArray(readBriefingsForDay)) {
                             totalReadBriefings += readBriefingsForDay.length;
-                            console.log(`[WeeklyReportStats] ${dateStr}: ${readBriefingsForDay.length} briefings read`);
                         }
                     } catch (e) {
                         console.error('[WeeklyReportStats] Failed to parse read briefings for', dateStr, e);
@@ -387,7 +345,6 @@ export function WeeklyReportContent() {
                 }
             }
 
-            console.log('[WeeklyReportStats] Total read briefings this week:', totalReadBriefings);
 
             setCurrentWeekStats({
                 weekNumber: currentWeekNum,

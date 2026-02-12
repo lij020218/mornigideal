@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailWithAuth } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
@@ -13,18 +13,16 @@ export async function GET(request: NextRequest) {
     const userEmail = await getUserEmailWithAuth(request);
 
     if (!userEmail) {
-      console.log('[schedules/today] No userEmail found, returning 401');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('[schedules/today] Fetching schedules');
 
     // users 테이블에서 profile.customGoals 조회
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('profile')
       .eq('email', userEmail)
-      .single();
+      .maybeSingle();
 
     if (userError || !user) {
       console.error('[schedules/today] User not found:', userError);
@@ -39,7 +37,6 @@ export async function GET(request: NextRequest) {
     const todayStr = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
     const dayOfWeek = kstNow.getDay(); // 0 = Sunday
 
-    console.log('[schedules/today] KST date:', todayStr, 'dayOfWeek:', dayOfWeek);
 
     // 오늘 일정 필터링 (특정 날짜 또는 반복 일정)
     const todaySchedules = customGoals.filter((schedule: any) => {
@@ -66,7 +63,6 @@ export async function GET(request: NextRequest) {
       return timeA.localeCompare(timeB);
     });
 
-    console.log('[schedules/today] Found', todaySchedules.length, 'schedules');
 
     // 모바일 앱 형식으로 변환
     const formattedSchedules = todaySchedules.map((s: any) => ({

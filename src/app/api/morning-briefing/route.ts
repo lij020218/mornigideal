@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { generateUserContext } from "@/lib/user-context-service";
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -22,7 +23,6 @@ const openai = new OpenAI({
  */
 export async function POST(request: NextRequest) {
     try {
-        console.log("[Morning Briefing] API 호출 시작");
 
         // 인증 확인
         const userEmail = await getUserEmailWithAuth(request);
@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
         }
 
         // 1. 날씨 정보 가져오기
-        console.log("[Morning Briefing] 날씨 정보 조회 중...");
         let weatherInfo = {
             temp: 5,
             description: "맑음",
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest) {
         };
 
         try {
-            const supabase = db.client;
+            const supabase = supabaseAdmin;
             const { data: cached } = await supabase
                 .from('weather_cache')
                 .select('weather_data, updated_at')
@@ -52,18 +51,15 @@ export async function POST(request: NextRequest) {
                     description: cached.weather_data.description,
                     condition: cached.weather_data.condition,
                 };
-                console.log("[Morning Briefing] 캐시된 날씨 정보 사용:", weatherInfo);
             }
         } catch (weatherError) {
             console.error("[Morning Briefing] 날씨 조회 실패, 기본값 사용:", weatherError);
         }
 
         // 2. 사용자 컨텍스트 생성 (일정 추천용)
-        console.log("[Morning Briefing] User context 생성 중...");
         const context = await generateUserContext(userEmail);
 
         // 3. AI로 일정 5개 추천 받기
-        console.log("[Morning Briefing] AI 일정 추천 생성 중...");
 
         const today = new Date().toISOString().split('T')[0];
         const existingSchedules = context.profile.customGoals
@@ -156,7 +152,7 @@ ${addedSchedulesText}
 }`;
 
         const aiResponse = await openai.chat.completions.create({
-            model: "gpt-5.2-2025-12-11",
+            model: MODELS.GPT_5_2,
             messages: [
                 {
                     role: "system",
@@ -178,7 +174,7 @@ ${addedSchedulesText}
         if (usage) {
             await logOpenAIUsage(
                 userEmail,
-                "gpt-5.2-2025-12-11",
+                MODELS.GPT_5_2,
                 "morning-briefing",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -198,10 +194,6 @@ ${addedSchedulesText}
         const bookRecommendation = parsedResponse.bookRecommendation || null;
         const songRecommendation = parsedResponse.songRecommendation || null;
 
-        console.log("[Morning Briefing] 생성된 일정 추천:", suggestions.length);
-        console.log("[Morning Briefing] 오늘의 목표:", todayGoal.text);
-        console.log("[Morning Briefing] 책 추천:", bookRecommendation?.title);
-        console.log("[Morning Briefing] 노래 추천:", songRecommendation?.title);
 
         // 4. 날씨 이모지 선택
         const weatherEmoji =
@@ -247,7 +239,6 @@ ${songRecommendation.reason}
 
 ` : ''}오늘 하루도 당신의 성장을 응원합니다! 작은 실천이 모여 큰 변화를 만듭니다 💪🌟`;
 
-        console.log("[Morning Briefing] 아침 인사 메시지 생성 완료");
 
         return NextResponse.json({
             success: true,

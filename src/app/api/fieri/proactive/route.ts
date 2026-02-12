@@ -14,13 +14,8 @@ import {
     ProactiveNotification
 } from '@/lib/proactiveNotificationService';
 import { getEscalationDecision, applyEscalation } from '@/lib/escalationService';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailWithAuth } from '@/lib/auth-utils';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export const dynamic = 'force-dynamic';
 
@@ -42,12 +37,12 @@ export async function GET(request: NextRequest) {
 
         // 3. 이미 해제된 알림 필터링
         const dismissedKey = `proactive_dismissed_${userEmail}`;
-        const { data: dismissedData } = await supabase
+        const { data: dismissedData } = await supabaseAdmin
             .from('user_kv_store')
             .select('value')
             .eq('user_email', userEmail)
             .eq('key', 'dismissed_proactive_notifications')
-            .single();
+            .maybeSingle();
 
         const dismissedIds = dismissedData?.value || [];
 
@@ -61,12 +56,12 @@ export async function GET(request: NextRequest) {
 
         // 5. 오늘 이미 표시한 타입별 알림 체크 (하루에 한 번만 표시)
         const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-        const { data: shownToday } = await supabase
+        const { data: shownToday } = await supabaseAdmin
             .from('user_kv_store')
             .select('value')
             .eq('user_email', userEmail)
             .eq('key', `proactive_shown_${todayStr}`)
-            .single();
+            .maybeSingle();
 
         const shownTypes = shownToday?.value || [];
 
@@ -129,18 +124,18 @@ export async function POST(request: NextRequest) {
 
         if (action === 'dismiss') {
             // 알림 해제 - dismissed 목록에 추가
-            const { data: existing } = await supabase
+            const { data: existing } = await supabaseAdmin
                 .from('user_kv_store')
                 .select('value')
                 .eq('user_email', userEmail)
                 .eq('key', 'dismissed_proactive_notifications')
-                .single();
+                .maybeSingle();
 
             const dismissedIds = existing?.value || [];
             if (!dismissedIds.includes(notificationId)) {
                 dismissedIds.push(notificationId);
 
-                await supabase
+                await supabaseAdmin
                     .from('user_kv_store')
                     .upsert({
                         user_email: userEmail,
@@ -153,18 +148,18 @@ export async function POST(request: NextRequest) {
             // Dismiss streak 카운트 증가 (3회 연속 무시 → 7일간 해당 타입 억제)
             if (notificationType) {
                 const streakKey = `dismiss_streak_${notificationType}`;
-                const { data: streakData } = await supabase
+                const { data: streakData } = await supabaseAdmin
                     .from('user_kv_store')
                     .select('value')
                     .eq('user_email', userEmail)
                     .eq('key', streakKey)
-                    .single();
+                    .maybeSingle();
 
                 const streak = streakData?.value || { count: 0, lastDate: null };
                 streak.count += 1;
                 streak.lastDate = new Date().toISOString().split('T')[0];
 
-                await supabase.from('user_kv_store').upsert({
+                await supabaseAdmin.from('user_kv_store').upsert({
                     user_email: userEmail,
                     key: streakKey,
                     value: streak,
@@ -180,18 +175,18 @@ export async function POST(request: NextRequest) {
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
             const key = `proactive_shown_${todayStr}`;
 
-            const { data: existing } = await supabase
+            const { data: existing } = await supabaseAdmin
                 .from('user_kv_store')
                 .select('value')
                 .eq('user_email', userEmail)
                 .eq('key', key)
-                .single();
+                .maybeSingle();
 
             const shownTypes = existing?.value || [];
             if (!shownTypes.includes(notificationType)) {
                 shownTypes.push(notificationType);
 
-                await supabase
+                await supabaseAdmin
                     .from('user_kv_store')
                     .upsert({
                         user_email: userEmail,
@@ -210,11 +205,11 @@ export async function POST(request: NextRequest) {
                 const { text, dayOfWeek, startTime, scheduleIds, color } = actionPayload;
 
                 // 사용자 프로필에서 customGoals 로드
-                const { data: userData, error: userFetchError } = await supabase
+                const { data: userData, error: userFetchError } = await supabaseAdmin
                     .from('users')
                     .select('profile')
                     .eq('email', userEmail)
-                    .single();
+                    .maybeSingle();
 
                 if (userFetchError || !userData) {
                     return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -241,7 +236,7 @@ export async function POST(request: NextRequest) {
                 filteredGoals.push(newRecurringGoal);
 
                 // 프로필 업데이트
-                const { error: updateError } = await supabase
+                const { error: updateError } = await supabaseAdmin
                     .from('users')
                     .update({ profile: { ...profile, customGoals: filteredGoals } })
                     .eq('email', userEmail);
@@ -251,13 +246,12 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: 'Failed to convert schedule' }, { status: 500 });
                 }
 
-                console.log(`[Proactive API] Converted "${text}" to recurring (day ${dayOfWeek}), removed ${scheduleIds.length} one-time schedules`);
             }
 
             // Dismiss streak 리셋 (사용자가 수락했으므로)
             if (notificationType) {
                 const streakKey = `dismiss_streak_${notificationType}`;
-                await supabase.from('user_kv_store').upsert({
+                await supabaseAdmin.from('user_kv_store').upsert({
                     user_email: userEmail,
                     key: streakKey,
                     value: { count: 0, lastDate: null },
@@ -266,18 +260,18 @@ export async function POST(request: NextRequest) {
             }
 
             // 알림 해제 처리
-            const { data: existing } = await supabase
+            const { data: existing } = await supabaseAdmin
                 .from('user_kv_store')
                 .select('value')
                 .eq('user_email', userEmail)
                 .eq('key', 'dismissed_proactive_notifications')
-                .single();
+                .maybeSingle();
 
             const dismissedIds = existing?.value || [];
             if (!dismissedIds.includes(notificationId)) {
                 dismissedIds.push(notificationId);
 
-                await supabase
+                await supabaseAdmin
                     .from('user_kv_store')
                     .upsert({
                         user_email: userEmail,

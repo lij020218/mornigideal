@@ -299,7 +299,7 @@ interface LearningProgress {
 
 interface LearningCurriculumViewProps {
     curriculum: Curriculum;
-    userPlan: "standard" | "pro" | "max";
+    userPlan: "free" | "pro" | "max";
     onClose: () => void;
     onStartDay: (day: CurriculumDay, hasSlides: boolean) => void;
 }
@@ -507,7 +507,6 @@ export function LearningCurriculumView({
                 throw new Error('Failed to update profile');
             }
 
-            console.log('[Learning] Profile updated successfully with', updatedGoals.length, 'goals');
 
             // Notify other components about schedule update
             window.dispatchEvent(new CustomEvent('schedule-updated'));
@@ -524,7 +523,6 @@ export function LearningCurriculumView({
             // 진행 상황은 일정 완료 시 업데이트됨 (여기서는 업데이트하지 않음)
             // handleCompleteDay는 실제로 일정을 완료했을 때 호출되어야 함
 
-            console.log('[Learning] Added schedule for day:', day.day, '(completion pending)');
 
             // 학습 팁 생성 요청 & 채팅 페이지로 이동
             try {
@@ -549,7 +547,6 @@ export function LearningCurriculumView({
 
                     // 채팅 페이지에 학습 팁이 추가되었음을 알림
                     window.dispatchEvent(new Event('learning-tip-added'));
-                    console.log('[Learning] Dispatched learning-tip-added event');
                 }
             } catch (tipError) {
                 console.error('[Learning] Failed to generate tip:', tipError);

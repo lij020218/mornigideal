@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserIdWithAuth, getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
     try {
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
         if (!userId) {
             const email = await getUserEmailWithAuth(request);
             if (email) {
-                const { data: u } = await supabase.from('users').select('id').eq('email', email).single();
+                const { data: u } = await supabaseAdmin.from('users').select('id').eq('email', email).maybeSingle();
                 userId = u?.id;
             }
         }
@@ -20,12 +20,12 @@ export async function GET(request: NextRequest) {
 
         const date = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // Today YYYY-MM-DD
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('daily_briefings')
             .select('*')
             .eq('user_id', userId)
             .eq('date', date)
-            .single();
+            .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
             console.error("Fetch briefing error", error);
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
         const { briefingId } = await request.json();
 
-        await supabase
+        await supabaseAdmin
             .from('daily_briefings')
             .update({ is_read: true })
             .eq('id', briefingId);

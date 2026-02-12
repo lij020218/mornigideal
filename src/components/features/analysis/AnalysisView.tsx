@@ -149,7 +149,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                         const oldContentLength = material.analysis?.content?.length || 0;
 
                         if (newPageCount > oldPageCount || newContentLength > oldContentLength) {
-                            console.log(`[POLLING] Update detected: Pages ${oldPageCount}->${newPageCount}, Content ${oldContentLength}->${newContentLength}`);
                             setMaterial(data.material);
                         }
 
@@ -183,7 +182,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
                 // Stop polling after 2 consecutive checks with same count (4 seconds of stability)
                 if (stableCount >= 2) {
                     clearInterval(interval);
-                    console.log("[POLLING] Analysis complete, stopping poll");
                 }
             } else {
                 stableCount = 0;
@@ -202,7 +200,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
             // 2. Quiz hasn't been generated yet
             // 3. Not currently loading
             if (pageAnalyses.length > 0 && !quiz && !isLoadingQuiz) {
-                console.log('[QUIZ] Auto-generating quiz in background...');
                 await loadQuiz();
             }
         };
@@ -217,7 +214,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         if (quiz) return; // Already loaded
 
         setIsLoadingQuiz(true);
-        console.log('[QUIZ] Loading quiz...', { pageAnalysesCount: pageAnalyses.length, materialId: material.id });
 
         try {
             const response = await fetch('/api/generate-quiz', {
@@ -232,7 +228,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
 
             const data = await response.json();
             if (data.success) {
-                console.log('[QUIZ] Quiz loaded successfully');
                 setQuiz(data.quiz);
             } else {
                 throw new Error(data.error || 'Failed to generate quiz');
@@ -246,30 +241,8 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
     };
 
     const loadConcepts = async () => {
-        if (conceptsContent) return; // Already loaded
-
-        setIsLoadingConcepts(true);
-        try {
-            const response = await fetch('/api/generate-concepts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    materialId: material.id
-                })
-            });
-
-            const data = await response.json();
-            if (data.concepts) {
-                setConceptsContent(data.concepts);
-            } else {
-                throw new Error(data.error || 'Failed to generate concepts');
-            }
-        } catch (error: any) {
-            console.error('Concepts generation error:', error);
-            toast.error('핵심 개념 생성에 실패했습니다');
-        } finally {
-            setIsLoadingConcepts(false);
-        }
+        if (conceptsContent) return;
+        toast.error('핵심 개념 생성 기능은 현재 준비 중입니다');
     };
 
     const handleQuizSubmit = async (answers: any) => {
@@ -348,7 +321,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
 
             if (response.ok) {
                 setQualityRating(rating);
-                console.log(`[RATING] Submitted ${rating} rating for material ${material.id}`);
             } else {
                 throw new Error('Failed to submit rating');
             }
@@ -360,16 +332,6 @@ export function AnalysisView({ material: initialMaterial, onPageChange }: Analys
         }
     };
 
-    console.log("AnalysisView render:", {
-        has_file_url: !!material.file_url,
-        file_url: material.file_url,
-        title: material.title,
-        totalSlides,
-        currentSlide,
-        activeTab,
-        hasQuiz: !!quiz,
-        isLoadingQuiz
-    });
 
     // Mobile View Toggle Component
     const MobileViewToggle = () => (

@@ -11,12 +11,10 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('[CRON] Starting daily briefing generation at 5:00 AM KST...');
 
         // Start generation
         await generateDailyBriefings();
 
-        console.log('[CRON] Daily briefing generation completed');
 
         return NextResponse.json({ success: true });
     } catch (error) {

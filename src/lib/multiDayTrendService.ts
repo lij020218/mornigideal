@@ -7,12 +7,7 @@
  * - 번아웃 위험도 감지
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from './supabase-admin';
 
 // ============================================
 // Types
@@ -60,11 +55,11 @@ export async function saveStateSnapshot(
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // state-updater에서 현재 상태 조회
-        const { data: stateData } = await supabase
+        const { data: stateData } = await supabaseAdmin
             .from('user_states')
             .select('stress_level, energy_level, focus_window_score')
             .eq('user_email', userEmail)
-            .single();
+            .maybeSingle();
 
         const snapshot = {
             user_email: userEmail,
@@ -78,14 +73,13 @@ export async function saveStateSnapshot(
             completed_tasks: overrides?.completedTasks ?? 0,
         };
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('daily_state_snapshots')
             .upsert(snapshot, { onConflict: 'user_email,date' });
 
         if (error) {
             console.error('[MultiDayTrend] Failed to save snapshot:', error);
         } else {
-            console.log('[MultiDayTrend] Snapshot saved for', todayStr);
         }
     } catch (error) {
         console.error('[MultiDayTrend] saveStateSnapshot error:', error);
@@ -102,7 +96,7 @@ export async function analyzeTrends(
 ): Promise<TrendAnalysis | null> {
     const days = period === '7d' ? 7 : 14;
 
-    const { data: snapshots, error } = await supabase
+    const { data: snapshots, error } = await supabaseAdmin
         .from('daily_state_snapshots')
         .select('*')
         .eq('user_email', userEmail)

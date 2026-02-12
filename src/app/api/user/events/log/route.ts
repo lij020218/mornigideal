@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * 사용자 이벤트 로깅 API
@@ -23,28 +23,25 @@ export async function POST(request: NextRequest) {
         }
 
         // 이벤트 기록
-        const event = await db.query(
-            `INSERT INTO user_events (id, user_email, event_type, start_at, end_at, metadata)
-             VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5)
-             RETURNING *`,
-            [
-                email,
-                eventType,
-                startAt ? new Date(startAt) : null,
-                endAt ? new Date(endAt) : null,
-                JSON.stringify(metadata || {})
-            ]
-        );
+        const { data: event, error } = await supabaseAdmin
+            .from('user_events')
+            .insert({
+                user_email: email,
+                event_type: eventType,
+                start_at: startAt ? new Date(startAt).toISOString() : null,
+                end_at: endAt ? new Date(endAt).toISOString() : null,
+                metadata: metadata || {},
+            })
+            .select()
+            .single();
 
-        console.log(`[Event Log] Event logged: ${eventType}`);
-
-        // 특정 이벤트는 즉시 feature 업데이트 트리거
-        if (['workout_completed', 'workout_skipped', 'sleep_logged'].includes(eventType)) {
-            // TODO: 배치 작업 큐에 추가하거나 즉시 업데이트
-            console.log(`[Event Log] Triggering feature update for ${eventType}`);
+        if (error) {
+            console.error("[Event Log] Insert error:", error);
+            return NextResponse.json({ error: "Failed to log event" }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, event: event.rows[0] });
+
+        return NextResponse.json({ success: true, event });
     } catch (error: any) {
         console.error("[Event Log] Error:", error);
         return NextResponse.json(

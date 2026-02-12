@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { v4 as uuidv4 } from "uuid";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -119,7 +120,7 @@ ${specialInstructions}
 - 주말(7일마다)에는 복습/프로젝트 일정을 넣어주세요`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -150,7 +151,7 @@ ${specialInstructions}
         if (usage) {
             await logOpenAIUsage(
                 userEmail,
-                "gpt-4o-mini-2024-07-18",
+                MODELS.GPT_4O_MINI,
                 "ai-learning-curriculum",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -172,14 +173,14 @@ ${specialInstructions}
         };
 
         // Save to database
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userData) {
-            await supabase
+            await supabaseAdmin
                 .from("user_learning_curriculums")
                 .insert({
                     id: curriculumId,
@@ -216,17 +217,17 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ curriculums: [] });
         }
 
-        const { data: curriculums } = await supabase
+        const { data: curriculums } = await supabaseAdmin
             .from("user_learning_curriculums")
             .select("*")
             .eq("user_id", userData.id)
@@ -271,18 +272,18 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: "Curriculum ID required" }, { status: 400 });
         }
 
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
         // Delete the curriculum (only if it belongs to the user)
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("user_learning_curriculums")
             .delete()
             .eq("id", curriculumId)

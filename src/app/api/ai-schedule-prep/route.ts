@@ -3,6 +3,7 @@ import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { resolvePersonaStyle } from "@/lib/prompts/persona";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -17,7 +18,6 @@ export async function POST(request: NextRequest) {
 
         const { schedule, userProfile, timeUntil } = await request.json();
 
-        console.log('[AI Schedule Prep] Generating preparation tips for:', schedule.text);
 
         // Build user context
         let userContext = "";
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
 **중요:** 일정 이름에 맞는 실용적인 준비 항목만 작성. 불필요한 조언 금지.`;
 
         // Use gpt-4o-mini for simple, quick preparation tips (cost-effective)
-        const modelName = "gpt-4o-mini-2024-07-18";
+        const modelName = MODELS.GPT_4O_MINI;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [

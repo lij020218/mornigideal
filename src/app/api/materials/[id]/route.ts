@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(
   request: NextRequest,
@@ -25,12 +14,12 @@ export async function GET(
 
     const { id } = await params;
 
-    const { data: material, error } = await supabase
+    const { data: material, error } = await supabaseAdmin
       .from("materials")
       .select("*")
       .eq("id", id)
       .eq("user_id", email)
-      .single();
+      .maybeSingle();
 
     if (error || !material) {
       return NextResponse.json(

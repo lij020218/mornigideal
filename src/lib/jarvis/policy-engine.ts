@@ -3,7 +3,7 @@
  * "지금 개입할 가치가 있나?" 판단
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { StateUpdater } from './state-updater';
 import {
     InterventionLevel,
@@ -39,7 +39,6 @@ export class PolicyEngine {
         if (planConfig.aiCallsPerMonth > 0) {
             const canUseAI = await this.checkAIUsageLimit(userPlan, planConfig.aiCallsPerMonth);
             if (!canUseAI) {
-                console.log('[PolicyEngine] AI usage limit exceeded');
                 return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['ai_limit_exceeded'], score: 0 };
             }
         }
@@ -58,20 +57,17 @@ export class PolicyEngine {
 
         // 5. Quiet Hours 체크
         if (this.isQuietHours(preferences)) {
-            console.log('[PolicyEngine] Quiet hours - skipping intervention');
             return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['quiet_hours'], score: 0 };
         }
 
         // 6. 최근 개입 쿨다운 체크
         if (await this.isInCooldown(preferences.interventionCooldownMinutes)) {
-            console.log('[PolicyEngine] Still in cooldown');
             return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['cooldown'], score: 0 };
         }
 
         // 7. 개입 점수 계산 (규칙 기반 + 피드백 가중치)
         const { score, reasonCodes } = await this.calculateInterventionScore(state);
 
-        console.log('[PolicyEngine] Intervention score:', score, reasonCodes);
 
         // 8. 임계치 비교
         if (score < GUARDRAILS.THRESHOLDS.INTERVENTION_SCORE) {
@@ -132,7 +128,7 @@ export class PolicyEngine {
      */
     private async getFeedbackWeights(): Promise<Record<string, number>> {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from('intervention_feedback_stats')
                 .select('action_type, weight_multiplier')
                 .eq('user_email', this.userEmail);
@@ -196,13 +192,13 @@ export class PolicyEngine {
      * 쿨다운 체크
      */
     private async isInCooldown(cooldownMinutes: number): Promise<boolean> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('intervention_logs')
             .select('intervened_at')
             .eq('user_email', this.userEmail)
             .order('intervened_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
         if (error || !data) return false;
 
@@ -217,11 +213,11 @@ export class PolicyEngine {
      * 사용자 설정 조회
      */
     private async getUserPreferences(): Promise<any> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('jarvis_preferences')
             .select('*')
             .eq('user_email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[PolicyEngine] Failed to get preferences:', error);
@@ -235,11 +231,11 @@ export class PolicyEngine {
      * 사용자 플랜 조회
      */
     private async getUserPlan(): Promise<string> {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             console.error('[PolicyEngine] Failed to get user plan:', error);
@@ -253,7 +249,7 @@ export class PolicyEngine {
      * AI 호출 횟수 제한 체크
      */
     private async checkAIUsageLimit(userPlan: string, limit: number): Promise<boolean> {
-        const { data, error } = await supabase.rpc('get_ai_usage', {
+        const { data, error } = await supabaseAdmin.rpc('get_ai_usage', {
             p_user_email: this.userEmail
         });
 
@@ -263,7 +259,6 @@ export class PolicyEngine {
         }
 
         const currentUsage = data || 0;
-        console.log(`[PolicyEngine] ${userPlan} plan - AI usage: ${currentUsage}/${limit}`);
 
         return currentUsage < limit;
     }

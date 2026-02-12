@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
 
-const MINI_MODEL = "gpt-5-mini-2025-08-07";
-const FINAL_MODEL = "gpt-5.2-2025-12-11";
+const MINI_MODEL = MODELS.GPT_5_MINI;
+const FINAL_MODEL = MODELS.GPT_5_2;
 
 // Increase timeout for quiz generation
 export const maxDuration = 60; // 60 seconds
@@ -33,7 +24,6 @@ async function generateOnboardingQuiz(userType: string, major: string, field: st
       ? `${major} 전공 대학생, ${field} 분야 관심, 목표: ${goal}`
       : `${field} 분야 ${userType}, 목표: ${goal}`;
 
-    console.log(`[ONBOARDING QUIZ] Context: ${context}`);
 
     const response = await openai.chat.completions.create({
       model: MINI_MODEL,
@@ -88,7 +78,6 @@ ${context}
       );
     }
 
-    console.log(`[ONBOARDING QUIZ] Generated ${quiz.length} questions`);
 
     return NextResponse.json({ quiz, success: true });
   } catch (error: any) {
@@ -112,7 +101,6 @@ export async function POST(request: NextRequest) {
 
     // Check if this is an onboarding quiz request
     if (userType || major || field || goal) {
-      console.log("[QUIZ] Generating onboarding quiz...");
       return await generateOnboardingQuiz(userType, major, field, goal);
     }
 
@@ -125,14 +113,13 @@ export async function POST(request: NextRequest) {
 
     // Check if quiz already exists in DB
     if (materialId) {
-      const { data: material } = await supabase
+      const { data: material } = await supabaseAdmin
         .from("materials")
         .select("analysis")
         .eq("id", materialId)
-        .single();
+        .maybeSingle();
 
       if (material?.analysis?.quiz) {
-        console.log("[QUIZ] Returning cached quiz from DB");
         return NextResponse.json({
           quiz: material.analysis.quiz,
           cached: true,
@@ -147,7 +134,6 @@ export async function POST(request: NextRequest) {
       )
       .join("\n\n==========\n\n");
 
-    console.log("[QUIZ] Generating T/F and MC with gpt-5-mini (parallel), Essay with gpt-5.1...");
 
     // Generate T/F and Multiple Choice with gpt-5-mini in parallel
     const [tfResult, mcResult, essayResult] = await Promise.all([
@@ -298,7 +284,6 @@ ${allContent}
       essay: (essayData.questions || []).slice(0, 5)
     };
 
-    console.log(`[QUIZ] Generated: ${quiz.trueFalse.length} T/F, ${quiz.multipleChoice.length} MC, ${quiz.essay.length} Essay`);
 
     // Calculate cost (3 API calls: T/F with Mini, MC with Mini, Essay with 5.1)
     const allContentTokens = Math.ceil(allContent.length / 4);
@@ -307,15 +292,14 @@ ${allContent}
     const essayCost = (allContentTokens / 1_000_000) * 2.50 + (500 / 1_000_000) * 10.00; // 5.1 cost
     const totalQuizCost = tfCost + mcCost + essayCost;
 
-    console.log(`[QUIZ] Estimated cost: $${totalQuizCost.toFixed(4)} (T/F: $${tfCost.toFixed(4)}, MC: $${mcCost.toFixed(4)}, Essay: $${essayCost.toFixed(4)})`);
 
     // Save quiz to DB if materialId is provided
     if (materialId) {
-      const { data: material } = await supabase
+      const { data: material } = await supabaseAdmin
         .from("materials")
         .select("analysis")
         .eq("id", materialId)
-        .single();
+        .maybeSingle();
 
       if (material) {
         // Add quiz cost to existing metrics
@@ -325,7 +309,7 @@ ${allContent}
           totalCost: (material.analysis?.metrics?.estimatedCost || 0) + totalQuizCost,
         };
 
-        await supabase
+        await supabaseAdmin
           .from("materials")
           .update({
             analysis: {
@@ -336,7 +320,6 @@ ${allContent}
           })
           .eq("id", materialId);
 
-        console.log("[QUIZ] Saved to DB with cost tracking");
       }
     }
 

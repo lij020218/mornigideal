@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
@@ -16,22 +16,22 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Missing curriculumId" }, { status: 400 });
         }
 
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ progress: null });
         }
 
-        const { data: progress } = await supabase
+        const { data: progress } = await supabaseAdmin
             .from("learning_progress")
             .select("*")
             .eq("user_id", userData.id)
             .eq("curriculum_id", curriculumId)
-            .single();
+            .maybeSingle();
 
         if (!progress) {
             return NextResponse.json({
@@ -67,27 +67,27 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing curriculumId" }, { status: 400 });
         }
 
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
         // Check if progress exists
-        const { data: existingProgress } = await supabase
+        const { data: existingProgress } = await supabaseAdmin
             .from("learning_progress")
             .select("id")
             .eq("user_id", userData.id)
             .eq("curriculum_id", curriculumId)
-            .single();
+            .maybeSingle();
 
         if (existingProgress) {
             // Update existing progress
-            await supabase
+            await supabaseAdmin
                 .from("learning_progress")
                 .update({
                     completed_days: completedDays,
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
                 .eq("id", existingProgress.id);
         } else {
             // Create new progress
-            await supabase
+            await supabaseAdmin
                 .from("learning_progress")
                 .insert({
                     user_id: userData.id,

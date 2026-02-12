@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { signToken } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select('id, email, name, image')
       .eq('email', email.toLowerCase())
-      .single();
+      .maybeSingle();
 
     let user;
 
@@ -83,9 +83,7 @@ export async function POST(request: NextRequest) {
             provider: provider,
             provider_account_id: providerId,
             created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+          });
       }
     }
 

@@ -45,9 +45,6 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         const currentTimeValue = kstDate.getHours() * 60 + kstDate.getMinutes();
         const todayStr = getTodayDateString();
 
-        console.log('[NotificationDropdown] Current day of week:', currentDayOfWeek, '(0=일,1=월,2=화,3=수,4=목,5=금,6=토)');
-        console.log('[NotificationDropdown] Current time:', currentTime);
-        console.log('[NotificationDropdown] Today string:', todayStr);
 
         const completions = getTodayCompletions();
         setTodayCompletions(completions);
@@ -56,24 +53,15 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         const todaysGoals = goals.filter(goal => {
             const hasNotif = goal.notificationEnabled;
 
-            console.log(`[NotificationDropdown] Checking goal: "${goal.text}"`, {
-                notificationEnabled: hasNotif,
-                specificDate: goal.specificDate,
-                daysOfWeek: goal.daysOfWeek,
-                startTime: goal.startTime,
-                endTime: goal.endTime
-            });
 
             // If goal has a specific date, only show on that date
             if (goal.specificDate) {
                 const isTodaySpecific = goal.specificDate === todayStr;
-                console.log(`[NotificationDropdown] Specific date goal "${goal.text}": specificDate=${goal.specificDate}, today=${todayStr}, match=${isTodaySpecific}, hasNotif=${hasNotif}`);
                 return isTodaySpecific && hasNotif;
             }
 
             // Otherwise, check if today is in daysOfWeek
             const hasDay = goal.daysOfWeek?.includes(currentDayOfWeek);
-            console.log(`[NotificationDropdown] Recurring goal "${goal.text}": currentDay=${currentDayOfWeek}, daysOfWeek=${JSON.stringify(goal.daysOfWeek)}, match=${hasDay}, hasNotif=${hasNotif}`);
 
             return hasDay && hasNotif;
         });
@@ -129,7 +117,6 @@ export function NotificationDropdown({ goals, isOpen, onClose }: NotificationDro
         });
 
         const uniqueItems = Array.from(uniqueItemsMap.values());
-        console.log(`[NotificationDropdown] Deduplicated items: ${items.length} -> ${uniqueItems.length}`);
 
         // Sort by time
         uniqueItems.sort((a, b) => {

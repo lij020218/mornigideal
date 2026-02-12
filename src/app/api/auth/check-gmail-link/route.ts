@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET() {
     try {
@@ -16,11 +11,11 @@ export async function GET() {
         }
 
         // Check if user has linked Gmail account
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("gmail_tokens")
             .select("gmail_email, expires_at")
             .eq("user_email", session.user.email)
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
             return NextResponse.json({ linked: false });

@@ -7,12 +7,7 @@
  * - Conflict resolution: GCal 우선
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
@@ -53,11 +48,11 @@ export class GoogleCalendarService {
      * 유효한 access token 반환 (만료 시 자동 refresh)
      */
     private async getAccessToken(): Promise<string | null> {
-        const { data: tokenData } = await supabase
+        const { data: tokenData } = await supabaseAdmin
             .from('google_calendar_tokens')
             .select('*')
             .eq('user_email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (!tokenData) return null;
 
@@ -85,7 +80,7 @@ export class GoogleCalendarService {
             const newTokens = await refreshResponse.json();
             const newExpiresAt = Date.now() + (newTokens.expires_in * 1000);
 
-            await supabase
+            await supabaseAdmin
                 .from('google_calendar_tokens')
                 .update({
                     access_token: newTokens.access_token,
@@ -141,7 +136,6 @@ export class GoogleCalendarService {
         if (result.errors.length > 0) {
             console.error('[GCalService] Sync errors:', result.errors);
         } else {
-            console.log('[GCalService] Sync completed:', result.pulled);
         }
 
         return result;
@@ -154,11 +148,11 @@ export class GoogleCalendarService {
         const stats = { added: 0, updated: 0, deleted: 0 };
 
         // 마지막 동기화 시각 조회
-        const { data: lastSync } = await supabase
+        const { data: lastSync } = await supabaseAdmin
             .from('google_calendar_tokens')
             .select('updated_at')
             .eq('user_email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         // 오늘부터 30일 이후까지 이벤트 조회
         const now = new Date();
@@ -189,11 +183,11 @@ export class GoogleCalendarService {
         if (events.length === 0) return stats;
 
         // 사용자 프로필 로드
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', this.userEmail)
-            .single();
+            .maybeSingle();
 
         if (!userData) return stats;
 
@@ -201,7 +195,7 @@ export class GoogleCalendarService {
         const customGoals: any[] = [...(profile.customGoals || [])];
 
         // 기존 매핑 조회
-        const { data: mappings } = await supabase
+        const { data: mappings } = await supabaseAdmin
             .from('calendar_sync_mapping')
             .select('*')
             .eq('user_email', this.userEmail);
@@ -219,7 +213,7 @@ export class GoogleCalendarService {
                         customGoals.splice(idx, 1);
                         stats.deleted++;
                     }
-                    await supabase
+                    await supabaseAdmin
                         .from('calendar_sync_mapping')
                         .delete()
                         .eq('id', existing.id);
@@ -237,7 +231,7 @@ export class GoogleCalendarService {
                         customGoals[idx] = { ...customGoals[idx], ...localGoal };
                         stats.updated++;
                     }
-                    await supabase
+                    await supabaseAdmin
                         .from('calendar_sync_mapping')
                         .update({ etag: event.etag, last_synced_at: new Date().toISOString() })
                         .eq('id', existing.id);
@@ -248,7 +242,7 @@ export class GoogleCalendarService {
                 customGoals.push({ ...localGoal, id: newGoalId });
                 stats.added++;
 
-                await supabase
+                await supabaseAdmin
                     .from('calendar_sync_mapping')
                     .insert({
                         user_email: this.userEmail,
@@ -263,13 +257,13 @@ export class GoogleCalendarService {
 
         // 프로필 업데이트
         if (stats.added > 0 || stats.updated > 0 || stats.deleted > 0) {
-            await supabase
+            await supabaseAdmin
                 .from('users')
                 .update({ profile: { ...profile, customGoals } })
                 .eq('email', this.userEmail);
 
             // 동기화 시각 업데이트
-            await supabase
+            await supabaseAdmin
                 .from('google_calendar_tokens')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('user_email', this.userEmail);
@@ -298,7 +292,7 @@ export class GoogleCalendarService {
             const created: GCalEvent = await response.json();
 
             // 매핑 저장
-            await supabase
+            await supabaseAdmin
                 .from('calendar_sync_mapping')
                 .upsert({
                     user_email: this.userEmail,
@@ -309,7 +303,6 @@ export class GoogleCalendarService {
                     last_synced_at: new Date().toISOString(),
                 }, { onConflict: 'user_email,local_goal_id' });
 
-            console.log('[GCalService] Pushed event:', goal.text, '→', created.id);
             return created.id;
         } catch (error) {
             console.error('[GCalService] Push error:', error);
@@ -326,7 +319,7 @@ export class GoogleCalendarService {
                 method: 'DELETE',
             });
 
-            await supabase
+            await supabaseAdmin
                 .from('calendar_sync_mapping')
                 .delete()
                 .eq('user_email', this.userEmail)
@@ -423,11 +416,11 @@ export class GoogleCalendarService {
  * 사용자가 GCal을 연동했는지 확인
  */
 export async function hasGCalLinked(userEmail: string): Promise<boolean> {
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
         .from('google_calendar_tokens')
         .select('user_email')
         .eq('user_email', userEmail)
-        .single();
+        .maybeSingle();
 
     return !!data;
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWeeklyReport, generateWeeklyReportNarrative } from "@/lib/weeklyReportGenerator";
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 /**
@@ -51,17 +51,13 @@ export async function GET(request: NextRequest) {
         if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        const supabase = db.client;
-
-        console.log(`[Weekly Report API] Fetching report`);
 
         // 빠른 주차 번호 계산 (DB 쿼리 없이)
         const targetWeekNumber = getTargetWeekNumber();
 
-        console.log(`[Weekly Report API] Target week: ${targetWeekNumber}`);
 
         // 캐시 먼저 확인 (DB 쿼리 1회)
-        const { data: existingReport } = await supabase
+        const { data: existingReport } = await supabaseAdmin
             .from('user_events')
             .select('*')
             .eq('user_email', userEmail)
@@ -73,7 +69,6 @@ export async function GET(request: NextRequest) {
 
         // 이미 존재하는 리포트가 있으면 그것을 반환 (매우 빠름)
         if (existingReport?.metadata?.report_data) {
-            console.log(`[Weekly Report API] Returning cached report for week ${targetWeekNumber}`);
             return NextResponse.json({
                 success: true,
                 cached: true,
@@ -85,11 +80,10 @@ export async function GET(request: NextRequest) {
         }
 
         // 캐시 없음 - 리포트 데이터 생성 (느린 작업)
-        console.log(`[Weekly Report API] Generating new report for week ${targetWeekNumber}`);
         const reportData = await generateWeeklyReport(userEmail);
 
         // Get user profile for AI narrative
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from('users')
             .select('profile')
             .eq('email', userEmail)
@@ -102,7 +96,7 @@ export async function GET(request: NextRequest) {
 
         // Save to database (for history and caching)
         try {
-            await supabase.from('user_events').insert({
+            await supabaseAdmin.from('user_events').insert({
                 id: `weekly-report-${userEmail}-week${targetWeekNumber}-${Date.now()}`,
                 user_email: userEmail,
                 event_type: 'weekly_report_generated',

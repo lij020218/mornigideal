@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -21,7 +22,7 @@ export interface EmbeddingResult {
 export async function generateEmbedding(text: string): Promise<EmbeddingResult> {
     try {
         const response = await openai.embeddings.create({
-            model: 'text-embedding-3-small',
+            model: MODELS.EMBEDDING_SMALL,
             input: text,
             encoding_format: 'float',
         });
@@ -43,7 +44,7 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult> 
 export async function generateEmbeddingsBatch(texts: string[]): Promise<EmbeddingResult[]> {
     try {
         const response = await openai.embeddings.create({
-            model: 'text-embedding-3-small',
+            model: MODELS.EMBEDDING_SMALL,
             input: texts,
             encoding_format: 'float',
         });

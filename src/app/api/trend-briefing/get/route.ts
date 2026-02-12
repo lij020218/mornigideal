@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
     try {
@@ -18,12 +13,12 @@ export async function GET(request: NextRequest) {
         // Fetching briefing for today
 
         // Fetch pre-generated trend briefing from Supabase
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('trends_cache')
             .select('trends, last_updated')
             .eq('email', userEmail)
             .eq('date', today)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 
 export async function POST(request: NextRequest) {
@@ -23,11 +23,11 @@ export async function POST(request: NextRequest) {
         const finalCategory = validCategories.includes(category) ? category : "insight";
 
         // Get current user profile
-        const { data: userData, error: fetchError } = await supabase
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from("users")
             .select("profile")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !userData) {
             console.error("[Learning Save] Fetch error:", fetchError);
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         const updatedProfile = { ...profile, learnings: updatedLearnings };
 
         // Save to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("users")
             .update({ profile: updatedProfile })
             .eq("email", userEmail);
@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to save learning" }, { status: 500 });
         }
 
-        console.log(`[Learning Save] Saved: "${content.substring(0, 50)}..." (${finalCategory})`);
 
         // Category labels for response
         const categoryLabels: Record<string, string> = {

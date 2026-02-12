@@ -4,7 +4,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     InterventionLevel,
     InterventionDecision,
@@ -13,6 +13,7 @@ import {
     REASON_CODES
 } from '@/types/jarvis';
 import { resolvePersonaStyle, getPersonaBlock, type PersonaStyle } from '@/lib/prompts/persona';
+import { MODELS } from "@/lib/models";
 
 const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY
@@ -42,7 +43,6 @@ export class Brain {
     async planIntervention(context: InterventionContext): Promise<InterventionPlan | null> {
         // 가드레일 체크: LLM 호출 전 확인
         if (!this.passesGuardrails(context)) {
-            console.log('[Brain] Failed guardrails check, skipping LLM');
             return null;
         }
 
@@ -50,7 +50,7 @@ export class Brain {
 
         try {
             const response = await anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20241022',
+                model: MODELS.CLAUDE_3_5_SONNET,
                 max_tokens: 1024,
                 temperature: 0.7,
                 system: this.getSystemPrompt(context.preferences),
@@ -191,13 +191,11 @@ ${schedulesText}
         );
 
         if (requiresConfirmation && context.decision.level < InterventionLevel.L3_DIRECT) {
-            console.log('[Brain] Action requires confirmation but level is too low');
             return false;
         }
 
         // L4 자동 실행은 옵트인 필요
         if (context.decision.level === InterventionLevel.L4_AUTO && !context.preferences.autoActionOptIn) {
-            console.log('[Brain] L4 auto action not opted in');
             return false;
         }
 
@@ -274,14 +272,13 @@ ${schedulesText}
      */
     private async incrementAIUsage(userEmail: string): Promise<void> {
         try {
-            const { data, error } = await supabase.rpc('increment_ai_usage', {
+            const { data, error } = await supabaseAdmin.rpc('increment_ai_usage', {
                 p_user_email: userEmail
             });
 
             if (error) {
                 console.error('[Brain] Failed to increment AI usage:', error);
             } else {
-                console.log(`[Brain] AI usage incremented to ${data}`);
             }
         } catch (error) {
             console.error('[Brain] Exception while incrementing AI usage:', error);

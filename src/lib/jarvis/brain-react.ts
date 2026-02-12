@@ -2,34 +2,49 @@
  * Jarvis ReAct Brain
  * Reason → Act → Observe 에이전트 루프
  *
- * Pro/Max 플랜에서 복합 요청 시 활성화
+ * 복합 요청 시 활성화 (전 플랜)
  * - 다단계 추론: 도구를 순차적으로 호출하며 문제 해결
- * - 플랜별 반복 제한: Standard=2, Pro=3, Max=5
+ * - 플랜별 반복 제한: Free=2, Pro=3, Max=5
  * - respond_to_user 호출 시 루프 종료
+ *
+ * 플랜별 모델:
+ * - Free: GPT-5-mini (저비용, 2-step)
+ * - Pro:  GPT-5.2 (고성능, 3-step)
+ * - Max:  Claude Sonnet 4.5 (에이전트 최강, 5-step)
  */
 
+import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { PlanType } from '@/types/jarvis';
 import { getAvailableTools, ToolDefinition, ToolCall, ToolResult } from './tools';
 import { ToolExecutor } from './tool-executor';
 import { getPersonaBlock, resolvePersonaStyle, type PersonaStyle } from '@/lib/prompts/persona';
+import { MODELS } from "@/lib/models";
 
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Anthropic은 Max 플랜에서만 사용 — API 키 없으면 null
+const anthropic = process.env.ANTHROPIC_API_KEY
+    ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    : null;
 
 // ================================================
 // 플랜별 설정
 // ================================================
 
+type LLMProvider = 'openai' | 'anthropic';
+
 const REACT_PLAN_CONFIGS: Record<string, {
     maxIterations: number;
     model: string;
     maxTokens: number;
+    provider: LLMProvider;
 }> = {
-    Standard: { maxIterations: 2, model: 'claude-3-5-haiku-20241022', maxTokens: 1024 },
-    Pro:      { maxIterations: 3, model: 'claude-sonnet-4-20250514', maxTokens: 2048 },
-    Max:      { maxIterations: 5, model: 'claude-sonnet-4-20250514', maxTokens: 2048 },
+    Free:     { maxIterations: 2, model: MODELS.GPT_5_MINI, maxTokens: 1024, provider: 'openai' },
+    Pro:      { maxIterations: 3, model: MODELS.GPT_5_2,    maxTokens: 2048, provider: 'openai' },
+    Max:      { maxIterations: 5, model: MODELS.CLAUDE_SONNET_4_5, maxTokens: 2048, provider: 'anthropic' },
 };
 
 // ================================================
@@ -73,14 +88,19 @@ export class ReActBrain {
     private userPlan: PlanType;
     private toolExecutor: ToolExecutor;
     private availableTools: ToolDefinition[];
-    private config: { maxIterations: number; model: string; maxTokens: number };
+    private config: { maxIterations: number; model: string; maxTokens: number; provider: LLMProvider };
 
     constructor(userEmail: string, userPlan: PlanType) {
         this.userEmail = userEmail;
         this.userPlan = userPlan;
         this.toolExecutor = new ToolExecutor(userEmail, userPlan);
         this.availableTools = getAvailableTools(userPlan);
-        this.config = REACT_PLAN_CONFIGS[userPlan] || REACT_PLAN_CONFIGS.Standard;
+        this.config = REACT_PLAN_CONFIGS[userPlan] || REACT_PLAN_CONFIGS.Free;
+
+        // Max인데 Anthropic 키 없으면 GPT-5.2로 폴백
+        if (this.config.provider === 'anthropic' && !anthropic) {
+            this.config = { ...REACT_PLAN_CONFIGS.Pro, maxIterations: 5 };
+        }
     }
 
     /**
@@ -99,20 +119,8 @@ export class ReActBrain {
 
             let llmResponse: string;
             try {
-                const response = await anthropic.messages.create({
-                    model: this.config.model,
-                    max_tokens: this.config.maxTokens,
-                    temperature: 0.3,
-                    system: systemPrompt,
-                    messages: [{ role: 'user', content: prompt }],
-                });
+                llmResponse = await this.callLLM(systemPrompt, prompt);
                 totalLlmCalls++;
-
-                const content = response.content[0];
-                if (content.type !== 'text') {
-                    throw new Error('Unexpected response type from LLM');
-                }
-                llmResponse = content.text;
             } catch (error) {
                 console.error(`[ReActBrain] LLM call failed at step ${i + 1}:`, error);
                 wasTerminatedEarly = true;
@@ -139,7 +147,6 @@ export class ReActBrain {
                 };
                 scratchpad.push(step);
 
-                console.log(`[ReActBrain] Completed in ${i + 1} steps, ${totalLlmCalls} LLM calls`);
 
                 return {
                     message: parsed.actionInput.message || '',
@@ -176,7 +183,6 @@ export class ReActBrain {
             };
             scratchpad.push(step);
 
-            console.log(`[ReActBrain] Step ${i + 1}: ${parsed.action} → ${result.success ? 'OK' : 'FAIL'}`);
         }
 
         // 반복 제한 초과 또는 에러 → 마지막 scratchpad로 응답 생성
@@ -203,6 +209,46 @@ export class ReActBrain {
             totalLlmCalls,
             wasTerminatedEarly: true,
         };
+    }
+
+    // ================================================
+    // LLM 호출 추상화
+    // ================================================
+
+    /**
+     * 플랜별 프로바이더에 따라 LLM 호출
+     */
+    private async callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+        if (this.config.provider === 'anthropic' && anthropic) {
+            const response = await anthropic.messages.create({
+                model: this.config.model,
+                max_tokens: this.config.maxTokens,
+                temperature: 0.3,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }],
+            });
+            const content = response.content[0];
+            if (content.type !== 'text' || !content.text) {
+                throw new Error('Empty response from Anthropic');
+            }
+            return content.text;
+        }
+
+        // OpenAI (Free, Pro, 또는 Anthropic 폴백)
+        const response = await openai.chat.completions.create({
+            model: this.config.model,
+            max_completion_tokens: this.config.maxTokens,
+            temperature: 0.3,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+        });
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+            throw new Error('Empty response from OpenAI');
+        }
+        return content;
     }
 
     // ================================================
@@ -408,26 +454,16 @@ ${observations}
 {"message": "한국어 응답", "actions": []}`;
 
         try {
-            const response = await anthropic.messages.create({
-                model: this.config.model,
-                max_tokens: this.config.maxTokens,
-                temperature: 0.3,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: fallbackPrompt }],
-            });
-
-            const content = response.content[0];
-            if (content.type === 'text') {
-                const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    return {
-                        message: parsed.message || content.text,
-                        actions: parsed.actions || [],
-                    };
-                }
-                return { message: content.text, actions: [] };
+            const content = await this.callLLM(systemPrompt, fallbackPrompt);
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return {
+                    message: parsed.message || content,
+                    actions: parsed.actions || [],
+                };
             }
+            return { message: content, actions: [] };
         } catch (error) {
             console.error('[ReActBrain] Fallback generation failed:', error);
         }

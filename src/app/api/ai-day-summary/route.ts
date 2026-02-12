@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -16,7 +17,6 @@ export async function POST(request: NextRequest) {
 
         const { todaySchedules, completedCount, totalCount, userProfile, tomorrowSchedules, userPlan } = await request.json();
 
-        console.log('[AI Day Summary] Generating day summary and feedback');
 
         // Build user context
         let userContext = "";
@@ -140,7 +140,7 @@ ${scheduleList || '- 일정 없음'}
 **중요:** 사용자의 목표와 오늘 완료한 일정을 구체적으로 언급하며, 따뜻하고 격려하는 톤으로 작성하세요.`;
 
         // Use gpt-5.2 for personalized, empathetic feedback
-        const modelName = "gpt-5.2-2025-12-11";
+        const modelName = MODELS.GPT_5_2;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [

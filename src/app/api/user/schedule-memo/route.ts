@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function POST(request: NextRequest) {
     try {
@@ -10,11 +10,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user ID
-        const { data: userData } = await supabase
+        const { data: userData } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (!userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         const { goalId, memo, date } = await request.json();
 
         // Save to schedule_memos table (you may need to create this table)
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("schedule_memos")
             .upsert({
                 user_id: userData.id,
@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             // If table doesn't exist, just log and continue
-            console.log("[Schedule Memo] Table may not exist:", error.message);
         }
 
         return NextResponse.json({ success: true });

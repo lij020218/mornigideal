@@ -1,11 +1,12 @@
-import { supabase } from './supabase';
+import { supabaseAdmin } from './supabase-admin';
+import bcrypt from 'bcryptjs';
 
 export interface User {
     id: string;
     name: string;
     username: string;
     email: string;
-    password: string; // In production, this should be hashed
+    password: string;
     profile?: any; // JSONB field for user profile data
     created_at?: string;
     updated_at?: string;
@@ -13,11 +14,11 @@ export interface User {
 
 export async function getUserByEmail(email: string): Promise<User | null> {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('*')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
@@ -37,11 +38,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 
 export async function getUserById(id: string): Promise<User | null> {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
@@ -69,7 +70,7 @@ export async function updateUserProfileById(userId: string, profileUpdates: any)
             ...profileUpdates,
         };
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .update({ profile: updatedProfile })
             .eq('id', userId)
@@ -90,11 +91,11 @@ export async function updateUserProfileById(userId: string, profileUpdates: any)
 
 export async function getUserByUsername(username: string): Promise<User | null> {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .select('*')
             .eq('username', username)
-            .single();
+            .maybeSingle();
 
         if (error) {
             if (error.code === 'PGRST116') {
@@ -114,7 +115,7 @@ export async function getUserByUsername(username: string): Promise<User | null> 
 
 export async function createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .insert([userData])
             .select()
@@ -134,11 +135,26 @@ export async function createUser(userData: Omit<User, 'id' | 'created_at' | 'upd
 
 export async function validateUser(email: string, password: string): Promise<User | null> {
     const user = await getUserByEmail(email);
-    if (!user) return null;
+    if (!user || !user.password) return null;
 
-    // In production, compare hashed passwords
-    if (user.password !== password) return null;
+    let isValid = false;
 
+    if (user.password.startsWith('$2')) {
+        // bcrypt 해시 비교
+        isValid = await bcrypt.compare(password, user.password);
+    } else {
+        // 평문 비밀번호: 검증 후 bcrypt로 자동 마이그레이션
+        if (password === user.password) {
+            isValid = true;
+            const hashedPassword = await bcrypt.hash(password, 12);
+            await supabaseAdmin
+                .from('users')
+                .update({ password: hashedPassword })
+                .eq('email', email);
+        }
+    }
+
+    if (!isValid) return null;
     return user;
 }
 
@@ -152,7 +168,7 @@ export async function updateUserProfile(email: string, profileUpdates: any): Pro
             ...profileUpdates,
         };
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('users')
             .update({ profile: updatedProfile })
             .eq('email', email)

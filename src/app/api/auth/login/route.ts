@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import bcrypt from 'bcryptjs';
 import { signToken } from '@/lib/auth-utils';
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select('id, email, name, password')
       .eq('email', email.toLowerCase())
-      .single();
+      .maybeSingle();
 
     if (error || !user) {
       return NextResponse.json(
@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
           .from('users')
           .update({ password: hashedPassword })
           .eq('id', user.id);
-        console.log(`[Auth] Migrated plaintext password to bcrypt for a user`);
       }
     }
 

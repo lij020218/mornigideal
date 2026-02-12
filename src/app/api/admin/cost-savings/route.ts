@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function GET(request: Request) {
     try {
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         }
 
         // Get AI usage logs
-        let query = supabase
+        let query = supabaseAdmin
             .from('openai_usage_logs')
             .select('*')
             .eq('user_email', session.user.email);

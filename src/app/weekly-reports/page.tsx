@@ -332,13 +332,13 @@ interface ReportHistoryItem {
 }
 
 const PLAN_LABELS: Record<string, { label: string; color: string; bgColor: string }> = {
-    standard: { label: "Standard", color: "text-slate-400", bgColor: "bg-slate-500/20" },
+    free: { label: "Free", color: "text-slate-400", bgColor: "bg-slate-500/20" },
     pro: { label: "Pro", color: "text-blue-400", bgColor: "bg-blue-500/20" },
     max: { label: "Max", color: "text-amber-400", bgColor: "bg-amber-500/20" },
 };
 
 const PLAN_LIMITS_TEXT: Record<string, string> = {
-    standard: "최근 3개월",
+    free: "최근 3개월",
     pro: "최근 6개월",
     max: "최근 1년",
 };
@@ -347,7 +347,7 @@ export default function WeeklyReportsPage() {
     const [currentReport, setCurrentReport] = useState<WeeklyReportData | null>(null);
     const [reportHistory, setReportHistory] = useState<ReportHistoryItem[]>([]);
     const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportHistoryItem | null>(null);
-    const [userPlan, setUserPlan] = useState<string>("standard");
+    const [userPlan, setUserPlan] = useState<string>("free");
     const [loading, setLoading] = useState(true);
     const [historyLoading, setHistoryLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -386,7 +386,7 @@ export default function WeeklyReportsPage() {
             if (response.ok) {
                 const data = await response.json();
                 setReportHistory(data.reports || []);
-                setUserPlan(data.plan || 'standard');
+                setUserPlan(data.plan || 'free');
             }
         } catch (error) {
             console.error('Failed to fetch weekly report history:', error);
@@ -909,10 +909,10 @@ export default function WeeklyReportsPage() {
                                     <div className={cn(
                                         "flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium w-fit",
                                         PLAN_LABELS[userPlan]?.bgColor || PLAN_LABELS.standard.bgColor,
-                                        PLAN_LABELS[userPlan]?.color || PLAN_LABELS.standard.color
+                                        PLAN_LABELS[userPlan]?.color || PLAN_LABELS.free.color
                                     )}>
                                         <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                        {PLAN_LABELS[userPlan]?.label || "Standard"} · {PLAN_LIMITS_TEXT[userPlan] || "최근 3개월"}
+                                        {PLAN_LABELS[userPlan]?.label || "Free"} · {PLAN_LIMITS_TEXT[userPlan] || "최근 3개월"}
                                     </div>
                                 </div>
 

@@ -6,9 +6,11 @@ import { generateEmbedding, prepareTextForEmbedding, generateContentHash } from 
 // 플랜별 RAG 설정
 const RAG_PLAN_CONFIG: Record<string, { threshold: number; limit: number; maxAgeDays: number | null; storageMb: number }> = {
     Free: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
-    Standard: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
+    free: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
     Pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 100 },
+    pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 100 },
     Max: { threshold: 0.7, limit: 10, maxAgeDays: null, storageMb: 1000 },
+    max: { threshold: 0.7, limit: 10, maxAgeDays: null, storageMb: 1000 },
 };
 
 export interface MemoryEntry {
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
             .from("users")
             .select("id, plan")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -150,7 +152,7 @@ export async function GET(request: NextRequest) {
             .from("users")
             .select("id, plan")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -194,7 +196,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 플랜별 기간 필터 (Free/Standard: 최근 30일만)
+        // 플랜별 기간 필터 (Free: 최근 30일만)
         if (planConfig.maxAgeDays) {
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - planConfig.maxAgeDays);
@@ -234,7 +236,7 @@ export async function DELETE(request: NextRequest) {
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });

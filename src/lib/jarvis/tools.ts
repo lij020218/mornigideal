@@ -39,7 +39,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         description: '오늘의 일정 목록을 조회합니다',
         parameters: [],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'get_schedule_by_date',
@@ -48,7 +48,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'date', type: 'string', description: 'YYYY-MM-DD 형식', required: true },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
 
     // === 일정 관리 ===
@@ -65,7 +65,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'memo', type: 'string', description: '메모', required: false },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'delete_schedule',
@@ -76,7 +76,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'isRepeating', type: 'boolean', description: '반복 일정 여부', required: false },
         ],
         requiresConfirmation: true,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'update_schedule',
@@ -88,7 +88,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'newStartTime', type: 'string', description: '새 시간 HH:MM', required: false },
         ],
         requiresConfirmation: true,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
 
     // === 검색/지식 ===
@@ -99,7 +99,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'query', type: 'string', description: '검색 쿼리', required: true },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'search_user_memory',
@@ -126,7 +126,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'goalType', type: 'string', description: 'weekly | monthly | yearly | all', required: false },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'get_schedule_patterns',
@@ -156,7 +156,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'category', type: 'string', description: 'insight | skill | reflection | goal_progress', required: true },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
 
     // === 일정 준비 ===
@@ -171,6 +171,18 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         planGate: ['Pro', 'Max'],
     },
 
+    // === 일정 추천 ===
+    {
+        name: 'suggest_schedule',
+        description: '사용자의 현재 상태(스트레스, 에너지, 업무-휴식 균형, 일정 패턴)를 분석하여 맞춤 일정을 추천합니다',
+        parameters: [
+            { name: 'count', type: 'number', description: '추천 개수 (기본 3)', required: false },
+            { name: 'focus', type: 'string', description: '집중 영역: rest | productivity | exercise | learning | auto (기본 auto)', required: false },
+        ],
+        requiresConfirmation: false,
+        planGate: ['Free', 'Pro', 'Max'],
+    },
+
     // === 최종 응답 (루프 종료) ===
     {
         name: 'respond_to_user',
@@ -180,7 +192,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'actions', type: 'object', description: '프론트엔드 액션 버튼 배열 (선택)', required: false },
         ],
         requiresConfirmation: false,
-        planGate: ['Standard', 'Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
 ];
 

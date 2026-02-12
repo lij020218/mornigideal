@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -89,7 +90,7 @@ ${languageInstructions}
 }`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -120,7 +121,7 @@ ${languageInstructions}
         if (usage) {
             await logOpenAIUsage(
                 userEmail,
-                "gpt-4o-mini-2024-07-18",
+                MODELS.GPT_4O_MINI,
                 "ai-learning-tip",
                 usage.prompt_tokens,
                 usage.completion_tokens

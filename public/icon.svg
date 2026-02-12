@@ -1,16 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#000000"/>
-  <circle cx="256" cy="256" r="200" fill="url(#grad1)" opacity="0.2"/>
+  <rect width="512" height="512" rx="80" fill="#000000"/>
   <defs>
     <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
-    </linearGradient>
-     <linearGradient id="gradText" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#c084fc;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
     </linearGradient>
   </defs>
-  <text x="50%" y="50%" font-family="Arial, sans-serif" font-weight="bold" font-size="250" fill="url(#gradText)" text-anchor="middle" dy=".35em">A</text>
-  <text x="50%" y="78%" font-family="Arial, sans-serif" font-weight="normal" font-size="40" fill="#ffffff" text-anchor="middle" letter-spacing="4">IDEAL</text>
+  <text x="50%" y="42%" font-family="Arial, sans-serif" font-weight="bold" font-size="200" fill="url(#grad1)" text-anchor="middle" dy=".35em">Fi</text>
+  <text x="50%" y="78%" font-family="Arial, sans-serif" font-weight="normal" font-size="80" fill="#ffffff" text-anchor="middle" opacity="0.9">.eri</text>
 </svg>

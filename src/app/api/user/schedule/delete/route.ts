@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { dualWriteDelete } from "@/lib/schedule-dual-write";
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,11 +20,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get current user profile
-        const { data: userData, error: fetchError } = await supabase
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from("users")
             .select("profile")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !userData) {
             console.error("[Schedule Delete] Fetch error:", fetchError);
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
         const updatedProfile = { ...profile, customGoals: updatedCustomGoals };
 
         // Save to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("users")
             .update({ profile: updatedProfile })
             .eq("email", email);
@@ -85,7 +86,12 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
         }
 
-        console.log(`[Schedule Delete] Deleted: ${deletedSchedule.text} at ${deletedSchedule.startTime}`);
+
+        // Dual-write to schedules table
+        const sid = scheduleId || deletedSchedule.id;
+        if (sid) {
+            await dualWriteDelete(email, sid);
+        }
 
         return NextResponse.json({
             success: true,

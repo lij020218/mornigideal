@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabaseAdmin } from './supabase-admin';
 
 interface UsageLog {
     user_email: string;
@@ -81,28 +81,13 @@ export async function logOpenAIUsage(
     const costInWon = estimatedCost * 1335; // KRW conversion (approximate)
     const timestamp = new Date().toLocaleTimeString('ko-KR');
 
-    console.log('');
-    console.log('💰 ========================================');
-    console.log(`⏰ ${timestamp}`);
-    console.log(`📍 Endpoint: ${endpoint}`);
-    console.log(`👤 User: ${userEmail?.substring(0, 3)}***`);
-    console.log(`🤖 Model: ${model}`);
-    console.log(`📊 Tokens:`);
-    console.log(`   ↗️  Input:  ${inputTokens.toLocaleString()} tokens`);
-    console.log(`   ↙️  Output: ${outputTokens.toLocaleString()} tokens`);
-    console.log(`   📦 Total:  ${totalTokens.toLocaleString()} tokens`);
-    console.log(`💵 Cost:`);
-    console.log(`   $${estimatedCost.toFixed(6)} USD`);
-    console.log(`   ₩${costInWon.toFixed(2)} KRW`);
-    console.log('========================================');
-    console.log('');
 
     // Log daily cumulative cost
     logDailyCumulativeCost(estimatedCost, totalTokens);
 
     // Store in database (create table if needed)
     try {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('openai_usage_logs')
             .insert([usageLog]);
 
@@ -139,15 +124,6 @@ export function logDailyCumulativeCost(costToAdd: number, tokensToAdd: number): 
 
     const dailyCostInWon = dailyCumulativeCost * 1335;
 
-    console.log('📈 ======== DAILY CUMULATIVE ========');
-    console.log(`📅 Date: ${today}`);
-    console.log(`🔢 Total API Calls Today: ${dailyCallCount}`);
-    console.log(`📦 Total Tokens Today: ${dailyCumulativeTokens.toLocaleString()}`);
-    console.log(`💰 Total Cost Today:`);
-    console.log(`   $${dailyCumulativeCost.toFixed(6)} USD`);
-    console.log(`   ₩${dailyCostInWon.toFixed(2)} KRW`);
-    console.log('====================================');
-    console.log('');
 }
 
 /**
@@ -164,7 +140,7 @@ export async function getUserUsageStats(
     byEndpoint: Record<string, { calls: number; tokens: number; cost: number }>;
 }> {
     try {
-        let query = supabase
+        let query = supabaseAdmin
             .from('openai_usage_logs')
             .select('*')
             .eq('user_email', userEmail);

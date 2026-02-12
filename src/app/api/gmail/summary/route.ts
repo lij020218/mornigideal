@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface GmailMessage {
     id: string;
@@ -207,7 +203,7 @@ async function refreshAccessToken(refreshToken: string, userEmail: string): Prom
         const newExpiresAt = Date.now() + (tokens.expires_in * 1000);
 
         // Update token in database
-        await supabase
+        await supabaseAdmin
             .from("gmail_tokens")
             .update({
                 access_token: tokens.access_token,
@@ -237,11 +233,11 @@ export async function GET(request: NextRequest) {
         // Try to get token from database (for linked Gmail accounts)
         {
             // Check database for linked Gmail account
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from("gmail_tokens")
                 .select("*")
                 .eq("user_email", userEmail)
-                .single();
+                .maybeSingle();
 
             if (error || !data) {
                 // No linked Gmail account found

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET /api/user/progress?curriculum_id=xxx - Get progress for specific curriculum
 export async function GET(request: NextRequest) {
@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -39,12 +39,12 @@ export async function GET(request: NextRequest) {
         }
 
         // Get progress for this curriculum
-        const { data: progress, error } = await supabase
+        const { data: progress, error } = await supabaseAdmin
             .from("curriculum_progress")
             .select("*")
             .eq("user_id", userData.id)
             .eq("curriculum_id", curriculum_id)
-            .single();
+            .maybeSingle();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
             console.error("[Progress API] Error:", error);
@@ -93,11 +93,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user ID from email
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json(
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
             updateData.current_day = current_day;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("curriculum_progress")
             .upsert(updateData, {
                 onConflict: 'user_id,curriculum_id'

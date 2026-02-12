@@ -78,7 +78,6 @@ export function EmailSummarySection() {
 
                 // If cache is less than 4 hours old, use it
                 if (age < CACHE_DURATION) {
-                    console.log(`[EmailSummary] Using cached data (${Math.floor(age / 1000 / 60)} minutes old)`);
                     setEmailData(JSON.parse(cachedData));
                     setLastFetched(timestamp);
                     setIsGmailConnected(true);
@@ -113,7 +112,6 @@ export function EmailSummarySection() {
             localStorage.setItem(CACHE_TIMESTAMP_KEY, timestamp.toString());
             setLastFetched(timestamp);
 
-            console.log('[EmailSummary] Fresh data fetched and cached');
         } catch (err) {
             console.error('[EmailSummary] Error:', err);
             setError("이메일 요약을 불러오는데 실패했습니다");

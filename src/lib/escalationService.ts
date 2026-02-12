@@ -7,13 +7,8 @@
  * - 중요 알림(마감 임박, 중요 일정 직전)은 절대 억제하지 않음
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { isImportantSchedule } from '@/lib/proactiveNotificationService';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // ============================================
 // Types
@@ -237,12 +232,12 @@ async function getDismissStreak(
     notificationType: string
 ): Promise<DismissStreak> {
     const streakKey = `dismiss_streak_${notificationType}`;
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
         .from('user_kv_store')
         .select('value')
         .eq('user_email', userEmail)
         .eq('key', streakKey)
-        .single();
+        .maybeSingle();
 
     if (!data?.value) {
         return { count: 0, lastDate: null };
@@ -260,18 +255,18 @@ async function updateDeliveryFlag(
     delivered: boolean
 ): Promise<void> {
     const streakKey = `dismiss_streak_${notificationType}`;
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
         .from('user_kv_store')
         .select('value')
         .eq('user_email', userEmail)
         .eq('key', streakKey)
-        .single();
+        .maybeSingle();
 
     if (data?.value) {
         const streak = data.value as DismissStreak;
         streak.lastDelivered = delivered;
 
-        await supabase.from('user_kv_store').upsert({
+        await supabaseAdmin.from('user_kv_store').upsert({
             user_email: userEmail,
             key: streakKey,
             value: streak,
@@ -288,7 +283,7 @@ async function resetDismissStreak(
     notificationType: string
 ): Promise<void> {
     const streakKey = `dismiss_streak_${notificationType}`;
-    await supabase.from('user_kv_store').upsert({
+    await supabaseAdmin.from('user_kv_store').upsert({
         user_email: userEmail,
         key: streakKey,
         value: { count: 0, lastDate: null },

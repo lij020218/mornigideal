@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { MODELS } from "@/lib/models";
 
 export default function VoiceAgent() {
     const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -38,7 +39,7 @@ export default function VoiceAgent() {
 
             // Offer를 OpenAI WebRTC 엔드포인트로 전송
             const answerSdp = await fetch(
-                `https://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28&client_secret=${client_secret}`,
+                `https://api.openai.com/v1/realtime?model=${MODELS.GPT_REALTIME}&client_secret=${client_secret}`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/sdp" },

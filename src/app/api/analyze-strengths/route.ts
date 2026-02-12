@@ -9,8 +9,6 @@ const model = genAI.getGenerativeModel({
 
 export async function POST(request: Request) {
     try {
-        console.log('[analyze-strengths] Starting analysis');
-        console.log('[analyze-strengths] API Key present:', !!process.env.GEMINI_API_KEY);
 
         if (!process.env.GEMINI_API_KEY) {
             console.error("[analyze-strengths] GEMINI_API_KEY is missing");
@@ -21,7 +19,6 @@ export async function POST(request: Request) {
         }
 
         const { userType, major, field, goal, score, level, totalQuestions } = await request.json();
-        console.log('[analyze-strengths] Request params:', { userType, field, goal, score, totalQuestions });
 
         const percentage = Math.round((score / totalQuestions) * 100);
 
@@ -46,7 +43,6 @@ JSON 형식으로만 응답하세요:
   "weaknesses": ["약점1", "약점2", "약점3"]
 }`;
 
-        console.log('[analyze-strengths] Calling Gemini API...');
 
         let result;
         try {
@@ -67,7 +63,6 @@ JSON 형식으로만 응답하세요:
         const response = await result.response;
         const text = response.text();
 
-        console.log("[analyze-strengths] Raw analysis response:", text.substring(0, 500));
 
         // Extract JSON from response
         let jsonText = text.trim();

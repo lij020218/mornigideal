@@ -14,7 +14,6 @@ interface DailyBriefingContent {
 }
 
 export async function generateDailyBriefings() {
-    console.log('[DailyBriefing] Starting generation job...');
 
     // 1. Fetch all users
     const { data: users, error: userError } = await supabaseAdmin
@@ -26,7 +25,6 @@ export async function generateDailyBriefings() {
         return;
     }
 
-    console.log(`[DailyBriefing] Found ${users.length} users.`);
 
     // 2. We'll fetch personalized trends for each user inside the loop
 
@@ -42,7 +40,6 @@ export async function generateDailyBriefings() {
     // 3. Process each user
     for (const user of users) {
         try {
-            console.log(`[DailyBriefing] Processing user: ${user.name} (${user.id})`);
 
             const profile = user.profile || {};
             const job = profile.job || "전문가";
@@ -56,7 +53,7 @@ export async function generateDailyBriefings() {
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('date', yesterdayStr)
-                .single();
+                .maybeSingle();
 
             // Calculate Score
             // Total Goals = WakeUp + Learning(2) + Briefing(6) + CustomGoals(active)
@@ -87,7 +84,7 @@ export async function generateDailyBriefings() {
                 .select('trends')
                 .eq('email', user.email)
                 .eq('date', dateStr)
-                .single();
+                .maybeSingle();
 
             const userTrends = userTrendCache?.trends || [];
 
@@ -179,7 +176,6 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
             }
 
             // C. Save to DB
-            console.log(`[DailyBriefing] Saving for user ${user.id}, Date: ${dateStr}`);
             const { error: insertError } = await supabaseAdmin
                 .from('daily_briefings')
                 .upsert({
@@ -193,7 +189,6 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
             if (insertError) {
                 console.error(`[DailyBriefing] Failed to save for ${user.name}:`, JSON.stringify(insertError));
             } else {
-                console.log(`[DailyBriefing] Successfully saved for ${user.name}`);
             }
 
         } catch (err) {
@@ -201,5 +196,4 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
         }
     }
 
-    console.log('[DailyBriefing] Job complete.');
 }

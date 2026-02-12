@@ -85,7 +85,6 @@ export function FieriInterventionsContainer({ className }: FieriInterventionsCon
         if (!notification) return;
 
         // TODO: Execute the action based on action_type
-        console.log('[Fi.eri] Accepting notification:', notification);
 
         // Dismiss notification (this will update local state)
         await handleNotificationDismiss(id);
@@ -132,7 +131,6 @@ export function FieriInterventionsContainer({ className }: FieriInterventionsCon
             if (response.ok) {
                 setConfirmations(prev => prev.filter(c => c.id !== id));
                 // TODO: Execute the actual action
-                console.log('[Fi.eri] Confirmation accepted:', id);
             }
         } catch (error) {
             console.error('Error accepting confirmation:', error);

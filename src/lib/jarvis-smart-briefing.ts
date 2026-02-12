@@ -8,6 +8,7 @@
 import OpenAI from "openai";
 import { canUseFeature } from "./user-plan";
 import { searchMemories } from "./jarvis-memory";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -120,7 +121,7 @@ ${news.slice(0, 15).map((n, i) => `${i + 1}. [${n.source}] ${n.title}\n   ${n.de
 }`;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",
@@ -188,7 +189,6 @@ ${news.slice(0, 15).map((n, i) => `${i + 1}. [${n.source}] ${n.title}\n   ${n.de
         briefing.importantItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
         briefing.normalItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-        console.log(`[SmartBriefing] Generated: ${briefing.criticalItems.length} critical, ${briefing.importantItems.length} important, ${briefing.normalItems.length} normal`);
 
         return briefing;
     } catch (error) {
@@ -245,7 +245,7 @@ ${context.userGoal || "미설정"}
 }`;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini-2024-07-18",
+            model: MODELS.GPT_4O_MINI,
             messages: [
                 {
                     role: "system",

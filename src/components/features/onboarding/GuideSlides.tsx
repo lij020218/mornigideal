@@ -91,7 +91,7 @@ export function GuideSlides({ onComplete }: GuideSlidesProps) {
         {
             id: "welcome",
             title: "준비 완료!",
-            subtitle: "A.ideal의 핵심 기능을 소개해드릴게요",
+            subtitle: "Fi.eri의 핵심 기능을 소개해드릴게요",
             icon: <Sparkles className="w-10 h-10 text-white" />,
             iconBg: "bg-gradient-to-br from-primary to-purple-600 shadow-lg shadow-primary/30",
             color: "text-primary",
@@ -108,7 +108,7 @@ export function GuideSlides({ onComplete }: GuideSlidesProps) {
                             <span className="text-primary font-bold"> AI 개인 비서</span>
                         </p>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                            A.ideal은 단순한 학습 도구가 아닙니다.<br />
+                            Fi.eri는 단순한 학습 도구가 아닙니다.<br />
                             목표 설정부터 일정 관리, 트렌드 파악까지<br />
                             당신의 커리어 여정을 함께합니다.
                         </p>

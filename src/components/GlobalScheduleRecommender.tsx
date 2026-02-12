@@ -131,7 +131,6 @@ export function GlobalScheduleRecommender() {
 
                 // 일정이 없거나 남은 일정이 없을 때 추천
                 if (todaySchedules.length === 0 || pendingSchedules.length === 0) {
-                    console.log('[GlobalScheduleRecommender] No schedules found, sending recommendation');
 
                     // AI 일정 추천 요청
                     const res = await fetch('/api/ai-suggest-schedules', {
@@ -177,7 +176,6 @@ export function GlobalScheduleRecommender() {
 
                             // 추천 완료 표시
                             localStorage.setItem(recommendKey, 'true');
-                            console.log('[GlobalScheduleRecommender] Recommendation sent');
                         }
                     }
                 }

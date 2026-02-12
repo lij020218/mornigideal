@@ -86,43 +86,24 @@ export function SlideViewer({
         setIsLoading(true);
         setError(null);
         try {
-            console.log("[SlideViewer] Fetching slides for:", {
-                curriculumId,
-                dayNumber,
-                curriculumIdType: typeof curriculumId,
-                curriculumIdLength: curriculumId?.length
-            });
 
             // First try to get existing slides
             const getUrl = `/api/ai-learning-slides?curriculumId=${encodeURIComponent(curriculumId)}&dayNumber=${dayNumber}`;
-            console.log("[SlideViewer] GET URL:", getUrl);
 
             const getRes = await fetch(getUrl);
 
             if (getRes.ok) {
                 const data = await getRes.json();
-                console.log("[SlideViewer] GET response:", {
-                    curriculumId,
-                    dayNumber,
-                    hasSlides: !!data.slides,
-                    slidesLength: data.slides?.length,
-                    slidesData: data.slides ? 'exists' : 'null',
-                    rawResponse: JSON.stringify(data).substring(0, 200)
-                });
                 if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
-                    console.log("[SlideViewer] ✅ Using cached slides from DB, count:", data.slides.length);
                     setSlides(data.slides);
                     setIsLoading(false);
                     return;
                 } else {
-                    console.log("[SlideViewer] ⚠️ No cached slides found, will generate new ones");
                 }
             } else {
-                console.log("[SlideViewer] GET request failed:", getRes.status, await getRes.text());
             }
 
             // If no existing slides, generate new ones
-            console.log("[SlideViewer] 🔄 Generating new slides via POST...");
             const postRes = await fetch("/api/ai-learning-slides", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -148,10 +129,8 @@ export function SlideViewer({
 
             if (postRes.ok) {
                 const data = await postRes.json();
-                console.log("[SlideViewer] ✅ POST response received, slides count:", data.slides?.length);
                 setSlides(data.slides || []);
             } else {
-                console.log("[SlideViewer] ❌ POST request failed:", postRes.status);
                 setError({
                     type: 'general',
                     message: '슬라이드를 생성하는 데 실패했습니다.'

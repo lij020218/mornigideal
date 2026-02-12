@@ -34,7 +34,7 @@ const PLAN_STYLES: Record<UserPlanType, {
     badge: string;
     border: string;
 }> = {
-    standard: {
+    free: {
         icon: <Star className="w-5 h-5 text-white" />,
         gradient: "from-gray-500 to-gray-600",
         badge: "bg-gray-500/20 text-gray-700",
@@ -62,26 +62,26 @@ const PLAN_INFO: Record<UserPlanType, {
     description: string;
     features: { icon: React.ReactNode; text: string; highlight?: boolean }[];
 }> = {
-    standard: {
-        name: "Standard",
-        nameKo: "스탠다드",
+    free: {
+        name: "Free",
+        nameKo: "무료",
         price: "무료",
-        description: "기본 AI 비서 기능",
+        description: "AI 일정 비서 + 선제적 알림",
         features: [
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 50회" },
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "AI 채팅 및 일정 관리" },
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "아침 인사 & 학습 팁" },
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "유튜브 리소스 추천" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 30회" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "AI 채팅 + 일정 관리" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "컨텍스트 융합 (날씨+일정)" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "선제적 알림 + 메모리 서피싱" },
         ],
     },
     pro: {
         name: "Pro",
         nameKo: "프로",
-        price: "₩9,900",
-        description: "스마트 알림 & 브리핑",
+        price: "₩6,900",
+        description: "ReAct 에이전트 + 스마트 알림",
         features: [
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 100회" },
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "Standard의 모든 기능" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "Free의 모든 기능" },
             { icon: <AlertTriangle className="w-4 h-4 text-yellow-500" />, text: "리스크 알림", highlight: true },
             { icon: <Newspaper className="w-4 h-4 text-blue-500" />, text: "스마트 뉴스 브리핑", highlight: true },
         ],
@@ -89,13 +89,13 @@ const PLAN_INFO: Record<UserPlanType, {
     max: {
         name: "Max",
         nameKo: "맥스",
-        price: "₩21,900",
+        price: "₩14,900",
         description: "AI가 당신을 기억합니다",
         features: [
             { icon: <Infinity className="w-4 h-4 text-amber-500" />, text: "무제한 AI 호출", highlight: true },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "Pro의 모든 기능" },
             { icon: <Brain className="w-4 h-4 text-purple-500" />, text: "AI 장기 기억 (RAG)", highlight: true },
-            { icon: <Sparkles className="w-4 h-4 text-amber-500" />, text: "선제적 인사이트 제안", highlight: true },
+            { icon: <Sparkles className="w-4 h-4 text-amber-500" />, text: "자동 실행 모드", highlight: true },
         ],
     },
 };
@@ -214,12 +214,12 @@ export function PlanSettings() {
                 <div className="space-y-3">
                     <h4 className="font-medium text-sm text-muted-foreground">플랜 비교</h4>
 
-                    {(["standard", "pro", "max"] as UserPlanType[]).map((planType) => {
+                    {(["free", "pro", "max"] as UserPlanType[]).map((planType) => {
                         const info = PLAN_INFO[planType];
                         const style = PLAN_STYLES[planType];
                         const isCurrent = plan.plan === planType;
                         const isUpgrade =
-                            (plan.plan === "standard" && (planType === "pro" || planType === "max")) ||
+                            (plan.plan === "free" && (planType === "pro" || planType === "max")) ||
                             (plan.plan === "pro" && planType === "max");
 
                         return (

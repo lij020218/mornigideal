@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
                 .select("*")
                 .eq("user_id", userData.id)
                 .eq("date", date)
-                .single();
+                .maybeSingle();
 
             if (error && error.code !== 'PGRST116') {
                 console.error("[Chat History] Get error:", error);
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -195,7 +195,6 @@ export async function POST(request: NextRequest) {
 
                         await supabaseAdmin.from("user_memory").insert(rows);
 
-                        console.log(`[Chat History] Auto-embedded ${rows.length}/${userMessages.length} messages (filtered: ${userMessages.length - meaningfulMessages.length}, dedup: ${meaningfulMessages.length - newEntries.length})`);
                     }
                 }
             }
@@ -228,7 +227,7 @@ export async function DELETE(request: NextRequest) {
             .from("users")
             .select("id")
             .eq("email", userEmail)
-            .single();
+            .maybeSingle();
 
         if (userError || !userData) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });

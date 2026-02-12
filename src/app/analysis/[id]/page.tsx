@@ -1,20 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AnalysisView } from "@/components/features/analysis/AnalysisView";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-        },
-    }
-);
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -23,24 +12,17 @@ interface PageProps {
 export default async function AnalysisPage({ params }: PageProps) {
     const { id } = await params;
 
-    const { data: material, error } = await supabase
+    const { data: material, error } = await supabaseAdmin
         .from("materials")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
     if (error || !material) {
         console.error("Failed to load material:", error);
         redirect("/materials");
     }
 
-    console.log("Material loaded:", {
-        id: material.id,
-        title: material.title,
-        has_file_url: !!material.file_url,
-        file_url: material.file_url,
-        type: material.type
-    });
 
     return (
         <div className="min-h-screen bg-gradient-mesh text-foreground relative overflow-hidden md:ml-20">

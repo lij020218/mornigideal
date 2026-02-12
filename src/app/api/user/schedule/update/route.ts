@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { dualWriteUpdate } from "@/lib/schedule-dual-write";
 
 interface LongTermGoal {
     id: string;
@@ -106,11 +107,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Get user profile
-        const { data: user, error: fetchError } = await supabase
+        const { data: user, error: fetchError } = await supabaseAdmin
             .from('users')
             .select('*')
             .eq('email', userEmail)
-            .single();
+            .maybeSingle();
 
         if (fetchError || !user?.profile?.customGoals) {
             return NextResponse.json({ error: "No schedules found" }, { status: 404 });
@@ -163,7 +164,6 @@ export async function POST(request: NextRequest) {
                 }),
             };
 
-            console.log(`[schedule/update] Updated goal ${linkedGoalId} progress to ${newProgress}%`);
         }
 
         // Update profile with new goals
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
         };
 
         // Save back to database
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({ profile: updatedProfile })
             .eq('email', userEmail);
@@ -182,6 +182,9 @@ export async function POST(request: NextRequest) {
         if (updateError) {
             throw updateError;
         }
+
+        // Dual-write to schedules table
+        await dualWriteUpdate(userEmail, scheduleId, { completed, skipped });
 
         return NextResponse.json({
             success: true,

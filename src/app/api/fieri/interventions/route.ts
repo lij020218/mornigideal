@@ -4,29 +4,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getUserEmailWithAuth } from '@/lib/auth-utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     try {
-        const { searchParams } = new URL(request.url);
-        const userEmail = searchParams.get('email');
-
+        const userEmail = await getUserEmailWithAuth(request);
         if (!userEmail) {
             return NextResponse.json(
-                { error: 'email parameter required' },
-                { status: 400 }
+                { error: 'Unauthorized' },
+                { status: 401 }
             );
         }
 
         // Fetch notifications (L2 soft suggestions)
-        const { data: notifications, error: notifError } = await supabase
+        const { data: notifications, error: notifError } = await supabaseAdmin
             .from('jarvis_notifications')
             .select('*')
             .eq('user_email', userEmail)
@@ -39,7 +33,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch confirmation requests (L3 direct actions)
-        const { data: confirmations, error: confirmError } = await supabase
+        const { data: confirmations, error: confirmError } = await supabaseAdmin
             .from('jarvis_confirmation_requests')
             .select('*')
             .eq('user_email', userEmail)
@@ -52,7 +46,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch resources (checklists, links, etc.)
-        const { data: resources, error: resourcesError } = await supabase
+        const { data: resources, error: resourcesError } = await supabaseAdmin
             .from('jarvis_resources')
             .select('*')
             .eq('user_email', userEmail)
@@ -72,7 +66,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[Interventions API] Exception:', error);
         return NextResponse.json(
-            { error: String(error) },
+            { error: 'Internal server error' },
             { status: 500 }
         );
     }
@@ -80,10 +74,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { action, userEmail, id } = body;
+        const userEmail = await getUserEmailWithAuth(request);
+        if (!userEmail) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
 
-        if (!userEmail || !id || !action) {
+        const body = await request.json();
+        const { action, id } = body;
+
+        if (!id || !action) {
             return NextResponse.json(
                 { error: 'Missing required parameters' },
                 { status: 400 }
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'dismiss_notification') {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('jarvis_notifications')
                 .update({ dismissed_at: new Date().toISOString() })
                 .eq('id', id)
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'accept_confirmation') {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('jarvis_confirmation_requests')
                 .update({
                     status: 'accepted',
@@ -127,7 +129,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'reject_confirmation') {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('jarvis_confirmation_requests')
                 .update({
                     status: 'rejected',
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'mark_resource_accessed') {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('jarvis_resources')
                 .update({ accessed_at: new Date().toISOString() })
                 .eq('id', id)
@@ -160,7 +162,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'complete_resource') {
-            const { error } = await supabase
+            const { error } = await supabaseAdmin
                 .from('jarvis_resources')
                 .update({ completed_at: new Date().toISOString() })
                 .eq('id', id)
@@ -182,12 +184,12 @@ export async function POST(request: NextRequest) {
             }
 
             // Fetch current resource
-            const { data: resource, error: fetchError } = await supabase
+            const { data: resource, error: fetchError } = await supabaseAdmin
                 .from('jarvis_resources')
                 .select('content')
                 .eq('id', id)
                 .eq('user_email', userEmail)
-                .single();
+                .maybeSingle();
 
             if (fetchError || !resource) {
                 return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
@@ -200,7 +202,7 @@ export async function POST(request: NextRequest) {
                     item.id === itemId ? { ...item, completed } : item
                 );
 
-                const { error: updateError } = await supabase
+                const { error: updateError } = await supabaseAdmin
                     .from('jarvis_resources')
                     .update({ content })
                     .eq('id', id)
@@ -221,7 +223,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('[Interventions API] Exception:', error);
         return NextResponse.json(
-            { error: String(error) },
+            { error: 'Internal server error' },
             { status: 500 }
         );
     }

@@ -1,13 +1,13 @@
-import db from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 /**
  * 자동 스트레스/에너지 레벨 감지 서비스
  *
- * 사용자의 행동 패턴으로 스트레스와 에너지를 자동 추정:
+ * 사용자의 customGoals 행동 패턴으로 스트레스와 에너지를 자동 추정:
  * - 일정 건너뛰기 빈도
- * - 일정 수정 빈도
  * - 완료율
- * - 활동 시간
+ * - 일정 밀도
+ * - 활동 시간대
  */
 
 export interface DailyState {
@@ -15,115 +15,118 @@ export interface DailyState {
     stress_level: number; // 1-10
     completion_rate: number; // 0-1
     activity_count: number;
+    completed_count: number;
+    skipped_count: number;
     detected_at: string;
 }
 
 /**
  * 오늘의 스트레스/에너지 레벨 자동 추정
+ * customGoals 기반 — 별도 이벤트 테이블 불필요
  */
 export async function detectDailyState(userEmail: string): Promise<DailyState> {
-    const supabase = db.client;
-    const today = new Date().toISOString().split('T')[0];
-    const todayStart = `${today}T00:00:00`;
-    const todayEnd = `${today}T23:59:59`;
+    const now = new Date();
+    const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
+    const dayOfWeek = kst.getDay();
+    const currentHour = kst.getHours();
 
-    console.log(`[Stress Detector] Analyzing state for ${today}`);
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("profile")
+        .eq("email", userEmail)
+        .maybeSingle();
 
-    // 오늘의 모든 이벤트 가져오기
-    const { data: events, error } = await supabase
-        .from('user_events')
-        .select('event_type, metadata, created_at')
-        .eq('user_email', userEmail)
-        .gte('created_at', todayStart)
-        .lte('created_at', todayEnd);
+    const customGoals = userData?.profile?.customGoals || [];
 
-    if (error || !events) {
-        console.error('[Stress Detector] Error fetching events:', error);
-        return {
-            energy_level: 5,
-            stress_level: 5,
-            completion_rate: 0,
-            activity_count: 0,
-            detected_at: new Date().toISOString(),
-        };
-    }
+    // 오늘 해당하는 일정 필터
+    const todayGoals = customGoals.filter((g: any) => {
+        if (g.specificDate === todayStr) return true;
+        if (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate) {
+            if (g.startDate && todayStr < g.startDate) return false;
+            if (g.endDate && todayStr > g.endDate) return false;
+            return true;
+        }
+        return false;
+    });
 
-    // 이벤트 분석
-    const completedCount = events.filter(e =>
-        e.event_type.includes('completed') ||
-        e.event_type === 'ai_suggestion_accepted'
-    ).length;
-
-    const skippedCount = events.filter(e =>
-        e.event_type.includes('skipped') ||
-        e.event_type.includes('cancelled')
-    ).length;
-
-    const rescheduledCount = events.filter(e =>
-        e.event_type === 'schedule_rescheduled'
-    ).length;
-
-    const totalActivities = completedCount + skippedCount;
-    const completionRate = totalActivities > 0 ? completedCount / totalActivities : 0;
+    const completedCount = todayGoals.filter((g: any) => g.completed).length;
+    const skippedCount = todayGoals.filter((g: any) => g.skipped).length;
+    const totalCount = todayGoals.length;
+    const resolvedCount = completedCount + skippedCount;
+    const completionRate = resolvedCount > 0 ? completedCount / resolvedCount : 0;
 
     // 스트레스 레벨 계산
-    let stressLevel = 5; // 기본값
+    let stressLevel = 5;
 
-    // 완료율이 낮으면 스트레스 높음
-    if (completionRate < 0.3) {
-        stressLevel = 8;
-    } else if (completionRate < 0.6) {
-        stressLevel = 6;
-    } else if (completionRate >= 0.8) {
-        stressLevel = 3; // 잘 완료하면 스트레스 낮음
+    // 일정 밀도가 높으면 스트레스 증가
+    if (totalCount >= 8) {
+        stressLevel += 2;
+    } else if (totalCount >= 5) {
+        stressLevel += 1;
     }
 
-    // 일정 재조정이 많으면 스트레스 증가
-    if (rescheduledCount > 3) {
-        stressLevel = Math.min(10, stressLevel + 2);
+    // 완료율이 낮으면 스트레스 증가
+    if (resolvedCount > 0) {
+        if (completionRate < 0.3) {
+            stressLevel += 2;
+        } else if (completionRate < 0.5) {
+            stressLevel += 1;
+        } else if (completionRate >= 0.8) {
+            stressLevel -= 2;
+        }
     }
 
     // 건너뛴 일정이 많으면 스트레스 증가
-    if (skippedCount > 3) {
-        stressLevel = Math.min(10, stressLevel + 2);
+    if (skippedCount >= 3) {
+        stressLevel += 1;
     }
 
-    // 에너지 레벨 계산 (완료율과 활동량 기반)
+    // 오후 늦은 시간인데 미완료가 많으면 스트레스 증가
+    const pendingCount = totalCount - resolvedCount;
+    if (currentHour >= 18 && pendingCount > 3) {
+        stressLevel += 1;
+    }
+
+    stressLevel = Math.max(1, Math.min(10, stressLevel));
+
+    // 에너지 레벨 계산
     let energyLevel = 5;
 
     if (completionRate >= 0.8 && completedCount >= 3) {
-        energyLevel = 8; // 높은 완료율 + 많은 활동 = 에너지 높음
-    } else if (completionRate >= 0.6) {
-        energyLevel = 6;
-    } else if (completionRate < 0.3) {
-        energyLevel = 3; // 낮은 완료율 = 에너지 부족
+        energyLevel = 8;
+    } else if (completionRate >= 0.6 && completedCount >= 2) {
+        energyLevel = 7;
+    } else if (completionRate < 0.3 && resolvedCount > 0) {
+        energyLevel = 3;
     }
 
-    // 활동이 아예 없으면 에너지 낮음
-    if (totalActivities === 0) {
-        energyLevel = 4;
+    // 일정이 아예 없으면 중간
+    if (totalCount === 0) {
+        energyLevel = 5;
+        stressLevel = 3;
     }
 
-    const state: DailyState = {
+    // 아침 시간대에는 에너지 보정
+    if (currentHour >= 6 && currentHour <= 10) {
+        energyLevel = Math.min(10, energyLevel + 1);
+    }
+    // 오후 3-5시 슬럼프
+    if (currentHour >= 15 && currentHour <= 17) {
+        energyLevel = Math.max(1, energyLevel - 1);
+    }
+
+    energyLevel = Math.max(1, Math.min(10, energyLevel));
+
+    return {
         energy_level: energyLevel,
         stress_level: stressLevel,
         completion_rate: completionRate,
-        activity_count: totalActivities,
+        activity_count: totalCount,
+        completed_count: completedCount,
+        skipped_count: skippedCount,
         detected_at: new Date().toISOString(),
     };
-
-    console.log('[Stress Detector] Detected state:', state);
-
-    // 이벤트로 기록
-    await supabase.from('user_events').insert({
-        id: crypto.randomUUID(),
-        user_email: userEmail,
-        event_type: 'daily_state_detected',
-        start_at: new Date().toISOString(),
-        metadata: state,
-    });
-
-    return state;
 }
 
 /**

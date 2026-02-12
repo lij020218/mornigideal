@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import Parser from 'rss-parser';
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -15,7 +12,7 @@ const openai = new OpenAI({
 
 const parser = new Parser();
 
-const MINI_MODEL = "gpt-5-mini-2025-08-07";
+const MINI_MODEL = MODELS.GPT_5_MINI;
 const BATCH_SIZE = 10; // 10개씩 병렬 처리
 
 // RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
@@ -72,12 +69,10 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  console.log(`[BATCH] Fetching from ${RSS_FEEDS.length} RSS feeds...`);
 
   for (const feed of RSS_FEEDS) {
     try {
       const feedData = await parser.parseURL(feed.url);
-      console.log(`[BATCH] ${feed.name}: ${feedData.items?.length || 0} items`);
 
       feedData.items?.forEach((item) => {
         const pubDate = item.pubDate ? new Date(item.pubDate) : null;
@@ -100,20 +95,17 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
     }
   }
 
-  console.log(`[BATCH] Total ${articles.length} articles collected`);
   return articles;
 }
 
 // Step 2: GPT-5-mini로 뉴스 요약 + 분류 (배치 병렬 처리)
 async function summarizeArticlesBatch(articles: RSSArticle[], batchId: string) {
-  console.log(`[BATCH] Summarizing ${articles.length} articles with ${MINI_MODEL}...`);
 
   const results: any[] = [];
 
   // 10개씩 병렬 처리
   for (let i = 0; i < articles.length; i += BATCH_SIZE) {
     const batch = articles.slice(i, i + BATCH_SIZE);
-    console.log(`[BATCH] Processing articles ${i + 1}-${Math.min(i + BATCH_SIZE, articles.length)}...`);
 
     const batchPromises = batch.map(async (article) => {
       try {
@@ -179,7 +171,6 @@ async function summarizeArticlesBatch(articles: RSSArticle[], batchId: string) {
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults.filter(r => r !== null));
 
-    console.log(`[BATCH] Completed ${results.length}/${articles.length}`);
   }
 
   return results;
@@ -187,7 +178,6 @@ async function summarizeArticlesBatch(articles: RSSArticle[], batchId: string) {
 
 // Step 3: Supabase에 저장
 async function saveToCache(articles: any[]) {
-  console.log(`[BATCH] Saving ${articles.length} articles to database...`);
 
   const records = articles.map(article => ({
     title: article.original_title,
@@ -204,7 +194,7 @@ async function saveToCache(articles: any[]) {
     is_active: true,
   }));
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('cached_news')
     .insert(records);
 
@@ -213,7 +203,6 @@ async function saveToCache(articles: any[]) {
     throw error;
   }
 
-  console.log(`[BATCH] Successfully saved ${articles.length} articles`);
   return data;
 }
 
@@ -228,10 +217,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log(`[BATCH ${batchId}] Starting news batch job...`);
 
     // 배치 실행 기록 시작
-    await supabase.from('news_batch_runs').insert({
+    await supabaseAdmin.from('news_batch_runs').insert({
       batch_id: batchId,
       status: 'running',
       started_at: new Date().toISOString(),
@@ -241,7 +229,7 @@ export async function POST(request: Request) {
     const rssArticles = await fetchRSSArticles();
 
     if (rssArticles.length === 0) {
-      await supabase.from('news_batch_runs').update({
+      await supabaseAdmin.from('news_batch_runs').update({
         status: 'failed',
         completed_at: new Date().toISOString(),
         error_message: 'No articles found',
@@ -257,20 +245,19 @@ export async function POST(request: Request) {
     await saveToCache(summarized);
 
     // Step 4: 오래된 뉴스 비활성화
-    const { error: deactivateError } = await supabase.rpc('deactivate_old_news');
+    const { error: deactivateError } = await supabaseAdmin.rpc('deactivate_old_news');
     if (deactivateError) {
       console.error('[BATCH] Error deactivating old news:', deactivateError);
     }
 
     // 배치 완료 기록
-    await supabase.from('news_batch_runs').update({
+    await supabaseAdmin.from('news_batch_runs').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
       articles_processed: rssArticles.length,
       articles_cached: summarized.length,
     }).eq('batch_id', batchId);
 
-    console.log(`[BATCH ${batchId}] Completed successfully`);
 
     return NextResponse.json({
       success: true,
@@ -283,7 +270,7 @@ export async function POST(request: Request) {
     console.error(`[BATCH ${batchId}] Error:`, error);
 
     // 배치 실패 기록
-    await supabase.from('news_batch_runs').update({
+    await supabaseAdmin.from('news_batch_runs').update({
       status: 'failed',
       completed_at: new Date().toISOString(),
       error_message: error instanceof Error ? error.message : 'Unknown error',

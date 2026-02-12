@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { getUserByEmail } from "@/lib/users";
+import { MODELS } from "@/lib/models";
 
 export async function POST(request: NextRequest) {
     try {
@@ -41,12 +42,11 @@ export async function POST(request: NextRequest) {
                 trendsSummary = trends.map((t: any, idx: number) => `${idx + 1}. ${t.title} (${t.source})`).join("\n");
             }
         } catch (err) {
-            console.warn("[Voice] Unable to fetch trends context:", err);
         }
 
         // 3) Let GPT decide intent and craft a short Korean reply
         const chat = await client.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: MODELS.GPT_4O_MINI_SHORT,
             response_format: { type: "json_object" },
             messages: [
                 {
@@ -93,7 +93,6 @@ ${trendsSummary || "없음"}
                 scheduleUpdate = parsed.scheduleUpdate;
             }
         } catch (err) {
-            console.warn("[Voice] Failed to parse JSON reply:", err);
         }
 
         // 4) If schedule update requested, attempt to persist to user profile
@@ -126,8 +125,8 @@ ${trendsSummary || "없음"}
                 }
 
                 // Persist profile
-                const { supabase } = await import("@/lib/supabase");
-                const { error } = await supabase
+                const { supabaseAdmin } = await import("@/lib/supabase-admin");
+                const { error } = await supabaseAdmin
                     .from("users")
                     .update({ profile })
                     .eq("email", userEmail);
@@ -146,7 +145,7 @@ ${trendsSummary || "없음"}
 
         // 4) Text-to-speech
         const speech = await client.audio.speech.create({
-            model: "gpt-4o-mini-tts",
+            model: MODELS.GPT_4O_MINI_TTS,
             voice: "verse",
             input: replyText,
         });

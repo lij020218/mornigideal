@@ -6,12 +6,7 @@
  * - 연결 상태 확인
  */
 
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from "./supabase-admin";
 
 interface SlackChannel {
   name: string;
@@ -33,11 +28,11 @@ export interface SlackUnreadSummary {
 
 // 토큰 가져오기
 async function getSlackToken(userEmail: string): Promise<string | null> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("slack_tokens")
     .select("access_token")
     .eq("user_email", userEmail)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data.access_token;
@@ -187,11 +182,11 @@ export async function sendSlackMessage(
     // 채널ID가 없으면 default_channel 사용
     let targetChannel = channelId;
     if (!targetChannel) {
-      const { data } = await supabase
+      const { data } = await supabaseAdmin
         .from("slack_tokens")
         .select("default_channel_id, slack_user_id")
         .eq("user_email", userEmail)
-        .single();
+        .maybeSingle();
 
       // 기본 채널 없으면 자기 자신에게 DM
       targetChannel = data?.default_channel_id || data?.slack_user_id;

@@ -18,17 +18,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        console.log('[Cron Daily Cleanup] Starting scheduled data cleanup...');
 
         // 모든 사용자 데이터 정리 (userEmail 없이 실행)
         const report = await executeDataCleanup();
 
-        console.log('[Cron Daily Cleanup] Completed:', {
-            deleted: report.totalRecordsDeleted,
-            aggregated: report.totalRecordsAggregated,
-            errors: report.errors.length,
-            executionTimeMs: report.executionTimeMs,
-        });
 
         // 에러가 많으면 알림 (Slack, 이메일 등)
         if (report.errors.length > 5) {

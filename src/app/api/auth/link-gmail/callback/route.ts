@@ -61,8 +61,6 @@ export async function GET(req: NextRequest) {
             const userEmail = ${JSON.stringify(state)};
             const error = ${JSON.stringify(error)};
 
-            console.log('[Gmail Callback] code:', code ? 'exists' : 'missing');
-            console.log('[Gmail Callback] error:', error);
 
             if (error) {
                 document.getElementById('status').textContent = '연동 실패';
@@ -70,7 +68,6 @@ export async function GET(req: NextRequest) {
 
                 // Send error to parent
                 if (window.opener) {
-                    console.log('[Gmail Callback] Sending error to parent');
                     window.opener.postMessage({
                         type: 'gmail-link-error',
                         error: error
@@ -91,7 +88,6 @@ export async function GET(req: NextRequest) {
             }
 
             try {
-                console.log('[Gmail Callback] Exchanging code for tokens...');
                 // Exchange code for tokens via our API (pass state for CSRF verification)
                 const response = await fetch('/api/auth/link-gmail', {
                     method: 'POST',
@@ -102,7 +98,6 @@ export async function GET(req: NextRequest) {
                 });
 
                 const data = await response.json();
-                console.log('[Gmail Callback] API response:', response.ok, data);
 
                 if (response.ok) {
                     document.getElementById('status').textContent = '✓ 연동 완료!';
@@ -110,12 +105,10 @@ export async function GET(req: NextRequest) {
 
                     // Send success message to parent window
                     if (window.opener && !window.opener.closed) {
-                        console.log('[Gmail Callback] Sending success to parent');
                         window.opener.postMessage({
                             type: 'gmail-link-success',
                             data: data
                         }, '*');
-                        console.log('[Gmail Callback] Message sent!');
                     } else {
                         console.error('[Gmail Callback] window.opener is null or closed!');
                         alert('연동이 완료되었습니다! 이 창을 닫고 페이지를 새로고침해주세요.');
@@ -123,7 +116,6 @@ export async function GET(req: NextRequest) {
 
                     // Close popup after 2 seconds
                     setTimeout(() => {
-                        console.log('[Gmail Callback] Closing popup...');
                         window.close();
                     }, 2000);
                 } else {

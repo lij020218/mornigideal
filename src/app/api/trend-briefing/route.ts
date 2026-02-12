@@ -62,12 +62,10 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    console.log('[RSS] Fetching from', RSS_FEEDS.length, 'RSS feeds...');
 
     for (const feed of RSS_FEEDS) {
         try {
             const feedData = await parser.parseURL(feed.url);
-            console.log(`[RSS] Fetched ${feedData.items?.length || 0} items from ${feed.name}`);
 
             feedData.items?.forEach((item) => {
                 const pubDate = item.pubDate ? new Date(item.pubDate) : null;
@@ -88,7 +86,6 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
         }
     }
 
-    console.log(`[RSS] Total articles collected: ${articles.length}`);
     return articles;
 }
 
@@ -108,8 +105,6 @@ export async function GET(request: Request) {
         if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        console.log('[API] Trend briefing request');
-        console.log('[API] Exclude count:', excludeTitles.length);
 
         // Check cache first (only if not force refreshing and no exclusions)
         if (!forceRefresh && excludeTitles.length === 0) {
@@ -148,12 +143,10 @@ export async function GET(request: Request) {
                         const lastUpdatedKST = new Date(lastUpdatedKSTStr);
                         const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr.split(', ')[1].split(':')[0]);
 
-                        console.log('[API] Cache check - Now:', nowKST.toISOString(), 'Cache updated:', lastUpdatedKSTStr, 'Hour:', lastUpdatedHourKST);
 
                         if (lastUpdatedHourKST >= 5) {
                             isCacheValid = true;
                         } else {
-                            console.log('[API] Cache is from today but before 5 AM KST. Invalidating for new 5 AM briefing.');
                         }
                     } else {
                         // It's before 5 AM. Any cache from today is fine.
@@ -162,7 +155,6 @@ export async function GET(request: Request) {
                 }
 
                 if (isCacheValid) {
-                    console.log('[API] Returning cached trends from today:', cachedData.lastUpdated);
                     return NextResponse.json({
                         trends: cachedData.trends,
                         cached: true,
@@ -172,8 +164,6 @@ export async function GET(request: Request) {
             }
         }
 
-        console.log('[API] Generating new daily briefing from RSS feeds...');
-        console.log('[API] Interests:', interests);
 
         // Step 1: Fetch articles from RSS feeds
         const rssArticles = await fetchRSSArticles();
@@ -201,12 +191,6 @@ export async function GET(request: Request) {
             })
             .sort((a, b) => b.recencyScore - a.recencyScore || a.ageInDays - b.ageInDays);
 
-        console.log('[API] Article age distribution:', {
-            today: sortedArticles.filter(a => a.ageInDays < 1).length,
-            yesterday: sortedArticles.filter(a => a.ageInDays >= 1 && a.ageInDays < 2).length,
-            twoDaysAgo: sortedArticles.filter(a => a.ageInDays >= 2 && a.ageInDays < 3).length,
-            older: sortedArticles.filter(a => a.ageInDays >= 3).length
-        });
 
         // Step 2: Use Gemini to filter and select relevant articles
         const model = genAI.getGenerativeModel({
@@ -221,7 +205,6 @@ export async function GET(request: Request) {
             /스포츠|축구|야구|농구|테니스|골프|sports|football|soccer|baseball|basketball/i.test(interests) :
             false;
 
-        console.log('[API] User interests:', interestList, '| Has sports interest:', hasSportsInterest);
 
         // Prioritize recent articles (first 100 sorted by recency)
         // Filter out sports articles if user has no sports interest
@@ -246,18 +229,15 @@ export async function GET(request: Request) {
         // 제외할 뉴스가 있으면 필터링
         let filteredArticles = articlesForPrompt;
         if (excludeTitles.length > 0) {
-            console.log('[API] Filtering out already viewed articles...');
             filteredArticles = articlesForPrompt.filter(article =>
                 !excludeTitles.some(excludeTitle =>
                     article.title.toLowerCase().includes(excludeTitle.toLowerCase()) ||
                     excludeTitle.toLowerCase().includes(article.title.toLowerCase())
                 )
             );
-            console.log(`[API] Filtered: ${articlesForPrompt.length} -> ${filteredArticles.length} articles`);
         }
 
         if (filteredArticles.length < 6) {
-            console.log('[API] Not enough new articles, using full sorted pool...');
             // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
             filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
                 id: index,
@@ -386,7 +366,6 @@ Select now.`;
             }
 
             if (sourceCount[sourceName] >= 2) {
-                console.log(`[API] Skipping article from ${sourceName} (already 2 from this source)`);
                 return false;
             }
 
@@ -394,7 +373,6 @@ Select now.`;
             return true;
         });
 
-        console.log('[API] Source distribution after filtering:', sourceCount);
 
         // Step 3: Map selected articles back to original RSS articles
         const trends = selectedArticles.map((selected: any) => {
@@ -420,13 +398,11 @@ Select now.`;
             };
         });
 
-        console.log(`[API] Selected ${trends.length} articles from RSS feeds`);
 
         // Save to cache (with user email for proper caching)
         await saveTrendsCache(trends, true, userEmail);
 
         // Pre-generate details for all trends - MUST await to ensure cache is ready
-        console.log('[API] Pre-generating details for all trends...');
         const detailModel = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" }
@@ -476,15 +452,12 @@ Write in Korean. Be practical and specific for senior ${job}.`;
                     // Validate structure
                     if (detail.content && detail.keyTakeaways && detail.actionItems) {
                         await saveDetailCache(trend.id, detail, userEmail);
-                        console.log(`[API] Pre-generated detail for: ${trend.title}`);
                     } else {
-                        console.warn(`[API] Invalid detail structure for ${trend.title}:`, Object.keys(detail));
                     }
                 } catch (error) {
                     console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
                 }
             }));
-            console.log('[API] All details pre-generated successfully');
         } catch (err) {
             console.error('[API] Error in detail pre-generation:', err);
         }
@@ -507,29 +480,23 @@ export async function POST(request: Request) {
     try {
         const { title, level, job, originalUrl, summary, trendId } = await request.json();
 
-        console.log('[API POST] Received request for detail:', { title, level, job, trendId });
 
         // Get user email from JWT or session
         const userEmail = await getUserEmailWithAuth(request as NextRequest);
         if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        console.log('[API POST] Trend briefing detail request');
 
         // Check cache first
         if (trendId) {
             const cachedDetail = await getDetailCache(trendId, userEmail);
 
             if (cachedDetail) {
-                console.log('[API] Found cached detail, checking structure...');
-                console.log('[API] Cached detail keys:', Object.keys(cachedDetail));
 
                 // Validate cache has required fields
                 if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems) {
-                    console.log('[API] Cache is valid, returning cached detail');
                     return NextResponse.json({ detail: cachedDetail, cached: true });
                 } else {
-                    console.warn('[API] Cache is invalid (missing required fields), regenerating...');
                 }
             }
         }
@@ -541,9 +508,7 @@ export async function POST(request: Request) {
             throw new Error('Gemini API key not configured');
         }
 
-        console.log('[API] Generating detail with Gemini...');
         const modelName = process.env.GEMINI_MODEL_2 || "gemini-2.5-flash";
-        console.log('[API] Using model:', modelName);
         const model = genAI.getGenerativeModel({
             model: modelName,
             generationConfig: { responseMimeType: "application/json" }
@@ -603,7 +568,6 @@ Write in Korean.`;
         const response = await result.response;
         const text = response.text();
 
-        console.log('[API POST] Gemini raw response length:', text?.length || 0);
 
         if (!text || text.trim().length === 0) {
             console.error('[API POST] Gemini returned empty response');
@@ -613,13 +577,6 @@ Write in Korean.`;
         let detail;
         try {
             detail = JSON.parse(text);
-            console.log('[API POST] Parsed detail:', {
-                hasTitle: !!detail.title,
-                hasContent: !!detail.content,
-                contentLength: detail.content?.length || 0,
-                keyTakeawaysCount: detail.keyTakeaways?.length || 0,
-                actionItemsCount: detail.actionItems?.length || 0
-            });
         } catch (e) {
             console.error("[API POST] Failed to parse detail JSON:", e);
             console.error("[API POST] Raw text:", text.substring(0, 500));

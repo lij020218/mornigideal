@@ -5,6 +5,7 @@ import { generateUserContext } from "@/lib/user-context-service";
 import { detectDailyState, getStressReliefSuggestions, getEnergyBoostSuggestions } from "@/lib/stress-detector";
 import { analyzeWorkRestBalance, getRecommendationsByType } from "@/lib/work-rest-analyzer";
 import { logOpenAIUsage } from "@/lib/openai-usage";
+import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -30,7 +31,6 @@ function getCachedSuggestions(cacheKey: string, requestCount: number): any | nul
         return null;
     }
 
-    console.log('[AI Suggest Schedules] Cache hit! Returning cached suggestions for', cacheKey);
     return cached.data;
 }
 
@@ -39,12 +39,10 @@ function setCachedSuggestions(cacheKey: string, requestCount: number, data: any)
         data,
         timestamp: Date.now()
     });
-    console.log('[AI Suggest Schedules] Cached suggestions for', cacheKey);
 }
 
 export async function POST(request: NextRequest) {
     try {
-        console.log("[AI Suggest Schedules] API 호출 시작");
 
         // 인증 확인
         const email = await getUserEmailWithAuth(request);
@@ -53,8 +51,6 @@ export async function POST(request: NextRequest) {
         }
 
         const { requestCount = 3, currentHour } = await request.json();
-        console.log("[AI Suggest Schedules] 요청 개수:", requestCount);
-        console.log("[AI Suggest Schedules] 현재 시간:", currentHour);
 
         // Check cache first (with hour to avoid stale recommendations)
         const cacheKey = `${email}-${requestCount}-${currentHour}`;
@@ -64,15 +60,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Context 생성 (캐시 사용하지 않고 항상 최신 데이터 가져오기)
-        console.log("[AI Suggest Schedules] User context 생성 중...");
         const context = await generateUserContext(email); // 캐시 대신 직접 생성
 
         // 스트레스/에너지 레벨 자동 감지
-        console.log("[AI Suggest Schedules] 스트레스/에너지 레벨 감지 중...");
         const dailyState = await detectDailyState(email);
 
         // 업무-휴식 균형 분석
-        console.log("[AI Suggest Schedules] 업무-휴식 균형 분석 중...");
         const workRestBalance = await analyzeWorkRestBalance(email);
         const balanceRecommendations = getRecommendationsByType(workRestBalance.recommendationType);
 
@@ -108,7 +101,6 @@ export async function POST(request: NextRequest) {
             ?.filter((goal: any) => goal.specificDate === today)
             .map((goal: any) => goal.text) || [];
 
-        console.log("[AI Suggest Schedules] 오늘 일정 (DB 실시간):", existingSchedules);
 
         const addedSchedulesText = existingSchedules.length > 0
             ? existingSchedules.join(", ")
@@ -350,9 +342,8 @@ ${addedSchedulesText}
 
 위 형식을 정확히 따라 응답하세요. 반드시 순수 JSON만 반환하고, 추가 설명이나 마크다운 없이 응답하세요.`;
 
-        console.log("[AI Suggest Schedules] OpenAI 요청 시작");
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: MODELS.GPT_4O_MINI_SHORT,
             messages: [
                 {
                     role: "system",
@@ -367,7 +358,6 @@ ${addedSchedulesText}
             response_format: { type: "json_object" }
         });
 
-        console.log("[AI Suggest Schedules] OpenAI 응답 성공");
         const responseText = completion.choices[0]?.message?.content || "{}";
 
         // Log usage
@@ -375,7 +365,7 @@ ${addedSchedulesText}
         if (usage) {
             await logOpenAIUsage(
                 email,
-                "gpt-4o-mini",
+                MODELS.GPT_4O_MINI_SHORT,
                 "ai-suggest-schedules",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -396,7 +386,6 @@ ${addedSchedulesText}
             id: `ai-suggestion-${Date.now()}-${index}`,
         }));
 
-        console.log("[AI Suggest Schedules] 생성된 추천:", suggestionsWithIds);
 
         const responseData = {
             suggestions: suggestionsWithIds,
