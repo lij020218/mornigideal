@@ -71,8 +71,11 @@ export interface WeeklyReportData {
 
 /**
  * 가장 최근 완료된 주간(월~일)의 시작일과 종료일을 계산
- * 예: 현재가 1월 20일(월)이면 -> 1월 13일(월) ~ 1월 19일(일) 반환
- * 예: 현재가 1월 19일(일)이면 -> 1월 6일(월) ~ 1월 12일(일) 반환 (아직 이번 주가 끝나지 않았으므로 지지난 주)
+ * 주간은 월요일 시작, 일요일 종료.
+ * 일요일이면 그 주(월~일)가 이미 완료되었으므로 해당 주를 반환.
+ * 월~토이면 지난 주(월~일)를 반환.
+ * 예: 2/16(일) -> 2/10(월) ~ 2/16(일) 반환
+ * 예: 2/17(월) -> 2/10(월) ~ 2/16(일) 반환
  */
 function getLastCompletedWeek(date: Date): { start: Date; end: Date; weekNumber: number } {
     const d = new Date(date);
@@ -80,29 +83,37 @@ function getLastCompletedWeek(date: Date): { start: Date; end: Date; weekNumber:
 
     const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ...
 
-    // 현재 주의 월요일 계산
-    // dayOfWeek가 0(일요일)이면 6일 전, 1(월요일)이면 0일 전, 2(화요일)이면 1일 전...
-    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const thisMonday = new Date(d);
-    thisMonday.setDate(d.getDate() - daysToSubtract);
+    let targetMonday: Date;
+    let targetSunday: Date;
 
-    // 지난 주의 월요일과 일요일
-    const lastMonday = new Date(thisMonday);
-    lastMonday.setDate(thisMonday.getDate() - 7);
+    if (dayOfWeek === 0) {
+        // 일요일: 이번 주(월~일)가 완료됨 → 이번 주의 월요일 = 6일 전
+        targetMonday = new Date(d);
+        targetMonday.setDate(d.getDate() - 6);
+        targetSunday = new Date(d);
+    } else {
+        // 월~토: 지난 주(월~일) 반환
+        const daysToSubtract = dayOfWeek - 1; // 월=0, 화=1, ...
+        const thisMonday = new Date(d);
+        thisMonday.setDate(d.getDate() - daysToSubtract);
 
-    const lastSunday = new Date(lastMonday);
-    lastSunday.setDate(lastMonday.getDate() + 6);
-    lastSunday.setHours(23, 59, 59, 999);
+        targetMonday = new Date(thisMonday);
+        targetMonday.setDate(thisMonday.getDate() - 7);
+        targetSunday = new Date(targetMonday);
+        targetSunday.setDate(targetMonday.getDate() + 6);
+    }
+
+    targetSunday.setHours(23, 59, 59, 999);
 
     // ISO 8601 주차 계산 (월요일 시작, 1월 4일이 포함된 주가 Week 1)
-    const target = new Date(lastMonday.valueOf());
-    const dow = lastMonday.getDay();
+    const target = new Date(targetMonday.valueOf());
+    const dow = targetMonday.getDay();
     const diff = dow === 0 ? -3 : 4 - dow;
-    target.setDate(lastMonday.getDate() + diff);
+    target.setDate(targetMonday.getDate() + diff);
     const yearStart = new Date(target.getFullYear(), 0, 1);
     const weekNumber = Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 
-    return { start: lastMonday, end: lastSunday, weekNumber };
+    return { start: targetMonday, end: targetSunday, weekNumber };
 }
 
 /**
@@ -495,65 +506,36 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 export async function generateWeeklyReportNarrative(reportData: WeeklyReportData, userProfile: any): Promise<string> {
     const { scheduleAnalysis, trendBriefingAnalysis, focusAnalysis, sleepAnalysis, growthMetrics, insights, comparisonWithLastWeek } = reportData;
 
-    const prompt = `당신은 사용자의 성장을 돕는 코치입니다. 다음 주간 데이터를 바탕으로 격려와 인사이트가 담긴 주간 리포트를 작성해주세요.
+    // 사용자의 실제 상황에 맞는 맞춤 조언을 위한 컨텍스트 구성
+    const userJob = userProfile.job || '';
+    const userGoal = userProfile.goal || '';
+    const userContext = userJob && userGoal
+        ? `이 사용자는 ${userJob}이며, "${userGoal}"을 목표로 하고 있습니다.`
+        : userJob
+            ? `이 사용자는 ${userJob}입니다.`
+            : userGoal
+                ? `이 사용자의 목표는 "${userGoal}"입니다.`
+                : '';
 
-**사용자 정보:**
-- 직업/역할: ${userProfile.job || '정보 없음'}
-- 목표: ${userProfile.goal || '정보 없음'}
+    const prompt = `아래 데이터를 기반으로 사용자에게 도움이 되는 맞춤 코멘트를 작성해.
 
-**이번 주 활동 (${reportData.period.start} ~ ${reportData.period.end}):**
+${userContext}
 
-📅 **일정 관리**
-- 총 일정: ${scheduleAnalysis.totalSchedules}개
-- 완료한 일정: ${scheduleAnalysis.completedSchedules}개 (완료율 ${scheduleAnalysis.completionRate.toFixed(1)}%)
-- 카테고리별: 업무 ${scheduleAnalysis.categoryBreakdown.work}, 학습 ${scheduleAnalysis.categoryBreakdown.learning}, 운동 ${scheduleAnalysis.categoryBreakdown.exercise}, 웰빙 ${scheduleAnalysis.categoryBreakdown.wellness}
-- 가장 생산적인 날: ${scheduleAnalysis.mostProductiveDay}
+이번 주 데이터:
+- 일정 ${scheduleAnalysis.completedSchedules}/${scheduleAnalysis.totalSchedules}개 완료 (${scheduleAnalysis.completionRate.toFixed(0)}%)
+- 업무 ${scheduleAnalysis.categoryBreakdown.work}, 학습 ${scheduleAnalysis.categoryBreakdown.learning}, 운동 ${scheduleAnalysis.categoryBreakdown.exercise}, 웰빙 ${scheduleAnalysis.categoryBreakdown.wellness}
+- 트렌드 브리핑 ${trendBriefingAnalysis.totalRead}개 읽음
+- 집중 모드 ${focusAnalysis.focusSessions}회 (${Math.round(focusAnalysis.totalFocusMinutes)}분)
+- 수면 평균 ${sleepAnalysis.avgSleepHours.toFixed(1)}시간
+- 지난주 대비: 완료율 ${comparisonWithLastWeek.completionRateChange > 0 ? '+' : ''}${comparisonWithLastWeek.completionRateChange.toFixed(0)}%p
 
-📚 **트렌드 학습**
-- 읽은 브리핑: ${trendBriefingAnalysis.totalRead}개
-- 일평균: ${trendBriefingAnalysis.avgReadPerDay.toFixed(1)}개
-- 연속 학습: ${trendBriefingAnalysis.readingStreak}일
-- 관심 카테고리: ${trendBriefingAnalysis.topCategories.map(c => c.category).join(', ')}
-
-⚡ **집중 모드**
-- 총 집중 시간: ${Math.round(focusAnalysis.totalFocusMinutes / 60)}시간 ${focusAnalysis.totalFocusMinutes % 60}분
-- 집중 세션: ${focusAnalysis.focusSessions}회
-- 평균 세션 시간: ${focusAnalysis.avgSessionMinutes}분
-- 이탈 횟수: ${focusAnalysis.totalInterruptions}회
-- 가장 집중한 날: ${focusAnalysis.mostFocusedDay}
-
-😴 **수면 패턴**
-- 수면 기록: ${sleepAnalysis.sleepSessions}회
-- 평균 수면 시간: ${sleepAnalysis.avgSleepHours.toFixed(1)}시간
-- 가장 이른 취침: ${sleepAnalysis.earliestSleep}
-- 가장 늦은 취침: ${sleepAnalysis.latestSleep}
-- 수면 규칙성 점수: ${sleepAnalysis.sleepConsistencyScore.toFixed(0)}/100
-
-📈 **성장 지표**
-- 일관성 점수: ${growthMetrics.consistencyScore.toFixed(0)}/100
-- 집중 영역: ${growthMetrics.focusAreas.join(', ')}
-- 투자 시간: ${Math.round(growthMetrics.timeInvested / 60)}시간
-
-**지난주 대비 변화:**
-- 일정 ${comparisonWithLastWeek.scheduleChange > 0 ? '증가' : '감소'}: ${Math.abs(comparisonWithLastWeek.scheduleChange).toFixed(1)}%
-- 완료율 ${comparisonWithLastWeek.completionRateChange > 0 ? '상승' : '하락'}: ${Math.abs(comparisonWithLastWeek.completionRateChange).toFixed(1)}%p
-- 브리핑 읽기 ${comparisonWithLastWeek.readingChange > 0 ? '증가' : '감소'}: ${Math.abs(comparisonWithLastWeek.readingChange).toFixed(1)}%
-
-**인사이트:**
-✅ 성취: ${insights.achievements.join(' ')}
-⚠️ 개선점: ${insights.improvements.join(' ')}
-💡 추천: ${insights.recommendations.join(' ')}
-
-**리포트 작성 가이드:**
-1. 친근하고 격려하는 톤으로 작성
-2. 구체적인 숫자와 함께 성장을 강조
-3. 개선점은 긍정적으로 표현 (예: "더 나아질 수 있는 부분")
-4. 다음 주를 위한 구체적인 액션 아이템 3개 제시
-5. 마크다운 형식으로 작성 (제목, 이모지, 리스트 활용)
-6. 전체 길이는 400-600자 정도로 간결하게
-7. **중요**: 개인화된 리포트이므로 "여러분" 사용 금지. 반드시 2인칭 단수 사용 (예: "이번 주도 수고하셨어요", "~해보세요", "~하셨네요")
-
-주간 리포트를 작성해주세요:`;
+작성 규칙:
+- 순수 텍스트만 (마크다운, 제목, 이모지, 리스트 기호 절대 금지)
+- 3~4문장, 150자 이내
+- 반말 금지, 존댓말 사용
+- 이번 주 데이터에서 가장 눈에 띄는 점 1개와, 다음 주에 실천할 수 있는 구체적 제안 1개를 포함
+- 사용자의 직업/목표와 연결지어 조언
+- 뻔한 격려("수고하셨어요", "화이팅") 대신 실질적으로 도움이 되는 내용 위주`;
 
     try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -563,19 +545,19 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
             },
             body: JSON.stringify({
-                model: MODELS.GPT_4O_MINI_SHORT,
+                model: MODELS.GPT_5_MINI,
                 messages: [
                     {
                         role: 'system',
-                        content: '당신은 사용자의 성장을 돕는 친근한 AI 코치입니다. 데이터를 바탕으로 격려와 통찰이 담긴 주간 리포트를 작성합니다.',
+                        content: '당신은 개인 일정 관리 앱의 AI 코치입니다. 사용자의 실제 데이터를 기반으로 짧고 실용적인 조언을 합니다. 마크다운, 이모지, 제목, 리스트 기호를 절대 사용하지 마세요. 순수 텍스트만 출력하세요.',
                     },
                     {
                         role: 'user',
                         content: prompt,
                     },
                 ],
-                temperature: 0.7,
-                max_tokens: 1000,
+                temperature: 1,
+                max_completion_tokens: 300,
             }),
         });
 
@@ -585,7 +567,15 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
         }
 
         const data = await response.json();
-        return data.choices[0].message.content;
+        let narrative = data.choices[0].message.content || '';
+        // Strip any markdown/emoji the model might still produce
+        narrative = narrative
+            .replace(/^#+\s*/gm, '')       // remove markdown headings
+            .replace(/^[-*]\s+/gm, '')     // remove list markers
+            .replace(/\*\*/g, '')          // remove bold markers
+            .replace(/\n{2,}/g, ' ')       // collapse double newlines to space
+            .trim();
+        return narrative;
     } catch (error) {
         console.error('[Weekly Report] Error generating narrative:', error);
         return generateFallbackNarrative(reportData);
@@ -598,22 +588,16 @@ export async function generateWeeklyReportNarrative(reportData: WeeklyReportData
 function generateFallbackNarrative(reportData: WeeklyReportData): string {
     const { scheduleAnalysis, trendBriefingAnalysis, insights } = reportData;
 
-    return `# 📊 이번 주 성장 리포트
+    const rate = scheduleAnalysis.completionRate.toFixed(0);
+    const total = scheduleAnalysis.totalSchedules;
+    const completed = scheduleAnalysis.completedSchedules;
 
-## 🎯 주간 하이라이트
+    if (total === 0) {
+        return '이번 주 등록된 일정이 없었어요. 다음 주에는 하루 1~2개씩 작은 일정부터 시작해보세요.';
+    }
 
-이번 주 ${scheduleAnalysis.totalSchedules}개의 일정 중 ${scheduleAnalysis.completedSchedules}개를 완료하셨네요! (완료율 ${scheduleAnalysis.completionRate.toFixed(1)}%)
+    const topImprovement = insights.improvements[0] || '';
+    const cleanImprovement = topImprovement.replace(/[^\w\sㄱ-힣.,!?~%()0-9]/g, '').trim();
 
-${insights.achievements.length > 0 ? '### ✨ 이번 주 성취\n' + insights.achievements.map(a => `- ${a}`).join('\n') : ''}
-
-## 📚 학습 현황
-
-- 트렌드 브리핑 ${trendBriefingAnalysis.totalRead}개 읽기
-- ${trendBriefingAnalysis.readingStreak}일 연속 학습
-
-${insights.improvements.length > 0 ? '## 💡 다음 주 개선 포인트\n' + insights.improvements.map(i => `- ${i}`).join('\n') : ''}
-
-${insights.recommendations.length > 0 ? '## 🚀 추천 액션\n' + insights.recommendations.map(r => `- ${r}`).join('\n') : ''}
-
-계속해서 성장하는 모습 응원합니다! 💪`;
+    return `이번 주 ${total}개 일정 중 ${completed}개를 완료해서 완료율 ${rate}%를 기록했어요.${cleanImprovement ? ` 다음 주에는 ${cleanImprovement}` : ' 이 페이스를 유지하면서 다음 주도 계획을 세워보세요.'}`;
 }

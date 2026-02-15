@@ -238,7 +238,6 @@ export class ReActBrain {
         const response = await openai.chat.completions.create({
             model: this.config.model,
             max_completion_tokens: this.config.maxTokens,
-            temperature: 0.3,
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
@@ -504,10 +503,6 @@ export function isComplexRequest(messages: Array<{ role: string; content: string
         /체크리스트/,
         /어떻게.{3,}할까/,
         /뭐.{2,}해야/,
-        /추천.{2,}해줘/,
-        /검색.{2,}해줘/,
-        /찾아.{2,}줘/,
-        /알아봐\s?줘/,
     ];
 
     return complexPatterns.some(pattern => pattern.test(text));

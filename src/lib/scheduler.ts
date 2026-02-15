@@ -7,10 +7,11 @@ export function initializeScheduler() {
         return;
     }
 
-    // Schedule to run every day at 5:00 AM
+    // Schedule to run every day at 5:00 AM — generate trend briefings
     cron.schedule('0 5 * * *', async () => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/cron/generate-daily-news`, {
+            console.log('[Scheduler] Running daily trend briefing generation at 5:00 AM');
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/cron/generate-trend-briefings`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`
@@ -19,14 +20,15 @@ export function initializeScheduler() {
 
             if (response.ok) {
                 const result = await response.json();
+                console.log('[Scheduler] Trend briefings generated successfully');
             } else {
-                console.error('[Scheduler] Daily news generation failed:', await response.text());
+                console.error('[Scheduler] Trend briefing generation failed:', response.status);
             }
         } catch (error) {
-            console.error('[Scheduler] Error calling daily news generation:', error);
+            console.error('[Scheduler] Error calling trend briefing generation:', error);
         }
     }, {
-        timezone: "Asia/Seoul" // Korean timezone
+        timezone: "Asia/Seoul"
     });
 
     isSchedulerInitialized = true;

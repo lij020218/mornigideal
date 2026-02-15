@@ -7,52 +7,72 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
+import { getUserEmailFromRequest } from '@/lib/auth-utils';
 import { dualWriteAdd } from '@/lib/schedule-dual-write';
 import { isValidDate } from '@/lib/validation';
 
-// 오늘 일정 조회
+// 일정 조회 (customGoals 기반)
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
+    const userEmail = await getUserEmailFromRequest(request);
+    if (!userEmail) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // URL에서 date 파라미터 가져오기 (없으면 오늘)
+    // URL에서 date 파라미터 가져오기 (없으면 오늘 KST)
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
 
-    const targetDate = (dateParam && isValidDate(dateParam)) ? new Date(dateParam) : new Date();
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
+    const targetDateStr = (dateParam && isValidDate(dateParam)) ? dateParam : todayStr;
+    const dayOfWeek = new Date(targetDateStr + 'T12:00:00').getDay();
 
-    const { data: schedules, error } = await supabaseAdmin
-      .from('schedules')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', startOfDay.toISOString())
-      .lte('date', endOfDay.toISOString())
-      .order('start_time', { ascending: true });
+    // customGoals에서 조회
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('profile')
+      .eq('email', userEmail)
+      .maybeSingle();
 
     if (error) {
       console.error('일정 조회 오류:', error);
       return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
     }
 
+    const customGoals: any[] = user?.profile?.customGoals || [];
+
+    // 해당 날짜의 일정 필터 (specificDate 매칭 + 반복 일정)
+    const daySchedules = customGoals.filter((g: any) => {
+      if (g.specificDate === targetDateStr) return true;
+      if (g.daysOfWeek && g.daysOfWeek.includes(dayOfWeek)) {
+        if (g.startDate && targetDateStr < g.startDate) return false;
+        if (g.endDate && targetDateStr > g.endDate) return false;
+        return true;
+      }
+      return false;
+    });
+
+    // startTime 기준 정렬
+    daySchedules.sort((a: any, b: any) => {
+      const aTime = a.startTime || '00:00';
+      const bTime = b.startTime || '00:00';
+      return aTime.localeCompare(bTime);
+    });
+
     // 모바일 앱 형식으로 변환
-    const formattedSchedules = (schedules || []).map(s => ({
-      id: s.id,
-      text: s.title,
-      startTime: s.start_time || '00:00',
-      endTime: s.end_time || undefined,
-      completed: s.completed,
-      skipped: s.skipped,
-      color: s.color,
-      location: s.location,
-      date: s.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+    const formattedSchedules = daySchedules.map((g: any) => ({
+      id: g.id,
+      text: g.text,
+      startTime: g.startTime || '00:00',
+      endTime: g.endTime || undefined,
+      completed: g.completed || false,
+      skipped: g.skipped || false,
+      color: g.color || undefined,
+      location: g.location || undefined,
+      memo: g.memo || undefined,
+      date: targetDateStr,
     }));
 
     return NextResponse.json({ schedules: formattedSchedules });

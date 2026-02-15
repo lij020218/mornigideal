@@ -85,33 +85,35 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 최근 90일 일정 조회
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 90);
-        startDate.setHours(0, 0, 0, 0);
-
-        const { data: schedules, error } = await supabaseAdmin
-            .from('schedules')
-            .select('date, completed, title')
-            .eq('user_id', userId)
-            .gte('date', startDate.toISOString())
-            .order('date', { ascending: true });
+        // customGoals에서 일정 데이터 조회 (실제 데이터 소스)
+        const { data: userData, error } = await supabaseAdmin
+            .from('users')
+            .select('profile')
+            .eq('id', userId)
+            .single();
 
         if (error) {
-            console.error('[Streaks] Error fetching schedules:', error);
-            return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
+            console.error('[Streaks] Error fetching user:', error);
+            return NextResponse.json({ error: 'Failed to fetch user data' }, { status: 500 });
         }
 
-        // 날짜별 통계 집계
+        const customGoals: any[] = userData?.profile?.customGoals || [];
+
+        // 최근 90일 기준
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        const ninetyDayStr = ninetyDaysAgo.toISOString().split('T')[0];
+
+        // 날짜별 통계 집계 (customGoals의 specificDate 기반)
         const dailyStats = new Map<string, { total: number; completed: number }>();
 
-        for (const schedule of schedules || []) {
-            const dateStr = schedule.date?.split('T')[0];
-            if (!dateStr) continue;
+        for (const goal of customGoals) {
+            const dateStr = goal.specificDate;
+            if (!dateStr || dateStr < ninetyDayStr) continue;
 
             const existing = dailyStats.get(dateStr) || { total: 0, completed: 0 };
             existing.total++;
-            if (schedule.completed) existing.completed++;
+            if (goal.completed) existing.completed++;
             dailyStats.set(dateStr, existing);
         }
 
@@ -157,30 +159,20 @@ export async function GET(request: NextRequest) {
             }
         } catch {}
 
-        // 목표 완료 통계
+        // 목표 완료 통계 (위에서 이미 가져온 userData 재사용)
         let goalsStats = { weeklyCompletedCount: 0, monthlyProgress: 0 };
-        try {
-            const { data: userData } = await supabaseAdmin
-                .from('users')
-                .select('profile')
-                .eq('id', userId)
-                .single();
+        if (userData?.profile?.longTermGoals) {
+            const ltg = userData.profile.longTermGoals;
+            const weeklyGoals = ltg.weekly || [];
+            goalsStats.weeklyCompletedCount = weeklyGoals.filter((g: any) => g.completed).length;
 
-            if (userData?.profile?.longTermGoals) {
-                const ltg = userData.profile.longTermGoals;
-                // 주간 목표 완료 수
-                const weeklyGoals = ltg.weekly || [];
-                goalsStats.weeklyCompletedCount = weeklyGoals.filter((g: any) => g.completed).length;
-
-                // 월간 목표 평균 진행률
-                const monthlyGoals = ltg.monthly || [];
-                if (monthlyGoals.length > 0) {
-                    goalsStats.monthlyProgress = Math.round(
-                        monthlyGoals.reduce((sum: number, g: any) => sum + (g.progress || 0), 0) / monthlyGoals.length
-                    );
-                }
+            const monthlyGoals = ltg.monthly || [];
+            if (monthlyGoals.length > 0) {
+                goalsStats.monthlyProgress = Math.round(
+                    monthlyGoals.reduce((sum: number, g: any) => sum + (g.progress || 0), 0) / monthlyGoals.length
+                );
             }
-        } catch {}
+        }
 
         // 최근 30일 활동 일수
         const thirtyDaysAgo = new Date();

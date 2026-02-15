@@ -193,6 +193,134 @@ ${m.metadata?.date ? `날짜: ${m.metadata.date}` : ''}
 }
 
 // ============================================
+// 사용자 일정 패턴 분석 컨텍스트 (추천 시 활용)
+// ============================================
+
+async function fetchSchedulePatternContext(userEmail: string): Promise<string> {
+    try {
+        const { data: userData } = await supabaseAdmin
+            .from('users')
+            .select('profile')
+            .eq('email', userEmail)
+            .maybeSingle();
+
+        if (!userData?.profile?.customGoals) return "";
+
+        const customGoals: any[] = userData.profile.customGoals;
+        if (customGoals.length < 5) return ""; // 데이터 부족
+
+        const fourWeeksAgo = new Date();
+        fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+        const fourWeeksAgoStr = fourWeeksAgo.toISOString().split('T')[0];
+
+        const recentGoals = customGoals.filter((g: any) =>
+            g.specificDate && g.specificDate >= fourWeeksAgoStr
+        );
+        if (recentGoals.length < 3) return "";
+
+        // 카테고리별 활동 분류
+        const categories: Record<string, { items: string[]; times: string[]; days: Set<number>; completedCount: number; totalCount: number }> = {
+            rest: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            exercise: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            meal: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            study: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            leisure: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            work: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+            social: { items: [], times: [], days: new Set(), completedCount: 0, totalCount: 0 },
+        };
+
+        const categoryKeywords: Record<string, string[]> = {
+            rest: ['휴식', '쉬기', '낮잠', '명상', '산책', '스트레칭', '수면', '취침', '잠'],
+            exercise: ['운동', '헬스', '요가', '필라테스', '러닝', '조깅', '수영', '웨이트', '등산', '자전거', '탁구', '배드민턴', '테니스', '축구', '농구'],
+            meal: ['식사', '아침', '점심', '저녁', '밥', '브런치', '간식', '카페'],
+            study: ['공부', '학습', '독서', '책', '강의', '스터디', '과제', '시험', '자격증', '영어', '코딩'],
+            leisure: ['게임', '영화', '드라마', '유튜브', '음악', '넷플릭스', '취미', '그림', '사진', '글쓰기', '그리기'],
+            work: ['업무', '회의', '미팅', '프로젝트', '개발', '기획', '보고서', '출근', '퇴근', '작업'],
+            social: ['친구', '모임', '약속', '데이트', '가족', '만남', '전화'],
+        };
+
+        for (const goal of recentGoals) {
+            const text = (goal.text || '').toLowerCase();
+            const dayOfWeek = goal.specificDate ? new Date(goal.specificDate + 'T12:00:00').getDay() : null;
+
+            for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+                if (keywords.some(kw => text.includes(kw))) {
+                    const catData = categories[cat];
+                    if (!catData.items.includes(goal.text)) {
+                        catData.items.push(goal.text);
+                    }
+                    if (goal.startTime) catData.times.push(goal.startTime);
+                    if (dayOfWeek !== null) catData.days.add(dayOfWeek);
+                    catData.totalCount++;
+                    if (goal.completed) catData.completedCount++;
+                    break; // 첫 매칭 카테고리만
+                }
+            }
+        }
+
+        // 빈도 분석
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+        const lines: string[] = [];
+
+        for (const [cat, data] of Object.entries(categories)) {
+            if (data.totalCount === 0) continue;
+
+            const catLabels: Record<string, string> = {
+                rest: '휴식', exercise: '운동', meal: '식사', study: '학습',
+                leisure: '여가/취미', work: '업무', social: '사회활동',
+            };
+
+            // 자주 하는 시간대 계산
+            const timeFreq: Record<string, number> = {};
+            for (const t of data.times) {
+                const hour = parseInt(t.split(':')[0]);
+                const block = hour < 12 ? '오전' : hour < 18 ? '오후' : '저녁';
+                timeFreq[block] = (timeFreq[block] || 0) + 1;
+            }
+            const topTime = Object.entries(timeFreq).sort((a, b) => b[1] - a[1])[0];
+
+            // 자주 하는 요일
+            const dayArr = [...data.days].sort().map(d => dayNames[d]);
+
+            // 고유 활동 이름 (최대 5개)
+            const uniqueActivities = data.items.slice(0, 5).join(', ');
+
+            const completionRate = data.totalCount > 0
+                ? Math.round((data.completedCount / data.totalCount) * 100)
+                : 0;
+
+            lines.push(`- ${catLabels[cat]}: 최근 4주간 ${data.totalCount}회 (완료율 ${completionRate}%)
+  활동: ${uniqueActivities}
+  선호 시간대: ${topTime ? topTime[0] : '데이터 부족'}${dayArr.length > 0 ? ` | 주로 ${dayArr.join('·')}요일` : ''}`);
+        }
+
+        if (lines.length === 0) return "";
+
+        // 전체 패턴 요약
+        const totalSchedules = recentGoals.length;
+        const completedSchedules = recentGoals.filter((g: any) => g.completed).length;
+        const overallRate = Math.round((completedSchedules / totalSchedules) * 100);
+
+        return `
+📊 **사용자의 일정 패턴 (최근 4주 분석)**
+
+전체: ${totalSchedules}개 일정, 완료율 ${overallRate}%
+
+${lines.join('\n')}
+
+**추천 시 활용 지침:**
+- 휴식 추천 시: 사용자가 실제로 하는 휴식 활동(위 데이터)을 기반으로 추천하세요. 새로운 활동보다 익숙한 활동이 실행 가능성이 높습니다.
+- 시간대 추천 시: 사용자가 해당 카테고리를 주로 하는 시간대에 맞춰 추천하세요.
+- 완료율이 높은 카테고리의 활동을 우선 추천하세요.
+- 사용자가 한 번도 하지 않은 유형의 활동은 신중하게 추천하세요.
+`;
+    } catch (e) {
+        console.error("[AI Chat] Failed to build schedule pattern context:", e);
+        return "";
+    }
+}
+
+// ============================================
 // 사용자 프로필 + 일정 컨텍스트 빌드
 // ============================================
 
@@ -472,11 +600,15 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
+                // ReAct가 조기 종료되면 폴백
+                if (result.wasTerminatedEarly) {
+                    throw new Error('ReAct terminated early');
+                }
+
                 // ReAct 사용량 기록 (LLM 호출 수만큼)
                 if (result.totalLlmCalls > 0) {
                     await logOpenAIUsage(userEmail, 'react-agent', 'ai-chat-react', 0, 0);
                 }
-
 
                 return NextResponse.json({
                     message: result.message,
@@ -495,6 +627,7 @@ export async function POST(request: NextRequest) {
         let eventLogsContext = "";
         let ragContext = "";
         let fusedContextStr = "";
+        let schedulePatternContext = "";
 
         if (dataSources.needsEventLogs) {
             asyncFetches.push(
@@ -505,6 +638,13 @@ export async function POST(request: NextRequest) {
         if (dataSources.needsRag) {
             asyncFetches.push(
                 fetchRagContext(messages, userEmail).then(result => { ragContext = result; })
+            );
+        }
+
+        // 추천 요청 시 일정 패턴 분석 (search/chat에서 활용)
+        if (intent === 'search' || intent === 'chat') {
+            asyncFetches.push(
+                fetchSchedulePatternContext(userEmail).then(result => { schedulePatternContext = result; })
             );
         }
 
@@ -568,6 +708,7 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
             locationContext,
             goalsContext,
             learningContext,
+            schedulePatternContext,
         });
 
         // Pro/Max: 컨텍스트 융합 인사이트 추가

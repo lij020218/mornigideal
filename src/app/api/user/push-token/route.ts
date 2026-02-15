@@ -18,21 +18,48 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'token and platform are required' }, { status: 400 });
         }
 
-        // upsert: 같은 (email, token) 조합이면 업데이트
-        const { error } = await supabaseAdmin
+        // 기존 토큰 확인
+        const { data: existing } = await supabaseAdmin
             .from('push_tokens')
-            .upsert({
-                user_email: userEmail,
-                token,
-                platform,
-                device_name: deviceName || null,
-                active: true,
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'user_email,token' });
+            .select('id')
+            .eq('user_email', userEmail)
+            .eq('token', token)
+            .maybeSingle();
 
-        if (error) {
-            console.error('[Push Token] Upsert error:', error);
-            return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
+        if (existing) {
+            // 이미 존재하면 업데이트
+            const { error } = await supabaseAdmin
+                .from('push_tokens')
+                .update({
+                    platform,
+                    device_name: deviceName || null,
+                    active: true,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('user_email', userEmail)
+                .eq('token', token);
+
+            if (error) {
+                console.error('[Push Token] Update error:', error);
+                return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
+            }
+        } else {
+            // 없으면 삽입
+            const { error } = await supabaseAdmin
+                .from('push_tokens')
+                .insert({
+                    user_email: userEmail,
+                    token,
+                    platform,
+                    device_name: deviceName || null,
+                    active: true,
+                    updated_at: new Date().toISOString(),
+                });
+
+            if (error) {
+                console.error('[Push Token] Insert error:', error);
+                return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
+            }
         }
 
         return NextResponse.json({ success: true });

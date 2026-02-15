@@ -265,7 +265,14 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - **맛집/카페/장소 추천**: 사용자 위치 정보(📍)가 Context에 있으면 반드시 활용하세요.
   - 위치 정보가 있을 때: "근처 카페" → 사용자 도시/동네 기반으로 구체적 추천 + 지도 앱 query에 동네명 포함
   - 위치 없이 "근처" 요청 시: 어느 지역인지 물어보세요
-  - 지도 앱 open_link에 동네명을 포함하면 더 정확한 결과를 보여줍니다 (예: query:"강남역 카페" 대신 query:"사용자동네 카페")`,
+  - 지도 앱 open_link에 동네명을 포함하면 더 정확한 결과를 보여줍니다 (예: query:"강남역 카페" 대신 query:"사용자동네 카페")
+- **일정 추천 시 (필수)**: Context에 사용자 일정 패턴이 있으면 반드시 활용하세요.
+  - 휴식 추천: 사용자가 실제로 해온 휴식 활동을 기반으로 추천 (예: 사용자가 주로 산책으로 휴식하면 산책 추천)
+  - 시간대: 해당 카테고리를 사용자가 주로 하는 시간대에 맞춰 추천
+  - 요일: 사용자의 바쁜/여유로운 요일 패턴을 고려
+  - 완료율 높은 활동을 우선 추천 (실행 가능성 높음)
+  - 사용자가 한 번도 해보지 않은 활동보다 익숙한 활동 위주로 추천
+  - add_schedule 액션으로 바로 일정에 추가할 수 있게 제공`,
 
         goal: `## 행동 가이드
 - **목표 조회**: "목표 보여줘/진행상황 어때" → show_goals
@@ -295,7 +302,8 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - 일정 관련 요청이 섞여 있으면 바로 actions에 포함
 - 설정 변경 요청이 섞여 있으면 바로 update_settings 액션에 포함
 - 일상 대화에는 actions 빈 배열 OK
-- **트렌드 브리핑 추천 요청 시**: Context에 있는 트렌드 브리핑 목록에서만 골라 소개하세요. 목록에 없는 브리핑을 만들어내지 마세요. open_briefing 액션의 briefingId는 목록의 ID 문자열을 그대로 사용하세요. 웹 검색(web_search)을 하지 마세요.`,
+- **트렌드 브리핑 추천 요청 시**: Context에 있는 트렌드 브리핑 목록에서만 골라 소개하세요. 목록에 없는 브리핑을 만들어내지 마세요. open_briefing 액션의 briefingId는 목록의 ID 문자열을 그대로 사용하세요. 웹 검색(web_search)을 하지 마세요.
+- **일정 추천 요청 시**: Context에 사용자 일정 패턴이 있으면 반드시 활용하세요. 사용자의 실제 생활 습관(자주 하는 활동, 선호 시간대, 완료율)을 기반으로 개인화된 추천을 하고, add_schedule 액션으로 바로 추가할 수 있게 제공하세요.`,
     };
 
     return guides[intent];
@@ -324,7 +332,10 @@ User: "강남역 근처 카페 찾아줘"
 {"message": "...", "actions": [{"type": "open_link", "label": "🗺️ 지도에서 보기", "data": {"app": "naver_map", "query": "강남역 카페"}}]}
 
 User: "근처 맛집 추천해줘" (📍 위치: 성수동)
-{"message": "성수동 근처 맛집을 찾아볼게요! 🍽️ 성수동은 트렌디한 레스토랑이 많아서 선택지가 다양할 거예요.", "actions": [{"type": "open_link", "label": "🗺️ 지도에서 보기", "data": {"app": "naver_map", "query": "성수동 맛집"}}]}`;
+{"message": "성수동 근처 맛집을 찾아볼게요! 🍽️ 성수동은 트렌디한 레스토랑이 많아서 선택지가 다양할 거예요.", "actions": [{"type": "open_link", "label": "🗺️ 지도에서 보기", "data": {"app": "naver_map", "query": "성수동 맛집"}}]}
+
+User: "오늘 일정 하나 추천해줘" (패턴: 사용자가 주로 저녁에 산책/독서로 휴식)
+{"message": "오늘 저녁 산책은 어떠세요? 최근 자주 하시던 활동이라 부담 없이 즐기실 수 있을 거예요 🚶‍♂️", "actions": [{"type": "add_schedule", "label": "산책 추가", "data": {"text": "산책", "startTime": "19:00", "endTime": "19:30", "specificDate": "${currentDate}", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}`;
     }
 
     if (intent === 'settings') {
@@ -505,6 +516,7 @@ export function assembleContextBlocks(params: {
     locationContext?: string;
     goalsContext?: string;
     learningContext?: string;
+    schedulePatternContext?: string;
 }): string[] {
     const blocks: string[] = [];
 
@@ -558,6 +570,11 @@ export function assembleContextBlocks(params: {
     // 학습 컨텍스트: chat/analysis 의도에서 활용
     if (params.learningContext && (params.intent === 'chat' || params.intent === 'analysis')) {
         blocks.push(params.learningContext);
+    }
+
+    // 일정 패턴 컨텍스트: search/chat 의도에서 추천 시 활용
+    if (params.schedulePatternContext && (params.intent === 'search' || params.intent === 'chat')) {
+        blocks.push(params.schedulePatternContext);
     }
 
     return blocks;

@@ -21,6 +21,10 @@
       "schedule": "0 20 * * *"
     },
     {
+      "path": "/api/cron/generate-greetings",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/cron/daily-cleanup",
       "schedule": "0 3 * * *"
     },

@@ -28,21 +28,29 @@ function getISOWeekNumber(date: Date): number {
     return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
-// 지난 주차 번호를 계산하는 함수 (DB 쿼리 없이)
+// 분석 대상 주의 주차 번호 계산 (DB 쿼리 없이)
+// 일요일이면 해당 주(월~일), 월~토이면 지난 주(월~일)
 function getTargetWeekNumber(): number {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
     const dayOfWeek = now.getDay();
-    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const thisMonday = new Date(now);
-    thisMonday.setDate(now.getDate() - daysToSubtract);
 
-    // 지난 주의 월요일
-    const lastMonday = new Date(thisMonday);
-    lastMonday.setDate(thisMonday.getDate() - 7);
+    let targetMonday: Date;
+    if (dayOfWeek === 0) {
+        // 일요일: 이번 주(월~일) 완료됨
+        targetMonday = new Date(now);
+        targetMonday.setDate(now.getDate() - 6);
+    } else {
+        // 월~토: 지난 주
+        const daysToSubtract = dayOfWeek - 1;
+        const thisMonday = new Date(now);
+        thisMonday.setDate(now.getDate() - daysToSubtract);
+        targetMonday = new Date(thisMonday);
+        targetMonday.setDate(thisMonday.getDate() - 7);
+    }
 
-    return getISOWeekNumber(lastMonday);
+    return getISOWeekNumber(targetMonday);
 }
 
 export async function GET(request: NextRequest) {
@@ -57,12 +65,15 @@ export async function GET(request: NextRequest) {
 
 
         // 캐시 먼저 확인 (DB 쿼리 1회)
+        // narrative_version: v2 = plain text (v1 = markdown)
+        const NARRATIVE_VERSION = 'v2';
         const { data: existingReport } = await supabaseAdmin
             .from('user_events')
             .select('*')
             .eq('user_email', userEmail)
             .eq('event_type', 'weekly_report_generated')
             .eq('metadata->>week_number', targetWeekNumber.toString())
+            .eq('metadata->>narrative_version', NARRATIVE_VERSION)
             .order('start_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -103,6 +114,7 @@ export async function GET(request: NextRequest) {
                 start_at: new Date().toISOString(),
                 metadata: {
                     week_number: targetWeekNumber,
+                    narrative_version: NARRATIVE_VERSION,
                     period_start: reportData.period.start,
                     period_end: reportData.period.end,
                     completion_rate: reportData.scheduleAnalysis.completionRate,

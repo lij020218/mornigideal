@@ -95,7 +95,8 @@ export async function dualWriteAdd(
             .upsert(cleanRow, { onConflict: "id" });
     } catch (error) {
         // 듀얼라이트 실패는 로그만 남기고 무시 (customGoals가 primary)
-        console.error("[DualWrite] Add failed:", error);
+        // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Add failed:", error);
     }
 }
 
@@ -147,7 +148,8 @@ export async function dualWriteUpdate(
             }
         }
     } catch (error) {
-        console.error("[DualWrite] Update failed:", error);
+        // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Update failed:", error);
     }
 }
 
@@ -185,7 +187,8 @@ export async function dualWriteModify(
             .eq("user_id", userId)
             .like("id", `${scheduleId}%`);
     } catch (error) {
-        console.error("[DualWrite] Modify failed:", error);
+        // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Modify failed:", error);
     }
 }
 
@@ -207,7 +210,8 @@ export async function dualWriteDelete(
             .eq("user_id", userId)
             .like("id", `${scheduleId}%`);
     } catch (error) {
-        console.error("[DualWrite] Delete failed:", error);
+        // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Delete failed:", error);
     }
 }
 
@@ -263,13 +267,15 @@ export async function syncTodaySchedules(email: string): Promise<number> {
             .upsert(rows, { onConflict: "id" });
 
         if (error) {
-            console.error("[DualWrite] Sync failed:", error);
+            // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Sync failed:", error);
             return 0;
         }
 
         return rows.length;
     } catch (error) {
-        console.error("[DualWrite] Sync error:", error);
+        // schedules 테이블 미생성 시 조용히 무시
+        // console.error("[DualWrite] Sync error:", error);
         return 0;
     }
 }
