@@ -10,6 +10,7 @@ import { Brain, InterventionContext } from './brain';
 import { Hands } from './hands';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { InterventionLevel } from '@/types/jarvis';
+import { logger } from '@/lib/logger';
 
 export class JarvisOrchestrator {
     private userEmail: string;
@@ -81,7 +82,7 @@ export class JarvisOrchestrator {
             );
 
             if (!result.success) {
-                console.error('[Jarvis] Execution failed:', result.error);
+                logger.error('[Jarvis] Execution failed:', result.error);
                 return;
             }
 
@@ -89,7 +90,7 @@ export class JarvisOrchestrator {
             // 6. Last intervention 시간 업데이트
             await this.updateLastIntervention();
         } catch (error) {
-            console.error('[Jarvis] Run failed:', error);
+            logger.error('[Jarvis] Run failed:', error);
             // 에러가 나도 계속 실행되어야 함 (다음 주기에 재시도)
         }
     }
@@ -179,7 +180,7 @@ export class JarvisOrchestrator {
             .maybeSingle();
 
         if (error || !data) {
-            console.error('[Jarvis] Failed to get preferences:', error);
+            logger.error('[Jarvis] Failed to get preferences:', error);
             return {
                 enabled: false,
                 maxInterventionLevel: InterventionLevel.L2_SOFT,
@@ -202,7 +203,7 @@ export class JarvisOrchestrator {
             .eq('user_email', this.userEmail);
 
         if (error) {
-            console.error('[Jarvis] Failed to update last intervention:', error);
+            logger.error('[Jarvis] Failed to update last intervention:', error);
         }
     }
 
@@ -237,7 +238,7 @@ export async function runJarvisForAllMaxUsers(): Promise<JarvisRunResult> {
             .in('profile->>plan', ['Standard', 'Pro', 'Max']);
 
         if (error) {
-            console.error('[Jarvis] Failed to fetch users:', error);
+            logger.error('[Jarvis] Failed to fetch users:', error);
             return result;
         }
 
@@ -254,7 +255,7 @@ export async function runJarvisForAllMaxUsers(): Promise<JarvisRunResult> {
                 await orchestrator.run();
                 result.succeeded++;
             } catch (error) {
-                console.error(`[Jarvis] Failed for user ${user.email}:`, error);
+                logger.error(`[Jarvis] Failed for user ${user.email}:`, error);
                 result.failed++;
                 result.failedEmails.push(user.email);
             }
@@ -267,11 +268,11 @@ export async function runJarvisForAllMaxUsers(): Promise<JarvisRunResult> {
             const { computeWeightsForAllUsers } = await import('./feedback-aggregator');
             await computeWeightsForAllUsers();
         } catch (e) {
-            console.error('[Jarvis] Feedback weight recomputation failed:', e);
+            logger.error('[Jarvis] Feedback weight recomputation failed:', e);
         }
 
     } catch (error) {
-        console.error('[Jarvis] Critical error in runJarvisForAllMaxUsers:', error);
+        logger.error('[Jarvis] Critical error in runJarvisForAllMaxUsers:', error);
     }
 
     return result;

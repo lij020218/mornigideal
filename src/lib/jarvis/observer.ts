@@ -6,6 +6,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { EventType } from '@/types/jarvis';
 import { canUseFeature } from '@/lib/user-plan';
+import { logger } from '@/lib/logger';
 
 export class JarvisObserver {
     private userEmail: string;
@@ -40,11 +41,11 @@ export class JarvisObserver {
                 });
 
             if (error) {
-                console.error('[JarvisObserver] Failed to log event:', error);
+                logger.error('[JarvisObserver] Failed to log event:', error);
             } else {
             }
         } catch (error) {
-            console.error('[JarvisObserver] Exception:', error);
+            logger.error('[JarvisObserver] Exception:', error);
         }
     }
 
@@ -73,13 +74,13 @@ export class JarvisObserver {
             const { data, error } = await query;
 
             if (error) {
-                console.error('[JarvisObserver] Failed to fetch events:', error);
+                logger.error('[JarvisObserver] Failed to fetch events:', error);
                 return [];
             }
 
             return data || [];
         } catch (error) {
-            console.error('[JarvisObserver] Exception:', error);
+            logger.error('[JarvisObserver] Exception:', error);
             return [];
         }
     }

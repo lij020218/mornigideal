@@ -5,6 +5,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { StateUpdater } from './state-updater';
+import { logger } from '@/lib/logger';
 import {
     InterventionLevel,
     InterventionDecision,
@@ -232,7 +233,7 @@ export class PolicyEngine {
             .maybeSingle();
 
         if (error) {
-            console.error('[PolicyEngine] Failed to get preferences:', error);
+            logger.error('[PolicyEngine] Failed to get preferences:', error);
             return null;
         }
 

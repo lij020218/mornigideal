@@ -9,6 +9,7 @@ import { StateUpdater } from './state-updater';
 import type { CustomGoal, LongTermGoal, UserProfile, AddScheduleArgs, DeleteScheduleArgs, UpdateScheduleArgs, SuggestScheduleArgs, CreateChecklistArgs, PrepareScheduleArgs, SaveLearningArgs, FocusType } from '@/lib/types';
 import type { MemoryType } from '@/lib/jarvis-memory';
 import { logAgentAction } from '@/lib/agent-action-log';
+import { logger } from '@/lib/logger';
 
 export class ToolExecutor {
     private userEmail: string;
@@ -60,7 +61,7 @@ export class ToolExecutor {
             const isTransient = error instanceof Error &&
                 (error.message.includes('timeout') || error.message.includes('ECONNRESET') || error.message.includes('connection'));
 
-            console.error(`[ToolExecutor] ${toolCall.toolName} failed (${isTransient ? 'transient' : 'permanent'}):`, error);
+            logger.error(`[ToolExecutor] ${toolCall.toolName} failed (${isTransient ? 'transient' : 'permanent'}):`, error);
             return {
                 success: false,
                 error: String(error),
@@ -204,7 +205,7 @@ export class ToolExecutor {
                 await gcal.pushEvent(newGoal);
             }
         } catch (e) {
-            console.error('[ToolExecutor] GCal sync failed (push):', e instanceof Error ? e.message : e);
+            logger.error('[ToolExecutor] GCal sync failed (push):', e instanceof Error ? e.message : e);
         }
 
         return {
@@ -269,7 +270,7 @@ export class ToolExecutor {
                 }
             }
         } catch (e) {
-            console.error('[ToolExecutor] GCal sync failed (delete):', e instanceof Error ? e.message : e);
+            logger.error('[ToolExecutor] GCal sync failed (delete):', e instanceof Error ? e.message : e);
         }
 
         return { success: true, humanReadableSummary: `"${args.text}" 일정을 삭제했습니다.` };

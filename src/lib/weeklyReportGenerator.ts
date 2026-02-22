@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
 import type { CustomGoal, ActivityEventLog } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 /**
  * Weekly Report Generator
@@ -563,7 +564,7 @@ ${userContext}
         });
 
         if (!response.ok) {
-            console.error('[Weekly Report] OpenAI API failed:', response.status);
+            logger.error('[Weekly Report] OpenAI API failed:', response.status);
             return generateFallbackNarrative(reportData);
         }
 
@@ -578,7 +579,7 @@ ${userContext}
             .trim();
         return narrative;
     } catch (error) {
-        console.error('[Weekly Report] Error generating narrative:', error);
+        logger.error('[Weekly Report] Error generating narrative:', error);
         return generateFallbackNarrative(reportData);
     }
 }

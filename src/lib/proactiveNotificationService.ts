@@ -12,6 +12,7 @@ import { TIMING, THRESHOLDS, LIMITS, DAILY_ROUTINE_KEYWORDS, IMPORTANT_SCHEDULE_
 import type { CustomGoal, LongTermGoal, ChatMessage, MemoryRow, UserProfile, ImportantEvent } from '@/lib/types';
 import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove, isMaxPlan } from '@/lib/user-plan';
+import { logger } from '@/lib/logger';
 
 export interface ProactiveNotification {
     id: string;
@@ -81,7 +82,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         if (prepWorthy.length > 0) {
         }
     } catch (e) {
-        console.error('[ProactiveNotif] Schedule prep failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Schedule prep failed:', e instanceof Error ? e.message : e);
     }
 
     // 1. 일정 시작 전 미리 알림 (10분, 20분 전)
@@ -169,7 +170,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         if (memorySurfacing.length > 0) {
         }
     } catch (e) {
-        console.error('[ProactiveNotif] Memory surfacing failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Memory surfacing failed:', e instanceof Error ? e.message : e);
     }
 
     // 8. 컨텍스트 융합 신호 기반 알림 (critical/warning만)
@@ -191,7 +192,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         if (fused.signals.length > 0) {
         }
     } catch (e) {
-        console.error('[ProactiveNotif] Context fusion failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Context fusion failed:', e instanceof Error ? e.message : e);
     }
 
     // ============================================================
@@ -203,7 +204,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const moodReminders = await getMoodCheckInReminderNotification(context);
         notifications.push(...moodReminders);
     } catch (e) {
-        console.error('[ProactiveNotif] Mood reminder failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Mood reminder failed:', e instanceof Error ? e.message : e);
     }
 
     // 12. 번아웃 경고 (Pro+)
@@ -211,7 +212,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const burnoutWarnings = await getBurnoutWarningNotification(context);
         notifications.push(...burnoutWarnings);
     } catch (e) {
-        console.error('[ProactiveNotif] Burnout warning failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Burnout warning failed:', e instanceof Error ? e.message : e);
     }
 
     // 13. 집중 스트릭 축하/격려
@@ -219,7 +220,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const focusStreaks = await getFocusStreakNotification(context);
         notifications.push(...focusStreaks);
     } catch (e) {
-        console.error('[ProactiveNotif] Focus streak failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Focus streak failed:', e instanceof Error ? e.message : e);
     }
 
     // 14. 건강 데이터 인사이트 (Pro+)
@@ -227,7 +228,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const healthInsights = await getHealthInsightNotification(context);
         notifications.push(...healthInsights);
     } catch (e) {
-        console.error('[ProactiveNotif] Health insight failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Health insight failed:', e instanceof Error ? e.message : e);
     }
 
     // 15. GitHub 커밋 스트릭 (Max)
@@ -235,7 +236,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const githubStreaks = await getGitHubStreakNotification(context);
         notifications.push(...githubStreaks);
     } catch (e) {
-        console.error('[ProactiveNotif] GitHub streak failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] GitHub streak failed:', e instanceof Error ? e.message : e);
     }
 
     // 16. 일정 과밀 경고
@@ -255,7 +256,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const inactiveReturns = await getInactiveReturnNotification(context);
         notifications.push(...inactiveReturns);
     } catch (e) {
-        console.error('[ProactiveNotif] Inactive return failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Inactive return failed:', e instanceof Error ? e.message : e);
     }
 
     // 20. 학습 리마인더
@@ -267,7 +268,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const energyBoosts = await getPostLunchBoostNotification(context);
         notifications.push(...energyBoosts);
     } catch (e) {
-        console.error('[ProactiveNotif] Energy boost failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Energy boost failed:', e instanceof Error ? e.message : e);
     }
 
     // 22. 퇴근 전 하루 마감
@@ -279,7 +280,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const weeklyReviews = await getWeeklyReviewNotification(context);
         notifications.push(...weeklyReviews);
     } catch (e) {
-        console.error('[ProactiveNotif] Weekly review failed:', e instanceof Error ? e.message : e);
+        logger.error('[ProactiveNotif] Weekly review failed:', e instanceof Error ? e.message : e);
     }
 
     return notifications;
@@ -1833,13 +1834,13 @@ export async function saveProactiveNotification(
             });
 
         if (error) {
-            console.error('[ProactiveNotification] Failed to save:', error);
+            logger.error('[ProactiveNotification] Failed to save:', error);
             return false;
         }
 
         return true;
     } catch (error) {
-        console.error('[ProactiveNotification] Exception:', error);
+        logger.error('[ProactiveNotification] Exception:', error);
         return false;
     }
 }
@@ -1864,7 +1865,7 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             .maybeSingle();
 
         if (userError || !userData) {
-            console.error('[ProactiveNotification] User not found:', userError);
+            logger.error('[ProactiveNotification] User not found:', userError);
             return null;
         }
 
@@ -1933,7 +1934,7 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
                 userMemory = { preferences, patterns };
             }
         } catch (memoryError) {
-            console.error('[ProactiveNotif] Memory data fetch failed:', memoryError instanceof Error ? memoryError.message : memoryError);
+            logger.error('[ProactiveNotif] Memory data fetch failed:', memoryError instanceof Error ? memoryError.message : memoryError);
         }
 
         // 반복 패턴 감지
@@ -1950,7 +1951,7 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             allCustomGoals: customGoals,
         };
     } catch (error) {
-        console.error('[ProactiveNotification] Failed to get user context:', error);
+        logger.error('[ProactiveNotification] Failed to get user context:', error);
         return null;
     }
 }

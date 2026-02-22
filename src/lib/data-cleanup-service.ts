@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { logger } from '@/lib/logger';
 import type { QueryParameter } from '@/lib/types';
 
 // Thin wrapper for raw SQL via Supabase RPC
@@ -85,7 +86,7 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
         await cleanupUserMemory(report, userEmail);
 
     } catch (error: unknown) {
-        console.error('[Data Cleanup] Error:', error);
+        logger.error('[Data Cleanup] Error:', error);
         report.errors.push(error instanceof Error ? error.message : String(error));
     }
 
@@ -235,7 +236,7 @@ async function aggregateEventsToDaily(cutoffDate: Date, userEmail?: string): Pro
             );
             insertedCount++;
         } catch (error) {
-            console.error('[Aggregation] Failed to insert daily feature:', error);
+            logger.error('[Aggregation] Failed to insert daily feature:', error);
         }
     }
 
@@ -331,7 +332,7 @@ async function aggregateDailyToWeekly(cutoffDate: Date, userEmail?: string): Pro
             );
             insertedCount++;
         } catch (error) {
-            console.error('[Aggregation] Failed to insert weekly feature:', error);
+            logger.error('[Aggregation] Failed to insert weekly feature:', error);
         }
     }
 
@@ -609,7 +610,7 @@ export async function getUserDataStats(userEmail: string) {
 
         return stats;
     } catch (error) {
-        console.error('[Data Stats] Error:', error);
+        logger.error('[Data Stats] Error:', error);
         return null;
     }
 }

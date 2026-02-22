@@ -7,12 +7,13 @@
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from './supabase-admin';
+import { logger } from './logger';
 
 // JWT Secret - 환경 변수에서만 로드, 하드코딩 금지
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
 
 if (!JWT_SECRET) {
-    console.error('[CRITICAL] JWT_SECRET is not configured. Authentication will fail.');
+    logger.error('[CRITICAL] JWT_SECRET is not configured. Authentication will fail.');
 }
 
 /**

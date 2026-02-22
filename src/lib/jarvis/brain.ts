@@ -14,6 +14,7 @@ import {
 } from '@/types/jarvis';
 import { resolvePersonaStyle, getPersonaBlock, type PersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from "@/lib/models";
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -92,13 +93,13 @@ export class Brain {
 
             // 응답 검증
             if (!this.validatePlan(plan, context)) {
-                console.error('[Brain] Generated plan failed validation');
+                logger.error('[Brain] Generated plan failed validation');
                 return null;
             }
 
             return plan;
         } catch (error) {
-            console.error('[Brain] LLM call failed:', error);
+            logger.error('[Brain] LLM call failed:', error);
             return null;
         }
     }
@@ -233,14 +234,14 @@ ${schedulesText}
         );
 
         if (hasForbiddenPattern) {
-            console.error('[Brain] Plan contains forbidden pattern');
+            logger.error('[Brain] Plan contains forbidden pattern');
             return false;
         }
 
         // 액션 타입이 유효한지 확인
         const validActionTypes = Object.values(ActionType);
         if (!validActionTypes.includes(plan.actionType)) {
-            console.error('[Brain] Invalid action type:', plan.actionType);
+            logger.error('[Brain] Invalid action type:', plan.actionType);
             return false;
         }
 
@@ -249,7 +250,7 @@ ${schedulesText}
             context.decision.level === InterventionLevel.L4_AUTO &&
             (GUARDRAILS.REQUIRES_CONFIRMATION as readonly string[]).includes(plan.actionType)
         ) {
-            console.error('[Brain] Cannot auto-execute action that requires confirmation');
+            logger.error('[Brain] Cannot auto-execute action that requires confirmation');
             return false;
         }
 
@@ -298,11 +299,11 @@ ${schedulesText}
             });
 
             if (error) {
-                console.error('[Brain] Failed to increment AI usage:', error);
+                logger.error('[Brain] Failed to increment AI usage:', error);
             } else {
             }
         } catch (error) {
-            console.error('[Brain] Exception while incrementing AI usage:', error);
+            logger.error('[Brain] Exception while incrementing AI usage:', error);
         }
     }
 }

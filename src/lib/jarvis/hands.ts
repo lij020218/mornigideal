@@ -13,6 +13,7 @@ import {
 import { InterventionPlan } from './brain';
 import { NOTIFICATION_COOLDOWNS } from '@/lib/constants';
 import { logAgentAction } from '@/lib/agent-action-log';
+import { logger } from '@/lib/logger';
 
 export interface ExecutionResult {
     success: boolean;
@@ -41,7 +42,7 @@ export class Hands {
         const needsConfirmation = (GUARDRAILS.REQUIRES_CONFIRMATION as readonly string[]).includes(plan.actionType);
 
         if (needsConfirmation && level < InterventionLevel.L3_DIRECT) {
-            console.error('[Hands] Action requires confirmation but level is too low');
+            logger.error('[Hands] Action requires confirmation but level is too low');
             return {
                 success: false,
                 error: 'Action requires higher intervention level'
@@ -142,7 +143,7 @@ export class Hands {
                 interventionLogId: logId
             };
         } catch (error) {
-            console.error('[Hands] Silent execution failed:', error);
+            logger.error('[Hands] Silent execution failed:', error);
             return {
                 success: false,
                 error: String(error)
@@ -185,7 +186,7 @@ export class Hands {
                 interventionLogId: logId
             };
         } catch (error) {
-            console.error('[Hands] Notification execution failed:', error);
+            logger.error('[Hands] Notification execution failed:', error);
             return {
                 success: false,
                 error: String(error)
@@ -243,7 +244,7 @@ export class Hands {
                     originalState = { customGoals: [...userData.profile.customGoals] };
                 }
             } catch (e) {
-                console.error('[Hands] Failed to snapshot for rollback:', e);
+                logger.error('[Hands] Failed to snapshot for rollback:', e);
             }
 
             let actionResult: any = null;
@@ -288,7 +289,7 @@ export class Hands {
                 interventionLogId: logId
             };
         } catch (error) {
-            console.error('[Hands] Auto execution failed:', error);
+            logger.error('[Hands] Auto execution failed:', error);
             return {
                 success: false,
                 error: String(error)
@@ -373,7 +374,7 @@ export class Hands {
         try {
             await Promise.all(tasks);
         } catch (error) {
-            console.error('[Hands] Enrichment failed (non-blocking):', error);
+            logger.error('[Hands] Enrichment failed (non-blocking):', error);
         }
 
         return enriched;
@@ -403,7 +404,7 @@ export class Hands {
             .single();
 
         if (error) {
-            console.error('[Hands] Failed to create intervention log:', error);
+            logger.error('[Hands] Failed to create intervention log:', error);
             throw error;
         }
 
@@ -429,7 +430,7 @@ export class Hands {
             .maybeSingle();
 
         if (existing) {
-            console.log(`[Hands] Skipping duplicate notification: ${notification.type}`);
+            logger.info(`[Hands] Skipping duplicate notification: ${notification.type}`);
             return;
         }
 
@@ -442,7 +443,7 @@ export class Hands {
             });
 
         if (error) {
-            console.error('[Hands] Failed to save notification:', error);
+            logger.error('[Hands] Failed to save notification:', error);
             throw error;
         }
     }
@@ -460,7 +461,7 @@ export class Hands {
             });
 
         if (error) {
-            console.error('[Hands] Failed to save confirmation request:', error);
+            logger.error('[Hands] Failed to save confirmation request:', error);
             throw error;
         }
     }
@@ -596,7 +597,7 @@ export class Hands {
             .eq('id', interventionLogId);
 
         if (error) {
-            console.error('[Hands] Failed to update feedback:', error);
+            logger.error('[Hands] Failed to update feedback:', error);
             throw error;
         }
 
@@ -613,7 +614,7 @@ export class Hands {
                 await computeWeights(logEntry.user_email);
             }
         } catch (e) {
-            console.error('[Hands] Feedback weight update failed:', e);
+            logger.error('[Hands] Feedback weight update failed:', e);
         }
     }
 
@@ -673,10 +674,10 @@ export class Hands {
                 })
                 .eq('id', interventionLogId);
 
-            console.log(`[Hands] Rolled back intervention ${interventionLogId}`);
+            logger.info(`[Hands] Rolled back intervention ${interventionLogId}`);
             return { success: true };
         } catch (e) {
-            console.error('[Hands] Rollback failed:', e);
+            logger.error('[Hands] Rollback failed:', e);
             return { success: false, error: '롤백 처리 중 오류가 발생했습니다.' };
         }
     }

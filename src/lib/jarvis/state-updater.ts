@@ -7,6 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { JarvisObserver } from './observer';
 import { EventType, GUARDRAILS } from '@/types/jarvis';
 import { getUserPlan, isProOrAbove } from '@/lib/user-plan';
+import { logger } from '@/lib/logger';
 
 /** Parse "HH:MM" safely; returns null if invalid. */
 function parseTime(time: string): { h: number; m: number } | null {
@@ -337,7 +338,7 @@ export class StateUpdater {
             });
 
         if (error) {
-            console.error('[StateUpdater] Failed to save state:', error);
+            logger.error('[StateUpdater] Failed to save state:', error);
         }
     }
 
@@ -352,7 +353,7 @@ export class StateUpdater {
             .maybeSingle();
 
         if (error) {
-            console.error('[StateUpdater] Failed to get state:', error);
+            logger.error('[StateUpdater] Failed to get state:', error);
             return null;
         }
 

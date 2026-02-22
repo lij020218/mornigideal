@@ -6,6 +6,7 @@
 import OpenAI from 'openai';
 import { MODELS } from "@/lib/models";
 import { embeddingCircuit } from '@/lib/circuit-breaker';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -91,7 +92,7 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult> 
 
         return result;
     } catch (error) {
-        console.error('[Embeddings] Failed to generate embedding:', error);
+        logger.error('[Embeddings] Failed to generate embedding:', error);
         throw new Error('Failed to generate embedding');
     }
 }
@@ -115,7 +116,7 @@ export async function generateEmbeddingsBatch(texts: string[]): Promise<Embeddin
             tokens: response.usage.total_tokens / texts.length, // Approximate per-text
         }));
     } catch (error) {
-        console.error('[Embeddings] Failed to generate embeddings batch:', error);
+        logger.error('[Embeddings] Failed to generate embeddings batch:', error);
         throw new Error('Failed to generate embeddings batch');
     }
 }

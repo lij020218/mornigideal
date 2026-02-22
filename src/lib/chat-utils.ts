@@ -6,6 +6,7 @@
  */
 
 import { FOCUS_KEYWORDS as FOCUS_KEYWORDS_CONST } from '@/lib/constants';
+import { logger } from '@/lib/logger';
 
 // ============================================
 // Types
@@ -653,7 +654,7 @@ ${getExamplesForIntent(intent, currentDate)}
 **OUTPUT**: 반드시 JSON 형식으로만 응답하세요. { "message": "...", "actions": [...] }`;
 
     if (prompt.length > 15000) {
-        console.warn(`[ChatUtils] System prompt very large: ${prompt.length} chars (intent: ${intent})`);
+        logger.warn(`[ChatUtils] System prompt very large: ${prompt.length} chars (intent: ${intent})`);
     }
 
     return prompt;

@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logger } from '@/lib/logger';
 
 interface FeedbackCount {
     action_type: string;
@@ -31,7 +32,7 @@ export async function computeWeights(userEmail: string): Promise<void> {
         .not('feedback_at', 'is', null);
 
     if (error) {
-        console.error('[FeedbackAggregator] Failed to query logs:', error);
+        logger.error('[FeedbackAggregator] Failed to query logs:', error);
         throw error;
     }
 
@@ -97,14 +98,14 @@ export async function computeWeights(userEmail: string): Promise<void> {
             );
 
         if (upsertError) {
-            console.error(
+            logger.error(
                 `[FeedbackAggregator] Failed to upsert stats for ${userEmail}/${count.action_type}:`,
                 upsertError
             );
         }
     }
 
-    console.log(
+    logger.info(
         `[FeedbackAggregator] Updated weights for ${userEmail}: ${counts.size} action types`
     );
 }
@@ -125,12 +126,12 @@ export async function computeWeightsForAllUsers(): Promise<{
         .not('feedback_at', 'is', null);
 
     if (error) {
-        console.error('[FeedbackAggregator] Failed to query users:', error);
+        logger.error('[FeedbackAggregator] Failed to query users:', error);
         throw error;
     }
 
     if (!users || users.length === 0) {
-        console.log('[FeedbackAggregator] No users with feedback found');
+        logger.info('[FeedbackAggregator] No users with feedback found');
         return { processed: 0, errors: 0 };
     }
 
@@ -145,12 +146,12 @@ export async function computeWeightsForAllUsers(): Promise<{
             await computeWeights(email);
             processed++;
         } catch (e) {
-            console.error(`[FeedbackAggregator] Failed for ${email}:`, e);
+            logger.error(`[FeedbackAggregator] Failed for ${email}:`, e);
             errors++;
         }
     }
 
-    console.log(
+    logger.info(
         `[FeedbackAggregator] Batch complete: ${processed} processed, ${errors} errors`
     );
     return { processed, errors };

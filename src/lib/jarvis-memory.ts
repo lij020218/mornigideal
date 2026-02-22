@@ -10,6 +10,7 @@ import { supabaseAdmin } from "./supabase-admin";
 import { isMaxPlan, canUseFeature } from "./user-plan";
 import { MODELS } from "@/lib/models";
 import { generateEmbedding } from "@/lib/embeddings";
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -115,13 +116,13 @@ export async function saveMemory(
             .single();
 
         if (error) {
-            console.error("[JarvisMemory] Error saving memory:", error);
+            logger.error("[JarvisMemory] Error saving memory:", error);
             return { success: false, error: error.message };
         }
 
         return { success: true, id: data.id };
     } catch (error: any) {
-        console.error("[JarvisMemory] Error:", error);
+        logger.error("[JarvisMemory] Error:", error);
         return { success: false, error: error.message };
     }
 }
@@ -171,7 +172,7 @@ export async function searchMemories(
         });
 
         if (error) {
-            console.error("[JarvisMemory] Search error:", error);
+            logger.error("[JarvisMemory] Search error:", error);
             return { success: false, error: error.message };
         }
 
@@ -188,7 +189,7 @@ export async function searchMemories(
 
         return { success: true, memories };
     } catch (error: any) {
-        console.error("[JarvisMemory] Error:", error);
+        logger.error("[JarvisMemory] Error:", error);
         return { success: false, error: error.message };
     }
 }
@@ -263,10 +264,10 @@ JSON 형식으로 응답:
             }
 
         } catch (parseError) {
-            console.error("[JarvisMemory] Failed to parse insights:", parseError);
+            logger.error("[JarvisMemory] Failed to parse insights:", parseError);
         }
     } catch (error) {
-        console.error("[JarvisMemory] Error extracting insights:", error);
+        logger.error("[JarvisMemory] Error extracting insights:", error);
     }
 }
 

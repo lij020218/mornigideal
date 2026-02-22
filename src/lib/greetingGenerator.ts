@@ -7,6 +7,7 @@ import { resolvePersonaStyle, getPersonaBlock } from "@/lib/prompts/persona";
 import { getTrendInsightsForAI } from "@/lib/multiDayTrendService";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -37,7 +38,7 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
                 const weatherRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/weather`);
                 if (weatherRes.ok) return await weatherRes.json();
             } catch (error) {
-                console.error('[GreetingGenerator] Failed to fetch weather:', error);
+                logger.error('[GreetingGenerator] Failed to fetch weather:', error);
             }
             return null;
         })(),
@@ -261,11 +262,11 @@ export async function generateGreetingsForAllUsers() {
         .select('id, email, name');
 
     if (userError || !users) {
-        console.error('[GreetingGenerator] Failed to fetch users:', userError);
+        logger.error('[GreetingGenerator] Failed to fetch users:', userError);
         return;
     }
 
-    console.log(`[GreetingGenerator] Generating greetings for ${users.length} users`);
+    logger.info(`[GreetingGenerator] Generating greetings for ${users.length} users`);
 
     // KST 기준 오늘 날짜
     const now = new Date();
@@ -294,14 +295,14 @@ export async function generateGreetingsForAllUsers() {
             }, { onConflict: 'id' });
 
             successCount++;
-            console.log(`[GreetingGenerator] Generated greeting for ${user.name || user.email}`);
+            logger.debug(`[GreetingGenerator] Generated greeting for ${user.name || user.email}`);
         } catch (err) {
             failCount++;
-            console.error(`[GreetingGenerator] Failed for ${user.email}:`, err);
+            logger.error(`[GreetingGenerator] Failed for ${user.email}:`, err);
         }
     }
 
-    console.log(`[GreetingGenerator] Done: ${successCount} success, ${failCount} failed`);
+    logger.info(`[GreetingGenerator] Done: ${successCount} success, ${failCount} failed`);
 }
 
 /**
