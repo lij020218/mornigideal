@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeDataCleanup } from "@/lib/data-cleanup-service";
+import { computeWeightsForAllUsers } from "@/lib/jarvis/feedback-aggregator";
 
 /**
  * 자동 데이터 정리 Cron Job
@@ -22,6 +23,14 @@ export async function GET(request: NextRequest) {
         // 모든 사용자 데이터 정리 (userEmail 없이 실행)
         const report = await executeDataCleanup();
 
+        // Jarvis 피드백 가중치 일괄 재계산
+        let feedbackReport = { processed: 0, errors: 0 };
+        try {
+            feedbackReport = await computeWeightsForAllUsers();
+            console.log('[Cron Daily Cleanup] Feedback weights updated:', feedbackReport);
+        } catch (e) {
+            console.error('[Cron Daily Cleanup] Feedback weight aggregation failed:', e);
+        }
 
         // 에러가 많으면 알림 (Slack, 이메일 등)
         if (report.errors.length > 5) {
@@ -32,6 +41,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             report,
+            feedbackReport,
         });
     } catch (error: any) {
         console.error("[Cron Daily Cleanup] Fatal error:", error);

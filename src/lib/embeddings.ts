@@ -5,6 +5,7 @@
 
 import OpenAI from 'openai';
 import { MODELS } from "@/lib/models";
+import { embeddingCircuit } from '@/lib/circuit-breaker';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -15,22 +16,80 @@ export interface EmbeddingResult {
     tokens: number;
 }
 
+// --- LRU Embedding Cache ---
+const CACHE_MAX = 100;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+interface CacheEntry {
+    embedding: number[];
+    tokens: number;
+    createdAt: number;
+}
+
+const embeddingCache = new Map<string, CacheEntry>();
+
+function evictStale(): void {
+    const now = Date.now();
+    for (const [key, entry] of embeddingCache) {
+        if (now - entry.createdAt > CACHE_TTL_MS) {
+            embeddingCache.delete(key);
+        }
+    }
+    // LRU eviction: Map iteration order is insertion order, so first key is oldest
+    while (embeddingCache.size > CACHE_MAX) {
+        const oldest = embeddingCache.keys().next().value;
+        if (oldest) embeddingCache.delete(oldest);
+    }
+}
+
+/**
+ * Clear the embedding cache (useful for testing)
+ */
+export function clearEmbeddingCache(): void {
+    embeddingCache.clear();
+}
+
 /**
  * Generate embedding vector for given text
  * Uses OpenAI's text-embedding-3-small model (1536 dimensions)
+ * Results are cached in-memory (LRU, max 100 entries, 30 min TTL)
  */
 export async function generateEmbedding(text: string): Promise<EmbeddingResult> {
     try {
-        const response = await openai.embeddings.create({
-            model: MODELS.EMBEDDING_SMALL,
-            input: text,
-            encoding_format: 'float',
-        });
+        const cacheKey = await generateContentHash(text);
 
-        return {
+        // Check cache
+        const cached = embeddingCache.get(cacheKey);
+        if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS) {
+            // Move to end for LRU freshness (delete + re-insert)
+            embeddingCache.delete(cacheKey);
+            embeddingCache.set(cacheKey, cached);
+            return { embedding: cached.embedding, tokens: cached.tokens };
+        }
+
+        const response = await embeddingCircuit.execute(() =>
+            openai.embeddings.create({
+                model: MODELS.EMBEDDING_SMALL,
+                input: text,
+                encoding_format: 'float',
+            })
+        );
+
+        const result: EmbeddingResult = {
             embedding: response.data[0].embedding,
             tokens: response.usage.total_tokens,
         };
+
+        // Store in cache
+        embeddingCache.set(cacheKey, {
+            embedding: result.embedding,
+            tokens: result.tokens,
+            createdAt: Date.now(),
+        });
+
+        evictStale();
+
+        return result;
     } catch (error) {
         console.error('[Embeddings] Failed to generate embedding:', error);
         throw new Error('Failed to generate embedding');
@@ -43,11 +102,13 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult> 
  */
 export async function generateEmbeddingsBatch(texts: string[]): Promise<EmbeddingResult[]> {
     try {
-        const response = await openai.embeddings.create({
-            model: MODELS.EMBEDDING_SMALL,
-            input: texts,
-            encoding_format: 'float',
-        });
+        const response = await embeddingCircuit.execute(() =>
+            openai.embeddings.create({
+                model: MODELS.EMBEDDING_SMALL,
+                input: texts,
+                encoding_format: 'float',
+            })
+        );
 
         return response.data.map((item) => ({
             embedding: item.embedding,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { scheduleDeleteSchema, validateBody } from '@/lib/schemas';
 import { dualWriteDelete } from "@/lib/schedule-dual-write";
 
 export async function POST(request: NextRequest) {
@@ -10,14 +11,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { scheduleId, text, startTime, isRepeating, specificDate } = await request.json();
-
-        if (!text && !scheduleId) {
-            return NextResponse.json(
-                { error: "scheduleId or text is required" },
-                { status: 400 }
-            );
-        }
+        const body = await request.json();
+        const v = validateBody(scheduleDeleteSchema, body);
+        if (!v.success) return v.response;
+        const { scheduleId, text, startTime, isRepeating, specificDate } = v.data;
 
         // Get current user profile
         const { data: userData, error: fetchError } = await supabaseAdmin
@@ -44,8 +41,8 @@ export async function POST(request: NextRequest) {
             // Find by text and time (approximate match)
             scheduleIndex = customGoals.findIndex((g: any) => {
                 // Text match (case-insensitive, partial match)
-                const textMatch = g.text?.toLowerCase().includes(text.toLowerCase()) ||
-                    text.toLowerCase().includes(g.text?.toLowerCase());
+                const textMatch = g.text?.toLowerCase().includes(text!.toLowerCase()) ||
+                    text!.toLowerCase().includes(g.text?.toLowerCase());
 
                 // Time match (if provided)
                 const timeMatch = !startTime || g.startTime === startTime;

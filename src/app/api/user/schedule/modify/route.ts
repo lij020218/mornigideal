@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { isValidString, isValidTime } from "@/lib/validation";
+import { scheduleModifySchema, validateBody } from '@/lib/schemas';
 import { dualWriteModify } from "@/lib/schedule-dual-write";
 
 export async function POST(request: NextRequest) {
@@ -11,6 +11,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const body = await request.json();
+        const v = validateBody(scheduleModifySchema, body);
+        if (!v.success) return v.response;
         const {
             scheduleId,
             originalText,
@@ -20,24 +23,7 @@ export async function POST(request: NextRequest) {
             newEndTime,
             newLocation,
             newMemo,
-        } = await request.json();
-
-        if (!originalText && !scheduleId) {
-            return NextResponse.json(
-                { error: "scheduleId or originalText is required" },
-                { status: 400 }
-            );
-        }
-
-        if (newText && !isValidString(newText, 500)) {
-            return NextResponse.json({ error: "newText too long (max 500)" }, { status: 400 });
-        }
-        if (newStartTime && !isValidTime(newStartTime)) {
-            return NextResponse.json({ error: "Invalid newStartTime (HH:MM)" }, { status: 400 });
-        }
-        if (newEndTime && !isValidTime(newEndTime)) {
-            return NextResponse.json({ error: "Invalid newEndTime (HH:MM)" }, { status: 400 });
-        }
+        } = v.data;
 
         // Get current user profile
         const { data: userData, error: fetchError } = await supabaseAdmin
@@ -63,8 +49,8 @@ export async function POST(request: NextRequest) {
         } else {
             // Find by text and time (approximate match)
             scheduleIndex = customGoals.findIndex((g: any) => {
-                const textMatch = g.text?.toLowerCase().includes(originalText.toLowerCase()) ||
-                    originalText.toLowerCase().includes(g.text?.toLowerCase());
+                const textMatch = g.text?.toLowerCase().includes(originalText!.toLowerCase()) ||
+                    originalText!.toLowerCase().includes(g.text?.toLowerCase());
                 const timeMatch = !originalTime || g.startTime === originalTime;
                 return textMatch && timeMatch;
             });

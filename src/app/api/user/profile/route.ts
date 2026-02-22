@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmail } from "@/lib/users";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { profileReplaceSchema, validateBody } from '@/lib/schemas';
 
 const MAX_PROFILE_SIZE = 50_000; // 50KB
 const ALLOWED_TOP_KEYS = new Set([
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST: 전체 프로필 교체
+// POST: 전체 프로필 교체 (customGoals 등 스케줄 데이터는 보존)
 export async function POST(request: NextRequest) {
     try {
         const email = await getUserEmailWithAuth(request);
@@ -62,18 +63,35 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
+        const v = validateBody(profileReplaceSchema, body);
+        if (!v.success) return v.response;
         const validationError = validateProfilePayload(body);
         if (validationError) {
             return NextResponse.json({ error: validationError }, { status: 400 });
         }
-        const { profile } = body;
+        const { profile } = v.data;
 
-        // Update user profile in database
         const { supabaseAdmin } = await import("@/lib/supabase-admin");
+
+        // 기존 프로필에서 스케줄 데이터 보존 (full replace 시 유실 방지)
+        const PRESERVED_KEYS = ['customGoals', 'learnings', 'reminders'] as const;
+        const { data: existing } = await supabaseAdmin
+            .from("users")
+            .select("profile")
+            .eq("email", email)
+            .maybeSingle();
+
+        const existingProfile = existing?.profile || {};
+        const mergedProfile = { ...profile };
+        for (const key of PRESERVED_KEYS) {
+            if (!(key in mergedProfile) && existingProfile[key]) {
+                mergedProfile[key] = existingProfile[key];
+            }
+        }
 
         const { data, error } = await supabaseAdmin
             .from("users")
-            .update({ profile })
+            .update({ profile: mergedProfile })
             .eq("email", email)
             .select()
             .single();

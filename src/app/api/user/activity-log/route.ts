@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { activityLogSchema, validateBody } from '@/lib/schemas';
 
 /**
  * Log user activity for personalization
@@ -26,7 +27,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { activityType, metadata } = await request.json();
+        const body = await request.json();
+        const v = validateBody(activityLogSchema, body);
+        if (!v.success) return v.response;
+        const { activityType, metadata } = v.data;
 
 
         // Store activity in database

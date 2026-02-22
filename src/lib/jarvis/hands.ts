@@ -11,6 +11,8 @@ import {
     GUARDRAILS
 } from '@/types/jarvis';
 import { InterventionPlan } from './brain';
+import { NOTIFICATION_COOLDOWNS } from '@/lib/constants';
+import { logAgentAction } from '@/lib/agent-action-log';
 
 export interface ExecutionResult {
     success: boolean;
@@ -102,6 +104,22 @@ export class Hands {
 
             switch (plan.actionType) {
                 case ActionType.RESOURCE_PREP:
+                    // Capability 기반 리소스 준비 시도, 실패 시 기존 방식 fallback
+                    try {
+                        const scheduleText = plan.actionPayload?.scheduleText || plan.actionPayload?.title;
+                        if (scheduleText) {
+                            const { generateSchedulePrep } = await import('@/lib/capabilities/schedule-prep');
+                            const prepResult = await generateSchedulePrep(this.userEmail, {
+                                scheduleText,
+                                startTime: plan.actionPayload?.startTime,
+                                timeUntil: plan.actionPayload?.timeUntil,
+                            });
+                            if (prepResult.success && prepResult.data) {
+                                actionResult = { ...plan.actionPayload, prepAdvice: prepResult.data.advice, prepType: prepResult.data.prepType };
+                                break;
+                            }
+                        }
+                    } catch { /* fallback below */ }
                     actionResult = await this.prepareResources(plan.actionPayload);
                     break;
 
@@ -140,12 +158,16 @@ export class Hands {
         reasonCodes: string[]
     ): Promise<ExecutionResult> {
         try {
+            // Capability enrichment (실패해도 원본 알림 전달)
+            const enriched = await this.enrichNotification(plan, reasonCodes);
+
             // 알림 데이터 저장 (UI에서 표시)
             await this.saveNotification({
                 type: 'jarvis_suggestion',
                 message: plan.message,
                 actionType: plan.actionType,
                 actionPayload: plan.actionPayload,
+                ...enriched,
                 createdAt: new Date().toISOString()
             });
 
@@ -155,6 +177,8 @@ export class Hands {
                 reasonCodes
                 // 사용자 피드백은 나중에 업데이트됨
             );
+
+            logAgentAction(this.userEmail, 'jarvis', plan.actionType, plan.actionPayload || {}).catch(() => {});
 
             return {
                 success: true,
@@ -191,6 +215,8 @@ export class Hands {
             createdAt: new Date().toISOString()
         });
 
+        logAgentAction(this.userEmail, 'jarvis', plan.actionType, plan.actionPayload || {}).catch(() => {});
+
         return {
             success: true,
             interventionLogId: logId,
@@ -204,6 +230,22 @@ export class Hands {
      */
     private async executeAuto(plan: InterventionPlan, reasonCodes: string[]): Promise<ExecutionResult> {
         try {
+            // Snapshot original state for rollback
+            let originalState: any = null;
+            try {
+                const { data: userData } = await supabaseAdmin
+                    .from('users')
+                    .select('profile')
+                    .eq('email', this.userEmail)
+                    .maybeSingle();
+                if (userData?.profile?.customGoals) {
+                    // Store the full customGoals array as snapshot
+                    originalState = { customGoals: [...userData.profile.customGoals] };
+                }
+            } catch (e) {
+                console.error('[Hands] Failed to snapshot for rollback:', e);
+            }
+
             let actionResult: any = null;
 
             switch (plan.actionType) {
@@ -225,7 +267,7 @@ export class Hands {
 
             const logId = await this.createInterventionLog(
                 InterventionLevel.L4_AUTO,
-                plan,
+                { ...plan, actionPayload: { ...plan.actionPayload, _originalState: originalState } },
                 reasonCodes,
                 UserFeedback.AUTO_EXECUTED
             );
@@ -239,6 +281,8 @@ export class Hands {
                 createdAt: new Date().toISOString()
             });
 
+            logAgentAction(this.userEmail, 'jarvis', plan.actionType, plan.actionPayload || {}).catch(() => {});
+
             return {
                 success: true,
                 interventionLogId: logId
@@ -250,6 +294,89 @@ export class Hands {
                 error: String(error)
             };
         }
+    }
+
+    /**
+     * Capability 기반 알림 enrichment
+     * reasonCodes에 따라 관련 capability를 호출하여 추가 데이터를 알림에 첨부.
+     * 각 capability 호출에 3초 타임아웃, 실패 시 빈 객체 반환 (원본 알림은 항상 전달).
+     */
+    private async enrichNotification(
+        plan: InterventionPlan,
+        reasonCodes: string[]
+    ): Promise<Record<string, any>> {
+        const enriched: Record<string, any> = {};
+        const ENRICHMENT_TIMEOUT = 3000;
+
+        const withTimeout = <T>(promise: Promise<T>): Promise<T | null> => {
+            let timer: ReturnType<typeof setTimeout>;
+            return Promise.race([
+                promise.then(v => { clearTimeout(timer); return v; }),
+                new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), ENRICHMENT_TIMEOUT); }),
+            ]).catch(() => null);
+        };
+
+        // 독립적인 enrichment를 병렬 실행 (직렬 최악 9초 → 병렬 최악 3초)
+        const tasks: Promise<void>[] = [];
+
+        if (reasonCodes.includes('deadline_soon') && plan.actionPayload?.scheduleText) {
+            tasks.push((async () => {
+                try {
+                    const { generateSchedulePrep } = await import('@/lib/capabilities/schedule-prep');
+                    const result = await withTimeout(
+                        generateSchedulePrep(this.userEmail, {
+                            scheduleText: plan.actionPayload.scheduleText,
+                            startTime: plan.actionPayload.startTime,
+                            timeUntil: plan.actionPayload.timeUntil,
+                        })
+                    );
+                    if (result?.success && result.data) {
+                        enriched.prepAdvice = result.data.advice;
+                    }
+                } catch { /* non-blocking */ }
+            })());
+        }
+
+        if (reasonCodes.includes('high_stress') || reasonCodes.includes('low_energy')) {
+            tasks.push((async () => {
+                try {
+                    const { generateSmartSuggestions } = await import('@/lib/capabilities/smart-suggestions');
+                    const result = await withTimeout(
+                        generateSmartSuggestions(this.userEmail, { requestCount: 2 })
+                    );
+                    if (result?.success && result.data) {
+                        enriched.suggestions = result.data.suggestions;
+                    }
+                } catch { /* non-blocking */ }
+            })());
+        }
+
+        if (plan.actionType === ActionType.RESOURCE_PREP && plan.actionPayload?.activity) {
+            tasks.push((async () => {
+                try {
+                    const { generateResourceRecommendation } = await import('@/lib/capabilities/resource-recommend');
+                    const result = await withTimeout(
+                        generateResourceRecommendation(this.userEmail, {
+                            activity: plan.actionPayload.activity,
+                            context: 'upcoming_schedule',
+                            timeUntil: plan.actionPayload.timeUntil,
+                        })
+                    );
+                    if (result?.success && result.data) {
+                        enriched.resourceRecommendation = result.data.recommendation;
+                        enriched.resourceActions = result.data.actions;
+                    }
+                } catch { /* non-blocking */ }
+            })());
+        }
+
+        try {
+            await Promise.all(tasks);
+        } catch (error) {
+            console.error('[Hands] Enrichment failed (non-blocking):', error);
+        }
+
+        return enriched;
     }
 
     /**
@@ -284,9 +411,29 @@ export class Hands {
     }
 
     /**
-     * 알림 저장 (UI에서 표시)
+     * 알림 저장 (UI에서 표시) - 쿨다운 기간 내 중복 방지
      */
     private async saveNotification(notification: any): Promise<void> {
+        // Check for recent duplicate within cooldown window
+        const cooldownMinutes = NOTIFICATION_COOLDOWNS[notification.type] || NOTIFICATION_COOLDOWNS._default;
+        const cutoff = new Date(Date.now() - cooldownMinutes * 60 * 1000).toISOString();
+
+        const { data: existing } = await supabaseAdmin
+            .from('jarvis_notifications')
+            .select('id')
+            .eq('user_email', this.userEmail)
+            .eq('type', notification.type)
+            .gte('created_at', cutoff)
+            .is('dismissed_at', null)
+            .limit(1)
+            .maybeSingle();
+
+        if (existing) {
+            console.log(`[Hands] Skipping duplicate notification: ${notification.type}`);
+            return;
+        }
+
+        // Original insert
         const { error } = await supabaseAdmin
             .from('jarvis_notifications')
             .insert({
@@ -451,6 +598,86 @@ export class Hands {
         if (error) {
             console.error('[Hands] Failed to update feedback:', error);
             throw error;
+        }
+
+        // 즉시 피드백 가중치 반영 (다음 개입부터 적용)
+        try {
+            const { data: logEntry } = await supabaseAdmin
+                .from('intervention_logs')
+                .select('user_email')
+                .eq('id', interventionLogId)
+                .single();
+
+            if (logEntry?.user_email) {
+                const { computeWeights } = await import('./feedback-aggregator');
+                await computeWeights(logEntry.user_email);
+            }
+        } catch (e) {
+            console.error('[Hands] Feedback weight update failed:', e);
+        }
+    }
+
+    /**
+     * L4 자동실행 롤백
+     */
+    async rollbackAction(interventionLogId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            // 1. intervention_log에서 원본 상태 조회
+            const { data: log, error: logError } = await supabaseAdmin
+                .from('intervention_logs')
+                .select('action_payload, user_email, action_type')
+                .eq('id', interventionLogId)
+                .eq('user_email', this.userEmail)
+                .maybeSingle();
+
+            if (logError || !log) {
+                return { success: false, error: '개입 기록을 찾을 수 없습니다.' };
+            }
+
+            const originalState = log.action_payload?._originalState;
+            if (!originalState?.customGoals) {
+                return { success: false, error: '롤백 데이터가 없습니다.' };
+            }
+
+            // 2. 원본 customGoals 복원
+            const { data: userData, error: userError } = await supabaseAdmin
+                .from('users')
+                .select('profile')
+                .eq('email', this.userEmail)
+                .maybeSingle();
+
+            if (userError || !userData) {
+                return { success: false, error: '사용자를 찾을 수 없습니다.' };
+            }
+
+            const { error: updateError } = await supabaseAdmin
+                .from('users')
+                .update({
+                    profile: {
+                        ...userData.profile,
+                        customGoals: originalState.customGoals
+                    }
+                })
+                .eq('email', this.userEmail);
+
+            if (updateError) {
+                return { success: false, error: `복원 실패: ${updateError.message}` };
+            }
+
+            // 3. intervention_log에 롤백 기록
+            await supabaseAdmin
+                .from('intervention_logs')
+                .update({
+                    user_feedback: 'rolled_back',
+                    feedback_at: new Date().toISOString()
+                })
+                .eq('id', interventionLogId);
+
+            console.log(`[Hands] Rolled back intervention ${interventionLogId}`);
+            return { success: true };
+        } catch (e) {
+            console.error('[Hands] Rollback failed:', e);
+            return { success: false, error: '롤백 처리 중 오류가 발생했습니다.' };
         }
     }
 }

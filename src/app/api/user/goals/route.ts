@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { isValidDate } from "@/lib/validation";
+import { dailyGoalsSchema, validateBody } from '@/lib/schemas';
 
 // GET /api/user/goals?date=2025-11-23 - Get goals for specific date
 export async function GET(request: NextRequest) {
@@ -78,14 +79,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { date, completed_goals, read_trends } = await request.json();
-
-        if (!date || !isValidDate(date)) {
-            return NextResponse.json(
-                { error: "Missing or invalid date (YYYY-MM-DD)" },
-                { status: 400 }
-            );
-        }
+        const body = await request.json();
+        const v = validateBody(dailyGoalsSchema, body);
+        if (!v.success) return v.response;
+        const { date, completed_goals, read_trends } = v.data;
 
         // Get user ID from email
         const { data: userData, error: userError } = await supabaseAdmin

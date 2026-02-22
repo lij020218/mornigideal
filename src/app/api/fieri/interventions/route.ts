@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { Hands } from '@/lib/jarvis/hands';
 
 export const dynamic = 'force-dynamic';
 
@@ -217,6 +218,16 @@ export async function POST(request: NextRequest) {
             }
 
             return NextResponse.json({ error: 'Not a checklist' }, { status: 400 });
+        }
+
+        if (action === 'undo_auto_action') {
+            const { interventionLogId } = body;
+            if (!interventionLogId) {
+                return NextResponse.json({ error: 'interventionLogId required' }, { status: 400 });
+            }
+            const hands = new Hands(userEmail);
+            const result = await hands.rollbackAction(interventionLogId);
+            return NextResponse.json(result, { status: result.success ? 200 : 400 });
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

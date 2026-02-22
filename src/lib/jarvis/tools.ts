@@ -117,7 +117,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         description: '사용자의 현재 상태 (에너지, 스트레스, 집중력 등)를 조회합니다',
         parameters: [],
         requiresConfirmation: false,
-        planGate: ['Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
     {
         name: 'get_goals',
@@ -133,7 +133,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         description: '사용자의 일정 패턴 (바쁜 요일, 자유시간, 루틴 등)을 분석합니다',
         parameters: [],
         requiresConfirmation: false,
-        planGate: ['Pro', 'Max'],
+        planGate: ['Free', 'Pro', 'Max'],
     },
 
     // === 액션 실행 ===
@@ -181,6 +181,61 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         ],
         requiresConfirmation: false,
         planGate: ['Free', 'Pro', 'Max'],
+    },
+
+    // === 기분/에너지 기록 ===
+    {
+        name: 'log_mood',
+        description: '사용자의 기분과 에너지 수준을 기록합니다. "기분이 안 좋아", "오늘 컨디션 좋아" 등의 표현에 자동 호출합니다.',
+        parameters: [
+            { name: 'mood', type: 'number', description: '기분 (1=매우나쁨 ~ 5=매우좋음)', required: true },
+            { name: 'energy', type: 'number', description: '에너지 (1=매우낮음 ~ 5=매우높음)', required: true },
+            { name: 'note', type: 'string', description: '한줄 메모 (선택)', required: false },
+        ],
+        requiresConfirmation: false,
+        planGate: ['Free', 'Pro', 'Max'],
+    },
+
+    // === 특화 에이전트 Capability ===
+    {
+        name: 'get_smart_suggestions',
+        description: 'AI 맞춤 일정 추천 (사용자 상태·패턴·업무-휴식 균형 분석 기반, 5카테고리 밸런스)',
+        parameters: [
+            { name: 'requestCount', type: 'number', description: '추천 개수 (기본 3)', required: false },
+            { name: 'currentHour', type: 'number', description: '현재 시간 (0-23, 기본 자동)', required: false },
+        ],
+        requiresConfirmation: false,
+        planGate: ['Pro', 'Max'],
+    },
+    {
+        name: 'get_prep_advice',
+        description: '다가오는 일정에 대한 준비 조언 + 체크리스트 (식사/휴식은 즉시, 업무/운동은 AI 생성)',
+        parameters: [
+            { name: 'scheduleText', type: 'string', description: '일정 이름', required: true },
+            { name: 'startTime', type: 'string', description: '시작 시간 HH:MM', required: false },
+            { name: 'timeUntil', type: 'number', description: '일정까지 남은 분', required: false },
+        ],
+        requiresConfirmation: false,
+        planGate: ['Free', 'Pro', 'Max'],
+    },
+    {
+        name: 'get_habit_insights',
+        description: '최근 7일 습관 패턴 분석 (운동/학습/업무/휴식 카테고리 분석 + AI 인사이트)',
+        parameters: [],
+        requiresConfirmation: false,
+        planGate: ['Pro', 'Max'],
+    },
+    {
+        name: 'get_resource_recommendations',
+        description: 'RAG 기반 리소스 추천 (활동명 기반으로 관련 도구/사이트/준비물 추천)',
+        parameters: [
+            { name: 'activity', type: 'string', description: '활동명', required: true },
+            { name: 'category', type: 'string', description: '활동 카테고리', required: false },
+            { name: 'context', type: 'string', description: '호출 컨텍스트 (upcoming_schedule, schedule_completed 등)', required: false },
+            { name: 'timeUntil', type: 'number', description: '일정까지 남은 분', required: false },
+        ],
+        requiresConfirmation: false,
+        planGate: ['Pro', 'Max'],
     },
 
     // === 최종 응답 (루프 종료) ===

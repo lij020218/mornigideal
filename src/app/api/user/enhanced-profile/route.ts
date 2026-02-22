@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getCached, setCache } from '@/lib/cache';
 
 /**
  * Get enhanced user profile with behavioral analytics
@@ -16,6 +17,13 @@ export async function GET(request: NextRequest) {
         const email = await getUserEmailWithAuth(request);
         if (!email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // Check cache first (5 min TTL)
+        const cacheKey = `enhanced-profile:${email}`;
+        const cached = getCached<any>(cacheKey);
+        if (cached) {
+            return NextResponse.json({ profile: cached });
         }
 
         // Fetch basic profile
@@ -97,6 +105,7 @@ export async function GET(request: NextRequest) {
             last_updated: new Date().toISOString(),
         };
 
+        setCache(cacheKey, enhancedProfile, 5 * 60 * 1000); // 5 minutes
         return NextResponse.json({ profile: enhancedProfile });
     } catch (error: any) {
         console.error('[Enhanced Profile] Error:', error);

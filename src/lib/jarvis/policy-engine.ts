@@ -13,6 +13,8 @@ import {
     PLAN_CONFIGS,
     PlanType
 } from '@/types/jarvis';
+import { getRecentActions } from '@/lib/agent-action-log';
+import { getUserPlan as getCentralizedPlan, checkAiUsageLimit } from '@/lib/user-plan';
 
 export class PolicyEngine {
     private userEmail: string;
@@ -27,20 +29,20 @@ export class PolicyEngine {
      * 개입 필요성 판단 (핵심 로직)
      */
     async shouldIntervene(): Promise<InterventionDecision> {
-        // 1. 사용자 플랜 확인
-        const userPlan = await this.getUserPlan();
-        const planConfig = PLAN_CONFIGS[userPlan as PlanType];
-
-        if (!planConfig.enabled) {
+        // 1. 사용자 플랜 확인 (중앙집중 user-plan.ts 사용)
+        const centralPlan = await getCentralizedPlan(this.userEmail);
+        if (!centralPlan.isActive) {
             return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['plan_not_supported'], score: 0 };
         }
 
-        // 2. AI 호출 횟수 체크 (Standard, Pro만)
-        if (planConfig.aiCallsPerMonth > 0) {
-            const canUseAI = await this.checkAIUsageLimit(userPlan, planConfig.aiCallsPerMonth);
-            if (!canUseAI) {
-                return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['ai_limit_exceeded'], score: 0 };
-            }
+        // Jarvis 도메인 설정 (maxInterventionLevel 등)
+        const planKey = centralPlan.plan === 'free' ? 'Free' : centralPlan.plan === 'pro' ? 'Pro' : centralPlan.plan === 'max' ? 'Max' : 'Free';
+        const jarvisConfig = PLAN_CONFIGS[planKey as PlanType];
+
+        // 2. AI 호출 횟수 체크 (중앙집중 checkAiUsageLimit 사용)
+        const usageInfo = await checkAiUsageLimit(this.userEmail);
+        if (!usageInfo.canUse) {
+            return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['ai_limit_exceeded'], score: 0 };
         }
 
         // 3. 현재 상태 조회
@@ -65,6 +67,16 @@ export class PolicyEngine {
             return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['cooldown'], score: 0 };
         }
 
+        // 6.5. 최근 ReAct 액션 체크 (중복 개입 방지)
+        const recentActions = await getRecentActions(this.userEmail, 30);
+        const hasRecentReactAction = recentActions.some(a =>
+            a.agent === 'react' &&
+            ['add_schedule', 'update_schedule', 'delete_schedule', 'suggest_schedule'].includes(a.actionType)
+        );
+        if (hasRecentReactAction) {
+            return { shouldIntervene: false, level: InterventionLevel.L0_OBSERVE, reasonCodes: ['recent_react_action'], score: 0 };
+        }
+
         // 7. 개입 점수 계산 (규칙 기반 + 피드백 가중치)
         const { score, reasonCodes } = await this.calculateInterventionScore(state);
 
@@ -76,7 +88,7 @@ export class PolicyEngine {
 
         // 9. 개입 레벨 결정 (플랜 제한 적용)
         const level = this.determineLevel(score, reasonCodes, preferences);
-        const limitedLevel = Math.min(level, planConfig.maxInterventionLevel);
+        const limitedLevel = Math.min(level, jarvisConfig.maxInterventionLevel);
 
         return {
             shouldIntervene: true,
@@ -227,39 +239,4 @@ export class PolicyEngine {
         return data;
     }
 
-    /**
-     * 사용자 플랜 조회
-     */
-    private async getUserPlan(): Promise<string> {
-        const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
-        if (error || !data) {
-            console.error('[PolicyEngine] Failed to get user plan:', error);
-            return 'Free';
-        }
-
-        return data.profile?.plan || 'Free';
-    }
-
-    /**
-     * AI 호출 횟수 제한 체크
-     */
-    private async checkAIUsageLimit(userPlan: string, limit: number): Promise<boolean> {
-        const { data, error } = await supabaseAdmin.rpc('get_ai_usage', {
-            p_user_email: this.userEmail
-        });
-
-        if (error) {
-            console.error('[PolicyEngine] Failed to check AI usage:', error);
-            return true; // 에러나면 허용 (안전한 방향)
-        }
-
-        const currentUsage = data || 0;
-
-        return currentUsage < limit;
-    }
 }

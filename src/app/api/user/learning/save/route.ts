@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { learningSaveSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,18 +10,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { content, category, relatedGoal, tags } = await request.json();
-
-        if (!content) {
-            return NextResponse.json(
-                { error: "content is required" },
-                { status: 400 }
-            );
-        }
-
-        // Validate category
-        const validCategories = ["insight", "skill", "reflection", "goal_progress"];
-        const finalCategory = validCategories.includes(category) ? category : "insight";
+        const body = await request.json();
+        const v = validateBody(learningSaveSchema, body);
+        if (!v.success) return v.response;
+        const { content, relatedGoal, tags } = v.data;
+        const finalCategory = v.data.category || "insight";
 
         // Get current user profile
         const { data: userData, error: fetchError } = await supabaseAdmin

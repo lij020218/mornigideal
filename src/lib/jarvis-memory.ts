@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import { supabaseAdmin } from "./supabase-admin";
 import { isMaxPlan, canUseFeature } from "./user-plan";
 import { MODELS } from "@/lib/models";
+import { generateEmbedding } from "@/lib/embeddings";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -58,14 +59,11 @@ async function getUserIdByEmail(email: string): Promise<string | null> {
 
 /**
  * 텍스트를 벡터 임베딩으로 변환
+ * Uses cached generateEmbedding from embeddings.ts to avoid redundant API calls
  */
 async function createEmbedding(text: string): Promise<number[]> {
-    const response = await openai.embeddings.create({
-        model: MODELS.EMBEDDING_SMALL,
-        input: text,
-    });
-
-    return response.data[0].embedding;
+    const result = await generateEmbedding(text);
+    return result.embedding;
 }
 
 /**

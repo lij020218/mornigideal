@@ -18,12 +18,32 @@ import Anthropic from '@anthropic-ai/sdk';
 import { PlanType } from '@/types/jarvis';
 import { getAvailableTools, ToolDefinition, ToolCall, ToolResult } from './tools';
 import { ToolExecutor } from './tool-executor';
+import { llmCircuit } from '@/lib/circuit-breaker';
 import { getPersonaBlock, resolvePersonaStyle, type PersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
+
+// ================================================
+// Error classification for retry logic
+// ================================================
+
+function classifyError(error: unknown): 'transient' | 'permanent' | 'unknown' {
+    const msg = error instanceof Error ? error.message : String(error);
+    const status = (error as any)?.status || (error as any)?.response?.status;
+
+    // Rate limit or timeout → transient
+    if (status === 429 || status === 408 || status === 502 || status === 503 || status === 504) return 'transient';
+    if (msg.includes('timeout') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT') || msg.includes('rate_limit')) return 'transient';
+
+    // Auth or model errors → permanent
+    if (status === 401 || status === 403 || status === 404) return 'permanent';
+    if (msg.includes('invalid_api_key') || msg.includes('model_not_found') || msg.includes('billing')) return 'permanent';
+
+    return 'unknown';
+}
 
 // Anthropic은 Max 플랜에서만 사용 — API 키 없으면 null
 const anthropic = process.env.ANTHROPIC_API_KEY
@@ -39,12 +59,11 @@ type LLMProvider = 'openai' | 'anthropic';
 const REACT_PLAN_CONFIGS: Record<string, {
     maxIterations: number;
     model: string;
-    maxTokens: number;
     provider: LLMProvider;
 }> = {
-    Free:     { maxIterations: 2, model: MODELS.GPT_5_MINI, maxTokens: 1024, provider: 'openai' },
-    Pro:      { maxIterations: 3, model: MODELS.GPT_5_2,    maxTokens: 2048, provider: 'openai' },
-    Max:      { maxIterations: 5, model: MODELS.CLAUDE_SONNET_4_5, maxTokens: 2048, provider: 'anthropic' },
+    Free:     { maxIterations: 3, model: MODELS.GPT_5_MINI, provider: 'openai' },
+    Pro:      { maxIterations: 3, model: MODELS.GPT_5_2,    provider: 'openai' },
+    Max:      { maxIterations: 5, model: MODELS.CLAUDE_SONNET_4_5, provider: 'anthropic' },
 };
 
 // ================================================
@@ -88,7 +107,7 @@ export class ReActBrain {
     private userPlan: PlanType;
     private toolExecutor: ToolExecutor;
     private availableTools: ToolDefinition[];
-    private config: { maxIterations: number; model: string; maxTokens: number; provider: LLMProvider };
+    private config: { maxIterations: number; model: string; provider: LLMProvider };
 
     constructor(userEmail: string, userPlan: PlanType) {
         this.userEmail = userEmail;
@@ -112,17 +131,51 @@ export class ReActBrain {
         const scratchpad: ReActStep[] = [];
         let totalLlmCalls = 0;
         let wasTerminatedEarly = false;
+        const loopStartTime = Date.now();
+        const LOOP_TIMEOUT = 60000; // 전체 루프 60초 제한
 
         for (let i = 0; i < this.config.maxIterations; i++) {
-            // 1. LLM 호출
+            // 전체 루프 타임아웃 체크
+            if (Date.now() - loopStartTime > LOOP_TIMEOUT) {
+                console.warn(`[ReActBrain] Loop timeout reached after ${i} iterations (${Date.now() - loopStartTime}ms)`);
+                wasTerminatedEarly = true;
+                break;
+            }
+            // 1. LLM 호출 (classified retry with exponential backoff)
             const prompt = this.buildIterationPrompt(userMessage, scratchpad);
 
-            let llmResponse: string;
-            try {
-                llmResponse = await this.callLLM(systemPrompt, prompt);
-                totalLlmCalls++;
-            } catch (error) {
-                console.error(`[ReActBrain] LLM call failed at step ${i + 1}:`, error);
+            let llmResponse: string | null = null;
+            let lastError: unknown = null;
+            const MAX_RETRIES = 2;
+
+            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    llmResponse = await this.callLLM(systemPrompt, prompt);
+                    totalLlmCalls++;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    const errorType = classifyError(error);
+
+                    if (errorType === 'permanent') {
+                        console.error(`[ReActBrain] Permanent error at step ${i + 1}, aborting:`, error);
+                        wasTerminatedEarly = true;
+                        break;
+                    }
+
+                    if (attempt < MAX_RETRIES) {
+                        const backoffMs = Math.min(500 * Math.pow(2, attempt), 4000);
+                        console.warn(`[ReActBrain] ${errorType} error at step ${i + 1}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}):`, error);
+                        await new Promise(resolve => setTimeout(resolve, backoffMs));
+                    } else {
+                        console.error(`[ReActBrain] All retries exhausted at step ${i + 1}:`, error);
+                        wasTerminatedEarly = true;
+                    }
+                }
+            }
+
+            if (wasTerminatedEarly) break;
+            if (!llmResponse) {
                 wasTerminatedEarly = true;
                 break;
             }
@@ -131,8 +184,15 @@ export class ReActBrain {
             const parsed = this.parseReActResponse(llmResponse);
 
             if (!parsed) {
-                console.error(`[ReActBrain] Failed to parse response at step ${i + 1}`);
+                console.error(`[ReActBrain] Failed to parse response at step ${i + 1}, generating fallback`);
                 wasTerminatedEarly = true;
+                // 파싱 실패한 raw 응답을 scratchpad에 기록하여 fallback 생성 시 활용
+                scratchpad.push({
+                    thought: '(파싱 실패)',
+                    action: 'parse_error',
+                    actionInput: {},
+                    observation: llmResponse.substring(0, 500),
+                });
                 break;
             }
 
@@ -157,31 +217,63 @@ export class ReActBrain {
                 };
             }
 
-            // 4. 도구 실행
-            const toolCall: ToolCall = {
-                toolName: parsed.action,
-                arguments: parsed.actionInput,
-            };
+            // 4. 도구 실행 (병렬 지원)
+            if (parsed.parallelActions && parsed.parallelActions.length > 1) {
+                // 병렬 실행: Promise.all로 독립 도구들 동시 호출
+                const results = await Promise.all(
+                    parsed.parallelActions.map(async (pa) => {
+                        const tc: ToolCall = { toolName: pa.action, arguments: pa.actionInput };
+                        try {
+                            return await this.toolExecutor.execute(tc);
+                        } catch (error) {
+                            return {
+                                success: false,
+                                error: String(error),
+                                humanReadableSummary: `도구 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
+                            } as ToolResult;
+                        }
+                    })
+                );
 
-            let result: ToolResult;
-            try {
-                result = await this.toolExecutor.execute(toolCall);
-            } catch (error) {
-                result = {
-                    success: false,
-                    error: String(error),
-                    humanReadableSummary: `도구 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
+                // 각 결과를 개별 스크래치패드 스텝으로 기록
+                const observations = parsed.parallelActions.map((pa, idx) =>
+                    `[${pa.action}] ${results[idx].humanReadableSummary}`
+                ).join('\n');
+
+                const step: ReActStep = {
+                    thought: parsed.thought,
+                    action: parsed.parallelActions.map(pa => pa.action).join('+'),
+                    actionInput: { parallel: parsed.parallelActions },
+                    observation: observations,
                 };
-            }
+                scratchpad.push(step);
+            } else {
+                // 단일 실행 (기존 로직)
+                const toolCall: ToolCall = {
+                    toolName: parsed.action,
+                    arguments: parsed.actionInput,
+                };
 
-            // 5. Observation 기록
-            const step: ReActStep = {
-                thought: parsed.thought,
-                action: parsed.action,
-                actionInput: parsed.actionInput,
-                observation: result.humanReadableSummary,
-            };
-            scratchpad.push(step);
+                let result: ToolResult;
+                try {
+                    result = await this.toolExecutor.execute(toolCall);
+                } catch (error) {
+                    result = {
+                        success: false,
+                        error: String(error),
+                        humanReadableSummary: `도구 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
+                    };
+                }
+
+                // 5. Observation 기록
+                const step: ReActStep = {
+                    thought: parsed.thought,
+                    action: parsed.action,
+                    actionInput: parsed.actionInput,
+                    observation: result.humanReadableSummary,
+                };
+                scratchpad.push(step);
+            }
 
         }
 
@@ -216,17 +308,24 @@ export class ReActBrain {
     // ================================================
 
     /**
-     * 플랜별 프로바이더에 따라 LLM 호출
+     * 플랜별 프로바이더에 따라 LLM 호출 (타임아웃 포함)
      */
     private async callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+        const LLM_TIMEOUT = 30000; // 30초 타임아웃
+
         if (this.config.provider === 'anthropic' && anthropic) {
-            const response = await anthropic.messages.create({
-                model: this.config.model,
-                max_tokens: this.config.maxTokens,
-                temperature: 0.3,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }],
-            });
+            const response = await Promise.race([
+                anthropic.messages.create({
+                    model: this.config.model,
+                    max_tokens: 4096,
+                    temperature: 1.0,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: userPrompt }],
+                }),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('LLM call timed out (Anthropic)')), LLM_TIMEOUT)
+                ),
+            ]);
             const content = response.content[0];
             if (content.type !== 'text' || !content.text) {
                 throw new Error('Empty response from Anthropic');
@@ -235,17 +334,29 @@ export class ReActBrain {
         }
 
         // OpenAI (Free, Pro, 또는 Anthropic 폴백)
-        const response = await openai.chat.completions.create({
-            model: this.config.model,
-            max_completion_tokens: this.config.maxTokens,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt },
-            ],
-        });
-        const content = response.choices[0]?.message?.content;
+        const response = await llmCircuit.execute(() =>
+            Promise.race([
+                openai.chat.completions.create({
+                    model: this.config.model,
+                    temperature: 1.0,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt },
+                    ],
+                    response_format: { type: 'json_object' },
+                }),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('LLM call timed out (OpenAI)')), LLM_TIMEOUT)
+                ),
+            ])
+        );
+        const choice = response.choices[0];
+        const content = choice?.message?.content;
         if (!content) {
-            throw new Error('Empty response from OpenAI');
+            const reason = choice?.finish_reason || 'unknown';
+            const refusal = (choice?.message as any)?.refusal;
+            console.error(`[ReActBrain] Empty OpenAI response — finish_reason: ${reason}, refusal: ${refusal || 'none'}, model: ${this.config.model}`);
+            throw new Error(`Empty response from OpenAI (finish_reason: ${reason})`);
         }
         return content;
     }
@@ -283,31 +394,34 @@ export class ReActBrain {
 ${toolDescriptions}
 
 ## ReAct 프로토콜:
-매 단계마다 다음 형식으로 응답하세요:
+매 단계마다 반드시 다음 JSON 형식으로만 응답하세요:
 
-Thought: [현재 상황 분석, 다음에 무엇을 해야 할지 추론]
-Action: [사용할 도구 이름]
-ActionInput: [JSON 형식 파라미터]
+{"thought": "현재 상황 분석, 다음에 무엇을 해야 할지 추론", "action": "사용할 도구 이름", "actionInput": {파라미터}}
 
 ## 규칙:
-1. 한 번에 하나의 Action만 수행하세요
-2. Observation(도구 실행 결과)을 확인한 후 다음 단계를 결정하세요
-3. 충분한 정보를 모았으면 반드시 "respond_to_user" 도구로 최종 응답을 전달하세요
-4. respond_to_user의 message는 반드시 한국어로, 사용자에게 직접 말하는 1인칭 형식이어야 합니다
-5. respond_to_user의 actions 배열에는 프론트엔드 액션 버튼 정보를 포함할 수 있습니다
+1. 독립적인 도구 호출이 여러 개 필요하면 "actions" 배열로 병렬 실행할 수 있습니다
+2. 이전 도구 결과에 의존하는 도구는 다음 단계에서 순차적으로 호출하세요
+3. Observation(도구 실행 결과)을 확인한 후 다음 단계를 결정하세요
+4. 충분한 정보를 모았으면 반드시 "respond_to_user" 도구로 최종 응답을 전달하세요
+5. respond_to_user의 message는 반드시 한국어로, 사용자에게 직접 말하는 1인칭 형식이어야 합니다
+6. respond_to_user의 actions 배열에는 프론트엔드 액션 버튼 정보를 포함할 수 있습니다
    - 일정 추가: { "type": "add_schedule", "label": "일정 추가", "data": { "text": "...", "startTime": "HH:MM", ... } }
    - 일정 삭제: { "type": "delete_schedule", "label": "일정 삭제", "data": { "text": "..." } }
-6. 최대 ${this.config.maxIterations}단계 내에 반드시 respond_to_user를 호출해야 합니다
-7. 불필요한 도구 호출을 하지 마세요. 이미 알고 있는 정보는 바로 활용하세요
+7. 최대 ${this.config.maxIterations}단계 내에 반드시 respond_to_user를 호출해야 합니다
+8. 불필요한 도구 호출을 하지 마세요. 이미 알고 있는 정보는 바로 활용하세요
+9. 반드시 JSON 형식으로만 응답하세요. 다른 텍스트를 포함하지 마세요
 
-## ActionInput JSON 예시:
-Thought: 사용자가 오늘 일정을 물어보고 있으니, 먼저 오늘 일정을 조회해야 한다.
-Action: get_today_schedules
-ActionInput: {}
+## 응답 형식:
+단일 도구:
+{"thought": "...", "action": "도구이름", "actionInput": {...}}
 
-Thought: 일정을 확인했고, 사용자에게 결과를 전달할 준비가 됐다.
-Action: respond_to_user
-ActionInput: {"message": "오늘 일정은 3개가 있어요!", "actions": []}`;
+병렬 도구 (독립적인 호출이 여러 개일 때):
+{"thought": "...", "actions": [{"action": "도구1", "actionInput": {...}}, {"action": "도구2", "actionInput": {...}}]}
+
+## 예시:
+{"thought": "사용자가 오늘 일정을 물어보고 있으니, 먼저 오늘 일정을 조회해야 한다.", "action": "get_today_schedules", "actionInput": {}}
+
+{"thought": "일정을 확인했고, 사용자에게 결과를 전달할 준비가 됐다.", "action": "respond_to_user", "actionInput": {"message": "오늘 일정은 3개가 있어요!", "actions": []}}`;
     }
 
     private buildUserMessage(input: ReActInput): string {
@@ -350,22 +464,24 @@ ActionInput: {"message": "오늘 일정은 3개가 있어요!", "actions": []}`;
             return userMessage;
         }
 
-        const scratchpadText = scratchpad
-            .map((step, i) => {
-                return `Thought: ${step.thought}
-Action: ${step.action}
-ActionInput: ${JSON.stringify(step.actionInput)}
-Observation: ${step.observation}`;
-            })
-            .join('\n\n');
+        // Scratchpad 크기 제한: observation을 500자로 잘라 토큰 폭발 방지
+        const MAX_OBS_LENGTH = 500;
+        const scratchpadJson = scratchpad.map(step => ({
+            thought: step.thought,
+            action: step.action,
+            actionInput: step.actionInput,
+            observation: step.observation.length > MAX_OBS_LENGTH
+                ? step.observation.substring(0, MAX_OBS_LENGTH) + '...(truncated)'
+                : step.observation,
+        }));
 
         return `${userMessage}
 
 --- 이전 단계 ---
-${scratchpadText}
+${JSON.stringify(scratchpadJson, null, 2)}
 
 --- 다음 단계 ---
-위 Observation을 참고하여 다음 Thought/Action/ActionInput을 결정하세요.`;
+위 observation을 참고하여 다음 JSON 응답을 결정하세요. 반드시 {"thought": "...", "action": "...", "actionInput": {...}} 형식으로만 응답하세요.`;
     }
 
     // ================================================
@@ -373,6 +489,55 @@ ${scratchpadText}
     // ================================================
 
     private parseReActResponse(text: string): {
+        thought: string;
+        action: string;
+        actionInput: Record<string, any>;
+        parallelActions?: { action: string; actionInput: Record<string, any> }[];
+    } | null {
+        // 1차: JSON.parse (OpenAI response_format 사용 시)
+        try {
+            const parsed = JSON.parse(text);
+
+            // 병렬 액션 형식: {"thought": "...", "actions": [{action, actionInput}, ...]}
+            if (Array.isArray(parsed.actions) && parsed.actions.length > 0 && parsed.actions[0]?.action) {
+                const validActions = parsed.actions.filter((a: any) =>
+                    this.availableTools.find(t => t.name === a.action)
+                );
+                if (validActions.length === 0) {
+                    console.error('[ReActBrain] No valid tools in parallel actions');
+                    return null;
+                }
+                // 첫 번째를 메인으로, 나머지를 parallelActions로
+                return {
+                    thought: parsed.thought || '',
+                    action: validActions[0].action,
+                    actionInput: validActions[0].actionInput || {},
+                    parallelActions: validActions.length > 1 ? validActions : undefined,
+                };
+            }
+
+            // 단일 액션 형식: {"thought": "...", "action": "...", "actionInput": {...}}
+            if (parsed.action) {
+                const validTool = this.availableTools.find(t => t.name === parsed.action);
+                if (!validTool) {
+                    console.error(`[ReActBrain] Unknown tool: ${parsed.action}`);
+                    return null;
+                }
+                return {
+                    thought: parsed.thought || '',
+                    action: parsed.action,
+                    actionInput: parsed.actionInput || {},
+                };
+            }
+        } catch {
+            // JSON 파싱 실패 → 레거시 정규식 파싱 시도 (Anthropic 텍스트 응답용)
+        }
+
+        // 2차: 레거시 정규식 파싱 (Anthropic용 fallback)
+        return this.parseReActResponseLegacy(text);
+    }
+
+    private parseReActResponseLegacy(text: string): {
         thought: string;
         action: string;
         actionInput: Record<string, any>;
@@ -385,7 +550,7 @@ ${scratchpadText}
             // Action 추출
             const actionMatch = text.match(/Action:\s*(\S+)/);
             if (!actionMatch) {
-                console.error('[ReActBrain] No Action found in response');
+                console.error('[ReActBrain] No Action found in response (legacy)');
                 return null;
             }
             const action = actionMatch[1].trim();
@@ -393,7 +558,7 @@ ${scratchpadText}
             // ActionInput 추출
             const inputMatch = text.match(/ActionInput:\s*([\s\S]*?)$/);
             if (!inputMatch) {
-                console.error('[ReActBrain] No ActionInput found in response');
+                console.error('[ReActBrain] No ActionInput found in response (legacy)');
                 return null;
             }
 
@@ -408,20 +573,20 @@ ${scratchpadText}
                     actionInput = {};
                 }
             } catch {
-                console.error('[ReActBrain] Failed to parse ActionInput JSON');
+                console.error('[ReActBrain] Failed to parse ActionInput JSON (legacy)');
                 actionInput = {};
             }
 
             // 도구 유효성 확인
             const validTool = this.availableTools.find(t => t.name === action);
             if (!validTool) {
-                console.error(`[ReActBrain] Unknown tool: ${action}`);
+                console.error(`[ReActBrain] Unknown tool: ${action} (legacy)`);
                 return null;
             }
 
             return { thought, action, actionInput };
         } catch (error) {
-            console.error('[ReActBrain] Parse error:', error);
+            console.error('[ReActBrain] Legacy parse error:', error);
             return null;
         }
     }

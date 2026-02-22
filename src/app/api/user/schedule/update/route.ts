@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { scheduleUpdateSchema, validateBody } from '@/lib/schemas';
 import { dualWriteUpdate } from "@/lib/schedule-dual-write";
 
 interface LongTermGoal {
@@ -100,11 +101,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { scheduleId, completed, skipped } = await request.json();
-
-        if (!scheduleId) {
-            return NextResponse.json({ error: "Schedule ID is required" }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(scheduleUpdateSchema, body);
+        if (!v.success) return v.response;
+        const { scheduleId, completed, skipped } = v.data;
 
         // Get user profile
         const { data: user, error: fetchError } = await supabaseAdmin

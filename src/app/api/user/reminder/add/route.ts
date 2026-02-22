@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { reminderAddSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,14 +10,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { targetTime, message, relatedSchedule, specificDate } = await request.json();
-
-        if (!targetTime || !message) {
-            return NextResponse.json(
-                { error: "targetTime and message are required" },
-                { status: 400 }
-            );
-        }
+        const body = await request.json();
+        const v = validateBody(reminderAddSchema, body);
+        if (!v.success) return v.response;
+        const { targetTime, message, relatedSchedule, specificDate } = v.data;
 
         // Get current user profile
         const { data: userData, error: fetchError } = await supabaseAdmin

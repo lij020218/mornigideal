@@ -54,21 +54,34 @@ export async function GET(request: NextRequest) {
             return true;
         });
 
-        // 5. 오늘 이미 표시한 타입별 알림 체크 (하루에 한 번만 표시)
+        // 5. 오늘 이미 표시한 타입별/ID별 알림 체크
         const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-        const { data: shownToday } = await supabaseAdmin
-            .from('user_kv_store')
-            .select('value')
-            .eq('user_email', userEmail)
-            .eq('key', `proactive_shown_${todayStr}`)
-            .maybeSingle();
+        const [{ data: shownToday }, { data: shownIdsToday }] = await Promise.all([
+            supabaseAdmin
+                .from('user_kv_store')
+                .select('value')
+                .eq('user_email', userEmail)
+                .eq('key', `proactive_shown_${todayStr}`)
+                .maybeSingle(),
+            supabaseAdmin
+                .from('user_kv_store')
+                .select('value')
+                .eq('user_email', userEmail)
+                .eq('key', `proactive_shown_ids_${todayStr}`)
+                .maybeSingle(),
+        ]);
 
         const shownTypes = shownToday?.value || [];
+        const shownIds: string[] = shownIdsToday?.value || [];
 
-        // morning_briefing, goal_nudge 등은 하루에 한 번만
+        // Type-singleton notifications: 하루에 한 번만 (morning_briefing, goal_nudge 등)
+        // Instance notifications: 같은 ID가 이미 표시됐으면 제외
+        const typeSingletons = ['morning_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
         const filteredNotifications = activeNotifications.filter(n => {
-            if (['morning_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'].includes(n.type)) {
+            if (typeSingletons.includes(n.type)) {
                 if (shownTypes.includes(n.type)) return false;
+            } else {
+                if (shownIds.includes(n.id)) return false;
             }
             return true;
         });
@@ -81,8 +94,8 @@ export async function GET(request: NextRequest) {
                 notif.type,
                 notif.priority,
                 {
-                    scheduleText: notif.actionPayload?.scheduleText,
-                    deadlineHours: notif.actionPayload?.deadlineHours,
+                    scheduleText: notif.actionPayload?.scheduleText as string | undefined,
+                    deadlineHours: notif.actionPayload?.deadlineHours as number | undefined,
                 }
             );
             const result = applyEscalation(notif, decision);
@@ -171,27 +184,52 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'mark_shown') {
-            // 오늘 표시한 알림 타입 기록
+            // 오늘 표시한 알림 타입 + ID 기록
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-            const key = `proactive_shown_${todayStr}`;
+            const typeKey = `proactive_shown_${todayStr}`;
+            const idKey = `proactive_shown_ids_${todayStr}`;
 
-            const { data: existing } = await supabaseAdmin
-                .from('user_kv_store')
-                .select('value')
-                .eq('user_email', userEmail)
-                .eq('key', key)
-                .maybeSingle();
+            const [{ data: existingTypes }, { data: existingIds }] = await Promise.all([
+                supabaseAdmin
+                    .from('user_kv_store')
+                    .select('value')
+                    .eq('user_email', userEmail)
+                    .eq('key', typeKey)
+                    .maybeSingle(),
+                supabaseAdmin
+                    .from('user_kv_store')
+                    .select('value')
+                    .eq('user_email', userEmail)
+                    .eq('key', idKey)
+                    .maybeSingle(),
+            ]);
 
-            const shownTypes = existing?.value || [];
-            if (!shownTypes.includes(notificationType)) {
+            // Save shown type
+            const shownTypes = existingTypes?.value || [];
+            if (notificationType && !shownTypes.includes(notificationType)) {
                 shownTypes.push(notificationType);
 
                 await supabaseAdmin
                     .from('user_kv_store')
                     .upsert({
                         user_email: userEmail,
-                        key: key,
+                        key: typeKey,
                         value: shownTypes,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'user_email,key' });
+            }
+
+            // Save shown notification ID
+            const shownIds: string[] = existingIds?.value || [];
+            if (notificationId && !shownIds.includes(notificationId)) {
+                shownIds.push(notificationId);
+
+                await supabaseAdmin
+                    .from('user_kv_store')
+                    .upsert({
+                        user_email: userEmail,
+                        key: idKey,
+                        value: shownIds,
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'user_email,key' });
             }

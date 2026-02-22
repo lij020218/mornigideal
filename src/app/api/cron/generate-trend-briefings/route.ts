@@ -1,10 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from 'openai';
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateTrendId, saveDetailCache } from "@/lib/newsCache";
+import { MODELS } from "@/lib/models";
 import Parser from 'rss-parser';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const parser = new Parser();
 
 // RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
@@ -75,42 +78,81 @@ async function fetchRSSArticles() {
     return allArticles.sort((a, b) => a.ageInDays - b.ageInDays);
 }
 
-async function generateDetailedBriefing(trend: any, job: string) {
-    const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
-    const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" }
-    });
+async function generateDetailedBriefing(trend: any, userProfile: { name: string; job: string; goal: string; interests: string[]; level: string }) {
+    const { name, job, goal, interests } = userProfile;
+    const userName = name || '사용자';
+    const interestList = interests.length > 0 ? interests.join(', ') : '비즈니스, 기술';
 
-    const prompt = `Create a briefing for Intermediate ${job}.
+    const prompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
 
-ARTICLE:
-- Title: "${trend.title}"
-- Summary: ${trend.summary}
+기사 정보:
+- 제목: "${trend.title}"
+- 요약: ${trend.summary}
 - URL: ${trend.originalUrl}
 
-SECTIONS NEEDED:
-1. 핵심 내용: What happened and why it matters
-2. Intermediate ${job}인 당신에게: Impact on ${job} professionals
-3. 주요 인사이트: 3-4 key takeaways
-4. 실행 아이템: 3 actionable steps for Intermediate ${job}
+사용자 정보:
+- 이름: ${userName}
+- 직업: ${job}
+- 목표: ${goal}
+- 관심 분야: ${interestList}
+
+아래 4개 섹션을 순서대로 작성하세요:
+
+1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 분석. 단순 요약이 아닌 "왜 이런 일이 일어났는지", "앞으로 어떤 변화가 예상되는지" 깊이 있게 설명.
+2. **왜 ${job}인 ${userName}님에게 중요한가**: 이 뉴스가 ${userName}님의 직업(${job})과 목표(${goal})에 구체적으로 어떤 의미인지 설명. 추상적 연결이 아니라 실무에 미치는 직접적 영향을 서술.
+3. **핵심 요약**: 기사의 핵심 내용을 3문장으로 압축 (각 15-20자 이내).
+4. **무엇을 할 수 있나**: ${userName}님이 지금 바로 실행할 수 있는 3가지 구체적 행동.
 
 OUTPUT JSON:
 {
-  "title": "Korean title",
-  "content": "### 핵심 내용\\n\\n[content]\\n\\n### Intermediate ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
-  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
-  "actionItems": ["Action 1", "Action 2", "Action 3"],
+  "title": "한국어 제목",
+  "content": "### 심층 분석\\n\\n[배경과 맥락 분석, 업계 영향]\\n\\n### 왜 ${job}인 ${userName}님에게 중요한가\\n\\n[${userName}님의 직업과 목표에 연결된 구체적 설명. **핵심 키워드**를 <mark>태그로 강조]\\n\\n### 무엇을 할 수 있나\\n\\n- **행동 1**\\n- **행동 2**\\n- **행동 3**",
+  "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${trend.originalUrl}"
 }
 
-Write in Korean. Be practical and specific for Intermediate ${job}.`;
+CRITICAL RULES FOR actionItems:
+- 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
+- 일정 제목으로 사용되므로 간단하고 명확하게
+- 현실적으로 30분~1시간 내에 실행 가능한 것만
+- 좋은 예시: "관련 기사 3개 읽기", "핵심 키워드 정리", "경쟁사 사례 조사"
+- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구"
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+OTHER RULES:
+- keyTakeaways는 정말 짧게 핵심만 (15-20자)
+- content에서 중요한 용어는 <mark>태그로 강조
+- 톤: 정중하고 전문적인 비서 말투 ("~입니다", "~하세요")
 
-    return JSON.parse(text);
+한국어로 작성하세요.`;
+
+    // Try Gemini first, fallback to OpenAI on 429/quota errors
+    try {
+        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { responseMimeType: "application/json" }
+        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return JSON.parse(response.text());
+    } catch (geminiError: any) {
+        const status = geminiError?.status || geminiError?.httpStatusCode;
+        if (status === 429 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota')) {
+            console.warn(`[CRON] Gemini 429 in generateDetailedBriefing, falling back to OpenAI`);
+            const completion = await openai.chat.completions.create({
+                model: MODELS.GPT_5_MINI,
+                messages: [
+                    { role: 'system', content: 'You are a professional Korean news briefing writer. Always respond with valid JSON only.' },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' },
+            });
+            const text = completion.choices[0]?.message?.content || '{}';
+            return JSON.parse(text);
+        }
+        throw geminiError;
+    }
 }
 
 export async function GET(request: Request) {
@@ -186,6 +228,7 @@ export async function GET(request: Request) {
             const batchResults = await Promise.allSettled(
                 userBatch.map(async (user) => {
                     const userProfile = user.profile as any;
+                    const name = userProfile.name || '사용자';
                     const job = userProfile.job || 'Professional';
                     const goal = userProfile.goal || 'Growth';
                     const interests = userProfile.interests || [];
@@ -232,15 +275,34 @@ Requirements:
 
 Select now.`;
 
-                    const result = await selectionModel.generateContent(selectionPrompt);
-                    const response = await result.response;
-                    const text = response.text();
+                    let text: string;
+                    try {
+                        const result = await selectionModel.generateContent(selectionPrompt);
+                        const response = await result.response;
+                        text = response.text();
+                    } catch (geminiError: any) {
+                        const status = geminiError?.status || geminiError?.httpStatusCode;
+                        if (status === 429 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota')) {
+                            console.warn(`[CRON] Gemini 429 in article selection for ${user.email}, falling back to OpenAI`);
+                            const completion = await openai.chat.completions.create({
+                                model: MODELS.GPT_5_MINI,
+                                messages: [
+                                    { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
+                                    { role: 'user', content: selectionPrompt }
+                                ],
+                                response_format: { type: 'json_object' },
+                            });
+                            text = completion.choices[0]?.message?.content || '{}';
+                        } else {
+                            throw geminiError;
+                        }
+                    }
 
                     let data;
                     try {
                         data = JSON.parse(text);
                     } catch {
-                        console.error(`[CRON] Failed to parse Gemini response for ${user.email}`);
+                        console.error(`[CRON] Failed to parse LLM response for ${user.email}`);
                         return { email: user.email, status: 'parse_error' };
                     }
 
@@ -272,9 +334,10 @@ Select now.`;
                     });
 
                     // Generate detailed briefings in parallel
+                    const userCtx = { name, job, goal, interests, level };
                     await Promise.all(trends.map(async (trend: any) => {
                         try {
-                            const detail = await generateDetailedBriefing(trend, job);
+                            const detail = await generateDetailedBriefing(trend, userCtx);
                             await saveDetailCache(trend.id, detail, user.email);
                         } catch (error) {
                             console.error(`[CRON] Error generating detail for ${trend.title}:`, error);

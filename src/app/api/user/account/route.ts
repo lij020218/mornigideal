@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import bcrypt from "bcryptjs";
+import { accountDeleteSchema, accountUpdateSchema, validateBody } from '@/lib/schemas';
 
 export async function DELETE(request: NextRequest) {
     try {
@@ -10,11 +11,10 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { password } = await request.json();
-
-        if (!password) {
-            return NextResponse.json({ error: "비밀번호를 입력해주세요." }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(accountDeleteSchema, body);
+        if (!v.success) return v.response;
+        const { password } = v.data;
 
         // Get user from public.users table (include password for verification)
         const { data: userData, error: userError } = await supabaseAdmin
@@ -28,22 +28,9 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // Verify password
+        // Verify password (bcrypt only)
         if (userData.password) {
-            let isValid = false;
-            if (userData.password.startsWith("$2")) {
-                isValid = await bcrypt.compare(password, userData.password);
-            } else {
-                // Plaintext fallback: verify then migrate to bcrypt
-                if (password === userData.password) {
-                    isValid = true;
-                    const hashedPassword = await bcrypt.hash(password, 12);
-                    await supabaseAdmin
-                        .from("users")
-                        .update({ password: hashedPassword })
-                        .eq("id", userData.id);
-                }
-            }
+            const isValid = await bcrypt.compare(password, userData.password);
             if (!isValid) {
                 return NextResponse.json({ error: "비밀번호가 일치하지 않습니다." }, { status: 403 });
             }
@@ -129,15 +116,10 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { currentPassword, newPassword } = await request.json();
-
-        if (!currentPassword || !newPassword) {
-            return NextResponse.json({ error: "현재 비밀번호와 새 비밀번호를 입력해주세요." }, { status: 400 });
-        }
-
-        if (newPassword.length < 8) {
-            return NextResponse.json({ error: "새 비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(accountUpdateSchema, body);
+        if (!v.success) return v.response;
+        const { currentPassword, newPassword } = v.data;
 
         // Get user
         const { data: userData, error: userError } = await supabaseAdmin
@@ -150,14 +132,8 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // Verify current password
-        let isValid = false;
-        if (userData.password.startsWith("$2")) {
-            isValid = await bcrypt.compare(currentPassword, userData.password);
-        } else {
-            // Plaintext fallback: verify (new hash will be set below anyway)
-            isValid = currentPassword === userData.password;
-        }
+        // Verify current password (bcrypt only)
+        const isValid = await bcrypt.compare(currentPassword, userData.password);
 
         if (!isValid) {
             return NextResponse.json({ error: "현재 비밀번호가 일치하지 않습니다." }, { status: 403 });

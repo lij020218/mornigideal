@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { THRESHOLDS, LIMITS, TIMING } from '@/lib/constants';
+import { getCached, setCache } from '@/lib/cache';
 
 /**
  * Deep Schedule Pattern Analysis
@@ -21,6 +23,13 @@ export async function GET(request: NextRequest) {
 
         const { searchParams } = new URL(request.url);
         const days = parseInt(searchParams.get('days') || '30');
+
+        // Check cache first (5 min TTL)
+        const cacheKey = `schedule-analytics:${email}:${days}`;
+        const cached = getCached<any>(cacheKey);
+        if (cached) {
+            return NextResponse.json({ analytics: cached });
+        }
 
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
@@ -52,6 +61,7 @@ export async function GET(request: NextRequest) {
         // Analyze patterns
         const analytics = analyzeSchedulePatterns(schedules || [], activities || []);
 
+        setCache(cacheKey, analytics, 5 * 60 * 1000); // 5 minutes
         return NextResponse.json({ analytics });
     } catch (error: any) {
         console.error('[Schedule Analytics] Error:', error);
@@ -187,7 +197,7 @@ function analyzeExercise(schedules: any[], activities: any[]): ExerciseAnalytics
 
     // WHO recommends at least 150 minutes (2.5 hours) of moderate activity per week
     // Or at least 3 workout sessions per week
-    const weeklyGoalMet = avgWorkoutsPerWeek >= 3;
+    const weeklyGoalMet = avgWorkoutsPerWeek >= THRESHOLDS.MIN_WEEKLY_WORKOUTS;
 
     return {
         totalWorkouts: workoutSchedules.length,
@@ -253,17 +263,17 @@ function analyzeSleep(schedules: any[]): SleepAnalytics {
     const sleepConsistency = Math.max(0, 100 - (wakeStdDev * 20)); // Lower std dev = higher consistency
 
     // Health assessment (7-9 hours is ideal)
-    const isHealthy = avgSleepDuration >= 7 && avgSleepDuration <= 9;
+    const isHealthy = avgSleepDuration >= TIMING.SLEEP_IDEAL_MIN_HOURS && avgSleepDuration <= TIMING.SLEEP_IDEAL_MAX_HOURS;
 
     const avgBedtimeStr = `${Math.floor(avgBedHour)}:${String(Math.round((avgBedHour % 1) * 60)).padStart(2, '0')}`;
     const avgWakeTimeStr = `${Math.floor(avgWakeHour)}:${String(Math.round((avgWakeHour % 1) * 60)).padStart(2, '0')}`;
 
     let recommendation;
-    if (avgSleepDuration < 7) {
+    if (avgSleepDuration < TIMING.SLEEP_IDEAL_MIN_HOURS) {
         recommendation = `수면 시간이 부족해요. 최소 7시간 수면을 목표로 해보세요`;
-    } else if (avgSleepDuration > 9) {
+    } else if (avgSleepDuration > TIMING.SLEEP_IDEAL_MAX_HOURS) {
         recommendation = `수면 시간이 너무 많아요. 과다 수면은 피로감을 증가시킬 수 있어요`;
-    } else if (sleepConsistency < 70) {
+    } else if (sleepConsistency < THRESHOLDS.SLEEP_CONSISTENCY_LOW) {
         recommendation = `수면 패턴이 불규칙해요. 일정한 시간에 자고 일어나보세요`;
     }
 
@@ -313,10 +323,10 @@ function generateWellnessInsights(
         sleepStatus = 'insufficient';
         alerts.push('수면 시간이 부족해요');
         recommendations.push(sleep.recommendation || '최소 7시간 수면을 목표로 해보세요');
-    } else if (sleep.avgSleepDuration >= 7 && sleep.avgSleepDuration <= 9 && sleep.sleepConsistency > 80) {
+    } else if (sleep.avgSleepDuration >= TIMING.SLEEP_IDEAL_MIN_HOURS && sleep.avgSleepDuration <= TIMING.SLEEP_IDEAL_MAX_HOURS && sleep.sleepConsistency > THRESHOLDS.SLEEP_CONSISTENCY_HIGH) {
         sleepStatus = 'excellent';
         recommendations.push('완벽한 수면 패턴이에요! 😴');
-    } else if (sleep.sleepConsistency < 70) {
+    } else if (sleep.sleepConsistency < THRESHOLDS.SLEEP_CONSISTENCY_LOW) {
         sleepStatus = 'insufficient';
         alerts.push('수면 패턴이 불규칙해요');
         recommendations.push('매일 비슷한 시간에 자고 일어나보세요');
@@ -340,7 +350,7 @@ function generateWellnessInsights(
     return {
         exerciseStatus,
         sleepStatus,
-        recommendations: recommendations.slice(0, 5), // Top 5
+        recommendations: recommendations.slice(0, LIMITS.WELLNESS_RECOMMENDATIONS), // Top 5
         alerts,
     };
 }

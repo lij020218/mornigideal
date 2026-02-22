@@ -9,18 +9,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { signToken } from '@/lib/auth-utils';
+import { oauthLoginSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { provider, email, name, image, providerId } = body;
-
-    if (!email || !provider) {
-      return NextResponse.json(
-        { error: '필수 정보가 누락되었습니다.' },
-        { status: 400 }
-      );
-    }
+    const v = validateBody(oauthLoginSchema, body);
+    if (!v.success) return v.response;
+    const { provider, email, name, image, providerId } = v.data;
 
     // 이메일로 기존 사용자 조회
     const { data: existingUser, error: findError } = await supabaseAdmin

@@ -15,6 +15,12 @@ import { ReActBrain, isComplexRequest, isSimpleResponse } from "@/lib/jarvis/bra
 import { getFusedContextForAI } from "@/lib/contextFusionService";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
+import { aiChatSchema, validateBody } from '@/lib/schemas';
+import { LIMITS } from '@/lib/constants';
+import type { ChatMessage, ChatContext, UserProfile } from '@/lib/types';
+import type { CustomGoal, LongTermGoal } from '@/lib/types';
+import type { MemoryRow } from '@/lib/types';
+import { compressMessages } from '@/lib/context-summarizer';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -35,7 +41,7 @@ async function fetchEventLogs(userEmail: string): Promise<string> {
             .eq('user_email', userEmail)
             .gte('occurred_at', sevenDaysAgo.toISOString())
             .order('occurred_at', { ascending: false })
-            .limit(50);
+            .limit(LIMITS.EVENT_LOGS);
 
         if (error || !events || events.length === 0) return "";
 
@@ -129,9 +135,9 @@ ${learningEvents.length > 0 ? `📚 학습 패턴:
     }
 }
 
-async function fetchRagContext(messages: any[], userEmail: string): Promise<string> {
+async function fetchRagContext(messages: ChatMessage[], userEmail: string): Promise<string> {
     try {
-        const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop();
+        const lastUserMessage = messages.filter((m) => m.role === 'user').pop();
         if (!lastUserMessage?.content) return "";
 
         const query = lastUserMessage.content;
@@ -174,8 +180,8 @@ async function fetchRagContext(messages: any[], userEmail: string): Promise<stri
 
 다음은 사용자의 과거 대화/일정/목표에서 현재 질문과 유사한 내용입니다:
 
-${memories.map((m: any, idx: number) => `
-${idx + 1}. [${m.content_type}] (유사도: ${Math.round(m.similarity * 100)}%)
+${memories.map((m: MemoryRow, idx: number) => `
+${idx + 1}. [${m.content_type}] (유사도: ${Math.round((m.similarity ?? 0) * 100)}%)
 ${m.content}
 ${m.metadata?.date ? `날짜: ${m.metadata.date}` : ''}
 `).join('\n')}
@@ -206,14 +212,14 @@ async function fetchSchedulePatternContext(userEmail: string): Promise<string> {
 
         if (!userData?.profile?.customGoals) return "";
 
-        const customGoals: any[] = userData.profile.customGoals;
+        const customGoals: CustomGoal[] = userData.profile.customGoals;
         if (customGoals.length < 5) return ""; // 데이터 부족
 
         const fourWeeksAgo = new Date();
         fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
         const fourWeeksAgoStr = fourWeeksAgo.toISOString().split('T')[0];
 
-        const recentGoals = customGoals.filter((g: any) =>
+        const recentGoals = customGoals.filter((g) =>
             g.specificDate && g.specificDate >= fourWeeksAgoStr
         );
         if (recentGoals.length < 3) return "";
@@ -298,7 +304,7 @@ async function fetchSchedulePatternContext(userEmail: string): Promise<string> {
 
         // 전체 패턴 요약
         const totalSchedules = recentGoals.length;
-        const completedSchedules = recentGoals.filter((g: any) => g.completed).length;
+        const completedSchedules = recentGoals.filter((g) => g.completed).length;
         const overallRate = Math.round((completedSchedules / totalSchedules) * 100);
 
         return `
@@ -324,11 +330,11 @@ ${lines.join('\n')}
 // 사용자 프로필 + 일정 컨텍스트 빌드
 // ============================================
 
-async function buildUserAndScheduleContext(userEmail: string, context: any): Promise<{
+async function buildUserAndScheduleContext(userEmail: string, context: ChatContext | undefined): Promise<{
     userContext: string;
     scheduleContext: string;
     userPlan: string;
-    profile: any;
+    profile: UserProfile | null;
 }> {
     try {
         const { getUserByEmail } = await import("@/lib/users");
@@ -358,17 +364,17 @@ async function buildUserAndScheduleContext(userEmail: string, context: any): Pro
         // 장기 목표
         let longTermGoalsContext = "";
         if (p.longTermGoals) {
-            const ltg = p.longTermGoals;
-            const activeWeekly = (ltg.weekly || []).filter((g: any) => !g.completed);
-            const activeMonthly = (ltg.monthly || []).filter((g: any) => !g.completed);
-            const activeYearly = (ltg.yearly || []).filter((g: any) => !g.completed);
+            const ltg = p.longTermGoals as { weekly?: LongTermGoal[]; monthly?: LongTermGoal[]; yearly?: LongTermGoal[] };
+            const activeWeekly = (ltg.weekly || []).filter((g: LongTermGoal) => !g.completed);
+            const activeMonthly = (ltg.monthly || []).filter((g: LongTermGoal) => !g.completed);
+            const activeYearly = (ltg.yearly || []).filter((g: LongTermGoal) => !g.completed);
 
             if (activeWeekly.length > 0 || activeMonthly.length > 0 || activeYearly.length > 0) {
                 longTermGoalsContext = `
 📌 **사용자의 장기 목표:**
-${activeWeekly.length > 0 ? `[주간 목표]\n${activeWeekly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
-${activeMonthly.length > 0 ? `[월간 목표]\n${activeMonthly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
-${activeYearly.length > 0 ? `[연간 목표]\n${activeYearly.map((g: any) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+${activeWeekly.length > 0 ? `[주간 목표]\n${activeWeekly.map((g) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+${activeMonthly.length > 0 ? `[월간 목표]\n${activeMonthly.map((g) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
+${activeYearly.length > 0 ? `[연간 목표]\n${activeYearly.map((g) => `- ${g.title} (진행률: ${g.progress}%)`).join('\n')}` : ''}
 
 **목표 관련 지침:**
 - 사용자가 설정한 장기 목표를 기억하고, 관련된 조언이나 격려를 해주세요.
@@ -399,14 +405,14 @@ ${longTermGoalsContext}
         if (context?.schedules && context.schedules.length > 0) {
             scheduleContext = `
 오늘의 일정 (${context.currentDate}):
-${context.schedules.map((g: any) => `- ${g.startTime}: ${g.text}${g.completed ? ' ✓ 완료' : g.skipped ? ' ⊘ 건너뜀' : ''}`).join('\n')}
+${context.schedules.map((g) => `- ${g.startTime}: ${g.text}${g.completed ? ' ✓ 완료' : g.skipped ? ' ⊘ 건너뜀' : ''}`).join('\n')}
 `;
         } else if (p.customGoals && p.customGoals.length > 0) {
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
             const dayOfWeek = today.getDay();
 
-            const todayGoals = p.customGoals.filter((g: any) =>
+            const todayGoals = p.customGoals.filter((g: CustomGoal) =>
                 g.specificDate === todayStr ||
                 (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate)
             );
@@ -414,7 +420,7 @@ ${context.schedules.map((g: any) => `- ${g.startTime}: ${g.text}${g.completed ? 
             if (todayGoals.length > 0) {
                 scheduleContext = `
 오늘의 일정 (${todayStr}):
-${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
+${todayGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}
 `;
             }
         }
@@ -432,7 +438,7 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
             const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
             const dayAfterTomorrowDayOfWeek = dayAfterTomorrow.getDay();
 
-            const tomorrowGoals = p.customGoals.filter((g: any) => {
+            const tomorrowGoals = p.customGoals.filter((g: CustomGoal) => {
                 if (g.specificDate === tomorrowStr) return true;
                 if (g.daysOfWeek?.includes(tomorrowDayOfWeek)) {
                     if (g.startDate && tomorrowStr < g.startDate) return false;
@@ -441,7 +447,7 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
                 return false;
             });
 
-            const dayAfterTomorrowGoals = p.customGoals.filter((g: any) => {
+            const dayAfterTomorrowGoals = p.customGoals.filter((g: CustomGoal) => {
                 if (g.specificDate === dayAfterTomorrowStr) return true;
                 if (g.daysOfWeek?.includes(dayAfterTomorrowDayOfWeek)) {
                     if (g.startDate && dayAfterTomorrowStr < g.startDate) return false;
@@ -452,12 +458,12 @@ ${todayGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}
 
             if (tomorrowGoals.length > 0) {
                 scheduleContext += `\n\n내일의 일정 (${tomorrowStr}):
-${tomorrowGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
+${tomorrowGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
             }
 
             if (dayAfterTomorrowGoals.length > 0) {
                 scheduleContext += `\n\n모레의 일정 (${dayAfterTomorrowStr}):
-${dayAfterTomorrowGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
+${dayAfterTomorrowGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
             }
 
             if (tomorrowGoals.length > 0 || dayAfterTomorrowGoals.length > 0) {
@@ -476,7 +482,7 @@ ${dayAfterTomorrowGoals.map((g: any) => `- ${g.startTime}: ${g.text}`).join('\n'
 // 트렌드 & 펜딩 컨텍스트 빌드 (순수 함수)
 // ============================================
 
-function buildTrendContext(context: any): string {
+function buildTrendContext(context: ChatContext | undefined): string {
     if (!context?.trendBriefings || !Array.isArray(context.trendBriefings)) return "";
     const briefings = context.trendBriefings;
     if (briefings.length === 0) return "";
@@ -486,7 +492,7 @@ function buildTrendContext(context: any): string {
 - 총 브리핑 수: ${briefings.length}개
 
 브리핑 목록:
-${briefings.map((t: any, i: number) => `${i + 1}. ID: "${t.id}" | [${t.category || '일반'}] ${t.title || t.name || '제목 없음'}`).join('\n')}
+${briefings.map((t, i: number) => `${i + 1}. ID: "${t.id}" | [${t.category || '일반'}] ${t.title || t.name || '제목 없음'}`).join('\n')}
 
 **중요**: 사용자가 브리핑을 추천/열기 요청 시, 반드시 위 목록에 있는 브리핑만 추천하세요. 목록에 없는 브리핑을 만들어내지 마세요.
 actions에 open_briefing을 포함할 때 briefingId는 위 목록의 ID 문자열을 그대로 복사하세요.
@@ -494,7 +500,7 @@ actions에 open_briefing을 포함할 때 briefingId는 위 목록의 ID 문자�
 `;
 }
 
-function buildPendingScheduleContext(context: any): string {
+function buildPendingScheduleContext(context: ChatContext | undefined): string {
     if (!context?.pendingSchedule) return "";
     const ps = context.pendingSchedule;
 
@@ -510,7 +516,7 @@ function buildPendingScheduleContext(context: any): string {
 `;
 }
 
-function buildDateContext(context: any): string {
+function buildDateContext(context: ChatContext | undefined): string {
     const now = new Date();
 
     if (context?.currentDate && context?.currentTime) {
@@ -565,11 +571,11 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. 요청 파싱
-        const { messages, context } = await request.json();
-
-        if (!messages || !Array.isArray(messages)) {
-            return NextResponse.json({ error: "Messages are required" }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(aiChatSchema, body);
+        if (!v.success) return v.response;
+        const { messages, context: rawContext } = v.data;
+        const context = rawContext as ChatContext | undefined;
 
         // 3. 의도 분류 (먼저!)
         const intent = classifyIntent(messages);
@@ -648,15 +654,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Pro/Max: 컨텍스트 융합 엔진
-        if (userPlan === 'Pro' || userPlan === 'Max') {
-            asyncFetches.push(
-                getFusedContextForAI(userEmail).then(result => { fusedContextStr = result; })
-            );
-        }
+        // 컨텍스트 융합 엔진 (전 플랜 개방 — 규칙 기반, LLM 비용 없음)
+        asyncFetches.push(
+            getFusedContextForAI(userEmail).then(result => { fusedContextStr = result; })
+        );
 
-        // 병렬 실행
-        await Promise.all(asyncFetches);
+        // 병렬 실행 (10초 타임아웃 — 개별 실패는 무시하고 진행)
+        await Promise.race([
+            Promise.allSettled(asyncFetches),
+            new Promise<void>(resolve => setTimeout(resolve, 10000)),
+        ]);
 
         // 6. 나머지 컨텍스트 (순수 함수, DB 호출 없음)
         const currentDateContext = buildDateContext(context);
@@ -676,7 +683,7 @@ export async function POST(request: NextRequest) {
             };
             goalsContext = `
 🎯 **사용자의 장기 목표:**
-${context.goals.map((g: any) => `- [${goalTypeMap[g.type] || g.type}] ${g.title}${g.category ? ` (${g.category})` : ''} - 진행률 ${g.progress || 0}%`).join('\n')}
+${context.goals.map((g) => `- [${goalTypeMap[g.type] || g.type}] ${g.title}${g.category ? ` (${g.category})` : ''} - 진행률 ${g.progress || 0}%`).join('\n')}
 
 목표와 관련된 질문이나 일정 요청 시 이 정보를 참고하세요.
 `;
@@ -686,7 +693,7 @@ ${context.goals.map((g: any) => `- [${goalTypeMap[g.type] || g.type}] ${g.title}
         if (context?.learningCurriculums && Array.isArray(context.learningCurriculums) && context.learningCurriculums.length > 0) {
             learningContext = `
 📚 **사용자의 학습 커리큘럼:**
-${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? ` (현재: ${c.currentModule})` : ''} - 진행률 ${c.progress || 0}%`).join('\n')}
+${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현재: ${c.currentModule})` : ''} - 진행률 ${c.progress || 0}%`).join('\n')}
 
 학습 관련 질문이나 진행 상황 문의 시 이 정보를 참고하세요.
 `;
@@ -725,18 +732,24 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
             personaStyle: profile?.personaStyle,
         });
 
-        // 8. LLM 호출
+        // 8. LLM 호출 (타임아웃 포함, 컨텍스트 계층적 요약 적용)
         const modelName = MODELS.GPT_5_MINI;
-        const completion = await openai.chat.completions.create({
-            model: modelName,
-            messages: [
-                { role: "system", content: systemPrompt },
-                ...messages.slice(-10),
-            ],
-            temperature: 1.0,
-            max_completion_tokens: 4096,
-            response_format: { type: "json_object" },
-        });
+        const LLM_TIMEOUT = 30000; // 30초
+        const compressedMessages = await compressMessages(messages);
+        const completion = await Promise.race([
+            openai.chat.completions.create({
+                model: modelName,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    ...compressedMessages,
+                ],
+                temperature: 1.0,
+                response_format: { type: "json_object" },
+            }),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('AI chat LLM call timed out')), LLM_TIMEOUT)
+            ),
+        ]);
 
         const finishReason = completion.choices[0]?.finish_reason;
         const responseContent = completion.choices[0]?.message?.content || '{"message": "죄송합니다. 응답을 생성하지 못했습니다."}';
@@ -770,29 +783,32 @@ ${context.learningCurriculums.map((c: any) => `- ${c.title}${c.currentModule ? `
             const messageMatch = responseContent.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
             const extractedMessage = messageMatch ? messageMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : "죄송합니다. 응답 처리 중 오류가 발생했어요.";
             // actions도 부분 추출 시도
-            let extractedActions: any[] = [];
+            let extractedActions: unknown[] = [];
             try {
                 const actionsMatch = responseContent.match(/"actions"\s*:\s*(\[[\s\S]*?\])/);
                 if (actionsMatch) extractedActions = JSON.parse(actionsMatch[1]);
-            } catch { /* actions 추출 실패 — 무시 */ }
+            } catch (e) {
+                console.error('[AI Chat] Partial actions extraction failed:', e instanceof Error ? e.message : e);
+            }
             return NextResponse.json({
                 message: extractedMessage,
                 actions: extractedActions,
             });
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as { code?: string; message?: string; response?: { data?: unknown } };
         console.error("[AI Chat] Error:", error);
-        console.error("[AI Chat] Error message:", error?.message);
-        console.error("[AI Chat] Error response:", error?.response?.data);
+        console.error("[AI Chat] Error message:", err?.message);
+        console.error("[AI Chat] Error response:", err?.response?.data);
 
-        if (error?.code === 'invalid_api_key' || error?.message?.includes('API key')) {
+        if (err?.code === 'invalid_api_key' || err?.message?.includes('API key')) {
             return NextResponse.json(
                 { error: "OpenAI API 키가 유효하지 않습니다.", message: "설정을 확인해주세요." },
                 { status: 401 }
             );
         }
 
-        if (error?.code === 'model_not_found' || error?.message?.includes('model')) {
+        if (err?.code === 'model_not_found' || err?.message?.includes('model')) {
             return NextResponse.json(
                 { error: "AI 모델을 찾을 수 없습니다.", message: "잠시 후 다시 시도해주세요." },
                 { status: 500 }

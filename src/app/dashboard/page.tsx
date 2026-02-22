@@ -35,7 +35,7 @@ export default async function DashboardPage() {
             </div>
             <Dashboard
                 username={username}
-                initialProfile={user?.profile || null}
+                initialProfile={(user?.profile as Parameters<typeof Dashboard>[0]['initialProfile']) || null}
                 initialMaterials={materials}
                 initialCurriculum={curriculum}
                 initialTrendBriefing={trendBriefing}

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { isValidString, isValidTime, isValidDate } from "@/lib/validation";
+import { scheduleAddSchema, validateBody } from '@/lib/schemas';
 import { dualWriteAdd } from "@/lib/schedule-dual-write";
+import { TIMING } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
     try {
@@ -12,24 +13,9 @@ export async function POST(request: NextRequest) {
         }
 
         const scheduleData = await request.json();
-        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo, linkedGoalId, linkedGoalType } = scheduleData;
-
-        if (!text || !isValidString(text, 500)) {
-            return NextResponse.json(
-                { error: "text is required (max 500 characters)" },
-                { status: 400 }
-            );
-        }
-
-        if (startTime && !isValidTime(startTime)) {
-            return NextResponse.json({ error: "Invalid startTime format (HH:MM)" }, { status: 400 });
-        }
-        if (endTime && !isValidTime(endTime)) {
-            return NextResponse.json({ error: "Invalid endTime format (HH:MM)" }, { status: 400 });
-        }
-        if (specificDate && !isValidDate(specificDate)) {
-            return NextResponse.json({ error: "Invalid specificDate format (YYYY-MM-DD)" }, { status: 400 });
-        }
+        const v = validateBody(scheduleAddSchema, scheduleData);
+        if (!v.success) return v.response;
+        const { text, startTime, endTime, color, specificDate, daysOfWeek, findAvailableSlot, estimatedDuration, location, memo, linkedGoalId, linkedGoalType } = v.data;
 
         // Get current user profile
         const { data: userData, error: fetchError } = await supabaseAdmin
@@ -89,13 +75,13 @@ export async function POST(request: NextRequest) {
             }
 
             // But ensure we don't start before 9 AM
-            if (startHour < 9) {
-                startHour = 9;
+            if (startHour < TIMING.SCHEDULE_DEFAULT_START) {
+                startHour = TIMING.SCHEDULE_DEFAULT_START;
                 startMinute = 0;
             }
 
 
-            const endHour = 22;
+            const endHour = TIMING.SCHEDULE_DEFAULT_END;
 
             let foundSlot = false;
             for (let hour = startHour; hour < endHour; hour++) {
@@ -297,8 +283,8 @@ export async function POST(request: NextRequest) {
         const newGoal = {
             id: `ai-${Date.now()}`,
             text,
-            time: getTimeOfDay(calculatedStartTime || startTime),
-            startTime: calculatedStartTime || startTime,
+            time: getTimeOfDay(calculatedStartTime || startTime || '09:00'),
+            startTime: calculatedStartTime || startTime || '09:00',
             endTime: calculatedEndTime || endTime || calculatedStartTime || startTime,
             color: getActivityColor(text, color),
             specificDate: specificDate || undefined,

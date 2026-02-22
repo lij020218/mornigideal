@@ -5,34 +5,54 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { JarvisObserver } from './observer';
-import { EventType, GUARDRAILS, PLAN_CONFIGS, PlanType } from '@/types/jarvis';
+import { EventType, GUARDRAILS } from '@/types/jarvis';
+import { getUserPlan, isProOrAbove } from '@/lib/user-plan';
+
+/** Parse "HH:MM" safely; returns null if invalid. */
+function parseTime(time: string): { h: number; m: number } | null {
+    if (!time || !/^\d{1,2}:\d{2}$/.test(time)) return null;
+    const [h, m] = time.split(':').map(Number);
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return { h, m };
+}
 
 export class StateUpdater {
     private userEmail: string;
     private observer: JarvisObserver;
+    private cachedUserData: { profile: any } | null = null;
 
     constructor(userEmail: string) {
         this.userEmail = userEmail;
         this.observer = new JarvisObserver(userEmail);
     }
 
+    /** Fetch user data once per lifecycle to eliminate N+1 queries. */
+    private async getUserData(): Promise<{ profile: any } | null> {
+        if (this.cachedUserData) return this.cachedUserData;
+        const { data } = await supabaseAdmin
+            .from('users')
+            .select('profile')
+            .eq('email', this.userEmail)
+            .maybeSingle();
+        this.cachedUserData = data;
+        return data;
+    }
+
     /**
      * 전체 상태 업데이트 (플랜별 차등)
      */
     async updateAllStates(): Promise<void> {
-        // 사용자 플랜 확인
-        const userPlan = await this.getUserPlan();
-        const planConfig = PLAN_CONFIGS[userPlan as PlanType];
-
-        if (!planConfig.features.stateMonitoring) {
+        // 사용자 플랜 확인 (canUseFeature 통합)
+        const plan = await getUserPlan(this.userEmail);
+        if (!plan.isActive) {
             return;
         }
 
         const energyLevel = await this.calculateEnergyLevel();
         const stressLevel = await this.calculateStressLevel();
 
-        // Standard: 에너지, 스트레스만
-        // Pro/Max: 전체
+        // Free: 에너지, 스트레스만
+        // Pro/Max: 전체 (집중도, 루틴, 마감)
         const updates: Record<string, any> = {
             energy_level: energyLevel,
             stress_level: stressLevel,
@@ -40,7 +60,8 @@ export class StateUpdater {
             state_updated_at: new Date().toISOString()
         };
 
-        if (userPlan === 'Pro' || userPlan === 'Max') {
+        const proOrAbove = await isProOrAbove(this.userEmail);
+        if (proOrAbove) {
             const focusWindowScore = await this.calculateFocusWindowScore();
             const routineDeviationScore = await this.calculateRoutineDeviation();
             const deadlinePressureScore = await this.calculateDeadlinePressure();
@@ -53,23 +74,6 @@ export class StateUpdater {
         }
 
         await this.saveState(updates);
-    }
-
-    /**
-     * 사용자 플랜 조회
-     */
-    private async getUserPlan(): Promise<string> {
-        const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
-        if (error || !data) {
-            return 'Free';
-        }
-
-        return data.profile?.plan || 'Free';
     }
 
     /**
@@ -104,12 +108,7 @@ export class StateUpdater {
      * - 미달성 목표가 있으면 UP (0-30점)
      */
     private async calculateStressLevel(): Promise<number> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+        const userData = await this.getUserData();
         const customGoals = userData?.profile?.customGoals || [];
         const now = new Date();
         const todayStr = this.formatDate(now);
@@ -123,12 +122,12 @@ export class StateUpdater {
 
         let totalBookedMinutes = 0;
         todaySchedules.forEach((s: any) => {
-            if (s.startTime && s.endTime) {
-                const [sh, sm] = s.startTime.split(':').map(Number);
-                const [eh, em] = s.endTime.split(':').map(Number);
-                const diff = (eh * 60 + em) - (sh * 60 + sm);
+            const start = parseTime(s.startTime);
+            const end = parseTime(s.endTime);
+            if (start && end) {
+                const diff = (end.h * 60 + end.m) - (start.h * 60 + start.m);
                 if (diff > 0) totalBookedMinutes += diff;
-            } else if (s.startTime) {
+            } else if (start) {
                 totalBookedMinutes += 60; // endTime 없으면 1시간 기본
             }
         });
@@ -164,12 +163,7 @@ export class StateUpdater {
      * - 잦은 컨텍스트 전환이 있으면 DOWN (0-20점 감점)
      */
     private async calculateFocusWindowScore(): Promise<number> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+        const userData = await this.getUserData();
         const customGoals = userData?.profile?.customGoals || [];
         const now = new Date();
         const todayStr = this.formatDate(now);
@@ -193,9 +187,10 @@ export class StateUpdater {
             const currentEnd = todaySchedules[i].endTime || this.addOneHour(todaySchedules[i].startTime);
             const nextStart = todaySchedules[i + 1].startTime;
 
-            const [ceH, ceM] = currentEnd.split(':').map(Number);
-            const [nsH, nsM] = nextStart.split(':').map(Number);
-            const gapMinutes = (nsH * 60 + nsM) - (ceH * 60 + ceM);
+            const ce = parseTime(currentEnd);
+            const ns = parseTime(nextStart);
+            if (!ce || !ns) continue; // 잘못된 시간 형식 스킵
+            const gapMinutes = (ns.h * 60 + ns.m) - (ce.h * 60 + ce.m);
 
             if (gapMinutes > 0) gaps.push(gapMinutes);
         }
@@ -266,12 +261,7 @@ export class StateUpdater {
      * - 중요 일정 키워드(마감/발표/면접 등) 감지
      */
     private async calculateDeadlinePressure(): Promise<number> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+        const userData = await this.getUserData();
         const longTermGoals = userData?.profile?.longTermGoals || {};
         const now = new Date();
         let totalPressure = 0;
@@ -324,10 +314,12 @@ export class StateUpdater {
         return Math.max(0, Math.min(100, Math.round(totalPressure)));
     }
 
+    /** KST 기준 YYYY-MM-DD (서버 TZ와 무관하게 일관된 날짜) */
     private formatDate(date: Date): string {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+        const kst = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const year = kst.getFullYear();
+        const month = String(kst.getMonth() + 1).padStart(2, '0');
+        const day = String(kst.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
 

@@ -22,6 +22,11 @@ export interface PlanFeatures {
     risk_alerts: boolean;            // 리스크 알림 (Pro, Max)
     smart_briefing: boolean;         // 스마트 브리핑 (Pro, Max)
     proactive_suggestions: boolean;  // 선제적 제안 (전 플랜)
+    mood_patterns: boolean;          // 기분 패턴 분석 (Pro+)
+    ai_templates: boolean;           // AI 맞춤 루틴 생성 (Pro+)
+    voice_journal: boolean;          // 음성 저널 (Pro+)
+    health_sync: boolean;            // 건강 데이터 동기화 (Pro+)
+    github_sync: boolean;            // GitHub 연동 (Max)
 }
 
 // 플랜 정보
@@ -53,6 +58,11 @@ const DEFAULT_PLAN: UserPlan = {
         risk_alerts: false,
         smart_briefing: false,
         proactive_suggestions: true,
+        mood_patterns: false,
+        ai_templates: false,
+        voice_journal: false,
+        health_sync: false,
+        github_sync: false,
     },
     expiresAt: null,
 };

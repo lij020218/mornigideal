@@ -60,7 +60,13 @@ export async function POST(request: Request) {
         let achievements: any[] = [];
 
         try {
-            const result = await searchModel.generateContent(searchPrompt);
+            const GEMINI_TIMEOUT = 10000; // 10초
+            const result = await Promise.race([
+                searchModel.generateContent(searchPrompt),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Gemini search timed out')), GEMINI_TIMEOUT)
+                ),
+            ]);
             const response = await result.response;
             const text = response.text();
 
@@ -112,7 +118,13 @@ ${isStudent ? `예시 형식:
   { "person": "배민 서비스기획", "achievement": "월간 사용자 피드백 500건 이상 분석" }
 ]`}`;
 
-            const fallbackResult = await fallbackModel.generateContent(fallbackPrompt);
+            const FALLBACK_TIMEOUT = 8000; // 8초
+            const fallbackResult = await Promise.race([
+                fallbackModel.generateContent(fallbackPrompt),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Gemini fallback timed out')), FALLBACK_TIMEOUT)
+                ),
+            ]);
             const fallbackResponse = await fallbackResult.response;
             const fallbackText = fallbackResponse.text();
 

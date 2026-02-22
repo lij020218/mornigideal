@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { materialRateSchema, validateBody } from '@/lib/schemas';
 
 /**
  * POST /api/material/rate
@@ -15,21 +16,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { materialId, rating } = await request.json();
-
-    if (!materialId || !rating) {
-      return NextResponse.json(
-        { error: "materialId and rating are required" },
-        { status: 400 }
-      );
-    }
-
-    if (rating !== "poor" && rating !== "good") {
-      return NextResponse.json(
-        { error: "rating must be 'poor' or 'good'" },
-        { status: 400 }
-      );
-    }
+    const body = await request.json();
+    const v = validateBody(materialRateSchema, body);
+    if (!v.success) return v.response;
+    const { materialId, rating } = v.data;
 
     // Verify the material belongs to the user
     const { data: material, error: fetchError } = await supabaseAdmin

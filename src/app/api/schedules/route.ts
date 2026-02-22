@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserEmailFromRequest } from '@/lib/auth-utils';
 import { dualWriteAdd } from '@/lib/schedule-dual-write';
 import { isValidDate } from '@/lib/validation';
+import { scheduleCreateSchema, validateBody } from '@/lib/schemas';
 
 // 일정 조회 (customGoals 기반)
 export async function GET(request: NextRequest) {
@@ -91,12 +92,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { text, startTime, endTime, date, specificDate, color } = body;
-
-
-    if (!text || !startTime) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    const v = validateBody(scheduleCreateSchema, body);
+    if (!v.success) return v.response;
+    const { text, startTime, endTime, date, specificDate, color } = v.data;
 
     // KST 기준 날짜 계산
     const now = new Date();

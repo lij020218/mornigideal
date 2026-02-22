@@ -4,7 +4,8 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { EventType, PLAN_CONFIGS, PlanType } from '@/types/jarvis';
+import { EventType } from '@/types/jarvis';
+import { canUseFeature } from '@/lib/user-plan';
 
 export class JarvisObserver {
     private userEmail: string;
@@ -22,18 +23,9 @@ export class JarvisObserver {
         source: string = 'manual'
     ): Promise<void> {
         try {
-            // 사용자 플랜 확인
-            const { data: userData } = await supabaseAdmin
-                .from('users')
-                .select('profile')
-                .eq('email', this.userEmail)
-                .maybeSingle();
-
-            const userPlan = userData?.profile?.plan || 'Free';
-            const planConfig = PLAN_CONFIGS[userPlan as PlanType];
-
             // 장기 기억이 있는 플랜만 DB에 저장
-            if (!planConfig.hasLongTermMemory) {
+            const hasMemory = await canUseFeature(this.userEmail, 'jarvis_memory');
+            if (!hasMemory) {
                 return;
             }
 

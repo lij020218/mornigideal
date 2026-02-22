@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { generateEmbeddingsBatch, prepareTextForEmbedding, isMessageMeaningful, generateContentHash } from "@/lib/embeddings";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { isValidDate } from "@/lib/validation";
+import { chatHistorySchema, validateBody } from '@/lib/schemas';
 
 export interface ChatMessage {
     id: string;
@@ -97,11 +98,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { date, messages, title } = await request.json();
-
-        if (!date || !messages) {
-            return NextResponse.json({ error: "Missing date or messages" }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(chatHistorySchema, body);
+        if (!v.success) return v.response;
+        const { date, messages, title } = v.data;
 
         // Get user ID
         const { data: userData, error: userError } = await supabaseAdmin

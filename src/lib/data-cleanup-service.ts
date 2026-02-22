@@ -1,9 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { QueryParameter } from '@/lib/types';
 
 // Thin wrapper for raw SQL via Supabase RPC
 // These cleanup operations require complex SQL that can't use the query builder
 const db = {
-    async query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount: number }> {
+    async query(sql: string, params?: QueryParameter[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number }> {
         try {
             const { data, error } = await supabaseAdmin.rpc('execute_sql', {
                 query_text: sql,
@@ -83,9 +84,9 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
         // 7. user_memory (RAG) 정리
         await cleanupUserMemory(report, userEmail);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Data Cleanup] Error:', error);
-        report.errors.push(error.message);
+        report.errors.push(error instanceof Error ? error.message : String(error));
     }
 
     report.executionTimeMs = Date.now() - startTime;
@@ -108,7 +109,7 @@ async function cleanupExpiredCache(report: CleanupReport, userEmail?: string): P
             DELETE FROM user_context_cache
             WHERE generated_at < $1
         `;
-        const params: any[] = [cutoffDate.toISOString()];
+        const params: QueryParameter[] = [cutoffDate.toISOString()];
 
         if (userEmail) {
             query += ` AND user_email = $2`;
@@ -121,8 +122,8 @@ async function cleanupExpiredCache(report: CleanupReport, userEmail?: string): P
         report.byTable['user_context_cache'] = { deleted: deletedCount, aggregated: 0 };
         report.totalRecordsDeleted += deletedCount;
 
-    } catch (error: any) {
-        report.errors.push(`Cache cleanup failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Cache cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -155,7 +156,7 @@ async function aggregateAndCleanupOldEvents(report: CleanupReport, userEmail?: s
             WHERE created_at < $1
               AND event_type = ANY($2)
         `;
-        const params: any[] = [cutoffDate.toISOString(), lowImportanceTypes];
+        const params: QueryParameter[] = [cutoffDate.toISOString(), lowImportanceTypes];
 
         if (userEmail) {
             query += ` AND user_email = $3`;
@@ -168,8 +169,8 @@ async function aggregateAndCleanupOldEvents(report: CleanupReport, userEmail?: s
         report.byTable['user_events'] = { deleted: deletedCount, aggregated: 0 };
         report.totalRecordsDeleted += deletedCount;
 
-    } catch (error: any) {
-        report.errors.push(`Event cleanup failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Event cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -194,7 +195,7 @@ async function aggregateEventsToDaily(cutoffDate: Date, userEmail?: string): Pro
                 AND user_features_daily.date = DATE(user_events.start_at)
           )
     `;
-    const params: any[] = [cutoffDate.toISOString()];
+    const params: QueryParameter[] = [cutoffDate.toISOString()];
 
     if (userEmail) {
         query += ` AND user_email = $2`;
@@ -208,12 +209,12 @@ async function aggregateEventsToDaily(cutoffDate: Date, userEmail?: string): Pro
     // 집계된 데이터를 user_features_daily에 삽입
     let insertedCount = 0;
     for (const row of result.rows) {
-        const completionRate = row.total_tasks > 0
-            ? row.completed_tasks / row.total_tasks
+        const completionRate = Number(row.total_tasks) > 0
+            ? Number(row.completed_tasks) / Number(row.total_tasks)
             : 0;
 
-        const density = row.total_tasks >= 10 ? 'high'
-            : row.total_tasks >= 5 ? 'medium'
+        const density = Number(row.total_tasks) >= 10 ? 'high'
+            : Number(row.total_tasks) >= 5 ? 'medium'
             : 'low';
 
         try {
@@ -223,12 +224,12 @@ async function aggregateEventsToDaily(cutoffDate: Date, userEmail?: string): Pro
                  VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7)
                  ON CONFLICT (user_email, date) DO NOTHING`,
                 [
-                    row.user_email,
-                    row.event_date,
-                    row.total_tasks,
-                    row.completed_tasks,
-                    row.workout_count,
-                    row.sleep_hours,
+                    row.user_email as string,
+                    row.event_date as string,
+                    Number(row.total_tasks),
+                    Number(row.completed_tasks),
+                    Number(row.workout_count),
+                    row.sleep_hours != null ? Number(row.sleep_hours) : null,
                     density,
                 ]
             );
@@ -260,7 +261,7 @@ async function aggregateAndCleanupDailyFeatures(report: CleanupReport, userEmail
 
         // 오래된 daily features 삭제
         let query = `DELETE FROM user_features_daily WHERE date < $1`;
-        const params: any[] = [cutoffDate.toISOString().split('T')[0]];
+        const params: QueryParameter[] = [cutoffDate.toISOString().split('T')[0]];
 
         if (userEmail) {
             query += ` AND user_email = $2`;
@@ -276,8 +277,8 @@ async function aggregateAndCleanupDailyFeatures(report: CleanupReport, userEmail
         };
         report.totalRecordsDeleted += deletedCount;
 
-    } catch (error: any) {
-        report.errors.push(`Daily features cleanup failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Daily features cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -301,7 +302,7 @@ async function aggregateDailyToWeekly(cutoffDate: Date, userEmail?: string): Pro
                 AND user_features_weekly.week_start = DATE_TRUNC('week', user_features_daily.date)
           )
     `;
-    const params: any[] = [cutoffDate.toISOString().split('T')[0]];
+    const params: QueryParameter[] = [cutoffDate.toISOString().split('T')[0]];
 
     if (userEmail) {
         query += ` AND user_email = $2`;
@@ -321,11 +322,11 @@ async function aggregateDailyToWeekly(cutoffDate: Date, userEmail?: string): Pro
                  VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5)
                  ON CONFLICT (user_email, week_start) DO NOTHING`,
                 [
-                    row.user_email,
-                    row.week_start,
-                    row.total_workouts,
-                    row.avg_sleep_hours,
-                    row.workout_completion_rate,
+                    row.user_email as string,
+                    row.week_start as string,
+                    Number(row.total_workouts),
+                    row.avg_sleep_hours != null ? Number(row.avg_sleep_hours) : null,
+                    row.workout_completion_rate != null ? Number(row.workout_completion_rate) : null,
                 ]
             );
             insertedCount++;
@@ -352,7 +353,7 @@ async function deduplicateData(report: CleanupReport, userEmail?: string): Promi
               AND a.event_type = b.event_type
               AND ABS(EXTRACT(EPOCH FROM (a.start_at - b.start_at))) < $1
         `;
-        const params: any[] = [eventRule.timeWindow];
+        const params: QueryParameter[] = [eventRule.timeWindow];
 
         if (userEmail) {
             query += ` AND a.user_email = $2`;
@@ -368,8 +369,8 @@ async function deduplicateData(report: CleanupReport, userEmail?: string): Promi
         report.byTable['user_events'].deleted += deletedCount;
         report.totalRecordsDeleted += deletedCount;
 
-    } catch (error: any) {
-        report.errors.push(`Deduplication failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Deduplication failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -413,8 +414,8 @@ async function cleanupOrphanedRecords(report: CleanupReport, userEmail?: string)
 
             }
         }
-    } catch (error: any) {
-        report.errors.push(`Orphaned records cleanup failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Orphaned records cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -438,9 +439,9 @@ async function enforceUserDataLimits(report: CleanupReport, userEmail?: string):
         const result = await db.query(query, userEmail ? [userEmail] : []);
 
         for (const row of result.rows) {
-            if (row.event_count > USER_DATA_LIMITS.maxEventsPerUser) {
+            if (Number(row.event_count) > USER_DATA_LIMITS.maxEventsPerUser) {
                 // 가장 오래되고 중요도 낮은 이벤트부터 삭제
-                const excess = row.event_count - USER_DATA_LIMITS.maxEventsPerUser;
+                const excess = Number(row.event_count) - USER_DATA_LIMITS.maxEventsPerUser;
 
                 const deleteResult = await db.query(
                     `DELETE FROM user_events
@@ -452,7 +453,7 @@ async function enforceUserDataLimits(report: CleanupReport, userEmail?: string):
                              created_at ASC
                          LIMIT $2
                      )`,
-                    [row.user_email, excess]
+                    [row.user_email as string, excess]
                 );
 
                 const deletedCount = deleteResult.rowCount || 0;
@@ -464,8 +465,8 @@ async function enforceUserDataLimits(report: CleanupReport, userEmail?: string):
                 report.totalRecordsDeleted += deletedCount;
             }
         }
-    } catch (error: any) {
-        report.errors.push(`Data limit enforcement failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`Data limit enforcement failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -527,7 +528,7 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
 
             for (const row of overLimitUsers.rows) {
                 // 초과량에 해당하는 오래된 레코드 삭제
-                const excessMb = row.size_mb - limitMb;
+                const excessMb = Number(row.size_mb) - limitMb;
                 const estimatedRowsToDelete = Math.ceil(excessMb / 0.007); // ~7KB per row
 
                 const deleteResult = await db.query(`
@@ -538,7 +539,7 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
                         ORDER BY created_at ASC
                         LIMIT $2
                     )
-                `, [row.user_id, estimatedRowsToDelete]);
+                `, [row.user_id as string, estimatedRowsToDelete]);
 
                 totalDeleted += deleteResult.rowCount || 0;
             }
@@ -549,8 +550,8 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
 
         if (totalDeleted > 0) {
         }
-    } catch (error: any) {
-        report.errors.push(`User memory cleanup failed: ${error.message}`);
+    } catch (error: unknown) {
+        report.errors.push(`User memory cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -559,28 +560,34 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
  */
 export async function getUserDataStats(userEmail: string) {
     try {
-        const stats: any = {};
+        const stats = {
+            totalEvents: 0,
+            totalDailyFeatures: 0,
+            totalWeeklyFeatures: 0,
+            dataRange: null as Record<string, unknown> | null,
+            usagePercentage: { events: 0, daily: 0, weekly: 0 },
+        };
 
         // 이벤트 수
         const eventsResult = await db.query(
             `SELECT COUNT(*) as count FROM user_events WHERE user_email = $1`,
             [userEmail]
         );
-        stats.totalEvents = parseInt(eventsResult.rows[0]?.count || '0');
+        stats.totalEvents = parseInt(String(eventsResult.rows[0]?.count ?? '0'));
 
         // Daily features 수
         const dailyResult = await db.query(
             `SELECT COUNT(*) as count FROM user_features_daily WHERE user_email = $1`,
             [userEmail]
         );
-        stats.totalDailyFeatures = parseInt(dailyResult.rows[0]?.count || '0');
+        stats.totalDailyFeatures = parseInt(String(dailyResult.rows[0]?.count ?? '0'));
 
         // Weekly features 수
         const weeklyResult = await db.query(
             `SELECT COUNT(*) as count FROM user_features_weekly WHERE user_email = $1`,
             [userEmail]
         );
-        stats.totalWeeklyFeatures = parseInt(weeklyResult.rows[0]?.count || '0');
+        stats.totalWeeklyFeatures = parseInt(String(weeklyResult.rows[0]?.count ?? '0'));
 
         // 가장 오래된/최신 데이터
         const rangeResult = await db.query(
@@ -591,7 +598,7 @@ export async function getUserDataStats(userEmail: string) {
              WHERE user_email = $1`,
             [userEmail]
         );
-        stats.dataRange = rangeResult.rows[0];
+        stats.dataRange = rangeResult.rows[0] || null;
 
         // 용량 사용률
         stats.usagePercentage = {

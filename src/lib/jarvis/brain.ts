@@ -3,7 +3,7 @@
  * LLM 기반 복잡한 판단 (20%)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
     InterventionLevel,
@@ -15,8 +15,8 @@ import {
 import { resolvePersonaStyle, getPersonaBlock, type PersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from "@/lib/models";
 
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
 export interface InterventionContext {
@@ -49,28 +49,46 @@ export class Brain {
         const prompt = this.buildPrompt(context);
 
         try {
-            const response = await anthropic.messages.create({
-                model: MODELS.CLAUDE_3_5_SONNET,
+            const response = await openai.chat.completions.create({
+                model: MODELS.GPT_5_MINI,
+                temperature: 1,
                 max_tokens: 1024,
-                temperature: 0.7,
-                system: this.getSystemPrompt(context.preferences),
+                response_format: {
+                    type: 'json_schema',
+                    json_schema: {
+                        name: 'intervention_plan',
+                        strict: true,
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                actionType: {
+                                    type: 'string',
+                                    enum: ['notification_sent', 'schedule_moved', 'resource_prep', 'checklist_created', 'schedule_suggested', 'learning_suggested'],
+                                },
+                                actionPayload: { type: 'object' },
+                                message: { type: 'string' },
+                                reasoning: { type: 'string' },
+                            },
+                            required: ['actionType', 'actionPayload', 'message', 'reasoning'],
+                            additionalProperties: false,
+                        },
+                    },
+                },
                 messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ]
+                    { role: 'system', content: this.getSystemPrompt(context.preferences) },
+                    { role: 'user', content: prompt },
+                ],
             });
 
             // AI 호출 횟수 증가 (API 호출 성공 후에만 차감)
             await this.incrementAIUsage(context.userEmail);
 
-            const content = response.content[0];
-            if (content.type !== 'text') {
-                throw new Error('Unexpected response type');
+            const text = response.choices[0]?.message?.content;
+            if (!text) {
+                throw new Error('Empty response from LLM');
             }
 
-            const plan = this.parseResponse(content.text, context);
+            const plan = this.parseResponse(text, context);
 
             // 응답 검증
             if (!this.validatePlan(plan, context)) {
@@ -105,21 +123,24 @@ export class Brain {
 
 당신은 사용자의 일정과 루틴을 24시간 모니터링하며, 필요한 순간에 적절히 개입하여 도움을 줍니다.
 
-중요한 제약사항 (절대 지켜야 함):
-1. 다음 단어/표현을 절대 사용하지 마세요: ${GUARDRAILS.FORBIDDEN_PATTERNS.join(', ')}
-2. 다음 액션은 반드시 사용자 확인이 필요합니다: ${GUARDRAILS.REQUIRES_CONFIRMATION.join(', ')}
-3. 의학적/정신과적 진단이나 조언을 하지 마세요
-4. 사용자의 감정 상태를 추측하되, 레이블을 붙이지 마세요
+## 판단 절차 (반드시 순서대로 따르세요)
+1. 현재 상태 수치(에너지/스트레스/루틴이탈/마감압박)에서 가장 심각한 지표를 식별하세요.
+2. 개입 이유(reasonCodes)와 다가오는 일정을 교차 확인하여, 지금 개입해야 하는 구체적 근거를 확정하세요.
+3. 아래 actionType 중 가장 적합한 하나만 선택하세요:
+   - notification_sent: 단순 알림/격려
+   - schedule_moved: 일정 이동 제안
+   - resource_prep: 다가오는 일정 준비물/리소스 사전 준비
+   - checklist_created: 체크리스트 생성
+   - schedule_suggested: 새 일정 추천
+   - learning_suggested: 학습 콘텐츠 추천
+4. message는 한국어 1-2문장, 사용자에게 직접 말하는 톤으로 작성하세요.
+5. reasoning에 위 1-3단계 판단 근거를 한 문장으로 요약하세요.
 
-응답 형식:
-{
-  "actionType": "notification_sent | schedule_moved | resource_prep | checklist_created | schedule_suggested | learning_suggested",
-  "actionPayload": { /* 액션별 구체적 데이터 */ },
-  "message": "사용자에게 보여줄 메시지 (1-2문장, 1인칭 시점)",
-  "reasoning": "왜 이 개입이 필요한지 간단한 설명"
-}
-
-JSON 형식으로만 답변하세요.`;
+## 제약사항
+- 다음 단어/표현을 절대 사용하지 마세요: ${GUARDRAILS.FORBIDDEN_PATTERNS.join(', ')}
+- 다음 액션은 반드시 사용자 확인이 필요합니다: ${GUARDRAILS.REQUIRES_CONFIRMATION.join(', ')}
+- 의학적/정신과적 진단이나 조언을 하지 마세요
+- 사용자의 감정 상태를 추측하되, 레이블을 붙이지 마세요`;
     }
 
     /**

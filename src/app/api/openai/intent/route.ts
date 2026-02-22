@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
                             {
                                 id: `voice-${Date.now()}`,
                                 text: parsed.scheduleUpdate.title || "새 목표",
-                                time: "morning",
                                 startTime: time,
                                 endTime: time,
                                 color: "#6366f1",

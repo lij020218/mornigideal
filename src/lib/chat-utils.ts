@@ -5,6 +5,8 @@
  * route.ts는 흐름 제어(Flow Control)만 담당
  */
 
+import { FOCUS_KEYWORDS as FOCUS_KEYWORDS_CONST } from '@/lib/constants';
+
 // ============================================
 // Types
 // ============================================
@@ -426,12 +428,7 @@ function detectBackToBack(
 // 집중 모드 권장 감지
 // ============================================
 
-const FOCUS_KEYWORDS = [
-    '업무', '회의', '미팅', '개발', '코딩', '작업', '프로젝트',
-    '공부', '학습', '강의', '수업', '시험', '과제', '리뷰',
-    '독서', '읽기', '글쓰기', '보고서', '기획', '분석',
-    'work', 'study', 'focus', 'coding', 'meeting', 'reading',
-];
+const FOCUS_KEYWORDS = [...FOCUS_KEYWORDS_CONST];
 
 function isFocusWorthy(text: string): boolean {
     const lower = text.toLowerCase();
@@ -501,6 +498,27 @@ export function postProcessActions(
 }
 
 // ============================================
+// 컨텍스트 블록 크기 제어
+// ============================================
+
+function truncateBlock(block: string, maxChars: number): string {
+    if (block.length <= maxChars) return block;
+    return block.slice(0, maxChars) + '\n... (이하 생략)';
+}
+
+const BLOCK_CHAR_LIMITS: Record<string, number> = {
+    scheduleContext: 2000,
+    eventLogsContext: 3000,
+    ragContext: 1500,
+    schedulePatternContext: 1500,
+    goalsContext: 1000,
+    learningContext: 1000,
+    trendContext: 1000,
+    pendingScheduleContext: 1000,
+    locationContext: 500,
+};
+
+// ============================================
 // 컨텍스트 블록 조립
 // ============================================
 
@@ -531,7 +549,7 @@ export function assembleContextBlocks(params: {
 
     // 일정: schedule/chat만 전체, 나머지는 개수 요약
     if (params.intent === 'schedule' || params.intent === 'chat') {
-        blocks.push(params.scheduleContext);
+        blocks.push(truncateBlock(params.scheduleContext, BLOCK_CHAR_LIMITS.scheduleContext));
     } else if (params.scheduleContext) {
         const scheduleCount = (params.scheduleContext.match(/^- /gm) || []).length;
         if (scheduleCount > 0) {
@@ -541,40 +559,40 @@ export function assembleContextBlocks(params: {
 
     // Max 전용: 관련 의도에서만
     if (params.eventLogsContext && (params.intent === 'schedule' || params.intent === 'analysis' || params.intent === 'goal')) {
-        blocks.push(params.eventLogsContext);
+        blocks.push(truncateBlock(params.eventLogsContext, BLOCK_CHAR_LIMITS.eventLogsContext));
     }
     if (params.ragContext) {
-        blocks.push(params.ragContext);
+        blocks.push(truncateBlock(params.ragContext, BLOCK_CHAR_LIMITS.ragContext));
     }
 
     // 트렌드: chat/search만
     if (params.trendContext && (params.intent === 'chat' || params.intent === 'search')) {
-        blocks.push(params.trendContext);
+        blocks.push(truncateBlock(params.trendContext, BLOCK_CHAR_LIMITS.trendContext));
     }
 
     // 펜딩 일정: 항상 (있을 때만)
     if (params.pendingScheduleContext) {
-        blocks.push(params.pendingScheduleContext);
+        blocks.push(truncateBlock(params.pendingScheduleContext, BLOCK_CHAR_LIMITS.pendingScheduleContext));
     }
 
     // 위치 컨텍스트: search/chat에서 장소 추천에 활용
     if (params.locationContext) {
-        blocks.push(params.locationContext);
+        blocks.push(truncateBlock(params.locationContext, BLOCK_CHAR_LIMITS.locationContext));
     }
 
     // 목표 컨텍스트: goal/chat/analysis 의도에서 활용
     if (params.goalsContext && (params.intent === 'goal' || params.intent === 'chat' || params.intent === 'analysis')) {
-        blocks.push(params.goalsContext);
+        blocks.push(truncateBlock(params.goalsContext, BLOCK_CHAR_LIMITS.goalsContext));
     }
 
     // 학습 컨텍스트: chat/analysis 의도에서 활용
     if (params.learningContext && (params.intent === 'chat' || params.intent === 'analysis')) {
-        blocks.push(params.learningContext);
+        blocks.push(truncateBlock(params.learningContext, BLOCK_CHAR_LIMITS.learningContext));
     }
 
     // 일정 패턴 컨텍스트: search/chat 의도에서 추천 시 활용
     if (params.schedulePatternContext && (params.intent === 'search' || params.intent === 'chat')) {
-        blocks.push(params.schedulePatternContext);
+        blocks.push(truncateBlock(params.schedulePatternContext, BLOCK_CHAR_LIMITS.schedulePatternContext));
     }
 
     return blocks;
@@ -604,7 +622,7 @@ export function buildSystemPrompt(params: {
         responseStyle = `**친구 모드**: "~해드릴게요", "~할까요?", "~어때요?" 같은 부드러운 존댓말. 2-3문장. 이모지 1-2개로 친근하게.`;
     }
 
-    return `# Fi.eri AI Assistant
+    const prompt = `# Fi.eri AI Assistant
 
 ## Context
 ${contextBlocks.join('\n')}
@@ -633,6 +651,12 @@ ${getExamplesForIntent(intent, currentDate)}
 **CRITICAL**: 요청에 실행할 동작이 있으면 반드시 actions에 포함!
 
 **OUTPUT**: 반드시 JSON 형식으로만 응답하세요. { "message": "...", "actions": [...] }`;
+
+    if (prompt.length > 15000) {
+        console.warn(`[ChatUtils] System prompt very large: ${prompt.length} chars (intent: ${intent})`);
+    }
+
+    return prompt;
 }
 
 // ============================================

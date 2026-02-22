@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
 import { dualWriteDelete } from '@/lib/schedule-dual-write';
+import { scheduleEditSchema, validateBody } from '@/lib/schemas';
 
 // 일정 상세 조회
 export async function GET(
@@ -67,7 +68,9 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { text, startTime, endTime, completed } = body;
+    const v = validateBody(scheduleEditSchema, body);
+    if (!v.success) return v.response;
+    const { text, startTime, endTime, completed } = v.data;
 
     const updateData: any = {};
     if (text) updateData.title = text;

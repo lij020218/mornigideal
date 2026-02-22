@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { modeEventSchema, validateBody } from '@/lib/schemas';
 
 /**
  * Mode Events API
@@ -22,24 +23,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { eventType, metadata } = await request.json();
-
-        if (!eventType) {
-            return NextResponse.json({ error: "Event type is required" }, { status: 400 });
-        }
-
-        // Validate event type
-        const validEventTypes = [
-            'focus_start',
-            'focus_end',
-            'focus_interrupted',
-            'sleep_start',
-            'sleep_end'
-        ];
-
-        if (!validEventTypes.includes(eventType)) {
-            return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(modeEventSchema, body);
+        if (!v.success) return v.response;
+        const { eventType, metadata } = v.data;
 
         // Insert event into user_events table
         const { data, error } = await supabaseAdmin

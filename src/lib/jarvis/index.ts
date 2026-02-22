@@ -18,6 +18,7 @@ export class JarvisOrchestrator {
     private policyEngine: PolicyEngine;
     private brain: Brain;
     private hands: Hands;
+    private cachedProfile: any = null;
 
     constructor(userEmail: string) {
         this.userEmail = userEmail;
@@ -26,6 +27,18 @@ export class JarvisOrchestrator {
         this.policyEngine = new PolicyEngine(userEmail);
         this.brain = new Brain();
         this.hands = new Hands(userEmail);
+    }
+
+    /** Fetch profile once per run to eliminate N+1 queries. */
+    private async getCachedProfile(): Promise<any> {
+        if (this.cachedProfile) return this.cachedProfile;
+        const { data } = await supabaseAdmin
+            .from('users')
+            .select('profile')
+            .eq('email', this.userEmail)
+            .maybeSingle();
+        this.cachedProfile = data?.profile || {};
+        return this.cachedProfile;
     }
 
     /**
@@ -115,18 +128,8 @@ export class JarvisOrchestrator {
      * 다가오는 일정 조회
      */
     private async getUpcomingSchedules(): Promise<any[]> {
-        const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
-        if (error || !data) {
-            console.error('[Jarvis] Failed to get user profile:', error);
-            return [];
-        }
-
-        const customGoals = data.profile?.customGoals || [];
+        const profile = await this.getCachedProfile();
+        const customGoals = profile?.customGoals || [];
         const now = new Date();
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -162,18 +165,7 @@ export class JarvisOrchestrator {
      * 사용자 프로필 조회
      */
     private async getUserProfile(): Promise<any> {
-        const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
-        if (error || !data) {
-            console.error('[Jarvis] Failed to get user profile:', error);
-            return {};
-        }
-
-        return data.profile || {};
+        return this.getCachedProfile();
     }
 
     /**
@@ -214,21 +206,28 @@ export class JarvisOrchestrator {
         }
     }
 
-    /**
-     * 날짜 포맷 (YYYY-MM-DD)
-     */
+    /** KST 기준 YYYY-MM-DD */
     private formatDate(date: Date): string {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+        const kst = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const year = kst.getFullYear();
+        const month = String(kst.getMonth() + 1).padStart(2, '0');
+        const day = String(kst.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
+}
+
+export interface JarvisRunResult {
+    totalUsers: number;
+    succeeded: number;
+    failed: number;
+    failedEmails: string[];
 }
 
 /**
  * Standard, Pro, Max 사용자에 대해 Jarvis 실행
  */
-export async function runJarvisForAllMaxUsers(): Promise<void> {
+export async function runJarvisForAllMaxUsers(): Promise<JarvisRunResult> {
+    const result: JarvisRunResult = { totalUsers: 0, succeeded: 0, failed: 0, failedEmails: [] };
 
     try {
         // Standard, Pro, Max 플랜 사용자 조회
@@ -239,28 +238,41 @@ export async function runJarvisForAllMaxUsers(): Promise<void> {
 
         if (error) {
             console.error('[Jarvis] Failed to fetch users:', error);
-            return;
+            return result;
         }
 
         if (!users || users.length === 0) {
-            return;
+            return result;
         }
 
+        result.totalUsers = users.length;
 
-        // 각 사용자에 대해 병렬 실행
+        // 각 사용자에 대해 병렬 실행 (per-user status tracking)
         const promises = users.map(async (user) => {
             try {
                 const orchestrator = new JarvisOrchestrator(user.email);
                 await orchestrator.run();
+                result.succeeded++;
             } catch (error) {
                 console.error(`[Jarvis] Failed for user ${user.email}:`, error);
-                // 한 사용자 실패해도 계속 진행
+                result.failed++;
+                result.failedEmails.push(user.email);
             }
         });
 
         await Promise.all(promises);
 
+        // 피드백 가중치 일괄 재계산 (cron 실행 시마다)
+        try {
+            const { computeWeightsForAllUsers } = await import('./feedback-aggregator');
+            await computeWeightsForAllUsers();
+        } catch (e) {
+            console.error('[Jarvis] Feedback weight recomputation failed:', e);
+        }
+
     } catch (error) {
         console.error('[Jarvis] Critical error in runJarvisForAllMaxUsers:', error);
     }
+
+    return result;
 }

@@ -1,35 +1,14 @@
 import { NextResponse } from "next/server";
 import { createUser, getUserByEmail, getUserByUsername } from "@/lib/users";
 import bcrypt from "bcryptjs";
+import { signupSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { name, username, email, password } = body;
-
-        if (!name || !username || !email || !password) {
-            return NextResponse.json(
-                { error: "모든 필드를 입력해주세요." },
-                { status: 400 }
-            );
-        }
-
-        // 이메일 형식 확인
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return NextResponse.json(
-                { error: "올바른 이메일 형식이 아닙니다." },
-                { status: 400 }
-            );
-        }
-
-        // 비밀번호 길이 확인
-        if (password.length < 8) {
-            return NextResponse.json(
-                { error: "비밀번호는 8자 이상이어야 합니다." },
-                { status: 400 }
-            );
-        }
+        const v = validateBody(signupSchema, body);
+        if (!v.success) return v.response;
+        const { name, username, email, password } = v.data;
 
         const existingEmail = await getUserByEmail(email);
         if (existingEmail) {

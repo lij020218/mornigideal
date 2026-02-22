@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
+import type { CustomGoal, ActivityEventLog } from '@/lib/types';
 
 /**
  * Weekly Report Generator
@@ -136,8 +137,8 @@ function getPreviousWeek(weekStart: Date): { start: Date; end: Date } {
  */
 export async function generateWeeklyReport(userEmail: string): Promise<WeeklyReportData> {
 
-    // 가장 최근 완료된 주간 (월~일) 계산
-    const now = new Date();
+    // 가장 최근 완료된 주간 (월~일) 계산 — KST 기준
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const lastWeek = getLastCompletedWeek(now);
     const oneWeekAgo = lastWeek.start;
     const weekEnd = lastWeek.end;
@@ -160,20 +161,20 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const customGoals = profile.customGoals || [];
 
     // 1. Schedule Analysis (지난 주간 월~일 일정 분석)
-    const lastWeekSchedules = customGoals.filter((goal: any) => {
+    const lastWeekSchedules = customGoals.filter((goal: CustomGoal) => {
         if (!goal.specificDate) return false;
         const goalDate = new Date(goal.specificDate);
         return goalDate >= oneWeekAgo && goalDate <= weekEnd;
     });
 
-    const previousWeekSchedules = customGoals.filter((goal: any) => {
+    const previousWeekSchedules = customGoals.filter((goal: CustomGoal) => {
         if (!goal.specificDate) return false;
         const goalDate = new Date(goal.specificDate);
         return goalDate >= twoWeeksAgo && goalDate <= twoWeeksAgoEnd;
     });
 
     const totalSchedules = lastWeekSchedules.length;
-    const completedSchedules = lastWeekSchedules.filter((g: any) => g.completed).length;
+    const completedSchedules = lastWeekSchedules.filter((g: CustomGoal) => g.completed).length;
     const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
 
     // Category breakdown
@@ -185,7 +186,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         other: 0,
     };
 
-    lastWeekSchedules.forEach((goal: any) => {
+    lastWeekSchedules.forEach((goal: CustomGoal) => {
         const text = (goal.text || '').toLowerCase();
         if (text.includes('업무') || text.includes('회의') || text.includes('미팅') || text.includes('work')) {
             categoryBreakdown.work++;
@@ -202,8 +203,8 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 
     // Day-by-day productivity
     const dayProductivity: Record<string, number> = {};
-    lastWeekSchedules.forEach((goal: any) => {
-        const date = goal.specificDate;
+    lastWeekSchedules.forEach((goal: CustomGoal) => {
+        const date = goal.specificDate ?? 'unknown';
         if (!dayProductivity[date]) dayProductivity[date] = 0;
         if (goal.completed) dayProductivity[date]++;
     });
@@ -227,7 +228,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 
     // Category breakdown for briefings
     const categoryCount: Record<string, number> = {};
-    readingEvents?.forEach((event: any) => {
+    readingEvents?.forEach((event: ActivityEventLog) => {
         const category = event.metadata?.category || 'other';
         categoryCount[category] = (categoryCount[category] || 0) + 1;
     });
@@ -239,7 +240,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 
     // Reading streak (연속 읽은 일수)
     const readingDays = new Set(
-        readingEvents?.map((event: any) => new Date(event.start_at).toISOString().split('T')[0]) || []
+        readingEvents?.map((event: ActivityEventLog) => new Date(event.start_at || event.created_at || '').toISOString().split('T')[0]) || []
     );
     const readingStreak = readingDays.size;
 
@@ -257,7 +258,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     let totalInterruptions = 0;
     const focusDayMinutes: Record<string, number> = {};
 
-    focusEvents?.filter((e: any) => e.event_type === 'focus_end').forEach((event: any) => {
+    focusEvents?.filter((e: ActivityEventLog) => e.event_type === 'focus_end').forEach((event: ActivityEventLog) => {
         const duration = event.metadata?.duration || 0;
         const minutes = Math.floor(duration / 60);
         totalFocusMinutes += minutes;
@@ -267,7 +268,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
             totalInterruptions += event.metadata.interruptCount;
         }
 
-        const day = new Date(event.created_at).toISOString().split('T')[0];
+        const day = new Date(event.created_at || event.start_at || '').toISOString().split('T')[0];
         focusDayMinutes[day] = (focusDayMinutes[day] || 0) + minutes;
     });
 
@@ -288,7 +289,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     let sleepSessions = 0;
     const sleepTimes: string[] = [];
 
-    sleepEvents?.filter((e: any) => e.event_type === 'sleep_end').forEach((event: any) => {
+    sleepEvents?.filter((e: ActivityEventLog) => e.event_type === 'sleep_end').forEach((event: ActivityEventLog) => {
         const durationMinutes = event.metadata?.durationMinutes || 0;
         totalSleepMinutes += durationMinutes;
         sleepSessions++;
@@ -329,8 +330,8 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         .gte('start_at', oneWeekAgo.toISOString())
         .lte('start_at', weekEnd.toISOString());
 
-    const workoutEvents = allEvents?.filter((e: any) => e.event_type === 'workout_completed') || [];
-    const learningEvents = allEvents?.filter((e: any) => e.event_type === 'learning_completed') || [];
+    const workoutEvents = allEvents?.filter((e: ActivityEventLog) => e.event_type === 'workout_completed') || [];
+    const learningEvents = allEvents?.filter((e: ActivityEventLog) => e.event_type === 'learning_completed') || [];
 
     const newHabitsFormed = workoutEvents.length >= 3 ? 1 : 0; // 주 3회 이상이면 습관으로 간주
     // Include focus and sleep data in consistency score
@@ -345,8 +346,8 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     if (categoryBreakdown.wellness > 0) focusAreas.push('웰빙');
 
     // Estimated time invested (duration sum)
-    const timeInvested = lastWeekSchedules.reduce((sum: number, goal: any) => {
-        const duration = parseInt(goal.duration) || 60;
+    const timeInvested = lastWeekSchedules.reduce((sum: number, goal: CustomGoal) => {
+        const duration = parseInt((goal as unknown as Record<string, string>).duration) || 60;
         return sum + duration;
     }, 0);
 
@@ -428,7 +429,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 
     // 5. Comparison with last week
     const previousTotal = previousWeekSchedules.length;
-    const previousCompleted = previousWeekSchedules.filter((g: any) => g.completed).length;
+    const previousCompleted = previousWeekSchedules.filter((g: CustomGoal) => g.completed).length;
     const previousCompletionRate = previousTotal > 0 ? (previousCompleted / previousTotal) * 100 : 0;
 
     const { data: previousReadingEvents } = await supabase
@@ -503,7 +504,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 /**
  * AI를 사용하여 주간 리포트를 자연스러운 문장으로 변환
  */
-export async function generateWeeklyReportNarrative(reportData: WeeklyReportData, userProfile: any): Promise<string> {
+export async function generateWeeklyReportNarrative(reportData: WeeklyReportData, userProfile: { job?: string; goal?: string }): Promise<string> {
     const { scheduleAnalysis, trendBriefingAnalysis, focusAnalysis, sleepAnalysis, growthMetrics, insights, comparisonWithLastWeek } = reportData;
 
     // 사용자의 실제 상황에 맞는 맞춤 조언을 위한 컨텍스트 구성

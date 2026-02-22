@@ -30,11 +30,15 @@ export async function GET(request: NextRequest) {
 
 
     try {
-        await runJarvisForAllMaxUsers();
+        const result = await runJarvisForAllMaxUsers();
 
         return NextResponse.json({
             success: true,
             message: 'Jarvis run completed',
+            totalUsers: result.totalUsers,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            failedEmails: result.failedEmails,
             timestamp: new Date().toISOString()
         });
     } catch (error) {

@@ -244,8 +244,8 @@ export async function GET(request: NextRequest) {
                         notif.type,
                         notif.priority,
                         {
-                            scheduleText: notif.actionPayload?.scheduleText,
-                            deadlineHours: notif.actionPayload?.deadlineHours,
+                            scheduleText: notif.actionPayload?.scheduleText as string | undefined,
+                            deadlineHours: notif.actionPayload?.deadlineHours as number | undefined,
                         }
                     );
                     const result = applyEscalation(notif, decision);

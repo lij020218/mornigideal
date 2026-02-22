@@ -6,27 +6,67 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { ToolCall, ToolResult } from './tools';
 import { StateUpdater } from './state-updater';
+import type { CustomGoal, LongTermGoal, UserProfile, AddScheduleArgs, DeleteScheduleArgs, UpdateScheduleArgs, SuggestScheduleArgs, CreateChecklistArgs, PrepareScheduleArgs, SaveLearningArgs, FocusType } from '@/lib/types';
+import type { MemoryType } from '@/lib/jarvis-memory';
+import { logAgentAction } from '@/lib/agent-action-log';
 
 export class ToolExecutor {
     private userEmail: string;
     private userPlan: string;
+    private cachedUserData: { profile: UserProfile } | null = null;
 
     constructor(userEmail: string, userPlan: string) {
         this.userEmail = userEmail;
         this.userPlan = userPlan;
     }
 
+    /**
+     * Fetch user data once per ToolExecutor lifecycle, then return cached.
+     * Eliminates N+1: previously 6 methods each queried users.profile independently.
+     */
+    private async getUserData(): Promise<{ profile: UserProfile } | null> {
+        if (this.cachedUserData) return this.cachedUserData;
+        const { data } = await supabaseAdmin
+            .from('users')
+            .select('profile')
+            .eq('email', this.userEmail)
+            .maybeSingle();
+        this.cachedUserData = data;
+        return data;
+    }
+
+    /** Invalidate cache after profile mutations (add/delete/update). */
+    private async invalidateCache(): Promise<void> {
+        this.cachedUserData = null;
+        // 공유 컨텍스트 풀도 무효화
+        try {
+            const { invalidateUserContext } = await import('@/lib/shared-context');
+            invalidateUserContext(this.userEmail);
+        } catch { /* ignore */ }
+    }
+
     async execute(toolCall: ToolCall): Promise<ToolResult> {
         const startTime = Date.now();
         try {
             const result = await this.dispatch(toolCall);
+
+            // Log successful schedule-related actions for cross-agent dedup
+            if (result.success && ['add_schedule', 'update_schedule', 'delete_schedule', 'suggest_schedule'].includes(toolCall.toolName)) {
+                logAgentAction(this.userEmail, 'react', toolCall.toolName, toolCall.arguments || {}).catch(() => {});
+            }
+
             return result;
         } catch (error) {
-            console.error(`[ToolExecutor] ${toolCall.toolName} failed:`, error);
+            const isTransient = error instanceof Error &&
+                (error.message.includes('timeout') || error.message.includes('ECONNRESET') || error.message.includes('connection'));
+
+            console.error(`[ToolExecutor] ${toolCall.toolName} failed (${isTransient ? 'transient' : 'permanent'}):`, error);
             return {
                 success: false,
                 error: String(error),
-                humanReadableSummary: `도구 "${toolCall.toolName}" 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
+                humanReadableSummary: isTransient
+                    ? `도구 "${toolCall.toolName}" 일시적 오류 — 다시 시도할 수 있습니다.`
+                    : `도구 "${toolCall.toolName}" 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
             };
         }
     }
@@ -40,11 +80,11 @@ export class ToolExecutor {
             case 'get_schedule_by_date':
                 return this.getSchedulesByDate(args.date);
             case 'add_schedule':
-                return this.addSchedule(args);
+                return this.addSchedule(args as AddScheduleArgs);
             case 'delete_schedule':
-                return this.deleteSchedule(args);
+                return this.deleteSchedule(args as DeleteScheduleArgs);
             case 'update_schedule':
-                return this.updateSchedule(args);
+                return this.updateSchedule(args as UpdateScheduleArgs);
             case 'web_search':
                 return this.webSearch(args.query);
             case 'search_user_memory':
@@ -56,13 +96,24 @@ export class ToolExecutor {
             case 'get_schedule_patterns':
                 return this.getSchedulePatterns();
             case 'create_checklist':
-                return this.createChecklist(args);
+                return this.createChecklist(args as CreateChecklistArgs);
             case 'prepare_schedule':
-                return this.prepareSchedule(args);
+                return this.prepareSchedule(args as PrepareScheduleArgs);
             case 'save_learning':
-                return this.saveLearning(args);
+                return this.saveLearning(args as SaveLearningArgs);
             case 'suggest_schedule':
-                return this.suggestSchedule(args);
+                return this.suggestSchedule(args as SuggestScheduleArgs);
+            case 'log_mood':
+                return this.logMood(args.mood, args.energy, args.note);
+            // === Capability-backed tools ===
+            case 'get_smart_suggestions':
+                return this.getSmartSuggestions(args);
+            case 'get_prep_advice':
+                return this.getPrepAdvice(args);
+            case 'get_habit_insights':
+                return this.getHabitInsights();
+            case 'get_resource_recommendations':
+                return this.getResourceRecommendations(args);
             case 'respond_to_user':
                 return {
                     success: true,
@@ -83,12 +134,7 @@ export class ToolExecutor {
     // ================================================
 
     private async getSchedulesByDate(dateStr: string): Promise<ToolResult> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+        const userData = await this.getUserData();
         if (!userData) {
             return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
         }
@@ -97,11 +143,11 @@ export class ToolExecutor {
         const dayOfWeek = new Date(dateStr).getDay();
 
         const schedules = customGoals
-            .filter((g: any) =>
+            .filter((g: CustomGoal) =>
                 g.specificDate === dateStr ||
                 (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate)
             )
-            .map((g: any) => ({
+            .map((g: CustomGoal) => ({
                 text: g.text,
                 startTime: g.startTime || '시간 미정',
                 endTime: g.endTime || '',
@@ -110,22 +156,17 @@ export class ToolExecutor {
                 memo: g.memo || '',
                 isRepeating: !!g.daysOfWeek,
             }))
-            .sort((a: any, b: any) => (a.startTime || '').localeCompare(b.startTime || ''));
+            .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
         const summary = schedules.length > 0
-            ? `${dateStr} 일정 ${schedules.length}개:\n${schedules.map((s: any) => `- ${s.startTime} ${s.text}${s.completed ? ' (완료)' : ''}`).join('\n')}`
+            ? `${dateStr} 일정 ${schedules.length}개:\n${schedules.map(s => `- ${s.startTime} ${s.text}${s.completed ? ' (완료)' : ''}`).join('\n')}`
             : `${dateStr}에 등록된 일정이 없습니다.`;
 
         return { success: true, data: schedules, humanReadableSummary: summary };
     }
 
-    private async addSchedule(args: Record<string, any>): Promise<ToolResult> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+    private async addSchedule(args: AddScheduleArgs): Promise<ToolResult> {
+        const userData = await this.getUserData();
         if (!userData) {
             return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
         }
@@ -153,6 +194,7 @@ export class ToolExecutor {
         if (error) {
             return { success: false, error: error.message, humanReadableSummary: `일정 추가 실패: ${error.message}` };
         }
+        this.invalidateCache();
 
         // GCal 연동된 사용자면 push
         try {
@@ -162,6 +204,7 @@ export class ToolExecutor {
                 await gcal.pushEvent(newGoal);
             }
         } catch (e) {
+            console.error('[ToolExecutor] GCal sync failed (push):', e instanceof Error ? e.message : e);
         }
 
         return {
@@ -171,13 +214,8 @@ export class ToolExecutor {
         };
     }
 
-    private async deleteSchedule(args: Record<string, any>): Promise<ToolResult> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+    private async deleteSchedule(args: DeleteScheduleArgs): Promise<ToolResult> {
+        const userData = await this.getUserData();
         if (!userData) {
             return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
         }
@@ -186,7 +224,7 @@ export class ToolExecutor {
         const targetText = (args.text || '').toLowerCase();
         const targetTime = args.startTime || '';
 
-        const filtered = customGoals.filter((g: any) => {
+        const filtered = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().includes(targetText);
             const matchesTime = !targetTime || g.startTime === targetTime;
             return !(matchesText && matchesTime);
@@ -204,10 +242,11 @@ export class ToolExecutor {
         if (error) {
             return { success: false, error: error.message, humanReadableSummary: `일정 삭제 실패: ${error.message}` };
         }
+        this.invalidateCache();
 
         // GCal 연동된 사용자면 삭제 동기화
         try {
-            const deletedGoals = customGoals.filter((g: any) => {
+            const deletedGoals = customGoals.filter((g: CustomGoal) => {
                 const matchesText = (g.text || '').toLowerCase().includes(targetText);
                 const matchesTime = !targetTime || g.startTime === targetTime;
                 return matchesText && matchesTime;
@@ -230,18 +269,14 @@ export class ToolExecutor {
                 }
             }
         } catch (e) {
+            console.error('[ToolExecutor] GCal sync failed (delete):', e instanceof Error ? e.message : e);
         }
 
         return { success: true, humanReadableSummary: `"${args.text}" 일정을 삭제했습니다.` };
     }
 
-    private async updateSchedule(args: Record<string, any>): Promise<ToolResult> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+    private async updateSchedule(args: UpdateScheduleArgs): Promise<ToolResult> {
+        const userData = await this.getUserData();
         if (!userData) {
             return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
         }
@@ -250,7 +285,7 @@ export class ToolExecutor {
         const targetText = (args.originalText || '').toLowerCase();
         let found = false;
 
-        const updated = customGoals.map((g: any) => {
+        const updated = customGoals.map((g: CustomGoal) => {
             if ((g.text || '').toLowerCase().includes(targetText) && g.startTime === args.originalTime) {
                 found = true;
                 return {
@@ -274,6 +309,7 @@ export class ToolExecutor {
         if (error) {
             return { success: false, error: error.message, humanReadableSummary: `일정 수정 실패: ${error.message}` };
         }
+        this.invalidateCache();
 
         return { success: true, humanReadableSummary: `"${args.originalText}" 일정을 수정했습니다.` };
     }
@@ -288,14 +324,14 @@ export class ToolExecutor {
             const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY || '' });
             const response = await tvly.search(query, { maxResults: 5 });
 
-            const results = (response.results || []).map((r: any) => ({
+            const results = (response.results || []).map((r: { title: string; url: string; content?: string }) => ({
                 title: r.title,
                 url: r.url,
                 snippet: r.content?.substring(0, 200),
             }));
 
             const summary = results.length > 0
-                ? `"${query}" 검색 결과 ${results.length}개:\n${results.map((r: any, i: number) => `${i + 1}. ${r.title}`).join('\n')}`
+                ? `"${query}" 검색 결과 ${results.length}개:\n${results.map((r, i) => `${i + 1}. ${r.title}`).join('\n')}`
                 : `"${query}" 검색 결과가 없습니다.`;
 
             return { success: true, data: results, humanReadableSummary: summary };
@@ -345,18 +381,13 @@ export class ToolExecutor {
     }
 
     private async getGoals(goalType: string): Promise<ToolResult> {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', this.userEmail)
-            .maybeSingle();
-
+        const userData = await this.getUserData();
         const longTermGoals = userData?.profile?.longTermGoals || {};
         const types = goalType === 'all' ? ['weekly', 'monthly', 'yearly'] : [goalType];
 
-        const goals: any[] = [];
+        const goals: Array<{ type: string; title: string; progress: number; completed: boolean; dueDate?: string }> = [];
         types.forEach(type => {
-            (longTermGoals[type] || []).forEach((g: any) => {
+            ((longTermGoals as Record<string, LongTermGoal[]>)[type] || []).forEach((g: LongTermGoal & { dueDate?: string }) => {
                 goals.push({ type, title: g.title, progress: g.progress || 0, completed: g.completed || false, dueDate: g.dueDate });
             });
         });
@@ -388,25 +419,21 @@ export class ToolExecutor {
     // 일정 추천
     // ================================================
 
-    private async suggestSchedule(args: Record<string, any>): Promise<ToolResult> {
+    private async suggestSchedule(args: SuggestScheduleArgs): Promise<ToolResult> {
         try {
             const count = args.count || 3;
             const focusArea = args.focus || 'auto';
 
-            // 병렬로 분석 데이터 수집
+            // 병렬로 분석 데이터 수집 (공유 컨텍스트 풀 사용)
+            const { getSharedDailyState, getSharedWorkRestBalance } = await import('@/lib/shared-context');
             const [dailyState, workRest, patterns] = await Promise.all([
-                import('@/lib/stress-detector').then(m => m.detectDailyState(this.userEmail)).catch(() => null),
-                import('@/lib/work-rest-analyzer').then(m => m.analyzeWorkRestBalance(this.userEmail)).catch(() => null),
+                getSharedDailyState(this.userEmail).catch(() => null) as Promise<any>,
+                getSharedWorkRestBalance(this.userEmail).catch(() => null) as Promise<any>,
                 import('@/lib/schedule-pattern-analyzer').then(m => m.analyzeSchedulePatterns(this.userEmail)).catch(() => null),
             ]);
 
-            // 오늘 일정 가져오기
-            const { data: userData } = await supabaseAdmin
-                .from('users')
-                .select('profile')
-                .eq('email', this.userEmail)
-                .maybeSingle();
-
+            // 오늘 일정 가져오기 (cached)
+            const userData = await this.getUserData();
             const profile = userData?.profile || {};
             const customGoals = profile.customGoals || [];
             const now = new Date();
@@ -415,7 +442,7 @@ export class ToolExecutor {
             const dayOfWeek = kst.getDay();
             const currentHour = kst.getHours();
 
-            const todayGoals = customGoals.filter((g: any) => {
+            const todayGoals = customGoals.filter((g: CustomGoal) => {
                 if (g.specificDate === todayStr) return true;
                 if (g.daysOfWeek?.includes(dayOfWeek) && !g.specificDate) return true;
                 return false;
@@ -423,15 +450,15 @@ export class ToolExecutor {
 
             // 빈 시간대 찾기
             const occupiedTimes = todayGoals
-                .filter((g: any) => g.startTime)
-                .map((g: any) => ({
-                    start: parseInt(g.startTime.split(':')[0]),
-                    end: g.endTime ? parseInt(g.endTime.split(':')[0]) : parseInt(g.startTime.split(':')[0]) + 1,
+                .filter((g: CustomGoal) => g.startTime)
+                .map((g: CustomGoal) => ({
+                    start: parseInt(g.startTime!.split(':')[0]),
+                    end: g.endTime ? parseInt(g.endTime.split(':')[0]) : parseInt(g.startTime!.split(':')[0]) + 1,
                 }));
 
             const freeSlots: string[] = [];
             for (let h = Math.max(currentHour + 1, 7); h <= 22; h++) {
-                const isOccupied = occupiedTimes.some((t: any) => h >= t.start && h < t.end);
+                const isOccupied = occupiedTimes.some(t => h >= t.start && h < t.end);
                 if (!isOccupied) {
                     freeSlots.push(`${String(h).padStart(2, '0')}:00`);
                 }
@@ -485,7 +512,7 @@ export class ToolExecutor {
     // 액션 실행
     // ================================================
 
-    private async createChecklist(args: Record<string, any>): Promise<ToolResult> {
+    private async createChecklist(args: CreateChecklistArgs): Promise<ToolResult> {
         const { error } = await supabaseAdmin
             .from('jarvis_resources')
             .insert({
@@ -509,7 +536,7 @@ export class ToolExecutor {
         };
     }
 
-    private async prepareSchedule(args: Record<string, any>): Promise<ToolResult> {
+    private async prepareSchedule(args: PrepareScheduleArgs): Promise<ToolResult> {
         try {
             const { generatePrep } = await import('@/lib/schedulePrepService');
             const schedule = { text: args.scheduleText, startTime: args.startTime };
@@ -528,10 +555,10 @@ export class ToolExecutor {
         }
     }
 
-    private async saveLearning(args: Record<string, any>): Promise<ToolResult> {
+    private async saveLearning(args: SaveLearningArgs): Promise<ToolResult> {
         try {
             const { saveMemory } = await import('@/lib/jarvis-memory');
-            await saveMemory(this.userEmail, args.category || 'insight', args.content, {});
+            await saveMemory(this.userEmail, args.content, (args.category || 'insight') as MemoryType, {});
 
             return {
                 success: true,
@@ -539,6 +566,139 @@ export class ToolExecutor {
             };
         } catch (error) {
             return { success: false, error: String(error), humanReadableSummary: '학습 기록 저장 실패' };
+        }
+    }
+
+    // ================================================
+    // 기분/에너지 기록
+    // ================================================
+
+    private async logMood(mood: number, energy: number, note?: string): Promise<ToolResult> {
+        try {
+            const { kvAppend } = await import('@/lib/kv-store');
+
+            const now = new Date();
+            const monthKey = `mood_checkins_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+            const entry = {
+                date: now.toISOString().split('T')[0],
+                time: now.toISOString(),
+                mood,
+                energy,
+                note: note || '',
+            };
+
+            await kvAppend(this.userEmail, monthKey, entry, 500);
+
+            // user_states.energy_level도 동시 업데이트
+            const energyLevel = energy * 20; // 1-5 → 20-100
+            await supabaseAdmin
+                .from('user_states')
+                .update({ energy_level: energyLevel, state_updated_at: now.toISOString() })
+                .eq('user_email', this.userEmail);
+
+            const moodEmojis = ['', '😫', '😔', '😐', '😊', '😄'];
+            return {
+                success: true,
+                data: entry,
+                humanReadableSummary: `기분 ${moodEmojis[mood] || mood}/5, 에너지 ${energy}/5 기록 완료${note ? ` (${note})` : ''}`,
+            };
+        } catch (error) {
+            return { success: false, error: String(error), humanReadableSummary: '기분 기록 실패' };
+        }
+    }
+
+    // ================================================
+    // Capability-backed tools
+    // ================================================
+
+    private async getSmartSuggestions(args: Record<string, any>): Promise<ToolResult> {
+        try {
+            const { generateSmartSuggestions } = await import('@/lib/capabilities/smart-suggestions');
+            const result = await generateSmartSuggestions(this.userEmail, {
+                requestCount: args.requestCount || 3,
+                currentHour: args.currentHour,
+            });
+
+            if (!result.success) {
+                return { success: false, error: result.error, humanReadableSummary: `AI 일정 추천 실패: ${result.error}` };
+            }
+
+            const suggestions = result.data!.suggestions;
+            const summary = suggestions.length > 0
+                ? `AI 맞춤 추천 ${suggestions.length}개:\n${suggestions.map(s => `- ${s.icon} ${s.title} (${s.estimatedTime})`).join('\n')}`
+                : 'AI 추천 결과가 없습니다.';
+
+            return { success: true, data: result.data, humanReadableSummary: summary };
+        } catch (error) {
+            return { success: false, error: String(error), humanReadableSummary: 'AI 일정 추천 실패' };
+        }
+    }
+
+    private async getPrepAdvice(args: Record<string, any>): Promise<ToolResult> {
+        try {
+            const { generateSchedulePrep } = await import('@/lib/capabilities/schedule-prep');
+            const result = await generateSchedulePrep(this.userEmail, {
+                scheduleText: args.scheduleText,
+                startTime: args.startTime,
+                timeUntil: args.timeUntil,
+            });
+
+            if (!result.success) {
+                return { success: false, error: result.error, humanReadableSummary: `준비 조언 생성 실패: ${result.error}` };
+            }
+
+            return {
+                success: true,
+                data: result.data,
+                humanReadableSummary: `"${args.scheduleText}" 준비 조언: ${result.data!.advice.substring(0, 100)}...`,
+            };
+        } catch (error) {
+            return { success: false, error: String(error), humanReadableSummary: '준비 조언 생성 실패' };
+        }
+    }
+
+    private async getHabitInsights(): Promise<ToolResult> {
+        try {
+            const { generateHabitInsights } = await import('@/lib/capabilities/habit-insights');
+            const result = await generateHabitInsights(this.userEmail, {});
+
+            if (!result.success && !result.data) {
+                return { success: false, error: result.error, humanReadableSummary: '습관 분석 실패' };
+            }
+
+            const data = result.data!;
+            return {
+                success: true,
+                data,
+                humanReadableSummary: `${data.emoji} ${data.insight} — ${data.suggestion}`,
+            };
+        } catch (error) {
+            return { success: false, error: String(error), humanReadableSummary: '습관 분석 실패' };
+        }
+    }
+
+    private async getResourceRecommendations(args: Record<string, any>): Promise<ToolResult> {
+        try {
+            const { generateResourceRecommendation } = await import('@/lib/capabilities/resource-recommend');
+            const result = await generateResourceRecommendation(this.userEmail, {
+                activity: args.activity,
+                category: args.category,
+                context: args.context,
+                timeUntil: args.timeUntil,
+            });
+
+            if (!result.success) {
+                return { success: false, error: result.error, humanReadableSummary: `리소스 추천 실패: ${result.error}` };
+            }
+
+            return {
+                success: true,
+                data: result.data,
+                humanReadableSummary: `"${args.activity}" 리소스: ${result.data!.recommendation.substring(0, 100)}...`,
+            };
+        } catch (error) {
+            return { success: false, error: String(error), humanReadableSummary: '리소스 추천 실패' };
         }
     }
 
@@ -609,10 +769,10 @@ function generateScheduleSuggestions(
     focus: string,
     count: number,
     freeSlots: string[],
-    profile: any,
-    dailyState: any,
-    workRest: any,
-    patterns: any,
+    profile: UserProfile,
+    dailyState: { stress_level: number; energy_level: number; completion_rate?: number } | null,
+    workRest: { workIntensity?: string; restStatus?: string; recommendationType?: string; emptyHoursToday?: number } | null,
+    patterns: unknown,
 ): ScheduleSuggestion[] {
     const pool = SUGGESTION_POOL[focus] || SUGGESTION_POOL.balanced;
     const suggestions: ScheduleSuggestion[] = [];

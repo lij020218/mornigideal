@@ -28,10 +28,10 @@ function getISOWeekNumber(date: Date): number {
     return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
-// 분석 대상 주의 주차 번호 계산 (DB 쿼리 없이)
+// 분석 대상 주의 주차 번호 계산 (DB 쿼리 없이, KST 기준)
 // 일요일이면 해당 주(월~일), 월~토이면 지난 주(월~일)
 function getTargetWeekNumber(): number {
-    const now = new Date();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     now.setHours(0, 0, 0, 0);
 
     const dayOfWeek = now.getDay();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmail, getUserById, updateUserProfile, updateUserProfileById } from "@/lib/users";
 import { getUserEmailWithAuth, getUserIdFromRequest } from "@/lib/auth-utils";
+import { longTermGoalSchema, validateBody } from '@/lib/schemas';
 
 // 장기 목표 타입 정의
 export interface LongTermGoal {
@@ -44,10 +45,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const longTermGoals: LongTermGoals = user.profile?.longTermGoals || {
-            weekly: [],
-            monthly: [],
-            yearly: [],
+        const rawGoals = user.profile?.longTermGoals;
+        const longTermGoals: LongTermGoals = {
+            weekly: rawGoals?.weekly as LongTermGoal[] || [],
+            monthly: rawGoals?.monthly as LongTermGoal[] || [],
+            yearly: rawGoals?.yearly as LongTermGoal[] || [],
         };
 
         return NextResponse.json({ goals: longTermGoals });
@@ -67,11 +69,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { goal, action } = await request.json();
-
-        if (!goal || !goal.type) {
-            return NextResponse.json({ error: "Goal data required" }, { status: 400 });
-        }
+        const body = await request.json();
+        const v = validateBody(longTermGoalSchema, body);
+        if (!v.success) return v.response;
+        const { goal, action } = v.data;
 
         let user;
         if (userId) {
@@ -84,18 +85,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const currentGoals: LongTermGoals = user.profile?.longTermGoals || {
-            weekly: [],
-            monthly: [],
-            yearly: [],
+        const rawGoals = user.profile?.longTermGoals;
+        const currentGoals: LongTermGoals = {
+            weekly: rawGoals?.weekly as LongTermGoal[] || [],
+            monthly: rawGoals?.monthly as LongTermGoal[] || [],
+            yearly: rawGoals?.yearly as LongTermGoal[] || [],
         };
 
         const now = new Date().toISOString();
         const goalType = goal.type as keyof LongTermGoals;
-
-        if (!["weekly", "monthly", "yearly"].includes(goalType)) {
-            return NextResponse.json({ error: "Invalid goal type" }, { status: 400 });
-        }
 
         // 프로필 업데이트 헬퍼 함수
         const updateProfile = async (updates: any) => {
@@ -111,7 +109,7 @@ export async function POST(request: NextRequest) {
             const newGoal: LongTermGoal = {
                 id: `goal-${Date.now()}`,
                 type: goalType,
-                title: goal.title,
+                title: goal.title || "",
                 description: goal.description || "",
                 category: goal.category || "general",
                 targetDate: goal.targetDate,
@@ -159,7 +157,7 @@ export async function POST(request: NextRequest) {
             const goalList = currentGoals[goalType];
             const index = goalList.findIndex((g) => g.id === goal.id);
             if (index !== -1) {
-                goalList[index].progress = Math.min(100, Math.max(0, goal.progress));
+                goalList[index].progress = Math.min(100, Math.max(0, goal.progress ?? 0));
                 if (goalList[index].progress >= 100) {
                     goalList[index].completed = true;
                 }
@@ -168,7 +166,7 @@ export async function POST(request: NextRequest) {
         } else if (action === "resetWeekly") {
             // 주간 목표 리셋 (일요일→월요일 전환 시)
             // 기존 주간 목표를 아카이브에 저장하고 새로 시작
-            const archivedWeeklyGoals = user.profile?.archivedWeeklyGoals || [];
+            const archivedWeeklyGoals = (user.profile?.archivedWeeklyGoals || []) as Array<{ weekStart: string; weekEnd: string; goals: LongTermGoal[]; archivedAt: string }>;
 
             // 이번 주 목표가 있으면 아카이브에 추가
             if (currentGoals.weekly.length > 0) {

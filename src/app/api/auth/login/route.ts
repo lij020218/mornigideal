@@ -10,18 +10,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import bcrypt from 'bcryptjs';
 import { signToken } from '@/lib/auth-utils';
+import { loginSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password } = body;
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: '이메일과 비밀번호를 입력해주세요.' },
-        { status: 400 }
-      );
-    }
+    const v = validateBody(loginSchema, body);
+    if (!v.success) return v.response;
+    const { email, password } = v.data;
 
     // Supabase에서 사용자 조회
     const { data: user, error } = await supabaseAdmin
@@ -45,23 +41,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 비밀번호 확인 (bcrypt 해시만 지원)
-    let isValid = false;
-    if (user.password.startsWith('$2')) {
-      // bcrypt 해시된 비밀번호
-      isValid = await bcrypt.compare(password, user.password);
-    } else {
-      // 평문 비밀번호: 검증 후 자동으로 해시로 마이그레이션
-      if (password === user.password) {
-        isValid = true;
-        // 보안 강화: 평문 비밀번호를 bcrypt 해시로 업그레이드
-        const hashedPassword = await bcrypt.hash(password, 12);
-        await supabaseAdmin
-          .from('users')
-          .update({ password: hashedPassword })
-          .eq('id', user.id);
-      }
-    }
+    // 비밀번호 확인 (bcrypt only)
+    const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { scheduleFeedbackSchema, validateBody } from '@/lib/schemas';
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,7 +21,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const { goalId, goalText, feedback, memo, followUpTask, timestamp } = await request.json();
+        const body = await request.json();
+        const v = validateBody(scheduleFeedbackSchema, body);
+        if (!v.success) return v.response;
+        const { goalId, goalText, feedback, memo, followUpTask, timestamp } = v.data;
 
         // Save to schedule_feedback table (you may need to create this table)
         const { error } = await supabaseAdmin

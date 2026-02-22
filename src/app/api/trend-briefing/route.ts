@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache, getDetailCache } from "@/lib/newsCache";
 import Parser from 'rss-parser';
 import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { getUserByEmail } from '@/lib/users';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
@@ -105,6 +106,10 @@ export async function GET(request: Request) {
         if (!userEmail) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
+
+        // 사용자 이름 조회 (프리생성 프롬프트에 사용)
+        const currentUser = await getUserByEmail(userEmail);
+        const userName = currentUser?.profile?.name || currentUser?.name || '사용자';
 
         // Check cache first (only if not force refreshing and no exclusions)
         if (!forceRefresh && excludeTitles.length === 0) {
@@ -408,56 +413,78 @@ Select now.`;
             generationConfig: { responseMimeType: "application/json" }
         });
 
+        // 순차 처리 — Gemini Free Tier 분당 5요청 제한 대응 (2개씩 병렬, 배치 간 딜레이)
         try {
-            await Promise.all(trends.map(async (trend: any) => {
-                try {
-                    const detailPrompt = `Create a briefing for senior ${job}.
+            const BATCH_SIZE = 2;
+            const BATCH_DELAY = 13000; // 13초 대기 (분당 5요청 제한)
 
-ARTICLE:
-- Title: "${trend.title}"
-- Summary: ${trend.summary}
+            for (let i = 0; i < trends.length; i += BATCH_SIZE) {
+                const batch = trends.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(batch.map(async (trend: any) => {
+                    try {
+                        const detailPrompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+
+기사 정보:
+- 제목: "${trend.title}"
+- 요약: ${trend.summary}
 - URL: ${trend.originalUrl}
 
-SECTIONS NEEDED:
-1. 핵심 내용: What happened and why it matters
-2. senior ${job}인 당신에게: Impact on ${job} professionals
-3. 주요 인사이트: 3-4 key takeaways
-4. 실행 아이템: 3 actionable steps for senior ${job}
+사용자 정보:
+- 이름: ${userName}
+- 직업: ${job}
+- 목표: ${goal || "전문성 향상"}
+- 관심 분야: ${interests || "비즈니스, 기술"}
+
+아래 4개 섹션을 순서대로 작성하세요:
+
+1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 분석. 단순 요약이 아닌 "왜 이런 일이 일어났는지", "앞으로 어떤 변화가 예상되는지" 깊이 있게 설명.
+2. **왜 ${job}인 ${userName}님에게 중요한가**: 이 뉴스가 ${userName}님의 직업(${job})과 목표(${goal || "전문성 향상"})에 구체적으로 어떤 의미인지 설명. 추상적 연결이 아니라 실무에 미치는 직접적 영향을 서술.
+3. **핵심 요약**: 기사의 핵심 내용을 3문장으로 압축 (각 15-20자 이내).
+4. **무엇을 할 수 있나**: ${userName}님이 지금 바로 실행할 수 있는 3가지 구체적 행동.
 
 OUTPUT JSON:
 {
-  "title": "Korean title",
-  "content": "### 핵심 내용\\n\\n[content]\\n\\n### senior ${job}인 당신에게\\n\\n[analysis]\\n\\n### 주요 인사이트\\n\\n- **Point 1**\\n- **Point 2**\\n- **Point 3**",
-  "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
-  "actionItems": ["AI 관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
+  "title": "한국어 제목",
+  "content": "### 심층 분석\\n\\n[배경과 맥락 분석, 업계 영향]\\n\\n### 왜 ${job}인 ${userName}님에게 중요한가\\n\\n[${userName}님의 직업과 목표에 연결된 구체적 설명. **핵심 키워드**를 <mark>태그로 강조]\\n\\n### 무엇을 할 수 있나\\n\\n- **행동 1**\\n- **행동 2**\\n- **행동 3**",
+  "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${trend.originalUrl}"
 }
 
 CRITICAL RULES FOR actionItems:
 - 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
 - 일정 제목으로 사용되므로 간단하고 명확하게
-- 현실적으로 30분~1시간 내에 실행 가능한 것만 (예: 읽기, 정리, 분석, 조사, 스크랩)
-- 절대 추상적이거나 장기적인 행동은 제외 (예: "전략 수립", "현장 조사", "파트너십 구축" 등은 금지)
+- 현실적으로 30분~1시간 내에 실행 가능한 것만
 - 좋은 예시: "관련 기사 3개 읽기", "핵심 키워드 정리", "경쟁사 사례 조사"
-- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구", "기업 현장 조사"
+- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구"
 
-Write in Korean. Be practical and specific for senior ${job}.`;
+OTHER RULES:
+- keyTakeaways는 정말 짧게 핵심만 (15-20자)
+- content에서 중요한 용어는 <mark>태그로 강조
+- 톤: 정중하고 전문적인 비서 말투 ("~입니다", "~하세요")
 
-                    const detailResult = await detailModel.generateContent(detailPrompt);
-                    const detailResponse = await detailResult.response;
-                    const detailText = detailResponse.text();
+한국어로 작성하세요.`;
 
-                    const detail = JSON.parse(detailText);
+                        const detailResult = await detailModel.generateContent(detailPrompt);
+                        const detailResponse = await detailResult.response;
+                        const detailText = detailResponse.text();
 
-                    // Validate structure
-                    if (detail.content && detail.keyTakeaways && detail.actionItems) {
-                        await saveDetailCache(trend.id, detail, userEmail);
-                    } else {
+                        const detail = JSON.parse(detailText);
+
+                        if (detail.content && detail.keyTakeaways && detail.actionItems) {
+                            await saveDetailCache(trend.id, detail, userEmail);
+                        }
+                    } catch (error) {
+                        console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
                     }
-                } catch (error) {
-                    console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
+                }));
+
+                // 마지막 배치가 아니면 딜레이
+                if (i + BATCH_SIZE < trends.length) {
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
-            }));
+            }
         } catch (err) {
             console.error('[API] Error in detail pre-generation:', err);
         }
@@ -501,6 +528,12 @@ export async function POST(request: Request) {
             }
         }
 
+        // 사용자 이름 조회
+        const postUser = await getUserByEmail(userEmail);
+        const postUserName = postUser?.profile?.name || postUser?.name || '사용자';
+        const postUserGoal = postUser?.profile?.goal || '전문성 향상';
+        const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
+
         // Check API key
         const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
         if (!apiKey) {
@@ -514,55 +547,48 @@ export async function POST(request: Request) {
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        // Generate professional title instead of "${level} ${job}"
-        const getUserTitle = (level: string, job: string) => {
-            if (level.toLowerCase().includes('senior') || level.toLowerCase().includes('전문')) {
-                return `${job} 전문가`;
-            } else if (level.toLowerCase().includes('intermediate') || level.toLowerCase().includes('중급')) {
-                return `${job} 실무자`;
-            } else if (level.toLowerCase().includes('junior') || level.toLowerCase().includes('초급')) {
-                return `${job} 입문자`;
-            }
-            return `${job} 종사자`;
-        };
+        const prompt = `${postUserName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
 
-        const userTitle = getUserTitle(level, job);
-
-        const prompt = `Create a briefing for ${userTitle}.
-
-ARTICLE:
-- Title: "${title}"
-- Summary: ${summary}
+기사 정보:
+- 제목: "${title}"
+- 요약: ${summary}
 - URL: ${originalUrl}
 
-SECTIONS NEEDED:
-1. 핵심 3줄 요약: 3문장으로 핵심만 요약 (각 문장은 15-20자 이내)
-2. 왜 중요한가: ${userTitle}에게 이 뉴스가 중요한 이유와 영향 분석
-3. 실행 아이템: ${userTitle}가 실제로 실행 가능한 3가지 간단한 행동
+사용자 정보:
+- 이름: ${postUserName}
+- 직업: ${job}
+- 목표: ${postUserGoal}
+- 관심 분야: ${postUserInterests}
+
+아래 4개 섹션을 순서대로 작성하세요:
+
+1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 분석. 단순 요약이 아닌 "왜 이런 일이 일어났는지", "앞으로 어떤 변화가 예상되는지" 깊이 있게 설명.
+2. **왜 ${job}인 ${postUserName}님에게 중요한가**: 이 뉴스가 ${postUserName}님의 직업(${job})과 목표(${postUserGoal})에 구체적으로 어떤 의미인지 설명. 추상적 연결이 아니라 실무에 미치는 직접적 영향을 서술.
+3. **핵심 요약**: 기사의 핵심 내용을 3문장으로 압축 (각 15-20자 이내).
+4. **무엇을 할 수 있나**: ${postUserName}님이 지금 바로 실행할 수 있는 3가지 구체적 행동.
 
 OUTPUT JSON:
 {
-  "title": "Korean title",
-  "content": "### 왜 중요한가\\n\\n${userTitle}에게 이 뉴스가 중요한 이유를 설명합니다. **핵심 키워드**를 <mark>태그로 강조하세요.\\n\\n### 심층 분석\\n\\n[detailed analysis with context]",
-  "keyTakeaways": ["3줄 요약 1 (15-20자)", "3줄 요약 2 (15-20자)", "3줄 요약 3 (15-20자)"],
-  "actionItems": ["AI 관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
+  "title": "한국어 제목",
+  "content": "### 심층 분석\\n\\n[배경과 맥락 분석, 업계 영향]\\n\\n### 왜 ${job}인 ${postUserName}님에게 중요한가\\n\\n[${postUserName}님의 직업과 목표에 연결된 구체적 설명. **핵심 키워드**를 <mark>태그로 강조]\\n\\n### 무엇을 할 수 있나\\n\\n- **행동 1**\\n- **행동 2**\\n- **행동 3**",
+  "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${originalUrl}"
 }
 
 CRITICAL RULES FOR actionItems:
 - 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
 - 일정 제목으로 사용되므로 간단하고 명확하게
-- 현실적으로 30분~1시간 내에 실행 가능한 것만 (예: 읽기, 정리, 분석, 조사, 스크랩)
-- 절대 추상적이거나 장기적인 행동은 제외 (예: "전략 수립", "현장 조사", "파트너십 구축" 등은 금지)
+- 현실적으로 30분~1시간 내에 실행 가능한 것만
 - 좋은 예시: "관련 기사 3개 읽기", "핵심 키워드 정리", "경쟁사 사례 조사"
-- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구", "기업 현장 조사"
+- 나쁜 예시: "국제 시야 확대 및 기술 이해 심화", "비즈니스 모델 연구"
 
 OTHER RULES:
 - keyTakeaways는 정말 짧게 핵심만 (15-20자)
 - content에서 중요한 용어는 <mark>태그로 강조
-- 톤: 정중하고 전문적인 비서 말투 사용
+- 톤: 정중하고 전문적인 비서 말투 ("~입니다", "~하세요")
 
-Write in Korean.`;
+한국어로 작성하세요.`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
