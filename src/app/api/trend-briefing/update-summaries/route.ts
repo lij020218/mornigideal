@@ -1,49 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
-export async function POST(request: NextRequest) {
-    try {
-        // Authenticate user
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const userEmail = email;
-        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const userEmail = email;
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
 
-        // Fetch existing trend briefing
-        const { data, error } = await supabaseAdmin
-            .from('trends_cache')
-            .select('trends, last_updated')
-            .eq('email', userEmail)
-            .eq('date', today)
-            .maybeSingle();
+    // Fetch existing trend briefing
+    const { data, error } = await supabaseAdmin
+        .from('trends_cache')
+        .select('trends, last_updated')
+        .eq('email', userEmail)
+        .eq('date', today)
+        .maybeSingle();
 
-        if (error || !data) {
-            console.error('[update-summaries] No briefing found:', error);
-            return NextResponse.json({ error: 'No briefing found to update' }, { status: 404 });
-        }
+    if (error || !data) {
+        logger.error('[update-summaries] No briefing found:', error);
+        return NextResponse.json({ error: 'No briefing found to update' }, { status: 404 });
+    }
 
-        const trends = data.trends || [];
+    const trends = data.trends || [];
 
-        if (trends.length === 0) {
-            return NextResponse.json({ error: 'No trends to update' }, { status: 404 });
-        }
+    if (trends.length === 0) {
+        return NextResponse.json({ error: 'No trends to update' }, { status: 404 });
+    }
 
 
-        // Use Gemini to generate short summaries for all trends
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json" }
-        });
+    // Use Gemini to generate short summaries for all trends
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
 
-        const prompt = `You are converting long trend briefing summaries into very short one-line summaries.
+    const prompt = `You are converting long trend briefing summaries into very short one-line summaries.
 
 TRENDS TO CONVERT:
 ${JSON.stringify(trends.map((t: any, i: number) => ({
@@ -89,59 +83,52 @@ OUTPUT JSON:
 
 Convert all ${trends.length} summaries now.`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-        let updateData;
-        try {
-            updateData = JSON.parse(text);
-        } catch (parseError) {
-            console.error("[update-summaries] Failed to parse Gemini response", parseError);
-            return NextResponse.json({ error: "Failed to process summaries" }, { status: 500 });
-        }
-
-        const updatedSummaries = updateData.updated_summaries || [];
-
-        // Apply new summaries to trends
-        const updatedTrends = trends.map((trend: any, index: number) => {
-            const update = updatedSummaries.find((u: any) => u.index === index);
-            if (update) {
-                return {
-                    ...trend,
-                    summary: update.new_summary
-                };
-            }
-            return trend;
-        });
-
-
-        // Save back to database
-        const { error: updateError } = await supabaseAdmin
-            .from('trends_cache')
-            .update({
-                trends: updatedTrends,
-                last_updated: new Date().toISOString()
-            })
-            .eq('email', userEmail)
-            .eq('date', today);
-
-        if (updateError) {
-            console.error('[update-summaries] Failed to update database:', updateError);
-            return NextResponse.json({ error: 'Failed to update database' }, { status: 500 });
-        }
-
-
-        return NextResponse.json({
-            success: true,
-            updated_count: updatedTrends.length,
-            trends: updatedTrends
-        });
-
-    } catch (error) {
-        console.error('[update-summaries] Unexpected error:', error);
-        return NextResponse.json({
-            error: 'Failed to update summaries'
-        }, { status: 500 });
+    let updateData;
+    try {
+        updateData = JSON.parse(text);
+    } catch (parseError) {
+        logger.error("[update-summaries] Failed to parse Gemini response", parseError);
+        return NextResponse.json({ error: "Failed to process summaries" }, { status: 500 });
     }
-}
+
+    const updatedSummaries = updateData.updated_summaries || [];
+
+    // Apply new summaries to trends
+    const updatedTrends = trends.map((trend: any, index: number) => {
+        const update = updatedSummaries.find((u: any) => u.index === index);
+        if (update) {
+            return {
+                ...trend,
+                summary: update.new_summary
+            };
+        }
+        return trend;
+    });
+
+
+    // Save back to database
+    const { error: updateError } = await supabaseAdmin
+        .from('trends_cache')
+        .update({
+            trends: updatedTrends,
+            last_updated: new Date().toISOString()
+        })
+        .eq('email', userEmail)
+        .eq('date', today);
+
+    if (updateError) {
+        logger.error('[update-summaries] Failed to update database:', updateError);
+        return NextResponse.json({ error: 'Failed to update database' }, { status: 500 });
+    }
+
+
+    return NextResponse.json({
+        success: true,
+        updated_count: updatedTrends.length,
+        trends: updatedTrends
+    });
+});

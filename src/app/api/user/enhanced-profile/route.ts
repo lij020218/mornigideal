@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getCached, setCache } from '@/lib/cache';
+import { logger } from '@/lib/logger';
 
 /**
  * Get enhanced user profile with behavioral analytics
@@ -12,106 +13,96 @@ import { getCached, setCache } from '@/lib/cache';
  * - AI-friendly insights for personalization
  */
 
-export async function GET(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // Check cache first (5 min TTL)
-        const cacheKey = `enhanced-profile:${email}`;
-        const cached = getCached<any>(cacheKey);
-        if (cached) {
-            return NextResponse.json({ profile: cached });
-        }
-
-        // Fetch basic profile
-        const { data: profile, error: profileError } = await supabaseAdmin
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .maybeSingle();
-
-        if (profileError) {
-            console.error('[Enhanced Profile] Profile error:', profileError);
-            return NextResponse.json({ error: profileError.message }, { status: 500 });
-        }
-
-        // Fetch activity analytics (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const { data: activities, error: activitiesError } = await supabaseAdmin
-            .from('user_activity_logs')
-            .select('*')
-            .eq('user_email', email)
-            .gte('timestamp', thirtyDaysAgo.toISOString());
-
-        const analytics = analyzeUserBehavior(activities || []);
-
-        // Fetch schedule history
-        const { data: schedules } = await supabaseAdmin
-            .from('custom_goals')
-            .select('*')
-            .eq('user_email', email);
-
-        const scheduleInsights = analyzeSchedulePatterns(schedules || []);
-
-        // Fetch wellness analytics from schedule patterns
-        let wellnessAnalytics = null;
-        try {
-            const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/schedule-analytics?days=30`, {
-                headers: {
-                    'Cookie': request.headers.get('Cookie') || '',
-                },
-            });
-            if (wellnessResponse.ok) {
-                const data = await wellnessResponse.json();
-                wellnessAnalytics = data.analytics;
-            }
-        } catch (error) {
-            console.error('[Enhanced Profile] Failed to fetch wellness analytics:', error);
-        }
-
-        // Build enhanced profile
-        const enhancedProfile = {
-            ...profile,
-            behavioral_insights: {
-                // Trend briefing preferences
-                preferred_briefing_categories: analytics.topBriefingCategories,
-                briefing_engagement_rate: analytics.briefingEngagementRate,
-
-                // Schedule patterns
-                most_completed_schedule_types: scheduleInsights.mostCompletedTypes,
-                most_skipped_schedule_types: scheduleInsights.mostSkippedTypes,
-                preferred_time_slots: analytics.mostActiveTimeSlots,
-                overall_completion_rate: analytics.scheduleCompletionRate,
-
-                // Activity summary
-                total_briefings_read: analytics.briefingReadCount,
-                total_schedules_completed: analytics.scheduleCompleted,
-                chat_interactions: analytics.chatInteractions,
-
-                // Wellness insights (from schedule analytics)
-                exercise_analytics: wellnessAnalytics?.exerciseAnalytics,
-                sleep_analytics: wellnessAnalytics?.sleepAnalytics,
-                wellness_insights: wellnessAnalytics?.wellnessInsights,
-                time_slot_patterns: wellnessAnalytics?.timeSlotPatterns,
-
-                // Recommendations for AI
-                ai_recommendations: generateAIRecommendations(analytics, scheduleInsights, profile, wellnessAnalytics),
-            },
-            last_updated: new Date().toISOString(),
-        };
-
-        setCache(cacheKey, enhancedProfile, 5 * 60 * 1000); // 5 minutes
-        return NextResponse.json({ profile: enhancedProfile });
-    } catch (error: any) {
-        console.error('[Enhanced Profile] Error:', error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    // Check cache first (5 min TTL)
+    const cacheKey = `enhanced-profile:${email}`;
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+        return NextResponse.json({ profile: cached });
     }
-}
+
+    // Fetch basic profile
+    const { data: profile, error: profileError } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+    if (profileError) {
+        logger.error('[Enhanced Profile] Profile error:', profileError);
+        return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+
+    // Fetch activity analytics (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: activities, error: activitiesError } = await supabaseAdmin
+        .from('user_activity_logs')
+        .select('*')
+        .eq('user_email', email)
+        .gte('timestamp', thirtyDaysAgo.toISOString());
+
+    const analytics = analyzeUserBehavior(activities || []);
+
+    // Fetch schedule history
+    const { data: schedules } = await supabaseAdmin
+        .from('custom_goals')
+        .select('*')
+        .eq('user_email', email);
+
+    const scheduleInsights = analyzeSchedulePatterns(schedules || []);
+
+    // Fetch wellness analytics from schedule patterns
+    let wellnessAnalytics = null;
+    try {
+        const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/schedule-analytics?days=30`, {
+            headers: {
+                'Cookie': request.headers.get('Cookie') || '',
+            },
+        });
+        if (wellnessResponse.ok) {
+            const data = await wellnessResponse.json();
+            wellnessAnalytics = data.analytics;
+        }
+    } catch (error) {
+        logger.error('[Enhanced Profile] Failed to fetch wellness analytics:', error);
+    }
+
+    // Build enhanced profile
+    const enhancedProfile = {
+        ...profile,
+        behavioral_insights: {
+            // Trend briefing preferences
+            preferred_briefing_categories: analytics.topBriefingCategories,
+            briefing_engagement_rate: analytics.briefingEngagementRate,
+
+            // Schedule patterns
+            most_completed_schedule_types: scheduleInsights.mostCompletedTypes,
+            most_skipped_schedule_types: scheduleInsights.mostSkippedTypes,
+            preferred_time_slots: analytics.mostActiveTimeSlots,
+            overall_completion_rate: analytics.scheduleCompletionRate,
+
+            // Activity summary
+            total_briefings_read: analytics.briefingReadCount,
+            total_schedules_completed: analytics.scheduleCompleted,
+            chat_interactions: analytics.chatInteractions,
+
+            // Wellness insights (from schedule analytics)
+            exercise_analytics: wellnessAnalytics?.exerciseAnalytics,
+            sleep_analytics: wellnessAnalytics?.sleepAnalytics,
+            wellness_insights: wellnessAnalytics?.wellnessInsights,
+            time_slot_patterns: wellnessAnalytics?.timeSlotPatterns,
+
+            // Recommendations for AI
+            ai_recommendations: generateAIRecommendations(analytics, scheduleInsights, profile, wellnessAnalytics),
+        },
+        last_updated: new Date().toISOString(),
+    };
+
+    setCache(cacheKey, enhancedProfile, 5 * 60 * 1000); // 5 minutes
+    return NextResponse.json({ profile: enhancedProfile });
+});
 
 function analyzeUserBehavior(activities: any[]) {
     const analytics = {

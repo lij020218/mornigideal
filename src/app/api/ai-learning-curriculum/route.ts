@@ -3,7 +3,8 @@ import OpenAI from "openai";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { v4 as uuidv4 } from "uuid";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
@@ -40,48 +41,42 @@ const LEVEL_LABELS: Record<string, string> = {
     expert: "전문가",
 };
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { topic, category, subTopic, reason, currentLevel, targetLevel, duration, userPlan } = await request.json();
 
-        const { topic, category, subTopic, reason, currentLevel, targetLevel, duration, userPlan } = await request.json();
+    if (!topic || !reason || !currentLevel || !targetLevel || !duration) {
+        return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
-        if (!topic || !reason || !currentLevel || !targetLevel || !duration) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
+    const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
+    const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
 
-        const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
-        const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
+    // 언어 학습인지 확인
+    const isLanguageLearning = category === "language" || /영어|english|일본어|japanese|중국어|chinese|스페인어|spanish|프랑스어|french|독일어|german/i.test(topic);
 
-        // 언어 학습인지 확인
-        const isLanguageLearning = category === "language" || /영어|english|일본어|japanese|중국어|chinese|스페인어|spanish|프랑스어|french|독일어|german/i.test(topic);
+    // 프로그래밍 학습인지 확인
+    const isProgramming = category === "programming" || /python|javascript|java|swift|kotlin|react|flutter|c#|c\+\+/i.test(topic);
 
-        // 프로그래밍 학습인지 확인
-        const isProgramming = category === "programming" || /python|javascript|java|swift|kotlin|react|flutter|c#|c\+\+/i.test(topic);
-
-        // 언어/프로그래밍별 특별 지침
-        let specialInstructions = "";
-        if (isLanguageLearning) {
-            specialInstructions = `
+    // 언어/프로그래밍별 특별 지침
+    let specialInstructions = "";
+    if (isLanguageLearning) {
+        specialInstructions = `
 **언어 학습 특별 지침:**
 - 각 일차에 실제 ${topic} 표현, 문장, 어휘를 포함하세요
 - 예: 영어라면 "How are you doing?", "I'd like to..." 같은 실제 표현
 - 일상 회화, 비즈니스, 여행 등 실용적인 상황별 표현 포함
 - 발음 팁이나 문화적 뉘앙스도 설명해주세요
 - 각 일차 제목에 배울 표현 카테고리를 명시하세요 (예: "일상 인사 표현", "음식 주문 표현")`;
-        } else if (isProgramming) {
-            specialInstructions = `
+    } else if (isProgramming) {
+        specialInstructions = `
 **프로그래밍 학습 특별 지침:**
 - 각 일차에 실제 ${topic} 코드 예제나 개념을 포함하세요
 - 실습 프로젝트는 점진적으로 복잡해지도록 구성
 - 실무에서 자주 사용하는 패턴과 베스트 프랙티스 포함
 - 디버깅 방법과 일반적인 오류 해결법도 다루세요`;
-        }
+    }
 
-        const prompt = `당신은 전문 교육 커리큘럼 설계자입니다. 다음 정보를 바탕으로 ${duration}일 분량의 맞춤형 학습 커리큘럼을 만들어주세요.
+    const prompt = `당신은 전문 교육 커리큘럼 설계자입니다. 다음 정보를 바탕으로 ${duration}일 분량의 맞춤형 학습 커리큘럼을 만들어주세요.
 
 **학습자 정보:**
 - 학습 주제: ${topic}
@@ -119,184 +114,157 @@ ${specialInstructions}
 - 각 일차는 이전 일차의 내용을 기반으로 발전해야 합니다
 - 주말(7일마다)에는 복습/프로젝트 일정을 넣어주세요`;
 
-        const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_4O_MINI,
-            messages: [
-                {
-                    role: "system",
-                    content: "당신은 체계적인 교육 커리큘럼을 설계하는 전문가입니다. 학습자의 수준과 목표에 맞는 실용적인 커리큘럼을 만들어주세요. 존댓말을 사용하세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-            temperature: 0.7,
-            max_tokens: 4000,
-            response_format: { type: "json_object" },
-        });
+    const completion = await openai.chat.completions.create({
+        model: MODELS.GPT_4O_MINI,
+        messages: [
+            {
+                role: "system",
+                content: "당신은 체계적인 교육 커리큘럼을 설계하는 전문가입니다. 학습자의 수준과 목표에 맞는 실용적인 커리큘럼을 만들어주세요. 존댓말을 사용하세요. 반드시 유효한 JSON 형식으로만 응답하세요.",
+            },
+            {
+                role: "user",
+                content: prompt,
+            },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        response_format: { type: "json_object" },
+    });
 
-        const responseText = completion.choices[0]?.message?.content || "{}";
+    const responseText = completion.choices[0]?.message?.content || "{}";
 
-        let parsed;
-        try {
-            parsed = JSON.parse(responseText);
-        } catch {
-            console.error("[AI Learning Curriculum] Failed to parse response:", responseText);
-            return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
-        }
+    let parsed;
+    try {
+        parsed = JSON.parse(responseText);
+    } catch {
+        logger.error("[AI Learning Curriculum] Failed to parse response:", responseText);
+        return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+    }
 
-        // Log usage
-        const usage = completion.usage;
-        if (usage) {
-            await logOpenAIUsage(
-                userEmail,
-                MODELS.GPT_4O_MINI,
-                "ai-learning-curriculum",
-                usage.prompt_tokens,
-                usage.completion_tokens
-            );
-        }
-
-        // Create curriculum object
-        const curriculumId = uuidv4();
-        const curriculum: GeneratedCurriculum = {
-            id: curriculumId,
-            topic,
-            reason,
-            targetLevel,
-            currentLevel,
-            duration,
-            days: parsed.days || [],
-            createdAt: new Date().toISOString(),
-            hasSlides: userPlan === "max",
-        };
-
-        // Save to database
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", userEmail)
-            .maybeSingle();
-
-        if (userData) {
-            await supabaseAdmin
-                .from("user_learning_curriculums")
-                .insert({
-                    id: curriculumId,
-                    user_id: userData.id,
-                    topic,
-                    reason,
-                    current_level: currentLevel,
-                    target_level: targetLevel,
-                    duration,
-                    curriculum_data: curriculum,
-                    user_plan: userPlan,
-                    created_at: new Date().toISOString(),
-                });
-        }
-
-        return NextResponse.json({
-            curriculum,
-            summary: parsed.summary || "",
-        });
-    } catch (error: any) {
-        console.error("[AI Learning Curriculum] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate learning curriculum" },
-            { status: 500 }
+    // Log usage
+    const usage = completion.usage;
+    if (usage) {
+        await logOpenAIUsage(
+            email,
+            MODELS.GPT_4O_MINI,
+            "ai-learning-curriculum",
+            usage.prompt_tokens,
+            usage.completion_tokens
         );
     }
-}
+
+    // Create curriculum object
+    const curriculumId = uuidv4();
+    const curriculum: GeneratedCurriculum = {
+        id: curriculumId,
+        topic,
+        reason,
+        targetLevel,
+        currentLevel,
+        duration,
+        days: parsed.days || [],
+        createdAt: new Date().toISOString(),
+        hasSlides: userPlan === "max",
+    };
+
+    // Save to database
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+    if (userData) {
+        await supabaseAdmin
+            .from("user_learning_curriculums")
+            .insert({
+                id: curriculumId,
+                user_id: userData.id,
+                topic,
+                reason,
+                current_level: currentLevel,
+                target_level: targetLevel,
+                duration,
+                curriculum_data: curriculum,
+                user_plan: userPlan,
+                created_at: new Date().toISOString(),
+            });
+    }
+
+    return NextResponse.json({
+        curriculum,
+        summary: parsed.summary || "",
+    });
+});
 
 // GET endpoint to fetch user's curriculums
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", userEmail)
-            .maybeSingle();
-
-        if (!userData) {
-            return NextResponse.json({ curriculums: [] });
-        }
-
-        const { data: curriculums } = await supabaseAdmin
-            .from("user_learning_curriculums")
-            .select("*")
-            .eq("user_id", userData.id)
-            .order("created_at", { ascending: false });
-
-        // curriculum_data에서 필요한 정보 추출하여 반환
-        const formattedCurriculums = (curriculums || []).map((c: any) => {
-            const data = c.curriculum_data || {};
-            return {
-                id: c.id,
-                topic: data.topic || c.topic,
-                reason: data.reason || c.reason,
-                currentLevel: data.currentLevel || c.current_level,
-                targetLevel: data.targetLevel || c.target_level,
-                duration: data.duration || c.duration,
-                days: data.days || [],
-                createdAt: data.createdAt || c.created_at,
-                hasSlides: data.hasSlides || false,
-                userPlan: c.user_plan || 'standard',
-            };
-        });
-
-        return NextResponse.json({ curriculums: formattedCurriculums });
-    } catch (error: any) {
-        console.error("[AI Learning Curriculum] GET Error:", error);
-        return NextResponse.json({ error: "Failed to fetch curriculums" }, { status: 500 });
+    if (!userData) {
+        return NextResponse.json({ curriculums: [] });
     }
-}
+
+    const { data: curriculums } = await supabaseAdmin
+        .from("user_learning_curriculums")
+        .select("*")
+        .eq("user_id", userData.id)
+        .order("created_at", { ascending: false });
+
+    // curriculum_data에서 필요한 정보 추출하여 반환
+    const formattedCurriculums = (curriculums || []).map((c: any) => {
+        const data = c.curriculum_data || {};
+        return {
+            id: c.id,
+            topic: data.topic || c.topic,
+            reason: data.reason || c.reason,
+            currentLevel: data.currentLevel || c.current_level,
+            targetLevel: data.targetLevel || c.target_level,
+            duration: data.duration || c.duration,
+            days: data.days || [],
+            createdAt: data.createdAt || c.created_at,
+            hasSlides: data.hasSlides || false,
+            userPlan: c.user_plan || 'standard',
+        };
+    });
+
+    return NextResponse.json({ curriculums: formattedCurriculums });
+});
 
 // DELETE endpoint to remove a curriculum
-export async function DELETE(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const DELETE = withAuth(async (request: NextRequest, email: string) => {
+    const { searchParams } = new URL(request.url);
+    const curriculumId = searchParams.get("id");
 
-        const { searchParams } = new URL(request.url);
-        const curriculumId = searchParams.get("id");
+    if (!curriculumId) {
+        return NextResponse.json({ error: "Curriculum ID required" }, { status: 400 });
+    }
 
-        if (!curriculumId) {
-            return NextResponse.json({ error: "Curriculum ID required" }, { status: 400 });
-        }
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", userEmail)
-            .maybeSingle();
+    if (!userData) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-        if (!userData) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
+    // Delete the curriculum (only if it belongs to the user)
+    const { error } = await supabaseAdmin
+        .from("user_learning_curriculums")
+        .delete()
+        .eq("id", curriculumId)
+        .eq("user_id", userData.id);
 
-        // Delete the curriculum (only if it belongs to the user)
-        const { error } = await supabaseAdmin
-            .from("user_learning_curriculums")
-            .delete()
-            .eq("id", curriculumId)
-            .eq("user_id", userData.id);
-
-        if (error) {
-            console.error("[AI Learning Curriculum] DELETE Error:", error);
-            return NextResponse.json({ error: "Failed to delete curriculum" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error("[AI Learning Curriculum] DELETE Error:", error);
+    if (error) {
+        logger.error("[AI Learning Curriculum] DELETE Error:", error);
         return NextResponse.json({ error: "Failed to delete curriculum" }, { status: 500 });
     }
-}
+
+    return NextResponse.json({ success: true });
+});

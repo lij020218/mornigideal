@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { saveDailyLog, extractMemoryFromConversation, updateUserMemory } from "@/lib/memoryService";
@@ -19,62 +19,56 @@ import { resolvePersonaStyle, getPersonaBlock, completionRateToTone } from "@/li
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { todaySchedules, completedScheduleIds, userProfile, todayMessages } = await request.json();
+
+    // 완료된 일정과 미완료 일정 분리
+    const completedSchedules = todaySchedules?.filter((s: any) =>
+        completedScheduleIds?.includes(s.id) || s.completed
+    ) || [];
+
+    const uncompletedSchedules = todaySchedules?.filter((s: any) =>
+        !completedScheduleIds?.includes(s.id) && !s.completed && !s.skipped
+    ) || [];
+
+    const skippedSchedules = todaySchedules?.filter((s: any) => s.skipped) || [];
+
+    // 완료율 계산
+    const totalSchedules = todaySchedules?.length || 0;
+    const completedCount = completedSchedules.length;
+    const completionRate = totalSchedules > 0
+        ? Math.round((completedCount / totalSchedules) * 100)
+        : 0;
+
+    // 내일 일정 가져오기
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    const tomorrowDayOfWeek = tomorrow.getDay();
+
+    const customGoals = userProfile?.customGoals || [];
+    const tomorrowSchedules = customGoals.filter((g: any) => {
+        if (g.specificDate === tomorrowStr) return true;
+        if (g.daysOfWeek?.includes(tomorrowDayOfWeek)) {
+            if (g.startDate && tomorrowStr < g.startDate) return false;
+            if (g.endDate && tomorrowStr > g.endDate) return false;
+            return true;
         }
+        return false;
+    });
 
-        const { todaySchedules, completedScheduleIds, userProfile, todayMessages } = await request.json();
+    // AI 저녁 회고 메시지 생성
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
-        // 완료된 일정과 미완료 일정 분리
-        const completedSchedules = todaySchedules?.filter((s: any) =>
-            completedScheduleIds?.includes(s.id) || s.completed
-        ) || [];
+    const personaBlock = getPersonaBlock({
+        style: resolvePersonaStyle(userProfile, userProfile?.plan),
+        tone: completionRateToTone(completionRate),
+        userName: userProfile?.name,
+        userJob: userProfile?.job,
+        plan: userProfile?.plan,
+    });
 
-        const uncompletedSchedules = todaySchedules?.filter((s: any) =>
-            !completedScheduleIds?.includes(s.id) && !s.completed && !s.skipped
-        ) || [];
-
-        const skippedSchedules = todaySchedules?.filter((s: any) => s.skipped) || [];
-
-        // 완료율 계산
-        const totalSchedules = todaySchedules?.length || 0;
-        const completedCount = completedSchedules.length;
-        const completionRate = totalSchedules > 0
-            ? Math.round((completedCount / totalSchedules) * 100)
-            : 0;
-
-        // 내일 일정 가져오기
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-        const tomorrowDayOfWeek = tomorrow.getDay();
-
-        const customGoals = userProfile?.customGoals || [];
-        const tomorrowSchedules = customGoals.filter((g: any) => {
-            if (g.specificDate === tomorrowStr) return true;
-            if (g.daysOfWeek?.includes(tomorrowDayOfWeek)) {
-                if (g.startDate && tomorrowStr < g.startDate) return false;
-                if (g.endDate && tomorrowStr > g.endDate) return false;
-                return true;
-            }
-            return false;
-        });
-
-        // AI 저녁 회고 메시지 생성
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-
-        const personaBlock = getPersonaBlock({
-            style: resolvePersonaStyle(userProfile, userProfile?.plan),
-            tone: completionRateToTone(completionRate),
-            userName: userProfile?.name,
-            userJob: userProfile?.job,
-            plan: userProfile?.plan,
-        });
-
-        const prompt = `${personaBlock}
+    const prompt = `${personaBlock}
 
 저녁 회고 메시지를 생성하세요.
 
@@ -117,54 +111,47 @@ ${tomorrowSchedules.length > 0
 자연스러운 한국어 메시지로 작성하세요. 이모지를 적절히 사용하세요.
 존댓말을 사용하고, 200자 내외로 간결하게 작성하세요.`;
 
-        const result = await model.generateContent(prompt);
-        const eveningMessage = result.response.text();
+    const result = await model.generateContent(prompt);
+    const eveningMessage = result.response.text();
 
-        // 기분 분석 (완료율 기반)
-        let mood: 'positive' | 'neutral' | 'negative' = 'neutral';
-        if (completionRate >= 70) mood = 'positive';
-        else if (completionRate < 40) mood = 'negative';
+    // 기분 분석 (완료율 기반)
+    let mood: 'positive' | 'neutral' | 'negative' = 'neutral';
+    if (completionRate >= 70) mood = 'positive';
+    else if (completionRate < 40) mood = 'negative';
 
-        // Daily Log 저장
-        await saveDailyLog(userEmail, {
-            summary: `${completedCount}/${totalSchedules} 일정 완료 (${completionRate}%)`,
-            mood,
-            keyTopics: completedSchedules.map((s: any) => s.text).slice(0, 5),
-            completedTasks: completedCount,
-            totalTasks: totalSchedules
-        });
+    // Daily Log 저장
+    await saveDailyLog(email, {
+        summary: `${completedCount}/${totalSchedules} 일정 완료 (${completionRate}%)`,
+        mood,
+        keyTopics: completedSchedules.map((s: any) => s.text).slice(0, 5),
+        completedTasks: completedCount,
+        totalTasks: totalSchedules
+    });
 
-        // 멀티데이 트렌드용 상태 스냅샷 저장
-        await saveStateSnapshot(userEmail, {
-            completionRate,
-            mood,
-            totalTasks: totalSchedules,
-            completedTasks: completedCount,
-        });
+    // 멀티데이 트렌드용 상태 스냅샷 저장
+    await saveStateSnapshot(email, {
+        completionRate,
+        mood,
+        totalTasks: totalSchedules,
+        completedTasks: completedCount,
+    });
 
-        // 오늘 대화에서 메모리 추출 (있다면)
-        if (todayMessages && todayMessages.length > 0) {
-            const memoryInsights = await extractMemoryFromConversation(userEmail, todayMessages);
-            if (memoryInsights) {
-                await updateUserMemory(userEmail, memoryInsights);
-            }
+    // 오늘 대화에서 메모리 추출 (있다면)
+    if (todayMessages && todayMessages.length > 0) {
+        const memoryInsights = await extractMemoryFromConversation(email, todayMessages);
+        if (memoryInsights) {
+            await updateUserMemory(email, memoryInsights);
         }
-
-        return NextResponse.json({
-            message: eveningMessage,
-            stats: {
-                completionRate,
-                completedCount,
-                totalSchedules,
-                uncompletedCount: uncompletedSchedules.length,
-                tomorrowCount: tomorrowSchedules.length
-            }
-        });
-    } catch (error: any) {
-        console.error("[Evening Check API] Error:", error?.message || error);
-        return NextResponse.json(
-            { error: "Failed to generate evening check" },
-            { status: 500 }
-        );
     }
-}
+
+    return NextResponse.json({
+        message: eveningMessage,
+        stats: {
+            completionRate,
+            completedCount,
+            totalSchedules,
+            uncompletedCount: uncompletedSchedules.length,
+            tomorrowCount: tomorrowSchedules.length
+        }
+    });
+});

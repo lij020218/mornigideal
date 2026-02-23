@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
@@ -17,38 +18,32 @@ interface LearningData {
     objectives: string[];
 }
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { learningData, userLevel } = await request.json() as {
+        learningData: LearningData;
+        userLevel?: string;
+    };
 
-        const { learningData, userLevel } = await request.json() as {
-            learningData: LearningData;
-            userLevel?: string;
-        };
+    if (!learningData || !learningData.dayTitle) {
+        return NextResponse.json({ error: "Missing learning data" }, { status: 400 });
+    }
 
-        if (!learningData || !learningData.dayTitle) {
-            return NextResponse.json({ error: "Missing learning data" }, { status: 400 });
-        }
+    const levelLabel = userLevel === "junior" ? "초급자" : userLevel === "senior" ? "숙련자" : "중급자";
 
-        const levelLabel = userLevel === "junior" ? "초급자" : userLevel === "senior" ? "숙련자" : "중급자";
+    // 언어 학습인지 감지 (영어, 일본어, 중국어 등)
+    const topic = learningData.curriculumTopic.toLowerCase();
+    const dayTitle = learningData.dayTitle.toLowerCase();
+    const isLanguageLearning = /영어|english|일본어|japanese|중국어|chinese|스페인어|spanish|프랑스어|french|외국어|언어/.test(topic + dayTitle);
 
-        // 언어 학습인지 감지 (영어, 일본어, 중국어 등)
-        const topic = learningData.curriculumTopic.toLowerCase();
-        const dayTitle = learningData.dayTitle.toLowerCase();
-        const isLanguageLearning = /영어|english|일본어|japanese|중국어|chinese|스페인어|spanish|프랑스어|french|외국어|언어/.test(topic + dayTitle);
+    // 특정 언어 감지
+    let targetLanguage = "";
+    if (/영어|english/.test(topic + dayTitle)) targetLanguage = "영어(English)";
+    else if (/일본어|japanese/.test(topic + dayTitle)) targetLanguage = "일본어";
+    else if (/중국어|chinese/.test(topic + dayTitle)) targetLanguage = "중국어";
+    else if (/스페인어|spanish/.test(topic + dayTitle)) targetLanguage = "스페인어";
+    else if (/프랑스어|french/.test(topic + dayTitle)) targetLanguage = "프랑스어";
 
-        // 특정 언어 감지
-        let targetLanguage = "";
-        if (/영어|english/.test(topic + dayTitle)) targetLanguage = "영어(English)";
-        else if (/일본어|japanese/.test(topic + dayTitle)) targetLanguage = "일본어";
-        else if (/중국어|chinese/.test(topic + dayTitle)) targetLanguage = "중국어";
-        else if (/스페인어|spanish/.test(topic + dayTitle)) targetLanguage = "스페인어";
-        else if (/프랑스어|french/.test(topic + dayTitle)) targetLanguage = "프랑스어";
-
-        const languageInstructions = isLanguageLearning && targetLanguage ? `
+    const languageInstructions = isLanguageLearning && targetLanguage ? `
 **중요 - 언어 학습 특별 지침:**
 이것은 ${targetLanguage} 학습입니다. 반드시 다음을 지켜주세요:
 1. 각 팁에 실제 ${targetLanguage} 표현/문장을 포함하세요
@@ -57,7 +52,7 @@ export async function POST(request: NextRequest) {
 4. 한국어 번역과 함께 제공하세요
 ` : "";
 
-        const prompt = `사용자가 오늘 학습할 주제에 대한 유용한 정보를 제공해주세요.
+    const prompt = `사용자가 오늘 학습할 주제에 대한 유용한 정보를 제공해주세요.
 
 **학습 정보:**
 - 전체 주제: ${learningData.curriculumTopic}
@@ -89,55 +84,48 @@ ${languageInstructions}
     "encouragement": "학습 응원 메시지 (1문장, 이모지 없이)"
 }`;
 
-        const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_4O_MINI,
-            messages: [
-                {
-                    role: "system",
-                    content: "당신은 친근하고 유능한 학습 멘토입니다. 학습자에게 실용적이고 도움이 되는 팁을 존댓말로 제공해주세요. 반말 금지. 반드시 유효한 JSON 형식으로만 응답하세요.",
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-            response_format: { type: "json_object" },
-        });
+    const completion = await openai.chat.completions.create({
+        model: MODELS.GPT_4O_MINI,
+        messages: [
+            {
+                role: "system",
+                content: "당신은 친근하고 유능한 학습 멘토입니다. 학습자에게 실용적이고 도움이 되는 팁을 존댓말로 제공해주세요. 반말 금지. 반드시 유효한 JSON 형식으로만 응답하세요.",
+            },
+            {
+                role: "user",
+                content: prompt,
+            },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+        response_format: { type: "json_object" },
+    });
 
-        const responseText = completion.choices[0]?.message?.content || "{}";
+    const responseText = completion.choices[0]?.message?.content || "{}";
 
-        let parsed;
-        try {
-            parsed = JSON.parse(responseText);
-        } catch {
-            console.error("[AI Learning Tip] Failed to parse response:", responseText);
-            return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
-        }
+    let parsed;
+    try {
+        parsed = JSON.parse(responseText);
+    } catch {
+        logger.error("[AI Learning Tip] Failed to parse response:", responseText);
+        return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+    }
 
-        // Log usage
-        const usage = completion.usage;
-        if (usage) {
-            await logOpenAIUsage(
-                userEmail,
-                MODELS.GPT_4O_MINI,
-                "ai-learning-tip",
-                usage.prompt_tokens,
-                usage.completion_tokens
-            );
-        }
-
-        return NextResponse.json({
-            greeting: parsed.greeting || "",
-            tips: parsed.tips || [],
-            encouragement: parsed.encouragement || "",
-        });
-    } catch (error: any) {
-        console.error("[AI Learning Tip] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate learning tip" },
-            { status: 500 }
+    // Log usage
+    const usage = completion.usage;
+    if (usage) {
+        await logOpenAIUsage(
+            email,
+            MODELS.GPT_4O_MINI,
+            "ai-learning-tip",
+            usage.prompt_tokens,
+            usage.completion_tokens
         );
     }
-}
+
+    return NextResponse.json({
+        greeting: parsed.greeting || "",
+        tips: parsed.tips || [],
+        encouragement: parsed.encouragement || "",
+    });
+});

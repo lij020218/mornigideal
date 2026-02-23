@@ -15,17 +15,12 @@ import {
 } from '@/lib/proactiveNotificationService';
 import { getEscalationDecision, applyEscalation } from '@/lib/escalationService';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
+export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
         // 1. 사용자 컨텍스트 수집
         const context = await getUserContext(userEmail);
         if (!context) {
@@ -117,21 +112,9 @@ export async function GET(request: NextRequest) {
                 uncompletedCount: context.uncompletedGoals.length
             }
         });
-    } catch (error) {
-        console.error('[Proactive API] Error:', error);
-        return NextResponse.json(
-            { error: 'Failed to generate notifications' },
-            { status: 500 }
-        );
-    }
-}
+});
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
         const body = await request.json();
         const { action, notificationId, notificationType, actionType, actionPayload } = body;
 
@@ -280,7 +263,7 @@ export async function POST(request: NextRequest) {
                     .eq('email', userEmail);
 
                 if (updateError) {
-                    console.error('[Proactive API] Failed to convert to recurring:', updateError);
+                    logger.error('[Proactive API] Failed to convert to recurring:', updateError);
                     return NextResponse.json({ error: 'Failed to convert schedule' }, { status: 500 });
                 }
 
@@ -323,11 +306,4 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    } catch (error) {
-        console.error('[Proactive API] POST Error:', error);
-        return NextResponse.json(
-            { error: 'Failed to process request' },
-            { status: 500 }
-        );
-    }
-}
+});

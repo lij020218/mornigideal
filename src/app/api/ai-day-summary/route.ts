@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
@@ -8,20 +8,14 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const { todaySchedules, completedCount, totalCount, userProfile, tomorrowSchedules, userPlan } = await request.json();
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { todaySchedules, completedCount, totalCount, userProfile, tomorrowSchedules, userPlan } = await request.json();
 
 
-        // Build user context
-        let userContext = "";
-        if (userProfile) {
-            userContext = `
+    // Build user context
+    let userContext = "";
+    if (userProfile) {
+        userContext = `
 사용자 정보:
 - 이름: ${userProfile.name || '사용자'}
 - 직업: ${userProfile.job || '미설정'}
@@ -29,28 +23,28 @@ export async function POST(request: NextRequest) {
 - 관심사: ${(userProfile.interests || []).join(', ') || '미설정'}
 - 플랜: ${userPlan || 'Free'}
 `;
-        }
+    }
 
-        // Build schedule summary
-        let scheduleList = '';
-        if (todaySchedules && todaySchedules.length > 0) {
-            scheduleList = todaySchedules
-                .map((s: any) => `  ${s.completed ? '✅' : '⏸️'} ${s.startTime} - ${s.text}`)
-                .join('\n');
-        }
+    // Build schedule summary
+    let scheduleList = '';
+    if (todaySchedules && todaySchedules.length > 0) {
+        scheduleList = todaySchedules
+            .map((s: any) => `  ${s.completed ? '✅' : '⏸️'} ${s.startTime} - ${s.text}`)
+            .join('\n');
+    }
 
-        // Build tomorrow's schedule
-        let tomorrowScheduleList = '';
-        if (tomorrowSchedules && tomorrowSchedules.length > 0) {
-            tomorrowScheduleList = tomorrowSchedules
-                .map((s: any) => `  ${s.startTime} - ${s.text}`)
-                .join('\n');
-        }
+    // Build tomorrow's schedule
+    let tomorrowScheduleList = '';
+    if (tomorrowSchedules && tomorrowSchedules.length > 0) {
+        tomorrowScheduleList = tomorrowSchedules
+            .map((s: any) => `  ${s.startTime} - ${s.text}`)
+            .join('\n');
+    }
 
-        const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-        const isMaxUser = userPlan === 'Max';
+    const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    const isMaxUser = userPlan === 'Max';
 
-        const prompt = isMaxUser ? `당신은 Fi.eri Max 플랜의 AI 비서 Jarvis입니다. 오늘 하루가 모두 끝났고, 내일 일정을 미리 확인하여 사용자를 완벽하게 준비시켜야 합니다.
+    const prompt = isMaxUser ? `당신은 Fi.eri Max 플랜의 AI 비서 Jarvis입니다. 오늘 하루가 모두 끝났고, 내일 일정을 미리 확인하여 사용자를 완벽하게 준비시켜야 합니다.
 ${userContext}
 
 오늘의 일정:
@@ -108,7 +102,7 @@ ${tomorrowScheduleList || '- 일정 없음'}
 - 내일 일정을 **반드시** 언급하고 연결 지어 생각
 - 수술/병원/중요 미팅은 구체적 준비사항 필수
 - 사용자 목표와 현재 상황을 통합적으로 고려`
-        : `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 오늘 하루가 모두 끝났습니다.
+    : `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 오늘 하루가 모두 끝났습니다.
 ${userContext}
 
 오늘의 일정:
@@ -139,44 +133,37 @@ ${scheduleList || '- 일정 없음'}
 
 **중요:** 사용자의 목표와 오늘 완료한 일정을 구체적으로 언급하며, 따뜻하고 격려하는 톤으로 작성하세요.`;
 
-        // Use gpt-5.2 for personalized, empathetic feedback
-        const modelName = MODELS.GPT_5_2;
-        const completion = await openai.chat.completions.create({
-            model: modelName,
-            messages: [
-                {
-                    role: "system",
-                    content: "당신은 Fi.eri 앱의 AI 비서입니다. 사용자의 하루를 돌아보며 따뜻한 피드백과 격려를 제공하세요."
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-            temperature: 0.8,
-        });
+    // Use gpt-5.2 for personalized, empathetic feedback
+    const modelName = MODELS.GPT_5_2;
+    const completion = await openai.chat.completions.create({
+        model: modelName,
+        messages: [
+            {
+                role: "system",
+                content: "당신은 Fi.eri 앱의 AI 비서입니다. 사용자의 하루를 돌아보며 따뜻한 피드백과 격려를 제공하세요."
+            },
+            {
+                role: "user",
+                content: prompt,
+            },
+        ],
+        temperature: 0.8,
+    });
 
-        const summary = completion.choices[0]?.message?.content ||
-            `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completedCount}/${totalCount}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
+    const summary = completion.choices[0]?.message?.content ||
+        `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completedCount}/${totalCount}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
 
-        // Log usage
-        const usage = completion.usage;
-        if (usage) {
-            await logOpenAIUsage(
-                email,
-                modelName,
-                '/api/ai-day-summary',
-                usage.prompt_tokens,
-                usage.completion_tokens
-            );
-        }
-
-        return NextResponse.json({ summary });
-    } catch (error: any) {
-        console.error("[AI Day Summary] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate day summary" },
-            { status: 500 }
+    // Log usage
+    const usage = completion.usage;
+    if (usage) {
+        await logOpenAIUsage(
+            email,
+            modelName,
+            '/api/ai-day-summary',
+            usage.prompt_tokens,
+            usage.completion_tokens
         );
     }
-}
+
+    return NextResponse.json({ summary });
+});

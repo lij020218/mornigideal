@@ -7,36 +7,27 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
 
 // Step 1: OAuth URL 생성
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        redirect_uri: `${BASE_URL}/api/auth/link-google-calendar/callback`,
+        response_type: "code",
+        scope: "https://www.googleapis.com/auth/calendar",
+        access_type: "offline",
+        prompt: "consent",
+        state: email,
+    });
 
-        const params = new URLSearchParams({
-            client_id: process.env.GOOGLE_CLIENT_ID!,
-            redirect_uri: `${BASE_URL}/api/auth/link-google-calendar/callback`,
-            response_type: "code",
-            scope: "https://www.googleapis.com/auth/calendar",
-            access_type: "offline",
-            prompt: "consent",
-            state: userEmail,
-        });
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-
-        return NextResponse.json({ authUrl });
-    } catch (error) {
-        console.error("[Link GCal] Error:", error);
-        return NextResponse.json({ error: "Failed to initiate OAuth" }, { status: 500 });
-    }
-}
+    return NextResponse.json({ authUrl });
+});
 
 // Step 2: 코드 교환 + 토큰 저장
 export async function POST(request: NextRequest) {
@@ -64,7 +55,7 @@ export async function POST(request: NextRequest) {
 
         if (!tokenResponse.ok) {
             const errorData = await tokenResponse.text();
-            console.error("[Link GCal] Token exchange failed:", errorData);
+            logger.error("[Link GCal] Token exchange failed:", errorData);
             return NextResponse.json({ error: "Failed to exchange code for tokens" }, { status: 500 });
         }
 
@@ -88,7 +79,7 @@ export async function POST(request: NextRequest) {
             });
 
         if (dbError) {
-            console.error("[Link GCal] Database error:", dbError);
+            logger.error("[Link GCal] Database error:", dbError);
             return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
         }
 
@@ -98,7 +89,7 @@ export async function POST(request: NextRequest) {
             message: "Google 캘린더가 성공적으로 연동되었습니다",
         });
     } catch (error) {
-        console.error("[Link GCal] Error:", error);
+        logger.error("[Link GCal] Error:", error);
         return NextResponse.json({ error: "Failed to link Google Calendar" }, { status: 500 });
     }
 }

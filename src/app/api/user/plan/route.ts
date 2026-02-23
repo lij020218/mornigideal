@@ -18,101 +18,76 @@ import {
     PLAN_DETAILS,
     UserPlanType,
 } from "@/lib/user-plan";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const plan = await getUserPlan(email);
+    const usage = await getAiUsageStats(email, 7);
+    const usageLimit = await checkAiUsageLimit(email);
+    const details = PLAN_DETAILS[plan.plan];
 
-        const plan = await getUserPlan(userEmail);
-        const usage = await getAiUsageStats(userEmail, 7);
-        const usageLimit = await checkAiUsageLimit(userEmail);
-        const details = PLAN_DETAILS[plan.plan];
+    return NextResponse.json({
+        plan: {
+            ...plan,
+            name: details.name,
+            nameKo: details.nameKo,
+            price: details.price,
+            monthlyPrice: details.monthlyPrice,
+            featureList: details.features,
+            highlights: details.highlights,
+        },
+        usage,
+        usageLimit,  // 오늘 사용량 및 남은 횟수
+        allPlans: PLAN_DETAILS,
+    });
+});
 
-        return NextResponse.json({
-            plan: {
-                ...plan,
-                name: details.name,
-                nameKo: details.nameKo,
-                price: details.price,
-                monthlyPrice: details.monthlyPrice,
-                featureList: details.features,
-                highlights: details.highlights,
-            },
-            usage,
-            usageLimit,  // 오늘 사용량 및 남은 횟수
-            allPlans: PLAN_DETAILS,
-        });
-    } catch (error: any) {
-        console.error("[User Plan API] GET Error:", error);
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { newPlan, durationDays, adminKey } = await request.json();
+
+    // 관리자 키 검증 (실제로는 결제 시스템과 연동)
+    const validAdminKey = process.env.ADMIN_UPGRADE_KEY;
+    if (adminKey !== validAdminKey) {
         return NextResponse.json(
-            { error: "플랜 정보 조회 중 오류가 발생했습니다." },
+            { error: "권한이 없습니다." },
+            { status: 403 }
+        );
+    }
+
+    if (!newPlan || !["free", "pro", "max"].includes(newPlan)) {
+        return NextResponse.json(
+            { error: "유효한 플랜을 선택해주세요. (free, pro, max)" },
+            { status: 400 }
+        );
+    }
+
+    const success = await upgradePlan(
+        email,
+        newPlan as UserPlanType,
+        durationDays
+    );
+
+    if (!success) {
+        return NextResponse.json(
+            { error: "플랜 변경에 실패했습니다." },
             { status: 500 }
         );
     }
-}
 
-export async function POST(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    const updatedPlan = await getUserPlan(email);
+    const details = PLAN_DETAILS[updatedPlan.plan];
 
-        const { newPlan, durationDays, adminKey } = await request.json();
-
-        // 관리자 키 검증 (실제로는 결제 시스템과 연동)
-        const validAdminKey = process.env.ADMIN_UPGRADE_KEY;
-        if (adminKey !== validAdminKey) {
-            return NextResponse.json(
-                { error: "권한이 없습니다." },
-                { status: 403 }
-            );
-        }
-
-        if (!newPlan || !["free", "pro", "max"].includes(newPlan)) {
-            return NextResponse.json(
-                { error: "유효한 플랜을 선택해주세요. (free, pro, max)" },
-                { status: 400 }
-            );
-        }
-
-        const success = await upgradePlan(
-            email,
-            newPlan as UserPlanType,
-            durationDays
-        );
-
-        if (!success) {
-            return NextResponse.json(
-                { error: "플랜 변경에 실패했습니다." },
-                { status: 500 }
-            );
-        }
-
-        const updatedPlan = await getUserPlan(email);
-        const details = PLAN_DETAILS[updatedPlan.plan];
-
-        return NextResponse.json({
-            success: true,
-            plan: {
-                ...updatedPlan,
-                name: details.name,
-                nameKo: details.nameKo,
-                price: details.price,
-                monthlyPrice: details.monthlyPrice,
-                featureList: details.features,
-                highlights: details.highlights,
-            },
-        });
-    } catch (error: any) {
-        console.error("[User Plan API] POST Error:", error);
-        return NextResponse.json(
-            { error: "플랜 변경 중 오류가 발생했습니다." },
-            { status: 500 }
-        );
-    }
-}
+    return NextResponse.json({
+        success: true,
+        plan: {
+            ...updatedPlan,
+            name: details.name,
+            nameKo: details.nameKo,
+            price: details.price,
+            monthlyPrice: details.monthlyPrice,
+            featureList: details.features,
+            highlights: details.highlights,
+        },
+    });
+});

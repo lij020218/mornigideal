@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmail, getUserById, updateUserProfile, updateUserProfileById } from "@/lib/users";
-import { getUserEmailWithAuth, getUserIdFromRequest } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { getUserIdFromRequest } from "@/lib/auth-utils";
 import { longTermGoalSchema, validateBody } from '@/lib/schemas';
+import { logger } from '@/lib/logger';
 
 // 장기 목표 타입 정의
 export interface LongTermGoal {
@@ -25,191 +27,171 @@ export interface LongTermGoals {
 }
 
 // GET: 장기 목표 조회
-export async function GET(request: NextRequest) {
-    try {
-        const userId = await getUserIdFromRequest(request);
-        const userEmail = await getUserEmailWithAuth(request);
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const userId = await getUserIdFromRequest(request);
 
-        if (!userId && !userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        let user;
-        if (userId) {
-            user = await getUserById(userId);
-        } else if (userEmail) {
-            user = await getUserByEmail(userEmail);
-        }
-
-        if (!user) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
-        const rawGoals = user.profile?.longTermGoals;
-        const longTermGoals: LongTermGoals = {
-            weekly: rawGoals?.weekly as LongTermGoal[] || [],
-            monthly: rawGoals?.monthly as LongTermGoal[] || [],
-            yearly: rawGoals?.yearly as LongTermGoal[] || [],
-        };
-
-        return NextResponse.json({ goals: longTermGoals });
-    } catch (error) {
-        console.error("[LongTermGoals API] GET Error:", error);
-        return NextResponse.json({ error: "Failed to fetch goals" }, { status: 500 });
+    let user;
+    if (userId) {
+        user = await getUserById(userId);
+    } else {
+        user = await getUserByEmail(email);
     }
-}
+
+    if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const rawGoals = user.profile?.longTermGoals;
+    const longTermGoals: LongTermGoals = {
+        weekly: rawGoals?.weekly as LongTermGoal[] || [],
+        monthly: rawGoals?.monthly as LongTermGoal[] || [],
+        yearly: rawGoals?.yearly as LongTermGoal[] || [],
+    };
+
+    return NextResponse.json({ goals: longTermGoals });
+});
 
 // POST: 장기 목표 추가/수정/삭제
-export async function POST(request: NextRequest) {
-    try {
-        const userId = await getUserIdFromRequest(request);
-        const userEmail = await getUserEmailWithAuth(request);
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const userId = await getUserIdFromRequest(request);
 
-        if (!userId && !userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    const body = await request.json();
+    const v = validateBody(longTermGoalSchema, body);
+    if (!v.success) return v.response;
+    const { goal, action } = v.data;
 
-        const body = await request.json();
-        const v = validateBody(longTermGoalSchema, body);
-        if (!v.success) return v.response;
-        const { goal, action } = v.data;
+    let user;
+    if (userId) {
+        user = await getUserById(userId);
+    } else {
+        user = await getUserByEmail(email);
+    }
 
-        let user;
+    if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const rawGoals = user.profile?.longTermGoals;
+    const currentGoals: LongTermGoals = {
+        weekly: rawGoals?.weekly as LongTermGoal[] || [],
+        monthly: rawGoals?.monthly as LongTermGoal[] || [],
+        yearly: rawGoals?.yearly as LongTermGoal[] || [],
+    };
+
+    const now = new Date().toISOString();
+    const goalType = goal.type as keyof LongTermGoals;
+
+    // 프로필 업데이트 헬퍼 함수
+    const updateProfile = async (updates: any) => {
         if (userId) {
-            user = await getUserById(userId);
-        } else if (userEmail) {
-            user = await getUserByEmail(userEmail);
+            await updateUserProfileById(userId, updates);
+        } else {
+            await updateUserProfile(email, updates);
         }
+    };
 
-        if (!user) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
-        const rawGoals = user.profile?.longTermGoals;
-        const currentGoals: LongTermGoals = {
-            weekly: rawGoals?.weekly as LongTermGoal[] || [],
-            monthly: rawGoals?.monthly as LongTermGoal[] || [],
-            yearly: rawGoals?.yearly as LongTermGoal[] || [],
+    if (action === "add") {
+        // 새 목표 추가
+        const newGoal: LongTermGoal = {
+            id: `goal-${Date.now()}`,
+            type: goalType,
+            title: goal.title || "",
+            description: goal.description || "",
+            category: goal.category || "general",
+            targetDate: goal.targetDate,
+            progress: 0,
+            milestones: goal.milestones || [],
+            completed: false,
+            createdAt: now,
+            updatedAt: now,
         };
 
-        const now = new Date().toISOString();
-        const goalType = goal.type as keyof LongTermGoals;
-
-        // 프로필 업데이트 헬퍼 함수
-        const updateProfile = async (updates: any) => {
-            if (userId) {
-                await updateUserProfileById(userId, updates);
-            } else if (userEmail) {
-                await updateUserProfile(userEmail, updates);
-            }
-        };
-
-        if (action === "add") {
-            // 새 목표 추가
-            const newGoal: LongTermGoal = {
-                id: `goal-${Date.now()}`,
-                type: goalType,
-                title: goal.title || "",
-                description: goal.description || "",
-                category: goal.category || "general",
-                targetDate: goal.targetDate,
-                progress: 0,
-                milestones: goal.milestones || [],
-                completed: false,
-                createdAt: now,
+        currentGoals[goalType].push(newGoal);
+    } else if (action === "update") {
+        // 기존 목표 수정
+        const goalList = currentGoals[goalType];
+        const index = goalList.findIndex((g) => g.id === goal.id);
+        if (index !== -1) {
+            goalList[index] = {
+                ...goalList[index],
+                title: goal.title ?? goalList[index].title,
+                description: goal.description ?? goalList[index].description,
+                category: goal.category ?? goalList[index].category,
+                targetDate: goal.targetDate ?? goalList[index].targetDate,
+                progress: goal.progress ?? goalList[index].progress,
+                milestones: goal.milestones ?? goalList[index].milestones,
+                completed: goal.completed ?? goalList[index].completed,
                 updatedAt: now,
             };
-
-            currentGoals[goalType].push(newGoal);
-        } else if (action === "update") {
-            // 기존 목표 수정
-            const goalList = currentGoals[goalType];
-            const index = goalList.findIndex((g) => g.id === goal.id);
-            if (index !== -1) {
-                goalList[index] = {
-                    ...goalList[index],
-                    title: goal.title ?? goalList[index].title,
-                    description: goal.description ?? goalList[index].description,
-                    category: goal.category ?? goalList[index].category,
-                    targetDate: goal.targetDate ?? goalList[index].targetDate,
-                    progress: goal.progress ?? goalList[index].progress,
-                    milestones: goal.milestones ?? goalList[index].milestones,
-                    completed: goal.completed ?? goalList[index].completed,
-                    updatedAt: now,
-                };
-            }
-        } else if (action === "delete") {
-            // 목표 삭제
-            currentGoals[goalType] = currentGoals[goalType].filter(
-                (g) => g.id !== goal.id
-            );
-        } else if (action === "complete") {
-            // 목표 완료 처리
-            const goalList = currentGoals[goalType];
-            const index = goalList.findIndex((g) => g.id === goal.id);
-            if (index !== -1) {
+        }
+    } else if (action === "delete") {
+        // 목표 삭제
+        currentGoals[goalType] = currentGoals[goalType].filter(
+            (g) => g.id !== goal.id
+        );
+    } else if (action === "complete") {
+        // 목표 완료 처리
+        const goalList = currentGoals[goalType];
+        const index = goalList.findIndex((g) => g.id === goal.id);
+        if (index !== -1) {
+            goalList[index].completed = true;
+            goalList[index].progress = 100;
+            goalList[index].updatedAt = now;
+        }
+    } else if (action === "updateProgress") {
+        // 진행률 업데이트
+        const goalList = currentGoals[goalType];
+        const index = goalList.findIndex((g) => g.id === goal.id);
+        if (index !== -1) {
+            goalList[index].progress = Math.min(100, Math.max(0, goal.progress ?? 0));
+            if (goalList[index].progress >= 100) {
                 goalList[index].completed = true;
-                goalList[index].progress = 100;
-                goalList[index].updatedAt = now;
             }
-        } else if (action === "updateProgress") {
-            // 진행률 업데이트
-            const goalList = currentGoals[goalType];
-            const index = goalList.findIndex((g) => g.id === goal.id);
-            if (index !== -1) {
-                goalList[index].progress = Math.min(100, Math.max(0, goal.progress ?? 0));
-                if (goalList[index].progress >= 100) {
-                    goalList[index].completed = true;
-                }
-                goalList[index].updatedAt = now;
-            }
-        } else if (action === "resetWeekly") {
-            // 주간 목표 리셋 (일요일→월요일 전환 시)
-            // 기존 주간 목표를 아카이브에 저장하고 새로 시작
-            const archivedWeeklyGoals = (user.profile?.archivedWeeklyGoals || []) as Array<{ weekStart: string; weekEnd: string; goals: LongTermGoal[]; archivedAt: string }>;
+            goalList[index].updatedAt = now;
+        }
+    } else if (action === "resetWeekly") {
+        // 주간 목표 리셋 (일요일→월요일 전환 시)
+        // 기존 주간 목표를 아카이브에 저장하고 새로 시작
+        const archivedWeeklyGoals = (user.profile?.archivedWeeklyGoals || []) as Array<{ weekStart: string; weekEnd: string; goals: LongTermGoal[]; archivedAt: string }>;
 
-            // 이번 주 목표가 있으면 아카이브에 추가
-            if (currentGoals.weekly.length > 0) {
-                const weekEndDate = new Date();
-                weekEndDate.setDate(weekEndDate.getDate() - 1); // 어제 (일요일)
-                const weekStartDate = new Date(weekEndDate);
-                weekStartDate.setDate(weekStartDate.getDate() - 6); // 지난 월요일
+        // 이번 주 목표가 있으면 아카이브에 추가
+        if (currentGoals.weekly.length > 0) {
+            const weekEndDate = new Date();
+            weekEndDate.setDate(weekEndDate.getDate() - 1); // 어제 (일요일)
+            const weekStartDate = new Date(weekEndDate);
+            weekStartDate.setDate(weekStartDate.getDate() - 6); // 지난 월요일
 
-                archivedWeeklyGoals.push({
-                    weekStart: weekStartDate.toISOString().split('T')[0],
-                    weekEnd: weekEndDate.toISOString().split('T')[0],
-                    goals: currentGoals.weekly,
-                    archivedAt: now,
-                });
-
-                // 최근 12주만 보관 (3개월)
-                if (archivedWeeklyGoals.length > 12) {
-                    archivedWeeklyGoals.shift();
-                }
-            }
-
-            // 주간 목표 초기화
-            currentGoals.weekly = [];
-
-            // 아카이브 저장
-            await updateProfile({
-                longTermGoals: currentGoals,
-                archivedWeeklyGoals: archivedWeeklyGoals,
+            archivedWeeklyGoals.push({
+                weekStart: weekStartDate.toISOString().split('T')[0],
+                weekEnd: weekEndDate.toISOString().split('T')[0],
+                goals: currentGoals.weekly,
+                archivedAt: now,
             });
 
-            return NextResponse.json({
-                success: true,
-                goals: currentGoals,
-                archived: archivedWeeklyGoals.length > 0 ? archivedWeeklyGoals[archivedWeeklyGoals.length - 1] : null,
-            });
+            // 최근 12주만 보관 (3개월)
+            if (archivedWeeklyGoals.length > 12) {
+                archivedWeeklyGoals.shift();
+            }
         }
 
-        // 프로필 업데이트
-        await updateProfile({ longTermGoals: currentGoals });
+        // 주간 목표 초기화
+        currentGoals.weekly = [];
 
-        return NextResponse.json({ success: true, goals: currentGoals });
-    } catch (error) {
-        console.error("[LongTermGoals API] POST Error:", error);
-        return NextResponse.json({ error: "Failed to update goals" }, { status: 500 });
+        // 아카이브 저장
+        await updateProfile({
+            longTermGoals: currentGoals,
+            archivedWeeklyGoals: archivedWeeklyGoals,
+        });
+
+        return NextResponse.json({
+            success: true,
+            goals: currentGoals,
+            archived: archivedWeeklyGoals.length > 0 ? archivedWeeklyGoals[archivedWeeklyGoals.length - 1] : null,
+        });
     }
-}
+
+    // 프로필 업데이트
+    await updateProfile({ longTermGoals: currentGoals });
+
+    return NextResponse.json({ success: true, goals: currentGoals });
+});

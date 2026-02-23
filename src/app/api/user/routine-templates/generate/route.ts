@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { isProOrAbove } from '@/lib/user-plan';
 import { templateGenerateSchema, validateBody } from '@/lib/schemas';
@@ -12,12 +12,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function POST(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     // Plan gate
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
@@ -91,4 +86,4 @@ export async function POST(request: NextRequest) {
     } catch {
         return NextResponse.json({ error: 'AI 응답 파싱 실패' }, { status: 500 });
     }
-}
+});

@@ -5,17 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { kvGet, kvSet } from '@/lib/kv-store';
 import { isProOrAbove } from '@/lib/user-plan';
 import { healthDataSchema, validateBody } from '@/lib/schemas';
 
-export async function POST(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     // Plan gate
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
@@ -36,14 +31,9 @@ export async function POST(request: NextRequest) {
     await kvSet(email, key, merged);
 
     return NextResponse.json({ success: true, data: merged });
-}
+});
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
             { error: '건강 데이터 조회는 Pro 이상 플랜에서 사용 가능합니다.' },
@@ -73,4 +63,4 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ data: results, from, to });
-}
+});

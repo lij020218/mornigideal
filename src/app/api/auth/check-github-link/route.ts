@@ -3,16 +3,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { isGitHubLinked } from '@/lib/githubService';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const linked = await isGitHubLinked(email);
 
     let username: string | null = null;
@@ -26,4 +21,4 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ linked, username });
-}
+});

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import pdfParse from "pdf-parse-fork";
@@ -37,7 +38,7 @@ const ADVANCED_MODEL = MODELS.GPT_5_2;    // High-quality conversion
  * - 총: ~$0.04-0.06 (기존 $0.15 대비 60-73% 절감)
  */
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, email: string) => {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
@@ -50,13 +51,6 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     try {
-      const email = await getUserEmailWithAuth(request);
-      if (!email) {
-        await sendEvent("error", { error: "Unauthorized" });
-        await writer.close();
-        return;
-      }
-
       const body = await request.json();
       const { blobUrl, fileName: originalFileName, type } = body;
 
@@ -98,7 +92,7 @@ export async function POST(request: NextRequest) {
         const { data: publicUrlData } = supabaseAdmin.storage.from("materials").getPublicUrl(fileName);
         fileUrl = publicUrlData.publicUrl;
       } else {
-        console.error("[STORAGE] Upload error:", uploadError);
+        logger.error("[STORAGE] Upload error:", uploadError);
         throw new Error("Failed to upload PDF");
       }
 
@@ -188,7 +182,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (insertError) {
-        console.error("[DB] Insert error:", insertError);
+        logger.error("[DB] Insert error:", insertError);
         throw insertError;
       }
 
@@ -585,7 +579,7 @@ ${converted}`;
       // STEP 6: Generate Core Concepts (Background)
       // ====================
 
-      
+
       // Generate concepts in background without blocking response
       (async () => {
         try {
@@ -696,7 +690,7 @@ ${fullContent.substring(0, 30000)}
             .eq("id", insertedMaterial.id);
 
         } catch (error) {
-          console.error('[CONCEPTS] Background generation failed:', error);
+          logger.error('[CONCEPTS] Background generation failed:', error);
           // Don't block main flow if concepts generation fails
         }
       })();
@@ -709,7 +703,7 @@ ${fullContent.substring(0, 30000)}
 
       await writer.close();
     } catch (error: any) {
-      console.error("[ERROR]", error);
+      logger.error("[ERROR]", error);
       await sendEvent("error", { error: "Analysis failed" });
       await writer.close();
     }
@@ -721,5 +715,5 @@ ${fullContent.substring(0, 30000)}
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
     },
-  });
-}
+  }) as any;
+});

@@ -1,187 +1,137 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET /api/user/curriculum - Get all curriculums for current user
-export async function GET(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    // Get user ID from email
+    const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        if (!email) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
+    if (userError || !userData) {
+        return NextResponse.json(
+            { error: "User not found" },
+            { status: 404 }
+        );
+    }
 
-        // Get user ID from email
-        const { data: userData, error: userError } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", email)
-            .maybeSingle();
+    // Get all curriculums for this user
+    const { data: curriculums, error } = await supabaseAdmin
+        .from("user_curriculums")
+        .select("*")
+        .eq("user_id", userData.id)
+        .order("created_at", { ascending: false });
 
-        if (userError || !userData) {
-            return NextResponse.json(
-                { error: "User not found" },
-                { status: 404 }
-            );
-        }
-
-        // Get all curriculums for this user
-        const { data: curriculums, error } = await supabaseAdmin
-            .from("user_curriculums")
-            .select("*")
-            .eq("user_id", userData.id)
-            .order("created_at", { ascending: false });
-
-        if (error) {
-            console.error("[Curriculum API] Error:", error);
-            return NextResponse.json(
-                { error: "Failed to fetch curriculums" },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({
-            curriculums: curriculums || []
-        });
-    } catch (error: any) {
-        console.error("[Curriculum API] Error:", error);
+    if (error) {
+        logger.error("[Curriculum API] Error:", error);
         return NextResponse.json(
             { error: "Failed to fetch curriculums" },
             { status: 500 }
         );
     }
-}
+
+    return NextResponse.json({
+        curriculums: curriculums || []
+    });
+});
 
 // POST /api/user/curriculum - Save a new curriculum
-export async function POST(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { curriculum_id, curriculum_data } = await request.json();
 
-        if (!email) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
+    if (!curriculum_id || !curriculum_data) {
+        return NextResponse.json(
+            { error: "Missing required fields" },
+            { status: 400 }
+        );
+    }
 
-        const { curriculum_id, curriculum_data } = await request.json();
+    // Get user ID from email
+    const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        if (!curriculum_id || !curriculum_data) {
-            return NextResponse.json(
-                { error: "Missing required fields" },
-                { status: 400 }
-            );
-        }
+    if (userError || !userData) {
+        return NextResponse.json(
+            { error: "User not found" },
+            { status: 404 }
+        );
+    }
 
-        // Get user ID from email
-        const { data: userData, error: userError } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", email)
-            .maybeSingle();
+    // Upsert curriculum (insert or update if exists)
+    const { data, error } = await supabaseAdmin
+        .from("user_curriculums")
+        .upsert({
+            user_id: userData.id,
+            curriculum_id,
+            curriculum_data
+        }, {
+            onConflict: 'user_id,curriculum_id'
+        })
+        .select()
+        .single();
 
-        if (userError || !userData) {
-            return NextResponse.json(
-                { error: "User not found" },
-                { status: 404 }
-            );
-        }
-
-        // Upsert curriculum (insert or update if exists)
-        const { data, error } = await supabaseAdmin
-            .from("user_curriculums")
-            .upsert({
-                user_id: userData.id,
-                curriculum_id,
-                curriculum_data
-            }, {
-                onConflict: 'user_id,curriculum_id'
-            })
-            .select()
-            .single();
-
-        if (error) {
-            console.error("[Curriculum API] Error:", error);
-            return NextResponse.json(
-                { error: "Failed to save curriculum" },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({
-            success: true,
-            curriculum: data
-        });
-    } catch (error: any) {
-        console.error("[Curriculum API] Error:", error);
+    if (error) {
+        logger.error("[Curriculum API] Error:", error);
         return NextResponse.json(
             { error: "Failed to save curriculum" },
             { status: 500 }
         );
     }
-}
+
+    return NextResponse.json({
+        success: true,
+        curriculum: data
+    });
+});
 
 // DELETE /api/user/curriculum - Remove a curriculum
-export async function DELETE(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
+export const DELETE = withAuth(async (request: NextRequest, email: string) => {
+    const { curriculum_id } = await request.json();
 
-        if (!email) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
+    if (!curriculum_id) {
+        return NextResponse.json(
+            { error: "Missing curriculum_id" },
+            { status: 400 }
+        );
+    }
 
-        const { curriculum_id } = await request.json();
+    // Get user ID from email
+    const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        if (!curriculum_id) {
-            return NextResponse.json(
-                { error: "Missing curriculum_id" },
-                { status: 400 }
-            );
-        }
+    if (userError || !userData) {
+        return NextResponse.json(
+            { error: "User not found" },
+            { status: 404 }
+        );
+    }
 
-        // Get user ID from email
-        const { data: userData, error: userError } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", email)
-            .maybeSingle();
+    // Delete curriculum
+    const { error } = await supabaseAdmin
+        .from("user_curriculums")
+        .delete()
+        .eq("user_id", userData.id)
+        .eq("curriculum_id", curriculum_id);
 
-        if (userError || !userData) {
-            return NextResponse.json(
-                { error: "User not found" },
-                { status: 404 }
-            );
-        }
-
-        // Delete curriculum
-        const { error } = await supabaseAdmin
-            .from("user_curriculums")
-            .delete()
-            .eq("user_id", userData.id)
-            .eq("curriculum_id", curriculum_id);
-
-        if (error) {
-            console.error("[Curriculum API] Error:", error);
-            return NextResponse.json(
-                { error: "Failed to delete curriculum" },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({
-            success: true
-        });
-    } catch (error: any) {
-        console.error("[Curriculum API] Error:", error);
+    if (error) {
+        logger.error("[Curriculum API] Error:", error);
         return NextResponse.json(
             { error: "Failed to delete curriculum" },
             { status: 500 }
         );
     }
-}
+
+    return NextResponse.json({
+        success: true
+    });
+});

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -20,21 +20,15 @@ const CATEGORIES = {
     other: { emoji: "✨", label: "기타", color: "#6B7280" },
 };
 
-export async function POST(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { goalText } = await request.json();
 
-        const { goalText } = await request.json();
-
-        if (!goalText || goalText.trim().length === 0) {
-            return NextResponse.json({ error: "Goal text is required" }, { status: 400 });
-        }
+    if (!goalText || goalText.trim().length === 0) {
+        return NextResponse.json({ error: "Goal text is required" }, { status: 400 });
+    }
 
 
-        const prompt = `사용자가 입력한 목표를 분류해주세요.
+    const prompt = `사용자가 입력한 목표를 분류해주세요.
 
 목표: "${goalText}"
 
@@ -56,37 +50,29 @@ export async function POST(request: NextRequest) {
   }
 }`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
 
-        // Parse JSON
-        let jsonText = text.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");
-        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    // Parse JSON
+    let jsonText = text.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
 
-        if (!jsonMatch) {
-            throw new Error("Failed to parse AI response");
-        }
-
-        const parsed = JSON.parse(jsonMatch[0]);
-        const category = parsed.category || "other";
-        const categoryInfo = CATEGORIES[category as keyof typeof CATEGORIES] || CATEGORIES.other;
-
-        return NextResponse.json({
-            success: true,
-            original: goalText,
-            category: category,
-            categoryInfo: categoryInfo,
-            refinedGoal: parsed.refinedGoal || goalText,
-            suggestedSchedule: parsed.suggestedSchedule || null,
-        });
-
-    } catch (error: any) {
-        console.error("[GoalClassify] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to classify goal" },
-            { status: 500 }
-        );
+    if (!jsonMatch) {
+        throw new Error("Failed to parse AI response");
     }
-}
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const category = parsed.category || "other";
+    const categoryInfo = CATEGORIES[category as keyof typeof CATEGORIES] || CATEGORIES.other;
+
+    return NextResponse.json({
+        success: true,
+        original: goalText,
+        category: category,
+        categoryInfo: categoryInfo,
+        refinedGoal: parsed.refinedGoal || goalText,
+        suggestedSchedule: parsed.suggestedSchedule || null,
+    });
+});

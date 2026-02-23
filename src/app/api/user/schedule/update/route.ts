@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 import { scheduleUpdateSchema, validateBody } from '@/lib/schemas';
 import { dualWriteUpdate } from "@/lib/schedule-dual-write";
 
@@ -94,13 +95,7 @@ function calculateGoalProgress(
     return Math.round((completedCount / totalCount) * 100);
 }
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
         const body = await request.json();
         const v = validateBody(scheduleUpdateSchema, body);
         if (!v.success) return v.response;
@@ -110,7 +105,7 @@ export async function POST(request: NextRequest) {
         const { data: user, error: fetchError } = await supabaseAdmin
             .from('users')
             .select('*')
-            .eq('email', userEmail)
+            .eq('email', email)
             .maybeSingle();
 
         if (fetchError || !user?.profile?.customGoals) {
@@ -177,14 +172,14 @@ export async function POST(request: NextRequest) {
         const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({ profile: updatedProfile })
-            .eq('email', userEmail);
+            .eq('email', email);
 
         if (updateError) {
             throw updateError;
         }
 
         // Dual-write to schedules table
-        await dualWriteUpdate(userEmail, scheduleId, { completed, skipped });
+        await dualWriteUpdate(email, scheduleId, { completed, skipped });
 
         return NextResponse.json({
             success: true,
@@ -192,10 +187,4 @@ export async function POST(request: NextRequest) {
             goalProgressUpdated: linkedGoalId ? true : false,
         });
 
-    } catch (error) {
-        console.error("[schedule/update] Error:", error);
-        return NextResponse.json({
-            error: "Failed to update schedule"
-        }, { status: 500 });
-    }
-}
+});

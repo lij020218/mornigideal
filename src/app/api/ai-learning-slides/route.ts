@@ -3,7 +3,8 @@ import OpenAI from "openai";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { isMaxPlan } from "@/lib/user-plan";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { MODELS } from "@/lib/models";
 
 const openai = new OpenAI({
@@ -39,68 +40,62 @@ const LEVEL_LABELS: Record<string, string> = {
     expert: "전문가",
 };
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    // Check if user has Max plan (from user_subscriptions table)
+    const hasMaxPlan = await isMaxPlan(email);
+    if (!hasMaxPlan) {
+        return NextResponse.json(
+            { error: "Slide generation is only available for Max plan users" },
+            { status: 403 }
+        );
+    }
 
-        // Check if user has Max plan (from user_subscriptions table)
-        const hasMaxPlan = await isMaxPlan(userEmail);
-        if (!hasMaxPlan) {
-            return NextResponse.json(
-                { error: "Slide generation is only available for Max plan users" },
-                { status: 403 }
-            );
-        }
+    // Get user ID for later use
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        // Get user ID for later use
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", userEmail)
-            .maybeSingle();
+    if (!userData) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-        if (!userData) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
+    const {
+        curriculumId,
+        dayNumber,
+        dayTitle,
+        dayDescription,
+        objectives,
+        topic,
+        currentLevel,
+        targetLevel,
+    }: SlideGenerationRequest = await request.json();
 
-        const {
-            curriculumId,
-            dayNumber,
-            dayTitle,
-            dayDescription,
-            objectives,
-            topic,
-            currentLevel,
-            targetLevel,
-        }: SlideGenerationRequest = await request.json();
+    if (!curriculumId || !dayNumber || !dayTitle || !topic) {
+        return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
-        if (!curriculumId || !dayNumber || !dayTitle || !topic) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
+    // Check if slides already exist for this user
 
-        // Check if slides already exist for this user
-
-        const { data: existingSlides, error: checkError } = await supabaseAdmin
-            .from("learning_slides")
-            .select("*")
-            .eq("curriculum_id", curriculumId)
-            .eq("day_number", dayNumber)
-            .eq("user_id", userData.id)
-            .maybeSingle();
+    const { data: existingSlides, error: checkError } = await supabaseAdmin
+        .from("learning_slides")
+        .select("*")
+        .eq("curriculum_id", curriculumId)
+        .eq("day_number", dayNumber)
+        .eq("user_id", userData.id)
+        .maybeSingle();
 
 
-        if (existingSlides) {
-            return NextResponse.json({ slides: existingSlides.slides_data });
-        }
+    if (existingSlides) {
+        return NextResponse.json({ slides: existingSlides.slides_data });
+    }
 
 
-        const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
-        const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
+    const currentLevelLabel = LEVEL_LABELS[currentLevel] || currentLevel;
+    const targetLevelLabel = LEVEL_LABELS[targetLevel] || targetLevel;
 
-        const prompt = `"${dayTitle}" 주제로 교육용 슬라이드 12-15장을 만들어주세요.
+    const prompt = `"${dayTitle}" 주제로 교육용 슬라이드 12-15장을 만들어주세요.
 
 **학습 정보:**
 - 대주제: ${topic}
@@ -165,12 +160,12 @@ export async function POST(request: NextRequest) {
     ]
 }`;
 
-        const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_5_2,
-            messages: [
-                {
-                    role: "system",
-                    content: `교육 콘텐츠 전문가입니다. 깊이 있으면서도 읽기 쉬운 슬라이드를 존댓말로 작성합니다.
+    const completion = await openai.chat.completions.create({
+        model: MODELS.GPT_5_2,
+        messages: [
+            {
+                role: "system",
+                content: `교육 콘텐츠 전문가입니다. 깊이 있으면서도 읽기 쉬운 슬라이드를 존댓말로 작성합니다.
 
 **핵심 원칙:**
 - 각 content는 2-3문장으로 충실하게 설명
@@ -184,110 +179,93 @@ export async function POST(request: NextRequest) {
 - 같은 내용 반복
 
 반드시 유효한 JSON으로만 응답하세요.`,
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-            temperature: 1,
-            response_format: { type: "json_object" },
-        });
+            },
+            {
+                role: "user",
+                content: prompt,
+            },
+        ],
+        temperature: 1,
+        response_format: { type: "json_object" },
+    });
 
-        const responseText = completion.choices[0]?.message?.content || "{}";
+    const responseText = completion.choices[0]?.message?.content || "{}";
 
-        let parsed;
-        try {
-            parsed = JSON.parse(responseText);
-        } catch {
-            console.error("[AI Learning Slides] Failed to parse response:", responseText);
-            return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
-        }
+    let parsed;
+    try {
+        parsed = JSON.parse(responseText);
+    } catch {
+        logger.error("[AI Learning Slides] Failed to parse response:", responseText);
+        return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+    }
 
-        // Log usage
-        const usage = completion.usage;
-        if (usage) {
-            await logOpenAIUsage(
-                userEmail,
-                MODELS.GPT_5_2,
-                "ai-learning-slides",
-                usage.prompt_tokens,
-                usage.completion_tokens
-            );
-        }
-
-        // Save slides to database
-        const { error: insertError } = await supabaseAdmin
-            .from("learning_slides")
-            .insert({
-                curriculum_id: curriculumId,
-                user_id: userData.id,
-                day_number: dayNumber,
-                day_title: dayTitle,
-                slides_data: parsed.slides || [],
-                created_at: new Date().toISOString(),
-            });
-
-        if (insertError) {
-            console.error("[AI Learning Slides] Insert error:", insertError);
-        } else {
-        }
-
-        return NextResponse.json({
-            slides: parsed.slides || [],
-        });
-    } catch (error: any) {
-        console.error("[AI Learning Slides] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate learning slides" },
-            { status: 500 }
+    // Log usage
+    const usage = completion.usage;
+    if (usage) {
+        await logOpenAIUsage(
+            email,
+            MODELS.GPT_5_2,
+            "ai-learning-slides",
+            usage.prompt_tokens,
+            usage.completion_tokens
         );
     }
-}
+
+    // Save slides to database
+    const { error: insertError } = await supabaseAdmin
+        .from("learning_slides")
+        .insert({
+            curriculum_id: curriculumId,
+            user_id: userData.id,
+            day_number: dayNumber,
+            day_title: dayTitle,
+            slides_data: parsed.slides || [],
+            created_at: new Date().toISOString(),
+        });
+
+    if (insertError) {
+        logger.error("[AI Learning Slides] Insert error:", insertError);
+    } else {
+    }
+
+    return NextResponse.json({
+        slides: parsed.slides || [],
+    });
+});
 
 // GET endpoint to fetch slides for a specific day
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    // Get user ID
+    const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-        // Get user ID
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", userEmail)
-            .maybeSingle();
-
-        if (!userData) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 });
-        }
-
-        const { searchParams } = new URL(request.url);
-        const curriculumId = searchParams.get("curriculumId");
-        const dayNumber = searchParams.get("dayNumber");
-
-        if (!curriculumId || !dayNumber) {
-            return NextResponse.json({ error: "Missing curriculumId or dayNumber" }, { status: 400 });
-        }
-
-        const { data: slides, error: slidesError } = await supabaseAdmin
-            .from("learning_slides")
-            .select("*")
-            .eq("curriculum_id", curriculumId)
-            .eq("day_number", parseInt(dayNumber))
-            .eq("user_id", userData.id)
-            .maybeSingle();
-
-
-        if (!slides) {
-            return NextResponse.json({ slides: null });
-        }
-
-        return NextResponse.json({ slides: slides.slides_data });
-    } catch (error: any) {
-        console.error("[AI Learning Slides] GET Error:", error);
-        return NextResponse.json({ error: "Failed to fetch slides" }, { status: 500 });
+    if (!userData) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-}
+
+    const { searchParams } = new URL(request.url);
+    const curriculumId = searchParams.get("curriculumId");
+    const dayNumber = searchParams.get("dayNumber");
+
+    if (!curriculumId || !dayNumber) {
+        return NextResponse.json({ error: "Missing curriculumId or dayNumber" }, { status: 400 });
+    }
+
+    const { data: slides, error: slidesError } = await supabaseAdmin
+        .from("learning_slides")
+        .select("*")
+        .eq("curriculum_id", curriculumId)
+        .eq("day_number", parseInt(dayNumber))
+        .eq("user_id", userData.id)
+        .maybeSingle();
+
+
+    if (!slides) {
+        return NextResponse.json({ slides: null });
+    }
+
+    return NextResponse.json({ slides: slides.slides_data });
+});

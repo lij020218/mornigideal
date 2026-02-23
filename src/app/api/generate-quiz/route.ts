@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -81,7 +82,7 @@ ${context}
 
     return NextResponse.json({ quiz, success: true });
   } catch (error: any) {
-    console.error("[ONBOARDING QUIZ ERROR]:", error);
+    logger.error("[ONBOARDING QUIZ ERROR]:", error);
     return NextResponse.json(
       { error: "Onboarding quiz generation failed" },
       { status: 500 }
@@ -89,13 +90,7 @@ ${context}
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     const body = await request.json();
     const { pageAnalyses, type, materialId, userType, major, field, goal } = body;
 
@@ -324,13 +319,4 @@ ${allContent}
     }
 
     return NextResponse.json({ quiz, success: true, cached: false, cost: totalQuizCost });
-  } catch (error: any) {
-    console.error("[QUIZ ERROR]:", error);
-    return NextResponse.json(
-      {
-        error: "Quiz generation failed"
-      },
-      { status: 500 }
-    );
-  }
-}
+});

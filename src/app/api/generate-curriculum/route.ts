@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,34 +11,26 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 export const maxDuration = 60; // 60 seconds
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
-    try {
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+        logger.error("[generate-curriculum] GEMINI_API_KEY is missing");
+        return NextResponse.json({
+            error: "Server configuration error: Missing API Key",
+            hint: "Please set GEMINI_API_KEY environment variable in Vercel"
+        }, { status: 500 });
+    }
 
-        // 1. Authenticate User
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { job, goal, level } = await request.json();
+
+    // 2. Generate Curriculum
+    const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
+        generationConfig: {
+            responseMimeType: "application/json"
         }
+    });
 
-        if (!process.env.GEMINI_API_KEY) {
-            console.error("[generate-curriculum] GEMINI_API_KEY is missing");
-            return NextResponse.json({
-                error: "Server configuration error: Missing API Key",
-                hint: "Please set GEMINI_API_KEY environment variable in Vercel"
-            }, { status: 500 });
-        }
-
-        const { job, goal, level } = await request.json();
-
-        // 2. Generate Curriculum
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        });
-
-        const prompt = `
+    const prompt = `
       You are an expert career coach and curriculum designer.
       Create a personalized learning curriculum for a user with the following profile:
       - Job/Status: ${job}
@@ -69,69 +62,62 @@ export async function POST(request: NextRequest) {
     `;
 
 
-        let result;
-        try {
-            result = await model.generateContent(prompt);
-        } catch (apiError: any) {
-            console.error("[generate-curriculum] Gemini API call failed:", {
-                message: apiError.message,
-                status: apiError.status,
-                error: apiError
-            });
-            return NextResponse.json({
-                error: "Gemini API call failed",
-                details: apiError.message,
-                hint: "Check if GEMINI_API_KEY is valid and model is accessible"
-            }, { status: 500 });
-        }
-
-        const response = await result.response;
-        const text = response.text();
-
-        // Clean up potential markdown formatting if the model includes it
-        const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-        let curriculum;
-        try {
-            curriculum = JSON.parse(cleanedText);
-        } catch (parseError) {
-            console.error('[generate-curriculum] Failed to parse response:', text.substring(0, 500));
-            throw new Error('Failed to parse curriculum data');
-        }
-
-        // 3. Save to Supabase
-        // Get user ID
-        const { data: userData, error: userError } = await supabaseAdmin
-            .from("users")
-            .select("id")
-            .eq("email", email)
-            .maybeSingle();
-
-        if (userError || !userData) {
-            console.error("[generate-curriculum] User not found for email:", email);
-            // We still return the curriculum to the frontend even if save fails, but log error
-        } else {
-            const curriculumId = uuidv4();
-            const { error: saveError } = await supabaseAdmin
-                .from("user_curriculums")
-                .insert({
-                    user_id: userData.id,
-                    curriculum_id: curriculumId,
-                    curriculum_data: curriculum
-                });
-
-            if (saveError) {
-                console.error("[generate-curriculum] Failed to save to Supabase:", saveError);
-            } else {
-            }
-        }
-
-        return NextResponse.json({ curriculum });
-
-    } catch (error: any) {
-        console.error("[generate-curriculum] Error:", error);
+    let result;
+    try {
+        result = await model.generateContent(prompt);
+    } catch (apiError: any) {
+        logger.error("[generate-curriculum] Gemini API call failed:", {
+            message: apiError.message,
+            status: apiError.status,
+            error: apiError
+        });
         return NextResponse.json({
-            error: "Failed to generate curriculum"
+            error: "Gemini API call failed",
+            details: apiError.message,
+            hint: "Check if GEMINI_API_KEY is valid and model is accessible"
         }, { status: 500 });
     }
-}
+
+    const response = await result.response;
+    const text = response.text();
+
+    // Clean up potential markdown formatting if the model includes it
+    const cleanedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    let curriculum;
+    try {
+        curriculum = JSON.parse(cleanedText);
+    } catch (parseError) {
+        logger.error('[generate-curriculum] Failed to parse response:', text.substring(0, 500));
+        throw new Error('Failed to parse curriculum data');
+    }
+
+    // 3. Save to Supabase
+    // Get user ID
+    const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+    if (userError || !userData) {
+        logger.error("[generate-curriculum] User not found for email:", email);
+        // We still return the curriculum to the frontend even if save fails, but log error
+    } else {
+        const curriculumId = uuidv4();
+        const { error: saveError } = await supabaseAdmin
+            .from("user_curriculums")
+            .insert({
+                user_id: userData.id,
+                curriculum_id: curriculumId,
+                curriculum_data: curriculum
+            });
+
+        if (saveError) {
+            logger.error("[generate-curriculum] Failed to save to Supabase:", saveError);
+        } else {
+        }
+    }
+
+    return NextResponse.json({ curriculum });
+});

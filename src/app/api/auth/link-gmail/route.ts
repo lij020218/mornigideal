@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getUserEmailWithAuth, getJwtSecret } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { getJwtSecret, getUserEmailWithAuth } from "@/lib/auth-utils";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logger } from '@/lib/logger';
 import crypto from "crypto";
 
 function getOAuthSecret(): string {
@@ -41,39 +43,23 @@ function verifyOAuthState(state: string): string | null {
 }
 
 // Step 1: Initiate OAuth flow
-export async function GET(req: NextRequest) {
-    try {
-        // Support both web session and mobile JWT
-        let userEmail = await getUserEmailWithAuth(req);
-        if (!userEmail) {
-            const session = await auth();
-            userEmail = session?.user?.email || null;
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const state = generateOAuthState(email);
 
-        if (!userEmail) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
+    const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/auth/link-gmail/callback`,
+        response_type: "code",
+        scope: "https://www.googleapis.com/auth/gmail.readonly email profile",
+        access_type: "offline",
+        prompt: "consent",
+        state,
+    });
 
-        const state = generateOAuthState(userEmail);
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-        const params = new URLSearchParams({
-            client_id: process.env.GOOGLE_CLIENT_ID!,
-            redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/auth/link-gmail/callback`,
-            response_type: "code",
-            scope: "https://www.googleapis.com/auth/gmail.readonly email profile",
-            access_type: "offline",
-            prompt: "consent",
-            state,
-        });
-
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-
-        return NextResponse.json({ authUrl });
-    } catch (error) {
-        console.error("[Link Gmail] Error:", error);
-        return NextResponse.json({ error: "Failed to initiate OAuth" }, { status: 500 });
-    }
-}
+    return NextResponse.json({ authUrl });
+});
 
 // Step 2: Handle OAuth callback - exchange code for tokens
 export async function POST(req: NextRequest) {
@@ -120,7 +106,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (!tokenResponse.ok) {
-            console.error("[Link Gmail] Token exchange failed");
+            logger.error("[Link Gmail] Token exchange failed");
             return NextResponse.json({ error: "Failed to exchange code for tokens" }, { status: 500 });
         }
 
@@ -160,7 +146,7 @@ export async function POST(req: NextRequest) {
             .select();
 
         if (error) {
-            console.error("[Link Gmail] Database error:", error);
+            logger.error("[Link Gmail] Database error:", error);
             return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
         }
 
@@ -170,7 +156,7 @@ export async function POST(req: NextRequest) {
             gmailEmail
         });
     } catch (error) {
-        console.error("[Link Gmail] Error:", error);
+        logger.error("[Link Gmail] Error:", error);
         return NextResponse.json({ error: "Failed to link Gmail account" }, { status: 500 });
     }
 }

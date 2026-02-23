@@ -4,16 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove } from '@/lib/user-plan';
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     // Plan gate
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
@@ -128,4 +123,4 @@ export async function GET(request: NextRequest) {
         },
         totalCheckins: filtered.length,
     });
-}
+});

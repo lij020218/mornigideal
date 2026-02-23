@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
@@ -20,57 +21,47 @@ const openai = new OpenAI({
  * - User goals and interests
  */
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { date, currentSchedules } = await request.json();
+    const targetDate = date ? new Date(date) : new Date();
+
+    // Fetch user profile
+    const { data: profile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+    // Fetch enhanced profile with behavioral insights
+    let enhancedProfile = null;
     try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const profileResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/enhanced-profile`, {
+            headers: {
+                'Cookie': request.headers.get('Cookie') || '',
+            },
+        });
+        if (profileResponse.ok) {
+            const data = await profileResponse.json();
+            enhancedProfile = data.profile;
         }
-
-        const { date, currentSchedules } = await request.json();
-        const targetDate = date ? new Date(date) : new Date();
-
-        // Fetch user profile
-        const { data: profile } = await supabaseAdmin
-            .from('user_profiles')
-            .select('*')
-            .eq('email', userEmail)
-            .maybeSingle();
-
-        // Fetch enhanced profile with behavioral insights
-        let enhancedProfile = null;
-        try {
-            const profileResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/enhanced-profile`, {
-                headers: {
-                    'Cookie': request.headers.get('Cookie') || '',
-                },
-            });
-            if (profileResponse.ok) {
-                const data = await profileResponse.json();
-                enhancedProfile = data.profile;
-            }
-        } catch (error) {
-            console.error('[Schedule Recommendations] Failed to fetch enhanced profile:', error);
-        }
-
-        // Analyze current day's schedule to find idle times
-        const scheduleGaps = findScheduleGaps(currentSchedules || [], targetDate);
-
-        // Generate recommendations
-        const recommendations = await generateSmartRecommendations(
-            profile,
-            enhancedProfile,
-            scheduleGaps,
-            targetDate,
-            userEmail
-        );
-
-        return NextResponse.json({ recommendations });
-    } catch (error: any) {
-        console.error('[Schedule Recommendations] Error:', error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    } catch (error) {
+        logger.error('[Schedule Recommendations] Failed to fetch enhanced profile:', error);
     }
-}
+
+    // Analyze current day's schedule to find idle times
+    const scheduleGaps = findScheduleGaps(currentSchedules || [], targetDate);
+
+    // Generate recommendations
+    const recommendations = await generateSmartRecommendations(
+        profile,
+        enhancedProfile,
+        scheduleGaps,
+        targetDate,
+        email
+    );
+
+    return NextResponse.json({ recommendations });
+});
 
 interface ScheduleGap {
     startTime: Date;
@@ -156,7 +147,7 @@ async function generateSmartRecommendations(
     enhancedProfile: any,
     gaps: ScheduleGap[],
     targetDate: Date,
-    userEmail: string
+    email: string
 ): Promise<any[]> {
     const insights = enhancedProfile?.behavioral_insights;
 
@@ -278,7 +269,7 @@ JSON 형식으로만 응답하세요:
 
         // Log usage
         await logOpenAIUsage(
-            userEmail,
+            email,
             completion.model,
             '/api/ai-schedule-recommendations',
             completion.usage?.prompt_tokens || 0,
@@ -318,7 +309,7 @@ JSON 형식으로만 응답하세요:
 
         return validatedRecommendations;
     } catch (error: any) {
-        console.error('[Schedule Recommendations] OpenAI error:', error);
+        logger.error('[Schedule Recommendations] OpenAI error:', error);
         return [];
     }
 }

@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 
-export async function GET(request: NextRequest) {
-  try {
-    const userEmail = await getUserEmailWithAuth(request);
-    if (!userEmail) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const { data, error } = await supabaseAdmin
       .from("slack_tokens")
       .select("slack_team_name, slack_user_id")
-      .eq("user_email", userEmail)
+      .eq("user_email", email)
       .maybeSingle();
 
     if (error || !data) {
@@ -24,8 +18,4 @@ export async function GET(request: NextRequest) {
       teamName: data.slack_team_name,
       slackUserId: data.slack_user_id,
     });
-  } catch (error) {
-    console.error("[Check Slack Link] Error:", error);
-    return NextResponse.json({ error: "Failed to check Slack link" }, { status: 500 });
-  }
-}
+});

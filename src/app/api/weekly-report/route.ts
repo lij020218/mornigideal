@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWeeklyReport, generateWeeklyReportNarrative } from "@/lib/weeklyReportGenerator";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 
 /**
  * Weekly Report API
@@ -53,93 +54,80 @@ function getTargetWeekNumber(): number {
     return getISOWeekNumber(targetMonday);
 }
 
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // 빠른 주차 번호 계산 (DB 쿼리 없이)
-        const targetWeekNumber = getTargetWeekNumber();
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    // 빠른 주차 번호 계산 (DB 쿼리 없이)
+    const targetWeekNumber = getTargetWeekNumber();
 
 
-        // 캐시 먼저 확인 (DB 쿼리 1회)
-        // narrative_version: v2 = plain text (v1 = markdown)
-        const NARRATIVE_VERSION = 'v2';
-        const { data: existingReport } = await supabaseAdmin
-            .from('user_events')
-            .select('*')
-            .eq('user_email', userEmail)
-            .eq('event_type', 'weekly_report_generated')
-            .eq('metadata->>week_number', targetWeekNumber.toString())
-            .eq('metadata->>narrative_version', NARRATIVE_VERSION)
-            .order('start_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+    // 캐시 먼저 확인 (DB 쿼리 1회)
+    // narrative_version: v2 = plain text (v1 = markdown)
+    const NARRATIVE_VERSION = 'v2';
+    const { data: existingReport } = await supabaseAdmin
+        .from('user_events')
+        .select('*')
+        .eq('user_email', email)
+        .eq('event_type', 'weekly_report_generated')
+        .eq('metadata->>week_number', targetWeekNumber.toString())
+        .eq('metadata->>narrative_version', NARRATIVE_VERSION)
+        .order('start_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        // 이미 존재하는 리포트가 있으면 그것을 반환 (매우 빠름)
-        if (existingReport?.metadata?.report_data) {
-            return NextResponse.json({
-                success: true,
-                cached: true,
-                report: {
-                    ...existingReport.metadata.report_data,
-                    narrative: existingReport.metadata.narrative,
-                },
-            });
-        }
-
-        // 캐시 없음 - 리포트 데이터 생성 (느린 작업)
-        const reportData = await generateWeeklyReport(userEmail);
-
-        // Get user profile for AI narrative
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', userEmail)
-            .maybeSingle();
-
-        const profile = userData?.profile || {};
-
-        // Generate AI narrative
-        const narrative = await generateWeeklyReportNarrative(reportData, profile);
-
-        // Save to database (for history and caching)
-        try {
-            await supabaseAdmin.from('user_events').insert({
-                id: `weekly-report-${userEmail}-week${targetWeekNumber}-${Date.now()}`,
-                user_email: userEmail,
-                event_type: 'weekly_report_generated',
-                start_at: new Date().toISOString(),
-                metadata: {
-                    week_number: targetWeekNumber,
-                    narrative_version: NARRATIVE_VERSION,
-                    period_start: reportData.period.start,
-                    period_end: reportData.period.end,
-                    completion_rate: reportData.scheduleAnalysis.completionRate,
-                    total_read: reportData.trendBriefingAnalysis.totalRead,
-                    narrative,
-                    report_data: reportData,
-                },
-            });
-        } catch (e) {
-            console.error('[Weekly Report API] Failed to save report:', e);
-        }
-
+    // 이미 존재하는 리포트가 있으면 그것을 반환 (매우 빠름)
+    if (existingReport?.metadata?.report_data) {
         return NextResponse.json({
             success: true,
-            cached: false,
+            cached: true,
             report: {
-                ...reportData,
-                narrative,
+                ...existingReport.metadata.report_data,
+                narrative: existingReport.metadata.narrative,
             },
         });
-    } catch (error: any) {
-        console.error("[Weekly Report API] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate weekly report" },
-            { status: 500 }
-        );
     }
-}
+
+    // 캐시 없음 - 리포트 데이터 생성 (느린 작업)
+    const reportData = await generateWeeklyReport(email);
+
+    // Get user profile for AI narrative
+    const { data: userData } = await supabaseAdmin
+        .from('users')
+        .select('profile')
+        .eq('email', email)
+        .maybeSingle();
+
+    const profile = userData?.profile || {};
+
+    // Generate AI narrative
+    const narrative = await generateWeeklyReportNarrative(reportData, profile);
+
+    // Save to database (for history and caching)
+    try {
+        await supabaseAdmin.from('user_events').insert({
+            id: `weekly-report-${email}-week${targetWeekNumber}-${Date.now()}`,
+            user_email: email,
+            event_type: 'weekly_report_generated',
+            start_at: new Date().toISOString(),
+            metadata: {
+                week_number: targetWeekNumber,
+                narrative_version: NARRATIVE_VERSION,
+                period_start: reportData.period.start,
+                period_end: reportData.period.end,
+                completion_rate: reportData.scheduleAnalysis.completionRate,
+                total_read: reportData.trendBriefingAnalysis.totalRead,
+                narrative,
+                report_data: reportData,
+            },
+        });
+    } catch (e) {
+        logger.error('[Weekly Report API] Failed to save report:', e);
+    }
+
+    return NextResponse.json({
+        success: true,
+        cached: false,
+        report: {
+            ...reportData,
+            narrative,
+        },
+    });
+});

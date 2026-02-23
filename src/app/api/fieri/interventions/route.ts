@@ -5,21 +5,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { Hands } from '@/lib/jarvis/hands';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
+export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
         // Fetch notifications (L2 soft suggestions)
         const { data: notifications, error: notifError } = await supabaseAdmin
             .from('jarvis_notifications')
@@ -30,7 +22,7 @@ export async function GET(request: NextRequest) {
             .limit(10);
 
         if (notifError) {
-            console.error('[Interventions API] Failed to fetch notifications:', notifError);
+            logger.error('[Interventions API] Failed to fetch notifications:', notifError);
         }
 
         // Fetch confirmation requests (L3 direct actions)
@@ -43,7 +35,7 @@ export async function GET(request: NextRequest) {
             .limit(5);
 
         if (confirmError) {
-            console.error('[Interventions API] Failed to fetch confirmations:', confirmError);
+            logger.error('[Interventions API] Failed to fetch confirmations:', confirmError);
         }
 
         // Fetch resources (checklists, links, etc.)
@@ -56,7 +48,7 @@ export async function GET(request: NextRequest) {
             .limit(10);
 
         if (resourcesError) {
-            console.error('[Interventions API] Failed to fetch resources:', resourcesError);
+            logger.error('[Interventions API] Failed to fetch resources:', resourcesError);
         }
 
         return NextResponse.json({
@@ -64,25 +56,9 @@ export async function GET(request: NextRequest) {
             confirmations: confirmations || [],
             resources: resources || []
         });
-    } catch (error) {
-        console.error('[Interventions API] Exception:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
-    }
-}
+});
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
+export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
         const body = await request.json();
         const { action, id } = body;
 
@@ -101,7 +77,7 @@ export async function POST(request: NextRequest) {
                 .eq('user_email', userEmail);
 
             if (error) {
-                console.error('[Interventions API] Failed to dismiss notification:', error);
+                logger.error('[Interventions API] Failed to dismiss notification:', error);
                 return NextResponse.json({ error: 'Failed to dismiss' }, { status: 500 });
             }
 
@@ -119,7 +95,7 @@ export async function POST(request: NextRequest) {
                 .eq('user_email', userEmail);
 
             if (error) {
-                console.error('[Interventions API] Failed to accept confirmation:', error);
+                logger.error('[Interventions API] Failed to accept confirmation:', error);
                 return NextResponse.json({ error: 'Failed to accept' }, { status: 500 });
             }
 
@@ -140,7 +116,7 @@ export async function POST(request: NextRequest) {
                 .eq('user_email', userEmail);
 
             if (error) {
-                console.error('[Interventions API] Failed to reject confirmation:', error);
+                logger.error('[Interventions API] Failed to reject confirmation:', error);
                 return NextResponse.json({ error: 'Failed to reject' }, { status: 500 });
             }
 
@@ -155,7 +131,7 @@ export async function POST(request: NextRequest) {
                 .eq('user_email', userEmail);
 
             if (error) {
-                console.error('[Interventions API] Failed to mark resource accessed:', error);
+                logger.error('[Interventions API] Failed to mark resource accessed:', error);
                 return NextResponse.json({ error: 'Failed to mark accessed' }, { status: 500 });
             }
 
@@ -170,7 +146,7 @@ export async function POST(request: NextRequest) {
                 .eq('user_email', userEmail);
 
             if (error) {
-                console.error('[Interventions API] Failed to complete resource:', error);
+                logger.error('[Interventions API] Failed to complete resource:', error);
                 return NextResponse.json({ error: 'Failed to complete' }, { status: 500 });
             }
 
@@ -210,7 +186,7 @@ export async function POST(request: NextRequest) {
                     .eq('user_email', userEmail);
 
                 if (updateError) {
-                    console.error('[Interventions API] Failed to update checklist:', updateError);
+                    logger.error('[Interventions API] Failed to update checklist:', updateError);
                     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
                 }
 
@@ -231,11 +207,4 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    } catch (error) {
-        console.error('[Interventions API] Exception:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
-    }
-}
+});

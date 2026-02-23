@@ -4,14 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const clientId = process.env.GITHUB_CLIENT_ID;
     if (!clientId) {
         return NextResponse.json({ error: 'GitHub OAuth not configured' }, { status: 500 });
@@ -24,4 +19,4 @@ export async function GET(request: NextRequest) {
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}`;
 
     return NextResponse.redirect(githubAuthUrl);
-}
+});

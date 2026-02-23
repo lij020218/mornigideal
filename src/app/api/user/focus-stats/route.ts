@@ -5,16 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { kvGet, kvAppend } from '@/lib/kv-store';
 import { focusSessionSchema, validateBody } from '@/lib/schemas';
 
-export async function POST(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     const body = await request.json();
     const v = validateBody(focusSessionSchema, body);
     if (!v.success) return v.response;
@@ -36,14 +31,9 @@ export async function POST(request: NextRequest) {
     await kvAppend(email, monthKey, entry, 500);
 
     return NextResponse.json({ success: true, entry });
-}
+});
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const period = request.nextUrl.searchParams.get('period') || 'week';
 
     const now = new Date();
@@ -124,4 +114,4 @@ export async function GET(request: NextRequest) {
         daily: dailyMap,
         sessions: period === 'today' ? filtered : undefined,
     });
-}
+});

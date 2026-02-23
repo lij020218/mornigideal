@@ -7,41 +7,28 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { upgradePlan, UserPlanType } from "@/lib/user-plan";
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { plan } = await request.json();
 
-        const { plan } = await request.json();
-
-        if (!plan || !["free", "pro", "max"].includes(plan)) {
-            return NextResponse.json(
-                { error: "유효한 플랜을 선택해주세요." },
-                { status: 400 }
-            );
-        }
-
-        const success = await upgradePlan(userEmail, plan as UserPlanType);
-
-        if (!success) {
-            return NextResponse.json(
-                { error: "플랜 동기화에 실패했습니다." },
-                { status: 500 }
-            );
-        }
-
-
-        return NextResponse.json({ success: true, plan });
-    } catch (error: any) {
-        console.error("[Plan Sync] Error:", error);
+    if (!plan || !["free", "pro", "max"].includes(plan)) {
         return NextResponse.json(
-            { error: "플랜 동기화 중 오류가 발생했습니다." },
+            { error: "유효한 플랜을 선택해주세요." },
+            { status: 400 }
+        );
+    }
+
+    const success = await upgradePlan(email, plan as UserPlanType);
+
+    if (!success) {
+        return NextResponse.json(
+            { error: "플랜 동기화에 실패했습니다." },
             { status: 500 }
         );
     }
-}
+
+
+    return NextResponse.json({ success: true, plan });
+});

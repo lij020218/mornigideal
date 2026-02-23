@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getUserByEmail } from "@/lib/users";
 
@@ -16,53 +17,44 @@ interface UserProfileData {
     level?: string;
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    // Get user profile from database
+    let userProfile: UserProfileData = {};
     try {
-
-        // Check authentication
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            console.error("[AI News Alert] Unauthorized access attempt");
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getUserByEmail(email);
+        if (user?.profile) {
+            userProfile = user.profile as UserProfileData;
         }
+    } catch (error) {
+        logger.error("[AI News Alert] 프로필 로드 실패:", error);
+    }
 
-        // Get user profile from database
-        let userProfile: UserProfileData = {};
-        try {
-            const user = await getUserByEmail(email);
-            if (user?.profile) {
-                userProfile = user.profile as UserProfileData;
-            }
-        } catch (error) {
-            console.error("[AI News Alert] 프로필 로드 실패:", error);
-        }
+    // Build user context
+    const interestMap: Record<string, string> = {
+        ai: "AI/인공지능/딥러닝/머신러닝",
+        startup: "스타트업/창업/벤처투자",
+        marketing: "마케팅/브랜딩/광고",
+        development: "소프트웨어 개발/프로그래밍",
+        design: "디자인/UX/UI",
+        finance: "금융/투자/주식/암호화폐",
+        selfdev: "자기계발/생산성",
+        health: "건강/피트니스/웰니스",
+    };
 
-        // Build user context
-        const interestMap: Record<string, string> = {
-            ai: "AI/인공지능/딥러닝/머신러닝",
-            startup: "스타트업/창업/벤처투자",
-            marketing: "마케팅/브랜딩/광고",
-            development: "소프트웨어 개발/프로그래밍",
-            design: "디자인/UX/UI",
-            finance: "금융/투자/주식/암호화폐",
-            selfdev: "자기계발/생산성",
-            health: "건강/피트니스/웰니스",
-        };
+    const interestLabels = (userProfile.interests || []).map(i => interestMap[i] || i);
+    const job = userProfile.job || userProfile.field || "전문직";
+    const goal = userProfile.goal || "";
 
-        const interestLabels = (userProfile.interests || []).map(i => interestMap[i] || i);
-        const job = userProfile.job || userProfile.field || "전문직";
-        const goal = userProfile.goal || "";
+    // Get current date for context
+    const now = new Date();
+    const currentMonth = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
-        // Get current date for context
-        const now = new Date();
-        const currentMonth = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+    // Use Gemini with Google Search grounding to find recent news
+    const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    });
 
-        // Use Gemini with Google Search grounding to find recent news
-        const model = genAI.getGenerativeModel({
-            model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-        });
-
-        const prompt = `당신은 "${job}" 직업을 가진 사용자를 위한 뉴스 큐레이터입니다.
+    const prompt = `당신은 "${job}" 직업을 가진 사용자를 위한 뉴스 큐레이터입니다.
 
 **사용자 정보:**
 - 직업: ${job}
@@ -106,49 +98,41 @@ export async function POST(request: NextRequest) {
     "hasNews": false
 }`;
 
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.7,
-            },
-        });
+    const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.7,
+        },
+    });
 
-        const response = result.response;
-        const text = response.text();
-        const cleanText = text.replace(/```json\n?|\n?```/g, "").trim();
+    const response = result.response;
+    const text = response.text();
+    const cleanText = text.replace(/```json\n?|\n?```/g, "").trim();
 
 
-        try {
-            const newsData = JSON.parse(cleanText);
+    try {
+        const newsData = JSON.parse(cleanText);
 
-            if (!newsData.hasNews) {
-                return NextResponse.json({
-                    hasNews: false,
-                    message: "현재 관련 뉴스가 없습니다."
-                });
-            }
-
-            return NextResponse.json({
-                hasNews: true,
-                headline: newsData.headline,
-                content: newsData.content,
-                source: newsData.source,
-                relevance: newsData.relevance,
-            });
-        } catch (parseError) {
-            console.error("[AI News Alert] JSON 파싱 실패:", parseError);
+        if (!newsData.hasNews) {
             return NextResponse.json({
                 hasNews: false,
-                error: "뉴스 파싱 실패"
+                message: "현재 관련 뉴스가 없습니다."
             });
         }
 
-    } catch (error: any) {
-        console.error("[AI News Alert] 에러 발생:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch news" },
-            { status: 500 }
-        );
+        return NextResponse.json({
+            hasNews: true,
+            headline: newsData.headline,
+            content: newsData.content,
+            source: newsData.source,
+            relevance: newsData.relevance,
+        });
+    } catch (parseError) {
+        logger.error("[AI News Alert] JSON 파싱 실패:", parseError);
+        return NextResponse.json({
+            hasNews: false,
+            error: "뉴스 파싱 실패"
+        });
     }
-}
+});

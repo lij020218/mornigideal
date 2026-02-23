@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { THRESHOLDS, LIMITS, TIMING } from '@/lib/constants';
 import { getCached, setCache } from '@/lib/cache';
+import { logger } from '@/lib/logger';
 
 /**
  * Deep Schedule Pattern Analysis
@@ -14,60 +15,50 @@ import { getCached, setCache } from '@/lib/cache';
  * - Wellness insights and recommendations
  */
 
-export async function GET(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const { searchParams } = new URL(request.url);
+    const days = parseInt(searchParams.get('days') || '30');
 
-        const { searchParams } = new URL(request.url);
-        const days = parseInt(searchParams.get('days') || '30');
-
-        // Check cache first (5 min TTL)
-        const cacheKey = `schedule-analytics:${email}:${days}`;
-        const cached = getCached<any>(cacheKey);
-        if (cached) {
-            return NextResponse.json({ analytics: cached });
-        }
-
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
-
-        // Fetch user's schedules (custom goals)
-        const { data: schedules, error: schedulesError } = await supabaseAdmin
-            .from('custom_goals')
-            .select('*')
-            .eq('user_email', email)
-            .gte('created_at', startDate.toISOString());
-
-        if (schedulesError) {
-            console.error('[Schedule Analytics] Error fetching schedules:', schedulesError);
-            return NextResponse.json({ error: schedulesError.message }, { status: 500 });
-        }
-
-        // Fetch schedule completion activities
-        const { data: activities, error: activitiesError } = await supabaseAdmin
-            .from('user_activity_logs')
-            .select('*')
-            .eq('user_email', email)
-            .in('activity_type', ['schedule_complete', 'schedule_skip'])
-            .gte('timestamp', startDate.toISOString());
-
-        if (activitiesError) {
-            console.error('[Schedule Analytics] Error fetching activities:', activitiesError);
-        }
-
-        // Analyze patterns
-        const analytics = analyzeSchedulePatterns(schedules || [], activities || []);
-
-        setCache(cacheKey, analytics, 5 * 60 * 1000); // 5 minutes
-        return NextResponse.json({ analytics });
-    } catch (error: any) {
-        console.error('[Schedule Analytics] Error:', error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    // Check cache first (5 min TTL)
+    const cacheKey = `schedule-analytics:${email}:${days}`;
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+        return NextResponse.json({ analytics: cached });
     }
-}
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Fetch user's schedules (custom goals)
+    const { data: schedules, error: schedulesError } = await supabaseAdmin
+        .from('custom_goals')
+        .select('*')
+        .eq('user_email', email)
+        .gte('created_at', startDate.toISOString());
+
+    if (schedulesError) {
+        logger.error('[Schedule Analytics] Error fetching schedules:', schedulesError);
+        return NextResponse.json({ error: schedulesError.message }, { status: 500 });
+    }
+
+    // Fetch schedule completion activities
+    const { data: activities, error: activitiesError } = await supabaseAdmin
+        .from('user_activity_logs')
+        .select('*')
+        .eq('user_email', email)
+        .in('activity_type', ['schedule_complete', 'schedule_skip'])
+        .gte('timestamp', startDate.toISOString());
+
+    if (activitiesError) {
+        logger.error('[Schedule Analytics] Error fetching activities:', activitiesError);
+    }
+
+    // Analyze patterns
+    const analytics = analyzeSchedulePatterns(schedules || [], activities || []);
+
+    setCache(cacheKey, analytics, 5 * 60 * 1000); // 5 minutes
+    return NextResponse.json({ analytics });
+});
 
 interface SchedulePattern {
     activityType: string;

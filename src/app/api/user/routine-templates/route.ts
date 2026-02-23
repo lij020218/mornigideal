@@ -5,30 +5,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getTemplatesByCategory, getTemplateById } from '@/lib/routineTemplates';
 import { templateApplySchema, validateBody } from '@/lib/schemas';
 import { isProOrAbove } from '@/lib/user-plan';
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const category = request.nextUrl.searchParams.get('category') || undefined;
     const templates = getTemplatesByCategory(category);
 
     return NextResponse.json({ templates });
-}
+});
 
-export async function POST(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     const body = await request.json();
     const v = validateBody(templateApplySchema, body);
     if (!v.success) return v.response;
@@ -125,4 +115,4 @@ export async function POST(request: NextRequest) {
         conflicts: conflicts.map(c => c.text),
         templateName: template.nameKo,
     });
-}
+});

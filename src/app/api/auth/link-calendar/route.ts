@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
 
@@ -99,135 +100,115 @@ async function exchangeKakaoToken(code: string, redirectUri: string) {
 
 // ─── GET: OAuth URL 생성 ───
 
-export async function GET(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const provider = request.nextUrl.searchParams.get('provider');
+    const redirectUri = request.nextUrl.searchParams.get('redirect_uri') || `${BASE_URL}/api/auth/link-google-calendar/callback`;
 
-        const provider = request.nextUrl.searchParams.get('provider');
-        const redirectUri = request.nextUrl.searchParams.get('redirect_uri') || `${BASE_URL}/api/auth/link-google-calendar/callback`;
+    let authUrl = '';
 
-        let authUrl = '';
-
-        switch (provider) {
-            case 'google':
-                authUrl = buildGoogleAuthUrl(userEmail, redirectUri);
-                break;
-            case 'naver':
-                authUrl = buildNaverAuthUrl(userEmail, redirectUri);
-                break;
-            case 'kakao':
-                authUrl = buildKakaoAuthUrl(userEmail, redirectUri);
-                break;
-            default:
-                return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
-        }
-
-        return NextResponse.json({ authUrl });
-    } catch (error) {
-        console.error("[Link Calendar] GET error:", error);
-        return NextResponse.json({ error: "Failed to initiate OAuth" }, { status: 500 });
+    switch (provider) {
+        case 'google':
+            authUrl = buildGoogleAuthUrl(email, redirectUri);
+            break;
+        case 'naver':
+            authUrl = buildNaverAuthUrl(email, redirectUri);
+            break;
+        case 'kakao':
+            authUrl = buildKakaoAuthUrl(email, redirectUri);
+            break;
+        default:
+            return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
-}
+
+    return NextResponse.json({ authUrl });
+});
 
 // ─── POST: 코드 교환 + 토큰 저장 ───
 
-export async function POST(request: NextRequest) {
-    try {
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const body = await request.json();
+    const { provider, code, redirect_uri } = body;
 
-        const body = await request.json();
-        const { provider, code, redirect_uri } = body;
+    if (!provider) {
+        return NextResponse.json({ error: "Missing provider" }, { status: 400 });
+    }
 
-        if (!provider) {
-            return NextResponse.json({ error: "Missing provider" }, { status: 400 });
-        }
-
-        // Apple: 코드 교환 없이 연동 기록만
-        if (provider === 'apple') {
-            const { error: dbError } = await supabaseAdmin
-                .from('calendar_tokens')
-                .upsert({
-                    user_email: userEmail,
-                    provider: 'apple',
-                    connected_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'user_email,provider' });
-
-            if (dbError) {
-                console.error("[Link Calendar] DB error (apple):", dbError);
-                return NextResponse.json({ error: "Failed to store connection" }, { status: 500 });
-            }
-
-            return NextResponse.json({ success: true, provider: 'apple' });
-        }
-
-        // OAuth 프로바이더: 코드 교환 필요
-        if (!code) {
-            return NextResponse.json({ error: "Missing code" }, { status: 400 });
-        }
-
-        const redirectUri = redirect_uri || `${BASE_URL}/api/auth/link-google-calendar/callback`;
-
-        let tokens;
-        switch (provider) {
-            case 'google':
-                tokens = await exchangeGoogleToken(code, redirectUri);
-                break;
-            case 'naver':
-                tokens = await exchangeNaverToken(code, redirectUri);
-                break;
-            case 'kakao':
-                tokens = await exchangeKakaoToken(code, redirectUri);
-                break;
-            default:
-                return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
-        }
-
-        // DB에 토큰 저장
+    // Apple: 코드 교환 없이 연동 기록만
+    if (provider === 'apple') {
         const { error: dbError } = await supabaseAdmin
             .from('calendar_tokens')
             .upsert({
-                user_email: userEmail,
-                provider,
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token || null,
-                expires_at: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : null,
-                scope: tokens.scope || null,
+                user_email: email,
+                provider: 'apple',
                 connected_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'user_email,provider' });
 
         if (dbError) {
-            console.error("[Link Calendar] DB error:", dbError);
-            return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
+            logger.error("[Link Calendar] DB error (apple):", dbError);
+            return NextResponse.json({ error: "Failed to store connection" }, { status: 500 });
         }
 
-        // Google: 기존 google_calendar_tokens 테이블에도 동기화 (기존 sync 서비스 호환)
-        if (provider === 'google') {
-            const { error: legacyErr } = await supabaseAdmin
-                .from('google_calendar_tokens')
-                .upsert({
-                    user_email: userEmail,
-                    access_token: tokens.access_token,
-                    refresh_token: tokens.refresh_token,
-                    token_type: tokens.token_type || "Bearer",
-                    expires_at: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : null,
-                    scope: tokens.scope,
-                    calendar_id: 'primary',
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'user_email' });
-            if (legacyErr) console.error("[Link Calendar] Google legacy sync error:", legacyErr);
-        }
-
-        return NextResponse.json({ success: true, provider });
-    } catch (error) {
-        console.error("[Link Calendar] POST error:", error);
-        return NextResponse.json({ error: "Failed to link calendar" }, { status: 500 });
+        return NextResponse.json({ success: true, provider: 'apple' });
     }
-}
+
+    // OAuth 프로바이더: 코드 교환 필요
+    if (!code) {
+        return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    }
+
+    const redirectUri = redirect_uri || `${BASE_URL}/api/auth/link-google-calendar/callback`;
+
+    let tokens;
+    switch (provider) {
+        case 'google':
+            tokens = await exchangeGoogleToken(code, redirectUri);
+            break;
+        case 'naver':
+            tokens = await exchangeNaverToken(code, redirectUri);
+            break;
+        case 'kakao':
+            tokens = await exchangeKakaoToken(code, redirectUri);
+            break;
+        default:
+            return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
+    }
+
+    // DB에 토큰 저장
+    const { error: dbError } = await supabaseAdmin
+        .from('calendar_tokens')
+        .upsert({
+            user_email: email,
+            provider,
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token || null,
+            expires_at: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : null,
+            scope: tokens.scope || null,
+            connected_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_email,provider' });
+
+    if (dbError) {
+        logger.error("[Link Calendar] DB error:", dbError);
+        return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
+    }
+
+    // Google: 기존 google_calendar_tokens 테이블에도 동기화 (기존 sync 서비스 호환)
+    if (provider === 'google') {
+        const { error: legacyErr } = await supabaseAdmin
+            .from('google_calendar_tokens')
+            .upsert({
+                user_email: email,
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token,
+                token_type: tokens.token_type || "Bearer",
+                expires_at: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : null,
+                scope: tokens.scope,
+                calendar_id: 'primary',
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_email' });
+        if (legacyErr) logger.error("[Link Calendar] Google legacy sync error:", legacyErr);
+    }
+
+    return NextResponse.json({ success: true, provider });
+});

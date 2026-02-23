@@ -7,7 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailWithAuth, getJwtSecret } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { getJwtSecret, getUserEmailWithAuth } from "@/lib/auth-utils";
+import { logger } from '@/lib/logger';
 import crypto from "crypto";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
@@ -49,13 +51,7 @@ function verifyOAuthState(state: string): string | null {
 }
 
 // GET: OAuth URL 생성
-export async function GET(request: NextRequest) {
-  try {
-    const userEmail = await getUserEmailWithAuth(request);
-    if (!userEmail) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     const scopes = [
       'channels:history',
       'channels:read',
@@ -67,7 +63,7 @@ export async function GET(request: NextRequest) {
       'users:read',
     ].join(',');
 
-    const state = generateOAuthState(userEmail);
+    const state = generateOAuthState(email);
 
     const params = new URLSearchParams({
       client_id: process.env.SLACK_CLIENT_ID!,
@@ -79,11 +75,7 @@ export async function GET(request: NextRequest) {
     const authUrl = `https://slack.com/oauth/v2/authorize?${params.toString()}`;
 
     return NextResponse.json({ authUrl });
-  } catch (error) {
-    console.error("[Link Slack] Error:", error);
-    return NextResponse.json({ error: "Failed to initiate OAuth" }, { status: 500 });
-  }
-}
+});
 
 // POST: 코드 교환 + 토큰 저장
 export async function POST(request: NextRequest) {
@@ -127,7 +119,7 @@ export async function POST(request: NextRequest) {
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.ok) {
-      console.error("[Link Slack] Token exchange failed:", tokenData.error);
+      logger.error("[Link Slack] Token exchange failed:", tokenData.error);
       return NextResponse.json({ error: "Failed to exchange code for tokens" }, { status: 500 });
     }
 
@@ -164,7 +156,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (dbError) {
-      console.error("[Link Slack] Database error:", dbError);
+      logger.error("[Link Slack] Database error:", dbError);
       return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
     }
 
@@ -180,7 +172,7 @@ export async function POST(request: NextRequest) {
       slackUserName: displayName,
     });
   } catch (error) {
-    console.error("[Link Slack] Error:", error);
+    logger.error("[Link Slack] Error:", error);
     return NextResponse.json({ error: "Failed to link Slack account" }, { status: 500 });
   }
 }

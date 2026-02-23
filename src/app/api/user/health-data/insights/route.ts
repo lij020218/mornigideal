@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove } from '@/lib/user-plan';
 
@@ -18,12 +18,7 @@ interface HealthDay {
     caloriesBurned?: number;
 }
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
             { error: '건강 인사이트는 Pro 이상 플랜에서 사용 가능합니다.' },
@@ -146,4 +141,4 @@ export async function GET(request: NextRequest) {
         },
         daily: healthDays,
     });
-}
+});

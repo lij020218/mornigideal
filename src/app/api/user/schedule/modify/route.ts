@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { scheduleModifySchema, validateBody } from '@/lib/schemas';
 import { dualWriteModify } from "@/lib/schedule-dual-write";
 
-export async function POST(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
-        if (!email) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
         const body = await request.json();
         const v = validateBody(scheduleModifySchema, body);
         if (!v.success) return v.response;
@@ -33,7 +28,7 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
 
         if (fetchError || !userData) {
-            console.error("[Schedule Modify] Fetch error:", fetchError);
+            logger.error("[Schedule Modify] Fetch error:", fetchError);
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
@@ -93,7 +88,7 @@ export async function POST(request: NextRequest) {
             .eq("email", email);
 
         if (updateError) {
-            console.error("[Schedule Modify] Update error:", updateError);
+            logger.error("[Schedule Modify] Update error:", updateError);
             return NextResponse.json({ error: "Failed to modify schedule" }, { status: 500 });
         }
 
@@ -115,8 +110,4 @@ export async function POST(request: NextRequest) {
             schedule: updatedSchedule,
             message: `일정이 수정되었습니다.`,
         });
-    } catch (error: any) {
-        console.error("[Schedule Modify] Error:", error);
-        return NextResponse.json({ error: "Failed to modify schedule" }, { status: 500 });
-    }
-}
+});

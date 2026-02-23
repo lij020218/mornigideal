@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
@@ -28,13 +29,7 @@ interface EssayResult {
   page: number;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { quiz, answers, type } = await request.json();
 
 
@@ -234,13 +229,4 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
 
 
     return NextResponse.json({ result, success: true });
-  } catch (error: any) {
-    console.error("[GRADING ERROR]", error);
-    return NextResponse.json(
-      {
-        error: "Grading failed"
-      },
-      { status: 500 }
-    );
-  }
-}
+});

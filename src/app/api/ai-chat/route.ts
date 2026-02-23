@@ -9,7 +9,7 @@ import {
     buildSystemPrompt,
     getRequiredDataSources,
 } from "@/lib/chat-utils";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { PLAN_CONFIGS, type PlanType } from "@/types/jarvis";
 import { ReActBrain, isComplexRequest, isSimpleResponse } from "@/lib/jarvis/brain-react";
 import { getFusedContextForAI } from "@/lib/contextFusionService";
@@ -21,6 +21,7 @@ import type { ChatMessage, ChatContext, UserProfile } from '@/lib/types';
 import type { CustomGoal, LongTermGoal } from '@/lib/types';
 import type { MemoryRow } from '@/lib/types';
 import { compressMessages } from '@/lib/context-summarizer';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -130,7 +131,7 @@ ${learningEvents.length > 0 ? `📚 학습 패턴:
    - "상위 X% 궤도", "목표 달성률 X%" 같은 벤치마크 제공
 `;
     } catch (e) {
-        console.error("[AI Chat] Failed to get event logs:", e);
+        logger.error("[AI Chat] Failed to get event logs:", e);
         return "";
     }
 }
@@ -193,7 +194,7 @@ ${m.metadata?.date ? `날짜: ${m.metadata.date}` : ''}
 - 과거 패턴을 기반으로 더 정확한 추천을 제공하세요
 `;
     } catch (e) {
-        console.error("[AI Chat] Failed to retrieve RAG context:", e);
+        logger.error("[AI Chat] Failed to retrieve RAG context:", e);
         return "";
     }
 }
@@ -321,7 +322,7 @@ ${lines.join('\n')}
 - 사용자가 한 번도 하지 않은 유형의 활동은 신중하게 추천하세요.
 `;
     } catch (e) {
-        console.error("[AI Chat] Failed to build schedule pattern context:", e);
+        logger.error("[AI Chat] Failed to build schedule pattern context:", e);
         return "";
     }
 }
@@ -473,7 +474,7 @@ ${dayAfterTomorrowGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
 
         return { userContext, scheduleContext, userPlan, profile: p };
     } catch (e) {
-        console.error("[AI Chat] Failed to get user context:", e);
+        logger.error("[AI Chat] Failed to get user context:", e);
         return { userContext: "", scheduleContext: "", userPlan: "Free", profile: null };
     }
 }
@@ -562,14 +563,8 @@ function buildDateContext(context: ChatContext | undefined): string {
 // POST 핸들러 (흐름 제어만 담당)
 // ============================================
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     try {
-        // 1. 인증
-        const userEmail = await getUserEmailWithAuth(request);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         // 2. 요청 파싱
         const body = await request.json();
         const v = validateBody(aiChatSchema, body);
@@ -621,7 +616,7 @@ export async function POST(request: NextRequest) {
                     actions: result.actions,
                 });
             } catch (reactError) {
-                console.error('[AI Chat] ReAct failed, falling back to single-shot:', reactError);
+                logger.error('[AI Chat] ReAct failed, falling back to single-shot:', reactError);
                 // 폴백: 아래 기존 GPT 단발 경로로 진행
             }
         }
@@ -778,7 +773,7 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
                 ...(focusSuggestion && { focusSuggestion }),
             });
         } catch (e) {
-            console.error('[AI Chat] JSON parse error:', e);
+            logger.error('[AI Chat] JSON parse error:', e);
             // JSON이 잘린 경우 message 필드만 추출 시도
             const messageMatch = responseContent.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
             const extractedMessage = messageMatch ? messageMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : "죄송합니다. 응답 처리 중 오류가 발생했어요.";
@@ -788,7 +783,7 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
                 const actionsMatch = responseContent.match(/"actions"\s*:\s*(\[[\s\S]*?\])/);
                 if (actionsMatch) extractedActions = JSON.parse(actionsMatch[1]);
             } catch (e) {
-                console.error('[AI Chat] Partial actions extraction failed:', e instanceof Error ? e.message : e);
+                logger.error('[AI Chat] Partial actions extraction failed:', e instanceof Error ? e.message : e);
             }
             return NextResponse.json({
                 message: extractedMessage,
@@ -797,9 +792,9 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
         }
     } catch (error: unknown) {
         const err = error as { code?: string; message?: string; response?: { data?: unknown } };
-        console.error("[AI Chat] Error:", error);
-        console.error("[AI Chat] Error message:", err?.message);
-        console.error("[AI Chat] Error response:", err?.response?.data);
+        logger.error("[AI Chat] Error:", error);
+        logger.error("[AI Chat] Error message:", err?.message);
+        logger.error("[AI Chat] Error response:", err?.response?.data);
 
         if (err?.code === 'invalid_api_key' || err?.message?.includes('API key')) {
             return NextResponse.json(
@@ -820,4 +815,4 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
             { status: 500 }
         );
     }
-}
+});

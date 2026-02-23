@@ -4,7 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove } from '@/lib/user-plan';
@@ -13,12 +14,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     // Plan gate: Pro+
     if (!(await isProOrAbove(email))) {
         return NextResponse.json(
@@ -116,11 +112,11 @@ export async function GET(request: NextRequest) {
             },
         });
     } catch (error) {
-        console.error('[VoiceBriefing] TTS error:', error);
+        logger.error('[VoiceBriefing] TTS error:', error);
         // Fallback: return text-only briefing
         return NextResponse.json({
             briefingText,
             audioAvailable: false,
         });
     }
-}
+});

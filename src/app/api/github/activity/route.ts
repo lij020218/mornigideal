@@ -3,16 +3,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
 import { isMaxPlan } from '@/lib/user-plan';
 import { getRecentCommits, getContributionStats, isGitHubLinked } from '@/lib/githubService';
 
-export async function GET(request: NextRequest) {
-    const email = await getUserEmailWithAuth(request);
-    if (!email) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, email: string) => {
     // Plan gate: Max only
     if (!(await isMaxPlan(email))) {
         return NextResponse.json(
@@ -41,4 +36,4 @@ export async function GET(request: NextRequest) {
         commits,
         stats,
     });
-}
+});

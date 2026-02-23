@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserEmailWithAuth } from "@/lib/auth-utils";
+import { withAuth } from "@/lib/api-handler";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logger } from '@/lib/logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -33,7 +34,7 @@ async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> 
         );
 
         if (!listResponse.ok) {
-            console.error('[Gmail API] List failed:', await listResponse.text());
+            logger.error('[Gmail API] List failed:', await listResponse.text());
             return [];
         }
 
@@ -88,7 +89,7 @@ async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> 
 
         return messages;
     } catch (error) {
-        console.error('[Gmail API] Error fetching messages:', error);
+        logger.error('[Gmail API] Error fetching messages:', error);
         return [];
     }
 }
@@ -195,7 +196,7 @@ async function refreshAccessToken(refreshToken: string, userEmail: string): Prom
         });
 
         if (!response.ok) {
-            console.error("[Gmail Summary] Token refresh failed:", await response.text());
+            logger.error("[Gmail Summary] Token refresh failed:", await response.text());
             return null;
         }
 
@@ -214,110 +215,95 @@ async function refreshAccessToken(refreshToken: string, userEmail: string): Prom
 
         return tokens.access_token;
     } catch (error) {
-        console.error("[Gmail Summary] Token refresh error:", error);
+        logger.error("[Gmail Summary] Token refresh error:", error);
         return null;
     }
 }
 
-export async function GET(request: NextRequest) {
-    try {
-        const email = await getUserEmailWithAuth(request);
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    let accessToken: string | null = null;
 
-        if (!email) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-        }
+    // Try to get token from database (for linked Gmail accounts)
+    {
+        // Check database for linked Gmail account
+        const { data, error } = await supabaseAdmin
+            .from("gmail_tokens")
+            .select("*")
+            .eq("user_email", email)
+            .maybeSingle();
 
-        const userEmail = email;
-        let accessToken: string | null = null;
-
-        // Try to get token from database (for linked Gmail accounts)
-        {
-            // Check database for linked Gmail account
-            const { data, error } = await supabaseAdmin
-                .from("gmail_tokens")
-                .select("*")
-                .eq("user_email", userEmail)
-                .maybeSingle();
-
-            if (error || !data) {
-                // No linked Gmail account found
-                return NextResponse.json({
-                    error: "Gmail not linked",
-                    message: "Google 계정을 연동해주세요"
-                }, { status: 403 });
-            }
-
-            // Check if token is expired
-            const now = Date.now();
-            if (data.expires_at < now) {
-                // Token expired, refreshing
-
-                if (!data.refresh_token) {
-                    return NextResponse.json({
-                        error: "No refresh token",
-                        message: "Gmail 계정을 다시 연동해주세요"
-                    }, { status: 403 });
-                }
-
-                accessToken = await refreshAccessToken(data.refresh_token, userEmail);
-
-                if (!accessToken) {
-                    return NextResponse.json({
-                        error: "Token refresh failed",
-                        message: "Gmail 계정을 다시 연동해주세요"
-                    }, { status: 403 });
-                }
-            } else {
-                accessToken = data.access_token;
-            }
-
-            // Using database token (linked account)
-        }  // end of token retrieval block
-
-        if (!accessToken) {
+        if (error || !data) {
+            // No linked Gmail account found
             return NextResponse.json({
-                error: "No access token",
-                message: "이메일 요약 기능을 사용하려면 Gmail 계정을 연동해주세요"
+                error: "Gmail not linked",
+                message: "Google 계정을 연동해주세요"
             }, { status: 403 });
         }
 
-        // Get user profile for job context
-        let userJob = "사용자";
-        try {
-            const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/user/profile`, {
-                headers: {
-                    Cookie: `authjs.session-token=${userEmail}` // Simplified, adjust based on your auth setup
-                }
-            });
-            if (profileResponse.ok) {
-                const { profile } = await profileResponse.json();
-                userJob = profile?.job || "사용자";
+        // Check if token is expired
+        const now = Date.now();
+        if (data.expires_at < now) {
+            // Token expired, refreshing
+
+            if (!data.refresh_token) {
+                return NextResponse.json({
+                    error: "No refresh token",
+                    message: "Gmail 계정을 다시 연동해주세요"
+                }, { status: 403 });
             }
-        } catch (error) {
-            console.error('[Gmail Summary] Failed to get user profile:', error);
+
+            accessToken = await refreshAccessToken(data.refresh_token, email);
+
+            if (!accessToken) {
+                return NextResponse.json({
+                    error: "Token refresh failed",
+                    message: "Gmail 계정을 다시 연동해주세요"
+                }, { status: 403 });
+            }
+        } else {
+            accessToken = data.access_token;
         }
 
-        // Fetch Gmail messages
-        const messages = await fetchGmailMessages(accessToken);
+        // Using database token (linked account)
+    }  // end of token retrieval block
 
-        if (messages.length === 0) {
-            return NextResponse.json({
-                importantEmails: [],
-                totalUnread: 0,
-                skippedCount: 0,
-                message: "읽지 않은 이메일이 없습니다"
-            });
-        }
-
-        // Classify and summarize
-        const summary = await classifyAndSummarizeEmails(messages, userJob);
-
-        return NextResponse.json(summary);
-    } catch (error) {
-        console.error("[Gmail Summary] Error:", error);
+    if (!accessToken) {
         return NextResponse.json({
-            error: "Failed to fetch email summary",
-            message: "이메일 요약 생성에 실패했습니다"
-        }, { status: 500 });
+            error: "No access token",
+            message: "이메일 요약 기능을 사용하려면 Gmail 계정을 연동해주세요"
+        }, { status: 403 });
     }
-}
+
+    // Get user profile for job context
+    let userJob = "사용자";
+    try {
+        const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/user/profile`, {
+            headers: {
+                Cookie: `authjs.session-token=${email}` // Simplified, adjust based on your auth setup
+            }
+        });
+        if (profileResponse.ok) {
+            const { profile } = await profileResponse.json();
+            userJob = profile?.job || "사용자";
+        }
+    } catch (error) {
+        logger.error('[Gmail Summary] Failed to get user profile:', error);
+    }
+
+    // Fetch Gmail messages
+    const messages = await fetchGmailMessages(accessToken);
+
+    if (messages.length === 0) {
+        return NextResponse.json({
+            importantEmails: [],
+            totalUnread: 0,
+            skippedCount: 0,
+            message: "읽지 않은 이메일이 없습니다"
+        });
+    }
+
+    // Classify and summarize
+    const summary = await classifyAndSummarizeEmails(messages, userJob);
+
+    return NextResponse.json(summary);
+});

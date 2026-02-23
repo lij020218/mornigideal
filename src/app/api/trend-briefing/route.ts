@@ -1,8 +1,9 @@
-﻿import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { getTrendsCache, saveDetailCache, generateTrendId, saveTrendsCache, getDetailCache } from "@/lib/newsCache";
 import Parser from 'rss-parser';
-import { getUserEmailWithAuth } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 import { getUserByEmail } from '@/lib/users';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
@@ -83,194 +84,189 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
                 }
             });
         } catch (error) {
-            console.error(`[RSS] Error fetching ${feed.name}:`, error);
+            logger.error(`[RSS] Error fetching ${feed.name}:`, error);
         }
     }
 
     return articles;
 }
 
-export async function GET(request: Request) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const job = searchParams.get("job") || "Marketer";
-        const goal = searchParams.get("goal");
-        const interests = searchParams.get("interests");
-        const forceRefresh = searchParams.get("forceRefresh") === "true";
-        const excludeTitles = searchParams.get("exclude")?.split("|||") || []; // 이미 본 뉴스 제목
+export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const { searchParams } = new URL(request.url);
+    const job = searchParams.get("job") || "Marketer";
+    const goal = searchParams.get("goal");
+    const interests = searchParams.get("interests");
+    const forceRefresh = searchParams.get("forceRefresh") === "true";
+    const excludeTitles = searchParams.get("exclude")?.split("|||") || []; // 이미 본 뉴스 제목
 
-        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-        // Get user email from JWT or session
-        const userEmail = await getUserEmailWithAuth(request as NextRequest);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    const userEmail = email;
 
-        // 사용자 이름 조회 (프리생성 프롬프트에 사용)
-        const currentUser = await getUserByEmail(userEmail);
-        const userName = currentUser?.profile?.name || currentUser?.name || '사용자';
+    // 사용자 이름 조회 (프리생성 프롬프트에 사용)
+    const currentUser = await getUserByEmail(userEmail);
+    const userName = currentUser?.profile?.name || currentUser?.name || '사용자';
 
-        // Check cache first (only if not force refreshing and no exclusions)
-        if (!forceRefresh && excludeTitles.length === 0) {
-            const cachedData = await getTrendsCache(userEmail);
+    // Check cache first (only if not force refreshing and no exclusions)
+    if (!forceRefresh && excludeTitles.length === 0) {
+        const cachedData = await getTrendsCache(userEmail);
 
-            if (cachedData && cachedData.trends.length > 0) {
-                const lastUpdatedDate = new Date(cachedData.lastUpdated);
-                const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        if (cachedData && cachedData.trends.length > 0) {
+            const lastUpdatedDate = new Date(cachedData.lastUpdated);
+            const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-                // Calculate 5 AM KST for today
-                const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-                const cutoffTime = new Date(nowKST);
-                cutoffTime.setHours(5, 0, 0, 0);
+            // Calculate 5 AM KST for today
+            const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+            const cutoffTime = new Date(nowKST);
+            cutoffTime.setHours(5, 0, 0, 0);
 
-                // If currently before 5 AM, we compare with yesterday's 5 AM (or just rely on date check)
-                // But simpler logic: If cache is from today, AND (it was generated after 5 AM OR it's currently before 5 AM)
-                // Actually, user wants: "New briefing at 5 AM".
-                // So if now >= 5 AM, cache must be >= 5 AM.
-                // If now < 5 AM, cache can be from anytime today (00:00-04:59).
+            // If currently before 5 AM, we compare with yesterday's 5 AM (or just rely on date check)
+            // But simpler logic: If cache is from today, AND (it was generated after 5 AM OR it's currently before 5 AM)
+            // Actually, user wants: "New briefing at 5 AM".
+            // So if now >= 5 AM, cache must be >= 5 AM.
+            // If now < 5 AM, cache can be from anytime today (00:00-04:59).
 
-                let isCacheValid = false;
-                if (cacheDate === today) {
-                    if (nowKST.getHours() >= 5) {
-                        // It's past 5 AM. Cache must be after 5 AM.
-                        // Convert UTC lastUpdatedDate to KST properly
-                        const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
-                            timeZone: "Asia/Seoul",
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                            hour12: false
-                        });
-                        const lastUpdatedKST = new Date(lastUpdatedKSTStr);
-                        const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr.split(', ')[1].split(':')[0]);
-
-
-                        if (lastUpdatedHourKST >= 5) {
-                            isCacheValid = true;
-                        } else {
-                        }
-                    } else {
-                        // It's before 5 AM. Any cache from today is fine.
-                        isCacheValid = true;
-                    }
-                }
-
-                if (isCacheValid) {
-                    return NextResponse.json({
-                        trends: cachedData.trends,
-                        cached: true,
-                        lastUpdated: cachedData.lastUpdated
+            let isCacheValid = false;
+            if (cacheDate === today) {
+                if (nowKST.getHours() >= 5) {
+                    // It's past 5 AM. Cache must be after 5 AM.
+                    // Convert UTC lastUpdatedDate to KST properly
+                    const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
+                        timeZone: "Asia/Seoul",
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
                     });
+                    const lastUpdatedKST = new Date(lastUpdatedKSTStr);
+                    const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr.split(', ')[1].split(':')[0]);
+
+
+                    if (lastUpdatedHourKST >= 5) {
+                        isCacheValid = true;
+                    } else {
+                    }
+                } else {
+                    // It's before 5 AM. Any cache from today is fine.
+                    isCacheValid = true;
                 }
             }
+
+            if (isCacheValid) {
+                return NextResponse.json({
+                    trends: cachedData.trends,
+                    cached: true,
+                    lastUpdated: cachedData.lastUpdated
+                });
+            }
         }
+    }
 
 
-        // Step 1: Fetch articles from RSS feeds
-        const rssArticles = await fetchRSSArticles();
+    // Step 1: Fetch articles from RSS feeds
+    const rssArticles = await fetchRSSArticles();
 
-        if (rssArticles.length === 0) {
-            return NextResponse.json({ error: "No articles found in RSS feeds" }, { status: 500 });
-        }
+    if (rssArticles.length === 0) {
+        return NextResponse.json({ error: "No articles found in RSS feeds" }, { status: 500 });
+    }
 
-        // Sort articles by date (newest first) and calculate recency scores
-        const now = new Date();
-        const sortedArticles = rssArticles
-            .map(article => {
-                const pubDate = article.pubDate ? new Date(article.pubDate) : null;
-                const ageInDays = pubDate ? (now.getTime() - pubDate.getTime()) / (1000 * 60 * 60 * 24) : 999;
+    // Sort articles by date (newest first) and calculate recency scores
+    const now = new Date();
+    const sortedArticles = rssArticles
+        .map(article => {
+            const pubDate = article.pubDate ? new Date(article.pubDate) : null;
+            const ageInDays = pubDate ? (now.getTime() - pubDate.getTime()) / (1000 * 60 * 60 * 24) : 999;
 
-                // Recency score: 100 for today, 90 for yesterday, 70 for 2 days ago, then decay
-                let recencyScore = 0;
-                if (ageInDays < 1) recencyScore = 100;
-                else if (ageInDays < 2) recencyScore = 90;
-                else if (ageInDays < 3) recencyScore = 70;
-                else if (ageInDays < 7) recencyScore = 50;
-                else recencyScore = 20;
+            // Recency score: 100 for today, 90 for yesterday, 70 for 2 days ago, then decay
+            let recencyScore = 0;
+            if (ageInDays < 1) recencyScore = 100;
+            else if (ageInDays < 2) recencyScore = 90;
+            else if (ageInDays < 3) recencyScore = 70;
+            else if (ageInDays < 7) recencyScore = 50;
+            else recencyScore = 20;
 
-                return { ...article, recencyScore, ageInDays };
-            })
-            .sort((a, b) => b.recencyScore - a.recencyScore || a.ageInDays - b.ageInDays);
-
-
-        // Step 2: Use Gemini to filter and select relevant articles
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json" }
-        });
-
-        const interestList = interests ? interests.split(',').map(i => i.trim()).join(', ') : "비즈니스, 기술";
-
-        // Check if user has sports-related interests
-        const hasSportsInterest = interests ?
-            /스포츠|축구|야구|농구|테니스|골프|sports|football|soccer|baseball|basketball/i.test(interests) :
-            false;
+            return { ...article, recencyScore, ageInDays };
+        })
+        .sort((a, b) => b.recencyScore - a.recencyScore || a.ageInDays - b.ageInDays);
 
 
-        // Prioritize recent articles (first 100 sorted by recency)
-        // Filter out sports articles if user has no sports interest
-        const sportsSources = ['ESPN', 'ESPN Soccer', 'BBC Sport', 'Sky Sports'];
-        const articlesForPrompt = sortedArticles
-            .filter(article => {
-                // If user has no sports interest, exclude sports sources
-                if (!hasSportsInterest && sportsSources.includes(article.sourceName)) {
-                    return false;
-                }
-                return true;
-            })
-            .slice(0, 100)
-            .map((article, index) => ({
-                id: index,
-                title: article.title,
-                source: article.sourceName,
-                date: article.pubDate,
-                recencyScore: article.recencyScore
-            }));
+    // Step 2: Use Gemini to filter and select relevant articles
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
 
-        // 제외할 뉴스가 있으면 필터링
-        let filteredArticles = articlesForPrompt;
-        if (excludeTitles.length > 0) {
-            filteredArticles = articlesForPrompt.filter(article =>
-                !excludeTitles.some(excludeTitle =>
-                    article.title.toLowerCase().includes(excludeTitle.toLowerCase()) ||
-                    excludeTitle.toLowerCase().includes(article.title.toLowerCase())
-                )
-            );
-        }
+    const interestList = interests ? interests.split(',').map(i => i.trim()).join(', ') : "비즈니스, 기술";
 
-        if (filteredArticles.length < 6) {
-            // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
-            filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
-                id: index,
-                title: article.title,
-                source: article.sourceName,
-                date: article.pubDate,
-                recencyScore: article.recencyScore
-            })).filter(article =>
-                !excludeTitles.some(excludeTitle =>
-                    article.title.toLowerCase().includes(excludeTitle.toLowerCase())
-                )
-            );
-        }
+    // Check if user has sports-related interests
+    const hasSportsInterest = interests ?
+        /스포츠|축구|야구|농구|테니스|골프|sports|football|soccer|baseball|basketball/i.test(interests) :
+        false;
 
-        const excludeInfo = excludeTitles.length > 0
-            ? `\n\n🚫 ALREADY VIEWED (${excludeTitles.length} articles) - DO NOT SELECT SIMILAR ARTICLES:\n${excludeTitles.slice(0, 10).map((t, i) => `${i + 1}. "${t}"`).join('\n')}`
-            : '';
 
-        // Build category list based on user interests
-        const allowedCategories = hasSportsInterest
-            ? "AI|Business|Tech|Finance|Strategy|Innovation|Sports"
-            : "AI|Business|Tech|Finance|Strategy|Innovation";
+    // Prioritize recent articles (first 100 sorted by recency)
+    // Filter out sports articles if user has no sports interest
+    const sportsSources = ['ESPN', 'ESPN Soccer', 'BBC Sport', 'Sky Sports'];
+    const articlesForPrompt = sortedArticles
+        .filter(article => {
+            // If user has no sports interest, exclude sports sources
+            if (!hasSportsInterest && sportsSources.includes(article.sourceName)) {
+                return false;
+            }
+            return true;
+        })
+        .slice(0, 100)
+        .map((article, index) => ({
+            id: index,
+            title: article.title,
+            source: article.sourceName,
+            date: article.pubDate,
+            recencyScore: article.recencyScore
+        }));
 
-        const sportsWarning = !hasSportsInterest
-            ? `\n🚫 **NO SPORTS**: User has NO sports interest. DO NOT select ANY sports articles (ESPN, BBC Sport, Sky Sports, 스포츠 뉴스 등 절대 금지)!`
-            : '';
+    // 제외할 뉴스가 있으면 필터링
+    let filteredArticles = articlesForPrompt;
+    if (excludeTitles.length > 0) {
+        filteredArticles = articlesForPrompt.filter(article =>
+            !excludeTitles.some(excludeTitle =>
+                article.title.toLowerCase().includes(excludeTitle.toLowerCase()) ||
+                excludeTitle.toLowerCase().includes(article.title.toLowerCase())
+            )
+        );
+    }
 
-        const prompt = `You are selecting 6 COMPLETELY NEW news articles for a ${job}.
+    if (filteredArticles.length < 6) {
+        // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
+        filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
+            id: index,
+            title: article.title,
+            source: article.sourceName,
+            date: article.pubDate,
+            recencyScore: article.recencyScore
+        })).filter(article =>
+            !excludeTitles.some(excludeTitle =>
+                article.title.toLowerCase().includes(excludeTitle.toLowerCase())
+            )
+        );
+    }
+
+    const excludeInfo = excludeTitles.length > 0
+        ? `\n\n🚫 ALREADY VIEWED (${excludeTitles.length} articles) - DO NOT SELECT SIMILAR ARTICLES:\n${excludeTitles.slice(0, 10).map((t, i) => `${i + 1}. "${t}"`).join('\n')}`
+        : '';
+
+    // Build category list based on user interests
+    const allowedCategories = hasSportsInterest
+        ? "AI|Business|Tech|Finance|Strategy|Innovation|Sports"
+        : "AI|Business|Tech|Finance|Strategy|Innovation";
+
+    const sportsWarning = !hasSportsInterest
+        ? `\n🚫 **NO SPORTS**: User has NO sports interest. DO NOT select ANY sports articles (ESPN, BBC Sport, Sky Sports, 스포츠 뉴스 등 절대 금지)!`
+        : '';
+
+    const prompt = `You are selecting 6 COMPLETELY NEW news articles for a ${job}.
 ${excludeInfo}
 ${sportsWarning}
 
@@ -342,88 +338,88 @@ Requirements:
 
 Select now.`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-        let data;
-        try {
-            data = JSON.parse(text);
-        } catch (parseError) {
-            console.error("[API] Failed to parse Gemini response", parseError);
-            return NextResponse.json({ error: "Failed to process articles" }, { status: 500 });
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (parseError) {
+        logger.error("[API] Failed to parse Gemini response", parseError);
+        return NextResponse.json({ error: "Failed to process articles" }, { status: 500 });
+    }
+
+    let selectedArticles = data.selectedArticles || [];
+
+    if (selectedArticles.length === 0) {
+        return NextResponse.json({ error: "No relevant articles found" }, { status: 500 });
+    }
+
+    // Step 2.5: Enforce same source limit (max 2 articles per source)
+    const sourceCount: Record<string, number> = {};
+    selectedArticles = selectedArticles.filter((article: any) => {
+        const filteredArticle = filteredArticles[article.id];
+        const sourceName = filteredArticle?.source || 'Unknown';
+
+        if (!sourceCount[sourceName]) {
+            sourceCount[sourceName] = 0;
         }
 
-        let selectedArticles = data.selectedArticles || [];
-
-        if (selectedArticles.length === 0) {
-            return NextResponse.json({ error: "No relevant articles found" }, { status: 500 });
+        if (sourceCount[sourceName] >= 2) {
+            return false;
         }
 
-        // Step 2.5: Enforce same source limit (max 2 articles per source)
-        const sourceCount: Record<string, number> = {};
-        selectedArticles = selectedArticles.filter((article: any) => {
-            const filteredArticle = filteredArticles[article.id];
-            const sourceName = filteredArticle?.source || 'Unknown';
-
-            if (!sourceCount[sourceName]) {
-                sourceCount[sourceName] = 0;
-            }
-
-            if (sourceCount[sourceName] >= 2) {
-                return false;
-            }
-
-            sourceCount[sourceName]++;
-            return true;
-        });
+        sourceCount[sourceName]++;
+        return true;
+    });
 
 
-        // Step 3: Map selected articles back to original RSS articles
-        const trends = selectedArticles.map((selected: any) => {
-            // Find the original article by matching the id from filteredArticles
-            const filteredArticle = filteredArticles[selected.id];
-            const originalArticle = rssArticles.find(article =>
-                article.title === filteredArticle?.title &&
-                article.sourceName === filteredArticle?.source
-            );
-            const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+    // Step 3: Map selected articles back to original RSS articles
+    const trends = selectedArticles.map((selected: any) => {
+        // Find the original article by matching the id from filteredArticles
+        const filteredArticle = filteredArticles[selected.id];
+        const originalArticle = rssArticles.find(article =>
+            article.title === filteredArticle?.title &&
+            article.sourceName === filteredArticle?.source
+        );
+        const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
 
-            return {
-                id: generateTrendId(selected.title_korean),
-                title: selected.title_korean,
-                category: selected.category || "General",
-                summary: selected.one_line_summary || selected.summary_korean, // Use one_line_summary if available
-                time: pubDate,
-                imageColor: "bg-blue-500/20",
-                originalUrl: originalArticle?.link || "",
-                imageUrl: "",
-                source: originalArticle?.sourceName || "Unknown",
-                relevance: selected.relevance_korean
-            };
-        });
+        return {
+            id: generateTrendId(selected.title_korean),
+            title: selected.title_korean,
+            category: selected.category || "General",
+            summary: selected.one_line_summary || selected.summary_korean, // Use one_line_summary if available
+            time: pubDate,
+            imageColor: "bg-blue-500/20",
+            originalUrl: originalArticle?.link || "",
+            imageUrl: "",
+            source: originalArticle?.sourceName || "Unknown",
+            relevance: selected.relevance_korean
+        };
+    });
 
 
-        // Save to cache (with user email for proper caching)
-        await saveTrendsCache(trends, true, userEmail);
+    // Save to cache (with user email for proper caching)
+    await saveTrendsCache(trends, true, userEmail);
 
-        // Pre-generate details for all trends - MUST await to ensure cache is ready
-        const detailModel = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json" }
-        });
+    // Pre-generate details for all trends - MUST await to ensure cache is ready
+    const detailModel = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
 
-        // 순차 처리 — Gemini Free Tier 분당 5요청 제한 대응 (2개씩 병렬, 배치 간 딜레이)
-        try {
-            const BATCH_SIZE = 2;
-            const BATCH_DELAY = 13000; // 13초 대기 (분당 5요청 제한)
+    // 순차 처리 — Gemini Free Tier 분당 5요청 제한 대응 (2개씩 병렬, 배치 간 딜레이)
+    try {
+        const BATCH_SIZE = 2;
+        const BATCH_DELAY = 13000; // 13초 대기 (분당 5요청 제한)
 
-            for (let i = 0; i < trends.length; i += BATCH_SIZE) {
-                const batch = trends.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < trends.length; i += BATCH_SIZE) {
+            const batch = trends.slice(i, i + BATCH_SIZE);
 
-                await Promise.all(batch.map(async (trend: any) => {
-                    try {
-                        const detailPrompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+            await Promise.all(batch.map(async (trend: any) => {
+                try {
+                    const detailPrompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
 
 기사 정보:
 - 제목: "${trend.title}"
@@ -466,88 +462,75 @@ OTHER RULES:
 
 한국어로 작성하세요.`;
 
-                        const detailResult = await detailModel.generateContent(detailPrompt);
-                        const detailResponse = await detailResult.response;
-                        const detailText = detailResponse.text();
+                    const detailResult = await detailModel.generateContent(detailPrompt);
+                    const detailResponse = await detailResult.response;
+                    const detailText = detailResponse.text();
 
-                        const detail = JSON.parse(detailText);
+                    const detail = JSON.parse(detailText);
 
-                        if (detail.content && detail.keyTakeaways && detail.actionItems) {
-                            await saveDetailCache(trend.id, detail, userEmail);
-                        }
-                    } catch (error) {
-                        console.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
+                    if (detail.content && detail.keyTakeaways && detail.actionItems) {
+                        await saveDetailCache(trend.id, detail, userEmail);
                     }
-                }));
-
-                // 마지막 배치가 아니면 딜레이
-                if (i + BATCH_SIZE < trends.length) {
-                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+                } catch (error) {
+                    logger.error(`[API] Failed to pre-generate detail for ${trend.title}:`, error);
                 }
+            }));
+
+            // 마지막 배치가 아니면 딜레이
+            if (i + BATCH_SIZE < trends.length) {
+                await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
             }
-        } catch (err) {
-            console.error('[API] Error in detail pre-generation:', err);
         }
-
-        return NextResponse.json({
-            trends,
-            cached: false,
-            lastUpdated: new Date().toISOString()
-        });
-
-    } catch (error) {
-        console.error("[API] Error fetching trends:", error);
-        return NextResponse.json({
-            error: "Failed to fetch trends"
-        }, { status: 500 });
+    } catch (err) {
+        logger.error('[API] Error in detail pre-generation:', err);
     }
-}
 
-export async function POST(request: Request) {
-    try {
-        const { title, level, job, originalUrl, summary, trendId } = await request.json();
+    return NextResponse.json({
+        trends,
+        cached: false,
+        lastUpdated: new Date().toISOString()
+    });
+});
 
+export const POST = withAuth(async (request: NextRequest, email: string) => {
+    const { title, level, job, originalUrl, summary, trendId } = await request.json();
 
-        // Get user email from JWT or session
-        const userEmail = await getUserEmailWithAuth(request as NextRequest);
-        if (!userEmail) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    const userEmail = email;
 
-        // Check cache first
-        if (trendId) {
-            const cachedDetail = await getDetailCache(trendId, userEmail);
+    // Check cache first
+    if (trendId) {
+        const cachedDetail = await getDetailCache(trendId, userEmail);
 
-            if (cachedDetail) {
+        if (cachedDetail) {
 
-                // Validate cache has required fields
-                if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems) {
-                    return NextResponse.json({ detail: cachedDetail, cached: true });
-                } else {
-                }
+            // Validate cache has required fields
+            if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems) {
+                return NextResponse.json({ detail: cachedDetail, cached: true });
+            } else {
             }
         }
+    }
 
-        // 사용자 이름 조회
-        const postUser = await getUserByEmail(userEmail);
-        const postUserName = postUser?.profile?.name || postUser?.name || '사용자';
-        const postUserGoal = postUser?.profile?.goal || '전문성 향상';
-        const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
+    // 사용자 이름 조회
+    const postUser = await getUserByEmail(userEmail);
+    const postUserName = postUser?.profile?.name || postUser?.name || '사용자';
+    const postUserGoal = postUser?.profile?.goal || '전문성 향상';
+    const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
 
-        // Check API key
-        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.error('[API] No Gemini API key found');
-            throw new Error('Gemini API key not configured');
-        }
+    // Check API key
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        logger.error('[API] No Gemini API key found');
+        throw new Error('Gemini API key not configured');
+    }
 
-        const modelName = process.env.GEMINI_MODEL_2 || "gemini-2.5-flash";
-        const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: { responseMimeType: "application/json" }
-        });
+    const modelName = process.env.GEMINI_MODEL_2 || "gemini-2.5-flash";
+    const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" }
+    });
 
-        const prompt = `${postUserName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+    const prompt = `${postUserName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
 
 기사 정보:
 - 제목: "${title}"
@@ -590,48 +573,42 @@ OTHER RULES:
 
 한국어로 작성하세요.`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
 
-        if (!text || text.trim().length === 0) {
-            console.error('[API POST] Gemini returned empty response');
-            return NextResponse.json({ error: "AI returned empty response" }, { status: 500 });
-        }
-
-        let detail;
-        try {
-            detail = JSON.parse(text);
-        } catch (e) {
-            console.error("[API POST] Failed to parse detail JSON:", e);
-            console.error("[API POST] Raw text:", text.substring(0, 500));
-            return NextResponse.json({ error: "Failed to generate detail" }, { status: 500 });
-        }
-
-        // Validate required fields
-        if (!detail.content || detail.content.trim().length === 0) {
-            console.error('[API POST] Generated detail has empty content');
-            return NextResponse.json({ error: "Generated detail has no content" }, { status: 500 });
-        }
-
-        // Ensure arrays exist
-        if (!detail.keyTakeaways) detail.keyTakeaways = [];
-        if (!detail.actionItems) detail.actionItems = [];
-
-        // Cache the detail
-        if (trendId) {
-            await saveDetailCache(trendId, detail, userEmail);
-        }
-
-        return NextResponse.json({
-            detail: { ...detail, originalUrl: originalUrl || "" },
-            cached: false
-        });
-    } catch (error) {
-        console.error("[API] Error generating briefing detail:", error);
-        return NextResponse.json({
-            error: "Failed to generate briefing detail"
-        }, { status: 500 });
+    if (!text || text.trim().length === 0) {
+        logger.error('[API POST] Gemini returned empty response');
+        return NextResponse.json({ error: "AI returned empty response" }, { status: 500 });
     }
-}
+
+    let detail;
+    try {
+        detail = JSON.parse(text);
+    } catch (e) {
+        logger.error("[API POST] Failed to parse detail JSON:", e);
+        logger.error("[API POST] Raw text:", text.substring(0, 500));
+        return NextResponse.json({ error: "Failed to generate detail" }, { status: 500 });
+    }
+
+    // Validate required fields
+    if (!detail.content || detail.content.trim().length === 0) {
+        logger.error('[API POST] Generated detail has empty content');
+        return NextResponse.json({ error: "Generated detail has no content" }, { status: 500 });
+    }
+
+    // Ensure arrays exist
+    if (!detail.keyTakeaways) detail.keyTakeaways = [];
+    if (!detail.actionItems) detail.actionItems = [];
+
+    // Cache the detail
+    if (trendId) {
+        await saveDetailCache(trendId, detail, userEmail);
+    }
+
+    return NextResponse.json({
+        detail: { ...detail, originalUrl: originalUrl || "" },
+        cached: false
+    });
+});
