@@ -25,6 +25,7 @@ import { getUserByEmail } from '@/lib/users';
 import { generateEmbedding } from '@/lib/embeddings';
 import { logger } from '@/lib/logger';
 import { kvGet, kvSet } from '@/lib/kv-store';
+import { checkContentSafety, checkResponseSafety } from '@/lib/content-safety';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -598,6 +599,16 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         const { messages, context: rawContext } = v.data;
         const context = rawContext as ChatContext | undefined;
 
+        // 2.5. 콘텐츠 안전 필터 (유해 메시지 사전 차단)
+        const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user');
+        if (lastUserMsg?.content) {
+            const safetyCheck = checkContentSafety(lastUserMsg.content);
+            if (safetyCheck.blocked) {
+                logger.warn(`[AI-Chat] Content blocked: category=${safetyCheck.category}, user=${userEmail}`);
+                return NextResponse.json({ message: safetyCheck.response, actions: [] });
+            }
+        }
+
         // 3. 의도 분류 (먼저!)
         const intent = classifyIntent(messages);
 
@@ -803,6 +814,14 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
         ]);
 
         const finishReason = completion.choices[0]?.finish_reason;
+
+        // 응답 안전 검사 (OpenAI content_filter 감지)
+        const responseSafety = checkResponseSafety(finishReason);
+        if (responseSafety.blocked) {
+            logger.warn(`[AI-Chat] Response blocked by OpenAI: finish_reason=${finishReason}, user=${userEmail}`);
+            return NextResponse.json({ message: responseSafety.response, actions: [] });
+        }
+
         const responseContent = completion.choices[0]?.message?.content || '{"message": "죄송합니다. 응답을 생성하지 못했습니다."}';
 
         // 9. 사용량 로깅

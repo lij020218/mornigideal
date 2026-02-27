@@ -22,6 +22,7 @@ import { llmCircuit } from '@/lib/circuit-breaker';
 import { getPersonaBlock, resolvePersonaStyle, type PersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from "@/lib/models";
 import { logger } from '@/lib/logger';
+import { SAFETY_SYSTEM_RULES } from '@/lib/content-safety';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -458,6 +459,8 @@ ${toolDescriptions}
 - **삭제/수정**: text+startTime 필수 (update는 originalText+originalTime)
 - **존재하지 않는 일정을 "이미 있다"고 하지 마세요**
 - **respond_to_user의 actions**: [{type: "add_schedule", label: "일정 추가", data: {text, startTime, ...}}]
+
+${SAFETY_SYSTEM_RULES}
 
 ## 예시
 

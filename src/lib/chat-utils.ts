@@ -7,6 +7,7 @@
 
 import { FOCUS_KEYWORDS as FOCUS_KEYWORDS_CONST } from '@/lib/constants';
 import { PERSONA_LABELS } from '@/lib/prompts/persona';
+import { SAFETY_SYSTEM_RULES } from '@/lib/content-safety';
 import { logger } from '@/lib/logger';
 
 // ============================================
@@ -653,6 +654,8 @@ ${getBehaviorGuide(intent)}
 ${getExamplesForIntent(intent, currentDate)}
 
 **CRITICAL**: 요청에 실행할 동작이 있으면 반드시 actions에 포함!
+
+${SAFETY_SYSTEM_RULES}
 
 **OUTPUT**: 반드시 JSON 형식으로만 응답하세요. { "message": "...", "actions": [...] }`;
 

@@ -128,7 +128,7 @@ OTHER RULES:
 
 한국어로 작성하세요.`;
 
-    // Try Gemini first, fallback to OpenAI on 429/quota errors
+    // Try Gemini first, fallback to flash model on 503, then OpenAI on 429/quota
     try {
         const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
         const model = genAI.getGenerativeModel({
@@ -140,8 +140,24 @@ OTHER RULES:
         return JSON.parse(response.text());
     } catch (geminiError: any) {
         const status = geminiError?.status || geminiError?.httpStatusCode;
-        if (status === 429 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota')) {
-            console.warn(`[CRON] Gemini 429 in generateDetailedBriefing, falling back to OpenAI`);
+        // 503: 모델 과부하 → gemini-3.0-flash로 재시도
+        if (status === 503 || geminiError?.message?.includes('503')) {
+            console.warn(`[CRON] Gemini 503, retrying with gemini-3.0-flash`);
+            try {
+                const flashModel = genAI.getGenerativeModel({
+                    model: "gemini-3.0-flash",
+                    generationConfig: { responseMimeType: "application/json" }
+                });
+                const result = await flashModel.generateContent(prompt);
+                const response = await result.response;
+                return JSON.parse(response.text());
+            } catch (flashError: any) {
+                console.warn(`[CRON] Gemini flash also failed, falling back to OpenAI`);
+            }
+        }
+        // 429/quota 또는 flash 실패 → OpenAI 폴백
+        if (status === 429 || status === 503 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota') || geminiError?.message?.includes('503')) {
+            console.warn(`[CRON] Gemini ${status} in generateDetailedBriefing, falling back to OpenAI`);
             const completion = await openai.chat.completions.create({
                 model: MODELS.GPT_5_MINI,
                 messages: [
@@ -284,17 +300,41 @@ Select now.`;
                         text = response.text();
                     } catch (geminiError: any) {
                         const status = geminiError?.status || geminiError?.httpStatusCode;
-                        if (status === 429 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota')) {
-                            console.warn(`[CRON] Gemini 429 in article selection for ${user.email}, falling back to OpenAI`);
-                            const completion = await openai.chat.completions.create({
-                                model: MODELS.GPT_5_MINI,
-                                messages: [
-                                    { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
-                                    { role: 'user', content: selectionPrompt }
-                                ],
-                                response_format: { type: 'json_object' },
-                            });
-                            text = completion.choices[0]?.message?.content || '{}';
+                        if (status === 429 || status === 503 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota') || geminiError?.message?.includes('503')) {
+                            // 503: flash 모델로 재시도
+                            if (status === 503 || geminiError?.message?.includes('503')) {
+                                console.warn(`[CRON] Gemini 503 in article selection, retrying with gemini-3.0-flash`);
+                                try {
+                                    const flashModel = genAI.getGenerativeModel({
+                                        model: "gemini-3.0-flash",
+                                        generationConfig: { responseMimeType: "application/json" }
+                                    });
+                                    const flashResult = await flashModel.generateContent(selectionPrompt);
+                                    text = flashResult.response.text();
+                                } catch {
+                                    console.warn(`[CRON] Gemini flash also failed for ${user.email}, falling back to OpenAI`);
+                                    const completion = await openai.chat.completions.create({
+                                        model: MODELS.GPT_5_MINI,
+                                        messages: [
+                                            { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
+                                            { role: 'user', content: selectionPrompt }
+                                        ],
+                                        response_format: { type: 'json_object' },
+                                    });
+                                    text = completion.choices[0]?.message?.content || '{}';
+                                }
+                            } else {
+                                console.warn(`[CRON] Gemini 429 in article selection for ${user.email}, falling back to OpenAI`);
+                                const completion = await openai.chat.completions.create({
+                                    model: MODELS.GPT_5_MINI,
+                                    messages: [
+                                        { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
+                                        { role: 'user', content: selectionPrompt }
+                                    ],
+                                    response_format: { type: 'json_object' },
+                                });
+                                text = completion.choices[0]?.message?.content || '{}';
+                            }
                         } else {
                             throw geminiError;
                         }
