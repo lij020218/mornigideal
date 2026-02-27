@@ -5,7 +5,8 @@ import Parser from 'rss-parser';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { getUserByEmail } from '@/lib/users';
-import { kvGet } from '@/lib/kv-store';
+import { kvGet, kvSet } from '@/lib/kv-store';
+import { LIMITS } from '@/lib/constants';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
@@ -107,6 +108,28 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const job = currentUser?.profile?.job || searchParams.get("job") || "전문가";
     const goal = currentUser?.profile?.goal || searchParams.get("goal");
     const interests = (currentUser?.profile?.interests || []).join(',') || searchParams.get("interests");
+    const userPlan = ((currentUser as any)?.plan || 'Free');
+    const normalizedPlan = userPlan.charAt(0).toUpperCase() + userPlan.slice(1).toLowerCase();
+    const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
+    const refreshLimit = LIMITS.TREND_REFRESH_DAILY[normalizedPlan] ?? 0;
+
+    // 새로고침 제한 체크
+    if (forceRefresh) {
+        if (refreshLimit === 0) {
+            return NextResponse.json({
+                error: 'Free 플랜은 브리핑 새로고침을 지원하지 않아요. Pro 플랜으로 업그레이드하면 매일 새로운 브리핑을 받을 수 있어요!',
+                code: 'PLAN_LIMIT',
+            }, { status: 403 });
+        }
+        const refreshKey = `trend_refresh_count_${today}`;
+        const usedRefreshes = await kvGet<number>(email, refreshKey) || 0;
+        if (usedRefreshes >= refreshLimit) {
+            return NextResponse.json({
+                error: `오늘 새로고침 횟수(${refreshLimit}회)를 모두 사용했어요. 내일 다시 시도해 주세요!`,
+                code: 'REFRESH_LIMIT',
+            }, { status: 429 });
+        }
+    }
 
     // Check cache first (only if not force refreshing and no exclusions)
     if (!forceRefresh && excludeTitles.length === 0) {
@@ -158,11 +181,14 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
             if (isCacheValid) {
                 const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
+                const refreshKey = `trend_refresh_count_${today}`;
+                const currentRefreshCount = await kvGet<number>(userEmail, refreshKey) || 0;
                 return NextResponse.json({
-                    trends: cachedData.trends,
+                    trends: cachedData.trends.slice(0, articleCount),
                     cached: true,
                     lastUpdated: cachedData.lastUpdated,
                     readIds,
+                    refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
                 });
             }
         }
@@ -198,7 +224,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     // Step 2: Use Gemini to filter and select relevant articles
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.0-flash",
         generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -241,7 +267,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         );
     }
 
-    if (filteredArticles.length < 6) {
+    if (filteredArticles.length < articleCount) {
         // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
         filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
             id: index,
@@ -269,7 +295,10 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         ? `\n🚫 **NO SPORTS**: User has NO sports interest. DO NOT select ANY sports articles (ESPN, BBC Sport, Sky Sports, 스포츠 뉴스 등 절대 금지)!`
         : '';
 
-    const prompt = `You are selecting 6 COMPLETELY NEW news articles for a ${job}.
+    const intlCount = Math.ceil(articleCount / 2);
+    const krCount = articleCount - intlCount;
+
+    const prompt = `You are selecting ${articleCount} COMPLETELY NEW news articles for a ${job}.
 ${excludeInfo}
 ${sportsWarning}
 
@@ -281,17 +310,17 @@ USER:
 - Goal: ${goal || "전문성 향상"}
 - Interests: ${interestList}
 
-⚠️ **CRITICAL**: You MUST select 6 DIFFERENT articles. DO NOT repeat previous selections!
+⚠️ **CRITICAL**: You MUST select ${articleCount} DIFFERENT articles. DO NOT repeat previous selections!
 ${excludeTitles.length > 0 ? '❌ The user has ALREADY SEEN the articles listed above. Select FRESH content ONLY!' : ''}
 ${!hasSportsInterest ? '⚠️ **NO SPORTS ARTICLES** - User is NOT interested in sports!' : ''}
 
-TASK: Select 6 most relevant NEW articles.
+TASK: Select ${articleCount} most relevant NEW articles.
 
 CRITERIA (IN ORDER OF PRIORITY):
 1. **🔥 RECENCY (HIGHEST PRIORITY)**: Strongly prefer articles with recencyScore >= 70 (published within last 2 days: today=100, yesterday=90, 2 days ago=70). Fresh news is CRITICAL.
-2. **🌍 SOURCE BALANCE (MANDATORY)**: MUST select EXACTLY 3 international articles (Reuters, Bloomberg, BBC, CNN, TechCrunch, WSJ, NYT, AP News, etc.) and EXACTLY 3 Korean articles (한국경제, 조선일보, 매일경제, etc.)
+2. **🌍 SOURCE BALANCE (MANDATORY)**: MUST select ${intlCount} international articles (Reuters, Bloomberg, BBC, CNN, TechCrunch, WSJ, NYT, AP News, etc.) and ${krCount} Korean articles (한국경제, 조선일보, 매일경제, etc.)
 3. **📰 SAME SOURCE LIMIT (MANDATORY)**: Maximum 2 articles from the SAME source! (예: BBC에서 최대 2개, 한국경제에서 최대 2개)
-4. **🎯 INTEREST MATCHING (MANDATORY)**: ALL 6 articles must be related to user interests (${interestList}). ${!hasSportsInterest ? 'NO SPORTS!' : ''}
+4. **🎯 INTEREST MATCHING (MANDATORY)**: ALL ${articleCount} articles must be related to user interests (${interestList}). ${!hasSportsInterest ? 'NO SPORTS!' : ''}
 5. Valuable for ${job} daily work
 6. Support goal: ${goal || "career growth"}
 7. Mix of topics within user interests
@@ -336,8 +365,8 @@ Requirements:
   *
   * 2문장 금지! 무조건 1문장만!
 - Focus on practical value for ${job}
-- ${interests ? `At least 3 articles matching: ${interestList}` : ""}
-- **MANDATORY: Exactly 3 international + 3 Korean articles (total 6)**
+- ${interests ? `At least ${Math.min(3, articleCount)} articles matching: ${interestList}` : ""}
+- **MANDATORY: ${intlCount} international + ${krCount} Korean articles (total ${articleCount})**
 
 Select now.`;
 
@@ -406,9 +435,16 @@ Select now.`;
     // Save to cache (with user email for proper caching)
     await saveTrendsCache(trends, true, userEmail);
 
+    // 새로고침 성공 시 카운트 증가
+    if (forceRefresh) {
+        const refreshKey = `trend_refresh_count_${today}`;
+        const usedRefreshes = await kvGet<number>(email, refreshKey) || 0;
+        await kvSet(email, refreshKey, usedRefreshes + 1);
+    }
+
     // Pre-generate details for all trends - MUST await to ensure cache is ready
     const detailModel = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.0-flash",
         generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -491,11 +527,16 @@ OTHER RULES:
     // 새로 생성한 브리핑이라도 오늘 읽은 기록 반환
     const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
 
+    // 남은 새로고침 횟수 계산
+    const refreshKey = `trend_refresh_count_${today}`;
+    const currentRefreshCount = await kvGet<number>(email, refreshKey) || 0;
+
     return NextResponse.json({
-        trends,
+        trends: trends.slice(0, articleCount),
         cached: false,
         lastUpdated: new Date().toISOString(),
         readIds,
+        refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
     });
 });
 
@@ -533,7 +574,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         throw new Error('Gemini API key not configured');
     }
 
-    const modelName = process.env.GEMINI_MODEL_2 || "gemini-2.5-flash";
+    const modelName = process.env.GEMINI_MODEL_2 || "gemini-3.0-flash";
     const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: { responseMimeType: "application/json" }

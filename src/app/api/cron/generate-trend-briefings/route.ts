@@ -7,6 +7,7 @@ import { MODELS } from "@/lib/models";
 import Parser from 'rss-parser';
 import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
 import { sendPushNotification } from "@/lib/pushService";
+import { LIMITS } from "@/lib/constants";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -130,7 +131,7 @@ OTHER RULES:
 
     // Try Gemini first, fallback to flash model on 503, then OpenAI on 429/quota
     try {
-        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        const modelName = process.env.GEMINI_MODEL || "gemini-3.0-flash";
         const model = genAI.getGenerativeModel({
             model: modelName,
             generationConfig: { responseMimeType: "application/json" }
@@ -197,12 +198,12 @@ export async function GET(request: Request) {
         // Step 2: Get users with profiles (paginated)
         const USER_BATCH_SIZE = 50;
         let userOffset = 0;
-        let allUsers: { email: string; profile: any }[] = [];
+        let allUsers: { email: string; profile: any; plan: string }[] = [];
 
         while (true) {
             const { data: batch, error: usersError } = await supabaseAdmin
                 .from('users')
-                .select('email, profile')
+                .select('email, profile, plan')
                 .not('profile', 'is', null)
                 .range(userOffset, userOffset + USER_BATCH_SIZE - 1);
 
@@ -222,7 +223,7 @@ export async function GET(request: Request) {
 
 
         const selectionModel = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.0-flash",
             generationConfig: { responseMimeType: "application/json" }
         });
 
@@ -252,6 +253,8 @@ export async function GET(request: Request) {
                     const interests = userProfile.interests || [];
                     const level = userProfile.level || 'Intermediate';
                     const interestList = interests.join(', ');
+                    const userPlan = (user.plan || 'Free').charAt(0).toUpperCase() + (user.plan || 'Free').slice(1).toLowerCase();
+                    const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
 
                     const selectionPrompt = `You are curating news for a ${level} ${job}.
 
@@ -263,14 +266,14 @@ USER PROFILE:
 AVAILABLE ARTICLES (${articlesForPrompt.length}):
 ${JSON.stringify(articlesForPrompt, null, 2)}
 
-TASK: Select EXACTLY 6 most relevant articles.
+TASK: Select EXACTLY ${articleCount} most relevant articles.
 
 CRITERIA:
 1. **Relevance to ${job}**: Directly useful for their work
 2. **Recency**: Prioritize newer articles (lower "days ago")
-3. **Diversity**: Mix of categories (avoid 6 tech articles)
+3. **Diversity**: Mix of categories (avoid all same topic)
 4. **Actionability**: Articles with practical takeaways
-5. **Interest match**: ${interests.length > 0 ? `At least 3 articles matching: ${interestList}` : ""}
+5. **Interest match**: ${interests.length > 0 ? `At least ${Math.min(3, articleCount)} articles matching: ${interestList}` : ""}
 
 OUTPUT JSON:
 {
@@ -286,10 +289,10 @@ OUTPUT JSON:
 }
 
 Requirements:
-- MUST select EXACTLY 6 articles
+- MUST select EXACTLY ${articleCount} articles
 - Summaries in Korean, natural and professional
 - Focus on practical value for ${job}
-- ${interests ? `At least 3 articles matching: ${interestList}` : ""}
+- ${interests ? `At least ${Math.min(3, articleCount)} articles matching: ${interestList}` : ""}
 
 Select now.`;
 
