@@ -8,7 +8,7 @@
 import OpenAI from 'openai';
 import { getStressReliefSuggestions, getEnergyBoostSuggestions } from '@/lib/stress-detector';
 import { getRecommendationsByType } from '@/lib/work-rest-analyzer';
-import { getSharedUserContext, getSharedDailyState, getSharedWorkRestBalance } from '@/lib/shared-context';
+import { getSharedUserContext, getSharedDailyState, getSharedWorkRestBalance, getSharedSuggestionPreferences } from '@/lib/shared-context';
 import { logOpenAIUsage } from '@/lib/openai-usage';
 import { MODELS } from '@/lib/models';
 import {
@@ -18,6 +18,7 @@ import {
     type SmartSuggestionsResult,
     type ScheduleSuggestion,
 } from '@/lib/agent-capabilities';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -70,6 +71,7 @@ export async function generateSmartSuggestions(
         const context = await getSharedUserContext(email) as any;
         const dailyState = await getSharedDailyState(email) as any;
         const workRestBalance = await getSharedWorkRestBalance(email) as any;
+        const suggestionPrefs = await getSharedSuggestionPreferences(email).catch(() => null) as any;
         const balanceRecommendations = getRecommendationsByType(workRestBalance.recommendationType);
 
         const currentSeason = now.getMonth() >= 11 || now.getMonth() <= 1 ? "겨울" :
@@ -166,6 +168,20 @@ ${context.constraints.workoutRestrictions.avoidTypes && context.constraints.work
 - 성공률 높은 시간블록: ${topTimeblocks || '데이터 부족'}
 - 일정 밀도: ${context.features.recentScheduleDensity}
 
+${suggestionPrefs ? `**[AI 추천 수락 패턴 - 데이터 기반 선호도] 📊**
+- 선호 카테고리: ${suggestionPrefs.topCategories?.length > 0 ? suggestionPrefs.topCategories.join(', ') : '데이터 수집 중'}
+- 기피 카테고리: ${suggestionPrefs.avoidCategories?.length > 0 ? suggestionPrefs.avoidCategories.join(', ') : '없음'}
+- 카테고리별 가중치: ${Object.entries(suggestionPrefs.categoryWeights || {}).map(([k, v]: [string, any]) => `${k}(${v.toFixed(1)})`).join(', ') || '데이터 부족'}
+- 시간대별 선호: ${['morning', 'afternoon', 'evening'].map(block => {
+    const scores = suggestionPrefs.timeCategoryScores?.[block] || {};
+    const top = Object.entries(scores).sort((a: any, b: any) => b[1] - a[1]).slice(0, 2);
+    const label = block === 'morning' ? '오전' : block === 'afternoon' ? '오후' : '저녁';
+    return top.length > 0 ? `${label}=${top.map(([k, v]: [string, any]) => `${k}(${(v * 100).toFixed(0)}%)`).join(',')}` : null;
+}).filter(Boolean).join(' / ') || '데이터 부족'}
+
+→ 선호 카테고리에서 최소 1개 추천 포함
+→ 기피 카테고리는 우선순위 낮춤 (완전 제외는 아님)
+` : ''}
 **[오늘의 상태 - 실시간 감지] ⚠️ 중요**
 - 에너지 레벨: ${dailyState.energy_level}/10 ${dailyState.energy_level <= 3 ? '(매우 낮음 - 가벼운 활동 권장)' : dailyState.energy_level <= 5 ? '(보통 이하)' : '(양호)'}
 - 스트레스 레벨: ${dailyState.stress_level}/10 ${dailyState.stress_level >= 8 ? '(매우 높음 - 휴식 필수!)' : dailyState.stress_level >= 6 ? '(높음 - 휴식 권장)' : '(정상)'}
@@ -296,7 +312,7 @@ ${addedSchedulesText}
 위 형식을 정확히 따라 응답하세요. 반드시 순수 JSON만 반환하고, 추가 설명이나 마크다운 없이 응답하세요.`;
 
         const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_4O_MINI_SHORT,
+            model: MODELS.GPT_5_MINI,
             messages: [
                 {
                     role: "system",
@@ -315,7 +331,7 @@ ${addedSchedulesText}
         if (usage) {
             await logOpenAIUsage(
                 email,
-                MODELS.GPT_4O_MINI_SHORT,
+                MODELS.GPT_5_MINI,
                 "ai-suggest-schedules",
                 usage.prompt_tokens,
                 usage.completion_tokens
@@ -341,7 +357,7 @@ ${addedSchedulesText}
 
         return { success: true, data: result, costTier: 'moderate', cachedHit: false };
     } catch (error) {
-        console.error('[SmartSuggestions] Error:', error);
+        logger.error('[SmartSuggestions] Error:', error);
         return { success: false, error: 'Failed to generate suggestions', costTier: 'moderate', cachedHit: false };
     }
 }

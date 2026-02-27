@@ -26,7 +26,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         .maybeSingle();
 
     if (!userData) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
+        return NextResponse.json({ memories: [], count: 0 });
     }
 
     // 메모리 서피싱은 규칙 기반 ($0 비용) → 전 플랜 제공

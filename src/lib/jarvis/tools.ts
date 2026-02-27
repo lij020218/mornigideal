@@ -63,6 +63,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             { name: 'daysOfWeek', type: 'object', description: '반복 요일 배열 [0=일~6=토]', required: false },
             { name: 'location', type: 'string', description: '장소', required: false },
             { name: 'memo', type: 'string', description: '메모', required: false },
+            { name: 'color', type: 'string', description: '색상 (primary/secondary 등, 기본 primary)', required: false },
         ],
         requiresConfirmation: false,
         planGate: ['Free', 'Pro', 'Max'],
@@ -129,6 +130,31 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         planGate: ['Free', 'Pro', 'Max'],
     },
     {
+        name: 'add_goal',
+        description: '새로운 장기 목표를 추가합니다 (주간/월간/연간)',
+        parameters: [
+            { name: 'title', type: 'string', description: '목표 제목', required: true },
+            { name: 'type', type: 'string', description: 'weekly | monthly | yearly', required: true },
+            { name: 'description', type: 'string', description: '목표 설명', required: false },
+            { name: 'category', type: 'string', description: '카테고리 (career/health/learning/finance/general)', required: false },
+            { name: 'targetDate', type: 'string', description: '목표 달성 기한 YYYY-MM-DD', required: false },
+        ],
+        requiresConfirmation: true,
+        planGate: ['Free', 'Pro', 'Max'],
+    },
+    {
+        name: 'update_goal',
+        description: '기존 목표의 진행률을 업데이트하거나 완료 처리합니다',
+        parameters: [
+            { name: 'goalId', type: 'string', description: '목표 ID', required: true },
+            { name: 'type', type: 'string', description: 'weekly | monthly | yearly', required: true },
+            { name: 'progress', type: 'number', description: '진행률 0-100', required: false },
+            { name: 'completed', type: 'boolean', description: '완료 여부', required: false },
+        ],
+        requiresConfirmation: true,
+        planGate: ['Free', 'Pro', 'Max'],
+    },
+    {
         name: 'get_schedule_patterns',
         description: '사용자의 일정 패턴 (바쁜 요일, 자유시간, 루틴 등)을 분석합니다',
         parameters: [],
@@ -162,7 +188,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     // === 일정 준비 ===
     {
         name: 'prepare_schedule',
-        description: '다가오는 중요 일정에 대한 준비 체크리스트를 생성합니다',
+        description: '일정 준비 체크리스트 생성 (기존 서비스). 간단한 "준비할 것 알려줘"에 사용하세요.',
         parameters: [
             { name: 'scheduleText', type: 'string', description: '일정 이름', required: true },
             { name: 'startTime', type: 'string', description: '일정 시작 시간 HH:MM', required: true },
@@ -174,7 +200,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     // === 일정 추천 ===
     {
         name: 'suggest_schedule',
-        description: '사용자의 현재 상태(스트레스, 에너지, 업무-휴식 균형, 일정 패턴)를 분석하여 맞춤 일정을 추천합니다',
+        description: '빈 시간대에 규칙 기반 일정 추천 (빠름, AI 미사용). 간단한 추천 요청에 사용하세요.',
         parameters: [
             { name: 'count', type: 'number', description: '추천 개수 (기본 3)', required: false },
             { name: 'focus', type: 'string', description: '집중 영역: rest | productivity | exercise | learning | auto (기본 auto)', required: false },
@@ -199,7 +225,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     // === 특화 에이전트 Capability ===
     {
         name: 'get_smart_suggestions',
-        description: 'AI 맞춤 일정 추천 (사용자 상태·패턴·업무-휴식 균형 분석 기반, 5카테고리 밸런스)',
+        description: 'AI 딥 분석 기반 일정 추천 (느림, LLM 사용). "자세히 분석해서 추천", "왜 이걸 추천하는지" 등 상세 요청에 사용하세요.',
         parameters: [
             { name: 'requestCount', type: 'number', description: '추천 개수 (기본 3)', required: false },
             { name: 'currentHour', type: 'number', description: '현재 시간 (0-23, 기본 자동)', required: false },
@@ -209,7 +235,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     },
     {
         name: 'get_prep_advice',
-        description: '다가오는 일정에 대한 준비 조언 + 체크리스트 (식사/휴식은 즉시, 업무/운동은 AI 생성)',
+        description: '카테고리별 맞춤 준비 조언 + 체크리스트 (식사/휴식은 즉시, 업무/운동은 AI 분석). 상세한 준비 가이드에 사용하세요.',
         parameters: [
             { name: 'scheduleText', type: 'string', description: '일정 이름', required: true },
             { name: 'startTime', type: 'string', description: '시작 시간 HH:MM', required: false },

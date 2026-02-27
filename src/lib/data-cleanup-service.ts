@@ -85,6 +85,9 @@ export async function executeDataCleanup(userEmail?: string): Promise<CleanupRep
         // 7. user_memory (RAG) 정리
         await cleanupUserMemory(report, userEmail);
 
+        // 8. user_kv_store 선제적 알림 관련 키 정리
+        await cleanupProactiveKvEntries(report, userEmail);
+
     } catch (error: unknown) {
         logger.error('[Data Cleanup] Error:', error);
         report.errors.push(error instanceof Error ? error.message : String(error));
@@ -612,5 +615,90 @@ export async function getUserDataStats(userEmail: string) {
     } catch (error) {
         logger.error('[Data Stats] Error:', error);
         return null;
+    }
+}
+
+/**
+ * 8. user_kv_store 선제적 알림 관련 키 정리
+ * - 날짜 키(proactive_shown_*, proactive_count_*, heartbeat_sent_*): 7일 이전 삭제
+ * - dismissed_proactive_notifications: 30일 이전 ID 제거
+ */
+async function cleanupProactiveKvEntries(report: CleanupReport, userEmail?: string): Promise<void> {
+    try {
+        let totalDeleted = 0;
+
+        // 1. 날짜 키 삭제 (7일 이전)
+        const cutoff7Days = new Date();
+        cutoff7Days.setDate(cutoff7Days.getDate() - 7);
+        const cutoffDateStr = cutoff7Days.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
+        const dateKeyPatterns = [
+            'proactive_shown_',
+            'proactive_shown_ids_',
+            'proactive_count_',
+            'heartbeat_sent_',
+        ];
+
+        for (const prefix of dateKeyPatterns) {
+            let deleteQuery = supabaseAdmin
+                .from('user_kv_store')
+                .delete({ count: 'exact' })
+                .like('key', `${prefix}%`)
+                .lt('key', `${prefix}${cutoffDateStr}`);
+
+            if (userEmail) {
+                deleteQuery = deleteQuery.eq('user_email', userEmail);
+            }
+
+            const { count } = await deleteQuery;
+            totalDeleted += count ?? 0;
+        }
+
+        // 2. dismissed_proactive_notifications 배열 정리 (30일 이전 ID 제거)
+        const cutoff30Days = new Date();
+        cutoff30Days.setDate(cutoff30Days.getDate() - 30);
+        const cutoff30Str = cutoff30Days.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
+        let dismissQuery = supabaseAdmin
+            .from('user_kv_store')
+            .select('user_email, value')
+            .eq('key', 'dismissed_proactive_notifications');
+
+        if (userEmail) {
+            dismissQuery = dismissQuery.eq('user_email', userEmail);
+        }
+
+        const { data: dismissRows } = await dismissQuery;
+        const datePattern = /\d{4}-\d{2}-\d{2}/;
+
+        for (const row of dismissRows || []) {
+            const ids: string[] = row.value || [];
+            if (ids.length === 0) continue;
+
+            const filtered = ids.filter(id => {
+                const match = id.match(datePattern);
+                if (!match) return true; // 날짜 없는 ID는 보존
+                return match[0] >= cutoff30Str;
+            });
+
+            if (filtered.length < ids.length) {
+                await supabaseAdmin
+                    .from('user_kv_store')
+                    .upsert({
+                        user_email: row.user_email,
+                        key: 'dismissed_proactive_notifications',
+                        value: filtered,
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: 'user_email,key' });
+
+                totalDeleted += ids.length - filtered.length;
+            }
+        }
+
+        report.byTable['user_kv_store_proactive'] = { deleted: totalDeleted, aggregated: 0 };
+        report.totalRecordsDeleted += totalDeleted;
+
+    } catch (error: unknown) {
+        report.errors.push(`Proactive KV cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }

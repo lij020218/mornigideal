@@ -3,9 +3,9 @@ import { logOpenAIUsage } from "@/lib/openai-usage";
 import { getUserByEmail } from "@/lib/users";
 import { getTrendsCache } from "@/lib/newsCache";
 import { isSlackConnected, getUnreadSummary } from "@/lib/slackService";
-import { resolvePersonaStyle, getPersonaBlock } from "@/lib/prompts/persona";
 import { getTrendInsightsForAI } from "@/lib/multiDayTrendService";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { sendPushNotification } from "@/lib/pushService";
 import { MODELS } from "@/lib/models";
 import { logger } from '@/lib/logger';
 
@@ -13,40 +13,66 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// ============================================
+// Types
+// ============================================
+
+interface GreetingDecision {
+    greeting: string;
+    weatherAdvice: string | null;
+    scheduleHighlight: string | null;
+    trendPick: string | null;
+    patternInsight: string | null;
+    closingMessage: string;
+}
+
+interface GreetingContext {
+    userName: string;
+    job: string;
+    hour: number;
+    weekday: string;
+    timeOfDay: string;
+    weather: any;
+    schedules: any[];
+    importantSchedules: any[];
+    topTrend: any;
+    slack: any;
+    multiDayTrend: string;
+    isMonday: boolean;
+    hasWeeklyGoals: boolean;
+}
+
+// ============================================
+// Core: 인사말 생성
+// ============================================
+
 /**
- * 단일 사용자에 대해 아침 인사를 생성합니다.
- * ai-morning-greeting/route.ts에서 추출한 코어 로직.
+ * 단일 사용자에 대해 인사를 생성합니다.
+ * AI가 판단(JSON) → 코드가 조립(텍스트).
  */
 export async function generateGreetingForUser(userEmail: string): Promise<string> {
-    // KST 기준 오늘 날짜/시간 (DB 호출 전에 계산)
+    // KST 기준 오늘 날짜/시간
     const now = new Date();
     const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const hour = kstNow.getHours();
-    const minute = kstNow.getMinutes();
     const dayOfWeek = kstNow.getDay();
     const weekday = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'][dayOfWeek];
     const todayStr = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
-    const currentTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 
-    // 모든 데이터를 병렬로 fetch (핵심 성능 개선)
+    // 모든 데이터를 병렬로 fetch
     const [user, weatherResult, trendsResult, multiDayResult, slackResult] = await Promise.all([
-        // 1. 유저 프로필
         getUserByEmail(userEmail),
-        // 2. 날씨
         (async () => {
             try {
-                const weatherRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/weather`);
+                const weatherRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/weather`);
                 if (weatherRes.ok) return await weatherRes.json();
             } catch (error) {
                 logger.error('[GreetingGenerator] Failed to fetch weather:', error);
             }
             return null;
         })(),
-        // 3. 트렌드 캐시
         getTrendsCache(userEmail).catch(() => null),
-        // 4. 멀티데이 트렌드
         getTrendInsightsForAI(userEmail).catch(() => ''),
-        // 5. 슬랙
         (async () => {
             try {
                 if (await isSlackConnected(userEmail)) {
@@ -57,7 +83,7 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
         })(),
     ]);
 
-    const profile = user?.profile || {};
+    const profile: any = user?.profile || {};
     const customGoals = profile.customGoals || [];
 
     // 오늘 일정 필터링
@@ -82,181 +108,267 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
         return importantKeywords.some(kw => text.includes(kw));
     });
 
-    // 병렬 fetch 결과 → 문자열로 변환
-    let weatherInfo = '';
-    if (weatherResult) {
-        const weatherEmoji = weatherResult.condition === 'rain' ? '🌧️' :
-                           weatherResult.condition === 'snow' ? '⛄' :
-                           weatherResult.condition === 'clouds' ? '☁️' : '☀️';
-        weatherInfo = `현재 날씨: ${weatherResult.description} ${weatherEmoji} (기온: ${weatherResult.temp}°C, 체감: ${weatherResult.feels_like}°C)`;
-    }
-
-    let trendContext = '';
-    if (trendsResult?.trends && trendsResult.trends.length > 0) {
-        const topTrends = trendsResult.trends.slice(0, 3);
-        trendContext = `\n오늘의 트렌드 브리핑 (상위 3개):\n${topTrends.map((t: any, i: number) =>
-            `${i + 1}. [${t.category}] ${t.title}${t.summary ? ` - ${t.summary}` : ''}`
-        ).join('\n')}`;
-    }
-
-    const multiDayTrendContext = multiDayResult || '';
-
-    // 주간 목표 체크 (월요일)
-    let weeklyGoalReminder = '';
-    if (dayOfWeek === 1) {
-        const weeklyGoals = profile.longTermGoals?.weekly || [];
-        const activeWeeklyGoals = weeklyGoals.filter((g: any) => !g.completed);
-        if (activeWeeklyGoals.length === 0) {
-            weeklyGoalReminder = '\n\n[월요일 특별 안내] 이번 주 목표가 아직 설정되지 않았습니다. 한 주의 시작을 맞아 주간 목표를 세워보라고 권유하세요.';
-        }
-    }
-
-    // 슬랙 결과 변환
-    let slackContext = '';
-    if (slackResult && slackResult.totalUnread > 0) {
-        slackContext = `\n슬랙 미확인 메시지: 총 ${slackResult.totalUnread}건`;
-        if (slackResult.dms.length > 0) {
-            slackContext += `\n- DM: ${slackResult.dms.map((d: any) => `${d.from}(${d.unread}건)`).join(', ')}`;
-        }
-        if (slackResult.channels.length > 0) {
-            slackContext += `\n- 채널: ${slackResult.channels.map((c: any) => `#${c.name}(${c.unread}건)`).join(', ')}`;
-        }
-    }
-
-    // 시간대 관련 (크론은 아침 6시에 실행되므로 아침 기준으로 생성)
-    const isLateNight = hour >= 0 && hour < 5;
-    const minRecommendHour = Math.max(hour + 1, 8);
-    const minRecommendTime = `${minRecommendHour.toString().padStart(2, '0')}:00`;
-
-    const timeGuidance = isLateNight
-        ? `현재 새벽 ${currentTimeStr}입니다. 지금은 수면이 가장 중요한 시간입니다. 일정 추천이나 활동 제안 대신 숙면을 권장하세요.`
-        : `현재 시간은 ${currentTimeStr}입니다. 추천 활동은 반드시 ${minRecommendTime} 이후 시간대만 추천하세요.`;
-
-    const scheduleListStr = todaySchedules.length > 0
-        ? todaySchedules.map((s: any) => `- ${s.startTime || '00:00'}: ${s.text}${s.endTime ? ` (~${s.endTime})` : ''}`).join('\n')
-        : '- 등록된 일정 없음';
-
-    const importantListStr = importantSchedules.length > 0
-        ? `\n⚠️ 중요 일정:\n${importantSchedules.map((s: any) => `- ${s.startTime}: ${s.text}`).join('\n')}`
-        : '';
-
-    // 시간대별 인사 가이드
     const timeOfDay = hour < 5 ? '새벽' : hour < 12 ? '아침' : hour < 18 ? '오후' : '저녁';
-    const greetingGuide = hour < 5
-        ? '새벽에 접속한 사용자입니다. "아직 늦은 시간이네요" 또는 "일찍 일어나셨군요" 등 상황에 맞는 인사를 하세요.'
-        : hour < 12
-        ? '"좋은 아침이에요" 등 아침 인사를 하세요.'
-        : hour < 14
-        ? '"좋은 오후에요" 또는 점심 관련 인사를 하세요.'
-        : hour < 18
-        ? '"오후도 힘내세요" 등 오후 인사를 하세요.'
-        : '"좋은 저녁이에요" 등 저녁 인사를 하세요.';
+    const topTrend = trendsResult?.trends?.[0] || null;
 
-    const prompt = `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 사용자가 오늘 처음 앱을 열었을 때 보여줄 인사 메시지를 생성하세요.
+    const weeklyGoals = profile.longTermGoals?.weekly || [];
+    const hasWeeklyGoals = weeklyGoals.some((g: any) => !g.completed);
 
-현재 시간: ${kstNow.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (${weekday}) — ${timeOfDay} 시간대
-${weatherInfo}
+    const ctx: GreetingContext = {
+        userName: profile.name || '사용자',
+        job: profile.job || '',
+        hour,
+        weekday,
+        timeOfDay,
+        weather: weatherResult,
+        schedules: todaySchedules,
+        importantSchedules,
+        topTrend,
+        slack: slackResult && slackResult.totalUnread > 0 ? slackResult : null,
+        multiDayTrend: multiDayResult || '',
+        isMonday: dayOfWeek === 1,
+        hasWeeklyGoals,
+    };
 
-**중요: ${timeGuidance}**
+    // AI 판단 → 코드 조립
+    const decision = await getAIDecision(ctx, userEmail);
+    return assembleGreeting(decision, ctx);
+}
 
-사용자 프로필:
-- 이름: ${profile.name || '사용자'}
-- 직업: ${profile.job || '미설정'}
-- 목표: ${profile.goal || '미설정'}
-- 관심 분야: ${(profile.interests || []).join(', ') || '미설정'}
+// ============================================
+// AI 판단: 컨텍스트 → 구조화된 JSON
+// ============================================
 
-오늘의 일정 (${todaySchedules.length}개):
-${scheduleListStr}
-${importantListStr}
-${trendContext}
-${slackContext}
-${multiDayTrendContext ? `\n최근 행동 패턴 분석:\n${multiDayTrendContext}` : ''}
-${weeklyGoalReminder}
+async function getAIDecision(ctx: GreetingContext, userEmail: string): Promise<GreetingDecision> {
+    const fallback = getDefaultDecision(ctx);
 
-**필수 포함 내용:**
-1. **인사**: ${greetingGuide} (2문장, 존댓말, 이모지 1개). 날씨 조언 포함. 절대 "좋은 아침"을 ${timeOfDay !== '아침' ? '사용하지 마세요' : '사용하세요'}.
-
-2. **오늘 일정 요약**: 오늘 총 ${todaySchedules.length}개 일정이 있다고 간결하게 요약.
-   - 시간순으로 주요 일정 나열 (모든 일정을 나열하지 말고, 핵심만 3-4개)
-   - 일정이 없으면 "오늘은 등록된 일정이 없어요. 오늘 할 일을 추가해보시는 건 어떨까요?"
-
-3. **중요 일정 강조**: ${importantSchedules.length > 0
-    ? `오늘 중요한 일정이 ${importantSchedules.length}개 있습니다. ⚡ 이모지와 함께 눈에 띄게 강조하세요.`
-    : '중요 일정이 없으면 이 섹션은 생략하세요.'}
-
-4. **트렌드 브리핑 추천**: ${trendContext
-    ? '오늘의 트렌드 브리핑 중 사용자 관심사와 가장 관련 있는 1개를 간단히 언급하고, "인사이트 탭에서 확인해보세요" 라고 안내하세요.'
-    : '트렌드 브리핑이 아직 준비 중이라면 이 섹션은 생략하세요.'}
-
-5. **슬랙 알림**: ${slackContext
-    ? `슬랙에 미확인 메시지가 있습니다. 건수와 주요 채널/DM을 간단히 언급하고 "슬랙에서 확인해보세요" 안내하세요.`
-    : '슬랙 연동이 안 되어있거나 미확인 메시지가 없으면 이 섹션은 생략하세요.'}
-
-6. **행동 패턴 인사이트**: ${multiDayTrendContext
-    ? '최근 7일 행동 패턴 분석 결과가 있습니다. 완료율 추세나 번아웃 위험 등 핵심 인사이트 1개를 자연스럽게 언급하세요.'
-    : '행동 패턴 데이터가 부족하면 이 섹션은 생략하세요.'}
-
-7. **마무리**: 하루를 응원하는 한마디 (1문장)
-
-${isLateNight ? '**새벽 시간이므로: 일정 요약만 간단히 하고, 휴식과 수면을 권장하세요. 추천 활동은 생략하세요.**' : ''}
-
-**응답 형식 규칙:**
-- 전체 길이: 150-250자 내외 (너무 길지 않게)
-- 자연스러운 대화체, 존댓말
-- 불필요한 서론 없이 바로 인사부터 시작
-- 마크다운 **볼드** 사용 가능
-- 각 섹션을 줄바꿈으로 구분`;
+    // 컨텍스트 요약 (LLM에게 보낼 간결한 데이터)
+    const contextSummary = buildContextSummary(ctx);
 
     const modelName = MODELS.GPT_5_MINI;
+    const LLM_TIMEOUT = 30000;
 
-    const LLM_TIMEOUT = 15000; // 15초
-    const completion = await Promise.race([
-        openai.chat.completions.create({
-            model: modelName,
-            messages: [
-                {
-                    role: "system",
-                    content: getPersonaBlock({
-                        style: resolvePersonaStyle(profile, profile?.plan as string | undefined),
-                        userName: profile?.name as string | undefined,
-                        userJob: profile?.job,
-                        plan: profile?.plan,
-                    }) + `\n\n사용자에게 개인화된 ${timeOfDay} 인사와 함께 오늘 하루의 핵심 정보를 전달하세요. 현재 ${timeOfDay} 시간대이므로 그에 맞는 톤으로 응답하세요.`
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-        }),
-        new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Greeting LLM call timed out')), LLM_TIMEOUT)
-        ),
-    ]);
+    try {
+        const completion = await Promise.race([
+            openai.chat.completions.create({
+                model: modelName,
+                response_format: { type: 'json_object' },
+                messages: [
+                    {
+                        role: "system",
+                        content: `사용자의 하루 컨텍스트를 보고 인사말 구성을 JSON으로 결정하세요.
+반드시 아래 JSON 형식으로만 응답하세요. 각 필드는 한국어 한 문장, 존댓말, 이모지 1개 이하.
+해당 데이터가 없는 필드는 null로 설정하세요.
 
-    const greeting = completion.choices[0]?.message?.content || "좋은 아침이에요! ☀️";
+{
+  "greeting": "시간대에 맞는 인사 + 사용자 이름 포함 (예: 좋은 아침이에요, 지훈님! ☀️)",
+  "weatherAdvice": "날씨 기반 조언 한 문장 (옷차림/우산 등, 날씨 데이터 없으면 null)",
+  "scheduleHighlight": "오늘 일정 중 주목할 포인트 한 문장 (일정 없으면 null)",
+  "trendPick": "트렌드 중 사용자에게 관련 있는 1개 추천 한 문장 (없으면 null)",
+  "patternInsight": "최근 행동 패턴 기반 인사이트 한 문장 (데이터 없으면 null)",
+  "closingMessage": "마무리 응원 한 문장"
+}`
+                    },
+                    {
+                        role: "user",
+                        content: contextSummary,
+                    },
+                ],
+            } as any),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Greeting AI decision timed out')), LLM_TIMEOUT)
+            ),
+        ]);
 
-    // Log usage
-    const usage = completion.usage;
-    if (usage) {
-        await logOpenAIUsage(
-            userEmail,
-            modelName,
-            '/api/cron/generate-greetings',
-            usage.prompt_tokens,
-            usage.completion_tokens
-        );
+        const content = completion.choices[0]?.message?.content;
+        if (!content) return fallback;
+
+        // Log usage
+        const usage = completion.usage;
+        if (usage) {
+            await logOpenAIUsage(
+                userEmail,
+                modelName,
+                '/api/cron/generate-greetings',
+                usage.prompt_tokens,
+                usage.completion_tokens
+            );
+        }
+
+        const parsed = JSON.parse(content) as Partial<GreetingDecision>;
+        return {
+            greeting: parsed.greeting || fallback.greeting,
+            weatherAdvice: parsed.weatherAdvice ?? fallback.weatherAdvice,
+            scheduleHighlight: parsed.scheduleHighlight ?? fallback.scheduleHighlight,
+            trendPick: parsed.trendPick ?? fallback.trendPick,
+            patternInsight: parsed.patternInsight ?? fallback.patternInsight,
+            closingMessage: parsed.closingMessage || fallback.closingMessage,
+        };
+    } catch (error) {
+        logger.error('[GreetingGenerator] AI decision failed, using fallback:', error);
+        return fallback;
+    }
+}
+
+function buildContextSummary(ctx: GreetingContext): string {
+    const parts: string[] = [];
+
+    parts.push(`시간: ${ctx.weekday} ${ctx.hour}시 (${ctx.timeOfDay})`);
+    parts.push(`사용자: ${ctx.userName}${ctx.job ? ` (${ctx.job})` : ''}`);
+
+    if (ctx.weather) {
+        parts.push(`날씨: ${ctx.weather.description}, ${ctx.weather.temp}°C (체감 ${ctx.weather.feels_like}°C)`);
     }
 
-    return greeting;
+    if (ctx.schedules.length > 0) {
+        const list = ctx.schedules.slice(0, 5).map((s: any) =>
+            `${s.startTime || '?'} ${s.text}`
+        ).join(', ');
+        parts.push(`오늘 일정 ${ctx.schedules.length}개: ${list}`);
+    } else {
+        parts.push('오늘 일정: 없음');
+    }
+
+    if (ctx.importantSchedules.length > 0) {
+        parts.push(`중요 일정: ${ctx.importantSchedules.map((s: any) => s.text).join(', ')}`);
+    }
+
+    if (ctx.topTrend) {
+        parts.push(`트렌드: [${ctx.topTrend.category}] ${ctx.topTrend.title}`);
+    }
+
+    if (ctx.slack) {
+        parts.push(`슬랙 미읽: ${ctx.slack.totalUnread}건`);
+    }
+
+    if (ctx.multiDayTrend) {
+        // 너무 길면 앞 200자만
+        parts.push(`행동 패턴: ${ctx.multiDayTrend.slice(0, 200)}`);
+    }
+
+    if (ctx.isMonday && !ctx.hasWeeklyGoals) {
+        parts.push('월요일인데 주간 목표 미설정');
+    }
+
+    return parts.join('\n');
 }
+
+// ============================================
+// 코드 조립: 판단 결과 → 인사말 텍스트
+// ============================================
+
+function assembleGreeting(decision: GreetingDecision, ctx: GreetingContext): string {
+    const parts: string[] = [];
+
+    // 1. 인사
+    parts.push(decision.greeting);
+
+    // 2. 날씨 조언
+    if (decision.weatherAdvice) {
+        parts.push(decision.weatherAdvice);
+    }
+
+    // 3. 일정 요약 (코드가 포맷)
+    parts.push(formatScheduleSummary(ctx.schedules, ctx.importantSchedules));
+
+    // 4. 일정 하이라이트 (AI 판단)
+    if (decision.scheduleHighlight) {
+        parts.push(`⚡ ${decision.scheduleHighlight}`);
+    }
+
+    // 5. 트렌드 추천
+    if (decision.trendPick) {
+        parts.push(`📰 ${decision.trendPick} — 인사이트 탭에서 확인해보세요`);
+    }
+
+    // 6. 슬랙
+    if (ctx.slack) {
+        parts.push(`💬 슬랙에 미확인 메시지 ${ctx.slack.totalUnread}건이 있어요`);
+    }
+
+    // 7. 행동 패턴 인사이트
+    if (decision.patternInsight) {
+        parts.push(`📊 ${decision.patternInsight}`);
+    }
+
+    // 8. 마무리
+    parts.push(decision.closingMessage);
+
+    return parts.join('\n\n');
+}
+
+function formatScheduleSummary(schedules: any[], importantSchedules: any[]): string {
+    if (schedules.length === 0) {
+        return '📅 오늘은 등록된 일정이 없어요. 할 일을 추가해보세요!';
+    }
+
+    const display = schedules.slice(0, 4);
+    const lines = display.map((s: any) => {
+        const time = s.startTime || '';
+        const end = s.endTime ? `~${s.endTime}` : '';
+        const isImportant = importantSchedules.some((imp: any) => imp.text === s.text);
+        return `  ${isImportant ? '⚡' : '•'} ${time}${end ? ` ${end}` : ''} ${s.text}`;
+    });
+
+    let summary = `📅 오늘 일정 ${schedules.length}개:\n${lines.join('\n')}`;
+    if (schedules.length > 4) {
+        summary += `\n  ...외 ${schedules.length - 4}개`;
+    }
+    return summary;
+}
+
+// ============================================
+// Fallback: LLM 실패 시 코드 기반 기본 판단
+// ============================================
+
+function getDefaultDecision(ctx: GreetingContext): GreetingDecision {
+    const timeEmoji = ctx.hour < 5 ? '🌙' : ctx.hour < 12 ? '☀️' : ctx.hour < 18 ? '✨' : '🌙';
+    const timeGreeting = ctx.hour < 5
+        ? `${ctx.userName}님, 아직 이른 시간이네요 ${timeEmoji}`
+        : `좋은 ${ctx.timeOfDay}이에요, ${ctx.userName}님! ${timeEmoji}`;
+
+    let weatherAdvice: string | null = null;
+    if (ctx.weather) {
+        const temp = ctx.weather.temp;
+        const advice = temp <= 0 ? '많이 추워요, 따뜻하게 입으세요!'
+            : temp <= 10 ? '쌀쌀해요, 겉옷을 챙기세요.'
+            : temp <= 20 ? '선선한 날씨에요.'
+            : '따뜻한 날이에요!';
+        const conditionAdvice = ctx.weather.condition === 'rain' ? ' 우산 잊지 마세요! 🌂'
+            : ctx.weather.condition === 'snow' ? ' 눈이 오니 조심하세요! ⛄' : '';
+        weatherAdvice = `${ctx.weather.description}, ${temp}°C. ${advice}${conditionAdvice}`;
+    }
+
+    let scheduleHighlight: string | null = null;
+    if (ctx.importantSchedules.length > 0) {
+        scheduleHighlight = `**${ctx.importantSchedules[0].text}** 잊지 마세요!`;
+    }
+
+    const closings = [
+        '오늘도 알찬 하루 보내세요! 💪',
+        '좋은 하루 되세요! ✨',
+        '오늘도 화이팅이에요! 🔥',
+        '멋진 하루가 될 거예요! 🌟',
+    ];
+
+    return {
+        greeting: timeGreeting,
+        weatherAdvice,
+        scheduleHighlight,
+        trendPick: ctx.topTrend ? `**${ctx.topTrend.title}** — 오늘의 트렌드예요` : null,
+        patternInsight: null,
+        closingMessage: closings[Math.floor(Math.random() * closings.length)],
+    };
+}
+
+// ============================================
+// 크론 & 캐시
+// ============================================
 
 /**
  * 모든 사용자에 대해 인사를 미리 생성하고 DB에 저장합니다.
- * dailyBriefingGenerator와 동일한 패턴.
  */
 export async function generateGreetingsForAllUsers() {
-    // 1. 모든 사용자 조회
     const { data: users, error: userError } = await supabaseAdmin
         .from('users')
         .select('id, email, name');
@@ -268,7 +380,6 @@ export async function generateGreetingsForAllUsers() {
 
     logger.info(`[GreetingGenerator] Generating greetings for ${users.length} users`);
 
-    // KST 기준 오늘 날짜
     const now = new Date();
     const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
@@ -281,7 +392,6 @@ export async function generateGreetingsForAllUsers() {
         try {
             const greeting = await generateGreetingForUser(user.email);
 
-            // user_events 테이블에 저장 (weekly report 캐싱과 동일 패턴)
             await supabaseAdmin.from('user_events').upsert({
                 id: `greeting-${user.email}-${dateStr}`,
                 user_email: user.email,
@@ -293,6 +403,20 @@ export async function generateGreetingsForAllUsers() {
                     generated_at: new Date().toISOString(),
                 },
             }, { onConflict: 'id' });
+
+            // 푸시 알림 전송
+            const pushBody = greeting.split('\n\n').slice(0, 2).join(' ').slice(0, 100);
+            try {
+                await sendPushNotification(user.email, {
+                    title: '☀️ 좋은 아침이에요!',
+                    body: pushBody,
+                    data: { type: 'morning_greeting', date: dateStr },
+                    channelId: 'morning',
+                    priority: 'high',
+                });
+            } catch (pushErr) {
+                logger.error(`[GreetingGenerator] Push failed for ${user.email}:`, pushErr);
+            }
 
             successCount++;
             logger.debug(`[GreetingGenerator] Generated greeting for ${user.name || user.email}`);

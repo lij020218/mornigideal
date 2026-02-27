@@ -80,6 +80,25 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
 
                 if (data.suggestions && data.suggestions.length > 0) {
                     setSuggestions(data.suggestions);
+                    // 추천 노출 이벤트 로깅
+                    fetch("/api/user/events/log", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            eventType: "ai_suggestion_shown",
+                            startAt: new Date().toISOString(),
+                            metadata: {
+                                suggestions: data.suggestions.map((s: any) => ({
+                                    id: s.id,
+                                    category: s.category,
+                                    title: s.title,
+                                    estimatedTime: s.estimatedTime,
+                                })),
+                                source: "today_suggestions",
+                                hour: new Date().getHours(),
+                            },
+                        }),
+                    }).catch(() => {});
                 } else {
                     setSuggestions([]);
                 }
@@ -197,6 +216,8 @@ export function TodaySuggestions({ userProfile, currentTime, onAddToSchedule }: 
                                 suggestion_id: selectedSuggestion.id,
                                 activity: selectedSuggestion.action,
                                 category: selectedSuggestion.category,
+                                priority: selectedSuggestion.priority,
+                                hour: new Date().getHours(),
                                 estimated_duration: durationInput,
                                 ai_estimated_time: selectedSuggestion.estimatedTime,
                                 source: "ai_suggestion",

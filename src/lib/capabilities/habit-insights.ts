@@ -15,6 +15,7 @@ import {
     type HabitInsightsParams,
     type HabitInsightsResult,
 } from '@/lib/agent-capabilities';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -138,6 +139,7 @@ export async function generateHabitInsights(
                 { role: 'user', content: prompt }
             ],
             temperature: 1.0,
+            response_format: { type: "json_object" },
         });
 
         const content = response.choices[0]?.message?.content || '';
@@ -183,7 +185,7 @@ export async function generateHabitInsights(
 
         return { success: true, data: result, costTier: 'cheap', cachedHit: false };
     } catch (error) {
-        console.error('[HabitInsights] Error:', error);
+        logger.error('[HabitInsights] Error:', error);
         return {
             success: false,
             error: 'Failed to generate habit insights',

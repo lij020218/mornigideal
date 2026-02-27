@@ -38,20 +38,24 @@ export async function GET(request: Request) {
         }
 
         // Try to get from cache first (instant loading!)
-        const { data: cached } = await supabaseAdmin
-            .from('weather_cache')
-            .select('weather_data, updated_at')
-            .eq('location', cacheKey)
-            .maybeSingle();
+        try {
+            const { data: cached } = await supabaseAdmin
+                .from('weather_cache')
+                .select('weather_data, updated_at')
+                .eq('location', cacheKey)
+                .maybeSingle();
 
-        if (cached?.weather_data) {
-            const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
-            const oneHour = 60 * 60 * 1000;
+            if (cached?.weather_data) {
+                const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
+                const oneHour = 60 * 60 * 1000;
 
-            // Return cache if less than 1 hour old
-            if (cacheAge < oneHour) {
-                return NextResponse.json(cached.weather_data);
+                // Return cache if less than 1 hour old
+                if (cacheAge < oneHour) {
+                    return NextResponse.json(cached.weather_data);
+                }
             }
+        } catch (cacheErr) {
+            console.warn('[Weather API] Cache lookup failed, fetching fresh data:', cacheErr);
         }
 
         // Cache miss or expired - fetch fresh data
@@ -116,7 +120,8 @@ export async function GET(request: Request) {
                 weather_data: response,
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'location' })
-            .then(() => {});
+            .then(() => {})
+            .catch(() => {});
 
         return NextResponse.json(response);
 

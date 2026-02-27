@@ -99,7 +99,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
     // 'calendar-full': The initial large calendar view
     // 'daily-detail': The specific day timeline view
     // 'weekly': The weekly schedule view for a specific week
-    const [viewMode, setViewMode] = useState<'calendar-full' | 'daily-detail' | 'weekly'>('calendar-full');
+    const [viewMode, setViewMode] = useState<'calendar-full' | 'daily-detail' | 'weekly'>('daily-detail');
 
     // For weekly view - now shows specific week's schedules
     const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
@@ -117,7 +117,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
 
     // For calendar view
     const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     // const [showTimeTable, setShowTimeTable] = useState<boolean>(false); // Removed
 
     // Adding/editing state
@@ -153,6 +153,15 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         if (isOpen) {
             if (initialSchedule) setSchedule(initialSchedule);
             if (initialCustomGoals) setCustomGoals(initialCustomGoals);
+
+            // 팝업 열릴 때마다 오늘 날짜의 일별 상세 보기로 시작
+            if (!linkedGoalData) {
+                const today = new Date();
+                setSelectedDate(today);
+                setViewMode('daily-detail');
+                setCurrentMonth(today);
+            }
+            resetPickers();
 
             // Fetch available goals for linking
             const fetchGoals = async () => {

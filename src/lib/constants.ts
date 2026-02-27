@@ -209,6 +209,10 @@ export const LIMITS = {
     WELLNESS_RECOMMENDATIONS: 5,
     /** Web search results */
     WEB_SEARCH_RESULTS: 5,
+    /** Proactive notification daily limit per plan */
+    PROACTIVE_DAILY: { free: 5, pro: 10, max: Infinity } as Record<string, number>,
+    /** AI chat daily call limit per plan */
+    AI_CHAT_DAILY: { Free: 30, Standard: 50, Pro: 100, Max: 200 } as Record<string, number>,
 } as const;
 
 // ============================================

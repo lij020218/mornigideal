@@ -249,7 +249,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const { data: focusEvents } = await supabase
         .from('user_events')
         .select('*')
-        .eq('email', userEmail)
+        .eq('user_email', userEmail)
         .in('event_type', ['focus_start', 'focus_end', 'focus_interrupted'])
         .gte('created_at', oneWeekAgo.toISOString())
         .lte('created_at', weekEnd.toISOString());
@@ -281,7 +281,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const { data: sleepEvents } = await supabase
         .from('user_events')
         .select('*')
-        .eq('email', userEmail)
+        .eq('user_email', userEmail)
         .in('event_type', ['sleep_start', 'sleep_end'])
         .gte('created_at', oneWeekAgo.toISOString())
         .lte('created_at', weekEnd.toISOString());

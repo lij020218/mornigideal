@@ -11,7 +11,7 @@ import {
 } from "@/lib/chat-utils";
 import { withAuth } from "@/lib/api-handler";
 import { PLAN_CONFIGS, type PlanType } from "@/types/jarvis";
-import { ReActBrain, isComplexRequest, isSimpleResponse } from "@/lib/jarvis/brain-react";
+import { ReActBrain, isComplexRequest, isSimpleResponse, getRequestComplexity } from "@/lib/jarvis/brain-react";
 import { getFusedContextForAI } from "@/lib/contextFusionService";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
@@ -21,7 +21,10 @@ import type { ChatMessage, ChatContext, UserProfile } from '@/lib/types';
 import type { CustomGoal, LongTermGoal } from '@/lib/types';
 import type { MemoryRow } from '@/lib/types';
 import { compressMessages } from '@/lib/context-summarizer';
+import { getUserByEmail } from '@/lib/users';
+import { generateEmbedding } from '@/lib/embeddings';
 import { logger } from '@/lib/logger';
+import { kvGet, kvSet } from '@/lib/kv-store';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -46,56 +49,59 @@ async function fetchEventLogs(userEmail: string): Promise<string> {
 
         if (error || !events || events.length === 0) return "";
 
-        const completedSchedules = events.filter(e => e.event_type === 'schedule_completed');
-        const missedSchedules = events.filter(e => e.event_type === 'schedule_missed');
-        const skippedSchedules = events.filter(e => e.event_type === 'schedule_snoozed');
+        // 단일 패스로 모든 분류 수행 (O(n) × 1 instead of O(n) × 7)
+        let completedCount = 0, missedCount = 0, skippedCount = 0;
+        let sleepHourSum = 0, sleepCount = 0;
+        let exerciseCount = 0, learningCount = 0;
 
-        const totalScheduleEvents = completedSchedules.length + missedSchedules.length + skippedSchedules.length;
+        for (const e of events) {
+            switch (e.event_type) {
+                case 'schedule_completed': {
+                    completedCount++;
+                    const text = e.payload?.scheduleText || '';
+                    if (text.includes('취침')) {
+                        const time = e.payload?.startTime || '23:00';
+                        sleepHourSum += parseInt(time.split(':')[0]);
+                        sleepCount++;
+                    }
+                    if (text.includes('운동') || text.includes('헬스')) exerciseCount++;
+                    if (text.includes('학습') || text.includes('공부')) learningCount++;
+                    break;
+                }
+                case 'schedule_missed':
+                    missedCount++;
+                    break;
+                case 'schedule_snoozed':
+                    skippedCount++;
+                    break;
+            }
+        }
+
+        const totalScheduleEvents = completedCount + missedCount + skippedCount;
         const completionRate = totalScheduleEvents > 0
-            ? Math.round((completedSchedules.length / totalScheduleEvents) * 100)
+            ? Math.round((completedCount / totalScheduleEvents) * 100)
             : 0;
-
-        const sleepEvents = events.filter(e =>
-            e.event_type === 'schedule_completed' &&
-            e.payload?.scheduleText?.includes('취침')
-        );
-        const avgSleepTime = sleepEvents.length > 0
-            ? sleepEvents.reduce((sum, e) => {
-                const time = e.payload?.startTime || '23:00';
-                const [hour] = time.split(':').map(Number);
-                return sum + hour;
-            }, 0) / sleepEvents.length
-            : null;
-
-        const exerciseEvents = events.filter(e =>
-            e.event_type === 'schedule_completed' &&
-            (e.payload?.scheduleText?.includes('운동') || e.payload?.scheduleText?.includes('헬스'))
-        );
-
-        const learningEvents = events.filter(e =>
-            e.event_type === 'schedule_completed' &&
-            (e.payload?.scheduleText?.includes('학습') || e.payload?.scheduleText?.includes('공부'))
-        );
+        const avgSleepTime = sleepCount > 0 ? sleepHourSum / sleepCount : null;
 
         return `
 🧠 **사용자 행동 패턴 분석 (최근 7일):**
 
 📊 일정 완료율: ${completionRate}%
-- 완료: ${completedSchedules.length}개
-- 놓침: ${missedSchedules.length}개
-- 미루기: ${skippedSchedules.length}개
+- 완료: ${completedCount}개
+- 놓침: ${missedCount}개
+- 미루기: ${skippedCount}개
 
 ${avgSleepTime ? `😴 수면 패턴:
 - 평균 취침 시간: 약 ${Math.round(avgSleepTime)}시
-- 최근 ${sleepEvents.length}회 취침 기록
+- 최근 ${sleepCount}회 취침 기록
 ` : ''}
 
-${exerciseEvents.length > 0 ? `💪 운동 패턴:
-- 최근 7일간 ${exerciseEvents.length}회 운동 완료
+${exerciseCount > 0 ? `💪 운동 패턴:
+- 최근 7일간 ${exerciseCount}회 운동 완료
 ` : ''}
 
-${learningEvents.length > 0 ? `📚 학습 패턴:
-- 최근 7일간 ${learningEvents.length}회 학습 완료
+${learningCount > 0 ? `📚 학습 패턴:
+- 최근 7일간 ${learningCount}회 학습 완료
 ` : ''}
 
 **고맥락 응답 가이드 (Max 플랜 - 자비스 모드):**
@@ -136,38 +142,41 @@ ${learningEvents.length > 0 ? `📚 학습 패턴:
     }
 }
 
-async function fetchRagContext(messages: ChatMessage[], userEmail: string): Promise<string> {
+async function fetchRagContext(messages: ChatMessage[], userEmail: string, userId?: string, userPlan?: string): Promise<string> {
     try {
         const lastUserMessage = messages.filter((m) => m.role === 'user').pop();
         if (!lastUserMessage?.content) return "";
 
         const query = lastUserMessage.content;
 
-        const { data: userData } = await supabaseAdmin
-            .from("users")
-            .select("id, plan")
-            .eq("email", userEmail)
-            .maybeSingle();
+        // userId가 없으면 DB 조회 (폴백)
+        let resolvedUserId = userId;
+        let resolvedPlan = userPlan || "Free";
+        if (!resolvedUserId) {
+            const { data: userData } = await supabaseAdmin
+                .from("users")
+                .select("id, plan")
+                .eq("email", userEmail)
+                .maybeSingle();
+            if (!userData) return "";
+            resolvedUserId = userData.id;
+            resolvedPlan = userData.plan || "Free";
+        }
 
-        if (!userData) return "";
-
-        const { generateEmbedding } = await import("@/lib/embeddings");
         const { embedding: queryEmbedding } = await generateEmbedding(query);
-
-        const userPlan = userData.plan || "Free";
         const planThresholds: Record<string, { threshold: number; limit: number }> = {
             Free: { threshold: 0.8, limit: 3 },
             Standard: { threshold: 0.8, limit: 3 },
             Pro: { threshold: 0.75, limit: 5 },
             Max: { threshold: 0.7, limit: 10 },
         };
-        const { threshold, limit } = planThresholds[userPlan] || planThresholds.Free;
+        const { threshold, limit } = planThresholds[resolvedPlan] || planThresholds.Free;
 
         const { data: memories, error } = await supabaseAdmin.rpc(
             'search_similar_memories',
             {
                 query_embedding: JSON.stringify(queryEmbedding),
-                match_user_id: userData.id,
+                match_user_id: resolvedUserId,
                 match_threshold: threshold,
                 match_count: limit,
             }
@@ -203,17 +212,20 @@ ${m.metadata?.date ? `날짜: ${m.metadata.date}` : ''}
 // 사용자 일정 패턴 분석 컨텍스트 (추천 시 활용)
 // ============================================
 
-async function fetchSchedulePatternContext(userEmail: string): Promise<string> {
+async function fetchSchedulePatternContext(userEmail: string, preloadedProfile?: UserProfile | null): Promise<string> {
     try {
-        const { data: userData } = await supabaseAdmin
-            .from('users')
-            .select('profile')
-            .eq('email', userEmail)
-            .maybeSingle();
-
-        if (!userData?.profile?.customGoals) return "";
-
-        const customGoals: CustomGoal[] = userData.profile.customGoals;
+        let customGoals: CustomGoal[];
+        if (preloadedProfile?.customGoals) {
+            customGoals = preloadedProfile.customGoals;
+        } else {
+            const { data: userData } = await supabaseAdmin
+                .from('users')
+                .select('profile')
+                .eq('email', userEmail)
+                .maybeSingle();
+            if (!userData?.profile?.customGoals) return "";
+            customGoals = userData.profile.customGoals;
+        }
         if (customGoals.length < 5) return ""; // 데이터 부족
 
         const fourWeeksAgo = new Date();
@@ -335,15 +347,15 @@ async function buildUserAndScheduleContext(userEmail: string, context: ChatConte
     userContext: string;
     scheduleContext: string;
     userPlan: string;
+    userId: string | undefined;
     profile: UserProfile | null;
 }> {
     try {
-        const { getUserByEmail } = await import("@/lib/users");
         const user = await getUserByEmail(userEmail);
         const userPlan = user?.profile?.plan || "Free";
 
         if (!user?.profile) {
-            return { userContext: "", scheduleContext: "", userPlan, profile: null };
+            return { userContext: "", scheduleContext: "", userPlan, userId: user?.id, profile: null };
         }
 
         const p = user.profile;
@@ -472,10 +484,10 @@ ${dayAfterTomorrowGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
             }
         }
 
-        return { userContext, scheduleContext, userPlan, profile: p };
+        return { userContext, scheduleContext, userPlan, userId: user?.id, profile: p };
     } catch (e) {
         logger.error("[AI Chat] Failed to get user context:", e);
-        return { userContext: "", scheduleContext: "", userPlan: "Free", profile: null };
+        return { userContext: "", scheduleContext: "", userPlan: "Free", userId: undefined, profile: null };
     }
 }
 
@@ -565,6 +577,20 @@ function buildDateContext(context: ChatContext | undefined): string {
 
 export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     try {
+        // 1. 일일 AI 호출 제한 체크
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+        const dailyCountKey = `ai_chat_count_${todayStr}`;
+        const currentCount = await kvGet<number>(userEmail, dailyCountKey) ?? 0;
+
+        // 사용자 플랜은 아래에서 조회하므로, 먼저 간이 체크 (최대 플랜 한도로)
+        const maxPossibleLimit = LIMITS.AI_CHAT_DAILY.Max;
+        if (currentCount >= maxPossibleLimit) {
+            return NextResponse.json(
+                { error: '일일 AI 채팅 한도를 초과했습니다. 내일 다시 이용해주세요.', message: '일일 사용 한도에 도달했어요.' },
+                { status: 429 }
+            );
+        }
+
         // 2. 요청 파싱
         const body = await request.json();
         const v = validateBody(aiChatSchema, body);
@@ -576,14 +602,28 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         const intent = classifyIntent(messages);
 
         // 4. 사용자 프로필 + 일정 (항상 필요)
-        const { userContext, scheduleContext, userPlan, profile } = await buildUserAndScheduleContext(userEmail, context);
+        const { userContext, scheduleContext, userPlan, userId, profile } = await buildUserAndScheduleContext(userEmail, context);
+
+        // 4.1 플랜별 일일 제한 재확인
+        const dailyLimit = LIMITS.AI_CHAT_DAILY[userPlan] ?? LIMITS.AI_CHAT_DAILY.Free;
+        if (currentCount >= dailyLimit) {
+            return NextResponse.json(
+                { error: '일일 AI 채팅 한도를 초과했습니다.', message: `${userPlan} 플랜의 일일 한도(${dailyLimit}회)에 도달했어요.` },
+                { status: 429 }
+            );
+        }
+
+        // 호출 카운트 증가
+        await kvSet(userEmail, dailyCountKey, currentCount + 1);
 
 
-        // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청)
+        // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청만)
+        // 단순 일정 추가/삭제("점심 잡아줘")는 단발 GPT가 더 정확하고 빠름
         const planConfig = PLAN_CONFIGS[userPlan as PlanType];
+        const complexity = getRequestComplexity(messages);
         const shouldUseReAct = planConfig?.features.reactLoop
             && !isSimpleResponse(messages)
-            && (intent !== 'chat' || isComplexRequest(messages));
+            && complexity > 0;
 
         if (shouldUseReAct) {
             try {
@@ -599,11 +639,11 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                         scheduleContext: scheduleContext || undefined,
                         userContext: userContext || undefined,
                     },
-                });
+                }, complexity);
 
-                // ReAct가 조기 종료되면 폴백
-                if (result.wasTerminatedEarly) {
-                    throw new Error('ReAct terminated early');
+                // wasTerminatedEarly여도 message가 있으면 (fallback 생성 성공) 사용
+                if (result.wasTerminatedEarly && !result.message) {
+                    throw new Error('ReAct terminated early with no response');
                 }
 
                 // ReAct 사용량 기록 (LLM 호출 수만큼)
@@ -611,9 +651,17 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     await logOpenAIUsage(userEmail, 'react-agent', 'ai-chat-react', 0, 0);
                 }
 
+                // ReAct 결과에도 동일한 후처리 적용 (이름 정규화, 시간 검증, 충돌 감지)
+                const currentTime = context?.currentTime || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                const { actions: processedActions, conflictWarning, focusSuggestion } = postProcessActions(
+                    result.actions || [], currentTime
+                );
+
                 return NextResponse.json({
                     message: result.message,
-                    actions: result.actions,
+                    actions: processedActions,
+                    ...(conflictWarning && { conflictWarning }),
+                    ...(focusSuggestion && { focusSuggestion }),
                 });
             } catch (reactError) {
                 logger.error('[AI Chat] ReAct failed, falling back to single-shot:', reactError);
@@ -621,7 +669,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             }
         }
 
-        // 5. 의도별 필요한 데이터만 조회 (Lazy Loading)
+        // 5. 의도별 필요한 데이터만 병렬 조회 (Lazy Loading)
         const dataSources = getRequiredDataSources(intent, userPlan);
 
         const asyncFetches: Promise<void>[] = [];
@@ -630,35 +678,44 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         let fusedContextStr = "";
         let schedulePatternContext = "";
 
+        // 개별 타임아웃 래퍼 (전체 10초 대기 대신 개별 5초 제한)
+        const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
+            Promise.race([promise, new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms))]);
+
         if (dataSources.needsEventLogs) {
             asyncFetches.push(
-                fetchEventLogs(userEmail).then(result => { eventLogsContext = result; })
+                withTimeout(fetchEventLogs(userEmail), 5000, "").then(result => { eventLogsContext = result; })
             );
         }
 
         if (dataSources.needsRag) {
             asyncFetches.push(
-                fetchRagContext(messages, userEmail).then(result => { ragContext = result; })
+                withTimeout(fetchRagContext(messages, userEmail, userId, userPlan), 5000, "").then(result => { ragContext = result; })
             );
         }
 
-        // 추천 요청 시 일정 패턴 분석 (search/chat에서 활용)
+        // 추천 요청 시 일정 패턴 분석 (search/chat에서 활용, 이미 로드된 profile 재활용)
         if (intent === 'search' || intent === 'chat') {
             asyncFetches.push(
-                fetchSchedulePatternContext(userEmail).then(result => { schedulePatternContext = result; })
+                withTimeout(fetchSchedulePatternContext(userEmail, profile), 3000, "").then(result => { schedulePatternContext = result; })
             );
         }
 
-        // 컨텍스트 융합 엔진 (전 플랜 개방 — 규칙 기반, LLM 비용 없음)
+        // 컨텍스트 융합 엔진 — schedule 단순 추가/삭제에는 불필요 (의도 게이팅)
+        if (intent !== 'schedule') {
+            asyncFetches.push(
+                withTimeout(getFusedContextForAI(userEmail), 5000, "").then(result => { fusedContextStr = result; })
+            );
+        }
+
+        // 메시지 압축도 병렬로 시작 (13개 이상일 때만 LLM 호출)
+        let compressedMessages = messages.slice(-10); // 기본값: 최근 10개
         asyncFetches.push(
-            getFusedContextForAI(userEmail).then(result => { fusedContextStr = result; })
+            withTimeout(compressMessages(messages), 8000, messages.slice(-10)).then(result => { compressedMessages = result; })
         );
 
-        // 병렬 실행 (10초 타임아웃 — 개별 실패는 무시하고 진행)
-        await Promise.race([
-            Promise.allSettled(asyncFetches),
-            new Promise<void>(resolve => setTimeout(resolve, 10000)),
-        ]);
+        // 병렬 실행 (개별 타임아웃으로 관리, 전체는 allSettled로 완료 대기)
+        await Promise.allSettled(asyncFetches);
 
         // 6. 나머지 컨텍스트 (순수 함수, DB 호출 없음)
         const currentDateContext = buildDateContext(context);
@@ -727,10 +784,9 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
             personaStyle: profile?.personaStyle,
         });
 
-        // 8. LLM 호출 (타임아웃 포함, 컨텍스트 계층적 요약 적용)
+        // 8. LLM 호출 (타임아웃 포함, 메시지 압축은 5단계에서 병렬 완료)
         const modelName = MODELS.GPT_5_MINI;
         const LLM_TIMEOUT = 30000; // 30초
-        const compressedMessages = await compressMessages(messages);
         const completion = await Promise.race([
             openai.chat.completions.create({
                 model: modelName,

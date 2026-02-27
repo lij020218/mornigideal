@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
+import { getUserPlan } from "@/lib/user-plan";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -12,7 +13,6 @@ const openai = new OpenAI({
 
 
 const MINI_MODEL = MODELS.GPT_5_MINI;
-const FINAL_MODEL = MODELS.GPT_5_2;
 
 // Increase timeout for quiz generation
 export const maxDuration = 60; // 60 seconds
@@ -93,6 +93,10 @@ ${context}
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const body = await request.json();
     const { pageAnalyses, type, materialId, userType, major, field, goal } = body;
+
+    // Max → GPT-5.2, Free/Pro → GPT-5-mini (비용 최적화)
+    const planInfo = await getUserPlan(email);
+    const essayModel = planInfo.plan === 'max' ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
 
     // Check if this is an onboarding quiz request
     if (userType || major || field || goal) {
@@ -203,9 +207,9 @@ ${allContent}
         temperature: 1.0,
       }),
 
-      // Essay questions with GPT-5.1
+      // Essay questions — Max: GPT-5.2, Free/Pro: GPT-5-mini
       openai.chat.completions.create({
-        model: FINAL_MODEL,
+        model: essayModel,
         messages: [
           {
             role: "system",
@@ -266,7 +270,7 @@ ${allContent}
     if (essayResult.usage) {
       await logOpenAIUsage(
         email,
-        FINAL_MODEL,
+        essayModel,
         "generate-quiz/essay",
         essayResult.usage.prompt_tokens,
         essayResult.usage.completion_tokens

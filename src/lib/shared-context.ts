@@ -82,6 +82,17 @@ export function getSharedWorkRestBalance(email: string): Promise<unknown> {
     });
 }
 
+export function getSharedSuggestionPreferences(email: string): Promise<unknown> {
+    return getOrSet(`suggestionPrefs:${email}`, async () => {
+        const { getSuggestionPreferences, computeSuggestionPreferences } = await import('./suggestion-preference-aggregator');
+        const cached = await getSuggestionPreferences(email);
+        if (cached && new Date(cached.updatedAt) > new Date(Date.now() - 6 * 60 * 60 * 1000)) {
+            return cached; // 6시간 이내 데이터 사용
+        }
+        return computeSuggestionPreferences(email);
+    }, 5 * 60_000); // 5분 TTL
+}
+
 /**
  * 뮤테이션 후 사용자 컨텍스트 무효화
  */

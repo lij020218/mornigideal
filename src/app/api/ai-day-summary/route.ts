@@ -133,8 +133,8 @@ ${scheduleList || '- 일정 없음'}
 
 **중요:** 사용자의 목표와 오늘 완료한 일정을 구체적으로 언급하며, 따뜻하고 격려하는 톤으로 작성하세요.`;
 
-    // Use gpt-5.2 for personalized, empathetic feedback
-    const modelName = MODELS.GPT_5_2;
+    // Max → GPT-5.2, Free/Pro → GPT-5-mini (비용 최적화)
+    const modelName = isMaxUser ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
     const completion = await openai.chat.completions.create({
         model: modelName,
         messages: [

@@ -21,6 +21,8 @@ import {
 } from '@/lib/proactiveNotificationService';
 import { getEscalationDecision, applyEscalation } from '@/lib/escalationService';
 import { sendPushNotification } from '@/lib/pushService';
+import { getUserPlan } from '@/lib/user-plan';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 300; // 5분 타임아웃
 export const dynamic = 'force-dynamic';
@@ -72,12 +74,12 @@ async function sendSlackDM(userEmail: string, notification: ProactiveNotificatio
 
         const result = await response.json();
         if (!result.ok) {
-            console.error('[Heartbeat] Slack DM failed:', result.error);
+            logger.error('[Heartbeat] Slack DM failed:', result.error);
             return false;
         }
         return true;
     } catch (error) {
-        console.error('[Heartbeat] Slack DM exception:', error);
+        logger.error('[Heartbeat] Slack DM exception:', error);
         return false;
     }
 }
@@ -108,7 +110,7 @@ async function markAsSent(userEmail: string, todayStr: string, notificationId: s
     const sentIds: string[] = existing?.value || [];
     if (!sentIds.includes(notificationId)) {
         sentIds.push(notificationId);
-        await supabaseAdmin.from('user_preferences').upsert({
+        await supabaseAdmin.from('user_kv_store').upsert({
             user_email: userEmail,
             key: `heartbeat_sent_${todayStr}`,
             value: sentIds,
@@ -189,7 +191,7 @@ export async function GET(request: NextRequest) {
                 .range(pageOffset, pageOffset + PAGE_SIZE - 1);
 
             if (usersError) {
-                console.error('[Heartbeat] Failed to get users:', usersError);
+                logger.error('[Heartbeat] Failed to get users:', usersError);
                 return NextResponse.json({ error: 'Failed to get users' }, { status: 500 });
             }
             if (!batch || batch.length === 0) break;
@@ -220,13 +222,15 @@ export async function GET(request: NextRequest) {
                         await gcalService.sync();
                     }
                 } catch (syncError) {
-                    console.error('[Heartbeat] GCal sync error:', syncError);
+                    logger.error('[Heartbeat] GCal sync error:', syncError);
                 }
 
                 const context = await getUserContext(user.email);
                 if (!context) continue;
 
-                // 알림 생성
+                // 알림 생성 (planType 전달로 내부 getUserPlan 중복 호출 방지)
+                const userPlan = await getUserPlan(user.email);
+                context.planType = userPlan.plan;
                 const notifications = await generateProactiveNotifications(context);
                 if (notifications.length === 0) continue;
 
@@ -258,9 +262,8 @@ export async function GET(request: NextRequest) {
                 let sentCount = 0;
 
                 for (const notif of escalated) {
-                    // push 전송 여부: 에스컬레이션 허용 + high/medium
-                    const shouldPush = notif.pushAllowed &&
-                        (notif.priority === 'high' || notif.priority === 'medium');
+                    // push 전송 여부: 에스컬레이션 허용 시 모든 알림에 푸시
+                    const shouldPush = notif.pushAllowed;
 
                     if (shouldPush) {
                         // Slack DM 발송 시도
@@ -299,7 +302,7 @@ export async function GET(request: NextRequest) {
                     sent: sentCount,
                 });
             } catch (userError) {
-                console.error('[Heartbeat] Error processing user:', userError);
+                logger.error('[Heartbeat] Error processing user:', userError);
             }
         }
 
@@ -314,7 +317,7 @@ export async function GET(request: NextRequest) {
             details: userResults,
         });
     } catch (error) {
-        console.error('[Heartbeat] Fatal error:', error);
+        logger.error('[Heartbeat] Fatal error:', error);
         return NextResponse.json(
             { error: 'Heartbeat failed' },
             { status: 500 }

@@ -37,29 +37,34 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: activities, error: activitiesError } = await supabaseAdmin
-        .from('user_activity_logs')
+    const { data: activities } = await supabaseAdmin
+        .from('user_events')
         .select('*')
-        .eq('user_email', email)
-        .gte('timestamp', thirtyDaysAgo.toISOString());
+        .eq('email', email)
+        .gte('created_at', thirtyDaysAgo.toISOString());
 
     const analytics = analyzeUserBehavior(activities || []);
 
-    // Fetch schedule history
+    // Fetch schedule history (daily_goals uses user_id)
+    const userId = profile?.id;
     const { data: schedules } = await supabaseAdmin
-        .from('custom_goals')
+        .from('daily_goals')
         .select('*')
-        .eq('user_email', email);
+        .eq('user_id', userId);
 
     const scheduleInsights = analyzeSchedulePatterns(schedules || []);
 
     // Fetch wellness analytics from schedule patterns
     let wellnessAnalytics = null;
     try {
-        const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/user/schedule-analytics?days=30`, {
-            headers: {
-                'Cookie': request.headers.get('Cookie') || '',
-            },
+        const headers: Record<string, string> = {};
+        const cookie = request.headers.get('Cookie');
+        if (cookie) headers['Cookie'] = cookie;
+        const auth = request.headers.get('Authorization');
+        if (auth) headers['Authorization'] = auth;
+
+        const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/api/user/schedule-analytics?days=30`, {
+            headers,
         });
         if (wellnessResponse.ok) {
             const data = await wellnessResponse.json();
@@ -122,7 +127,7 @@ function analyzeUserBehavior(activities: any[]) {
     activities.forEach(activity => {
         const metadata = activity.metadata || {};
 
-        switch (activity.activity_type) {
+        switch (activity.event_type) {
             case 'briefing_read':
                 analytics.briefingReadCount++;
                 const category = metadata.category || 'uncategorized';
@@ -133,7 +138,7 @@ function analyzeUserBehavior(activities: any[]) {
                 analytics.scheduleCompleted++;
                 analytics.scheduleTotal++;
 
-                const hour = new Date(activity.timestamp).getHours();
+                const hour = new Date(activity.created_at).getHours();
                 const timeSlot = `${hour}:00`;
                 analytics.timeSlotCounts[timeSlot] = (analytics.timeSlotCounts[timeSlot] || 0) + 1;
                 break;
@@ -167,7 +172,7 @@ function analyzeUserBehavior(activities: any[]) {
         .map(([slot]) => slot);
 
     // Calculate engagement rate (% of days with at least 1 activity)
-    const uniqueDays = new Set(activities.map(a => new Date(a.timestamp).toDateString())).size;
+    const uniqueDays = new Set(activities.map(a => new Date(a.created_at).toDateString())).size;
     analytics.briefingEngagementRate = uniqueDays > 0 ? Math.round((analytics.briefingReadCount / uniqueDays) * 100) : 0;
 
     return analytics;

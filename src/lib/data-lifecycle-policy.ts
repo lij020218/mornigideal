@@ -129,6 +129,8 @@ export const EVENT_IMPORTANCE_SCORES: Record<string, number> = {
     'learning_session_completed': 8,
     'sleep_logged': 7,
     'ai_suggestion_accepted': 7,
+    'ai_suggestion_dismissed': 5,
+    'ai_suggestion_shown': 3,
 
     // 낮은 중요도 (5점)
     'schedule_added': 5,

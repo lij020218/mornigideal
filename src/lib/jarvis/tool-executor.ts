@@ -94,6 +94,10 @@ export class ToolExecutor {
                 return this.getUserState();
             case 'get_goals':
                 return this.getGoals(args.goalType || 'all');
+            case 'add_goal':
+                return this.addGoal(args as { title: string; type: string; description?: string; category?: string; targetDate?: string });
+            case 'update_goal':
+                return this.updateGoal(args as { goalId: string; type: string; progress?: number; completed?: boolean });
             case 'get_schedule_patterns':
                 return this.getSchedulePatterns();
             case 'create_checklist':
@@ -401,6 +405,110 @@ export class ToolExecutor {
         return { success: true, data: goals, humanReadableSummary: summary };
     }
 
+    private async addGoal(args: { title: string; type: string; description?: string; category?: string; targetDate?: string }): Promise<ToolResult> {
+        const goalType = args.type as 'weekly' | 'monthly' | 'yearly';
+        if (!['weekly', 'monthly', 'yearly'].includes(goalType)) {
+            return { success: false, error: 'invalid type', humanReadableSummary: '목표 타입은 weekly, monthly, yearly 중 하나여야 합니다.' };
+        }
+
+        const userData = await this.getUserData();
+        if (!userData) {
+            return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
+        }
+
+        const longTermGoals = userData.profile?.longTermGoals || {};
+        const currentGoals = {
+            weekly: (longTermGoals as Record<string, LongTermGoal[]>).weekly || [],
+            monthly: (longTermGoals as Record<string, LongTermGoal[]>).monthly || [],
+            yearly: (longTermGoals as Record<string, LongTermGoal[]>).yearly || [],
+        };
+
+        const now = new Date().toISOString();
+        const newGoal: LongTermGoal = {
+            id: `goal-${Date.now()}`,
+            type: goalType,
+            title: args.title,
+            description: args.description || '',
+            category: args.category || 'general',
+            targetDate: args.targetDate,
+            progress: 0,
+            milestones: [],
+            completed: false,
+            createdAt: now,
+            updatedAt: now,
+        };
+
+        currentGoals[goalType].push(newGoal);
+
+        await supabaseAdmin
+            .from('users')
+            .update({ profile: { ...userData.profile, longTermGoals: currentGoals } })
+            .eq('email', this.userEmail);
+
+        this.cachedUserData = null; // 캐시 무효화
+
+        const typeLabel = { weekly: '주간', monthly: '월간', yearly: '연간' }[goalType];
+        return {
+            success: true,
+            data: newGoal,
+            humanReadableSummary: `${typeLabel} 목표 "${args.title}"을(를) 추가했습니다.`,
+        };
+    }
+
+    private async updateGoal(args: { goalId: string; type: string; progress?: number; completed?: boolean }): Promise<ToolResult> {
+        const goalType = args.type as 'weekly' | 'monthly' | 'yearly';
+        if (!['weekly', 'monthly', 'yearly'].includes(goalType)) {
+            return { success: false, error: 'invalid type', humanReadableSummary: '목표 타입은 weekly, monthly, yearly 중 하나여야 합니다.' };
+        }
+
+        const userData = await this.getUserData();
+        if (!userData) {
+            return { success: false, error: '사용자 없음', humanReadableSummary: '사용자 정보를 찾을 수 없습니다.' };
+        }
+
+        const longTermGoals = userData.profile?.longTermGoals || {};
+        const currentGoals = {
+            weekly: (longTermGoals as Record<string, LongTermGoal[]>).weekly || [],
+            monthly: (longTermGoals as Record<string, LongTermGoal[]>).monthly || [],
+            yearly: (longTermGoals as Record<string, LongTermGoal[]>).yearly || [],
+        };
+
+        const goalList = currentGoals[goalType];
+        const index = goalList.findIndex((g: LongTermGoal) => g.id === args.goalId);
+        if (index === -1) {
+            return { success: false, error: 'goal not found', humanReadableSummary: '해당 목표를 찾을 수 없습니다.' };
+        }
+
+        const now = new Date().toISOString();
+        if (args.progress !== undefined) {
+            goalList[index].progress = Math.min(100, Math.max(0, args.progress));
+            if (goalList[index].progress >= 100) {
+                goalList[index].completed = true;
+            }
+        }
+        if (args.completed !== undefined) {
+            goalList[index].completed = args.completed;
+            if (args.completed) goalList[index].progress = 100;
+        }
+        goalList[index].updatedAt = now;
+
+        await supabaseAdmin
+            .from('users')
+            .update({ profile: { ...userData.profile, longTermGoals: currentGoals } })
+            .eq('email', this.userEmail);
+
+        this.cachedUserData = null;
+
+        const goal = goalList[index];
+        return {
+            success: true,
+            data: goal,
+            humanReadableSummary: args.completed
+                ? `목표 "${goal.title}"을(를) 완료 처리했습니다!`
+                : `목표 "${goal.title}" 진행률을 ${goal.progress}%로 업데이트했습니다.`,
+        };
+    }
+
     private async getSchedulePatterns(): Promise<ToolResult> {
         try {
             const { analyzeSchedulePatterns } = await import('@/lib/schedule-pattern-analyzer');
@@ -426,11 +534,12 @@ export class ToolExecutor {
             const focusArea = args.focus || 'auto';
 
             // 병렬로 분석 데이터 수집 (공유 컨텍스트 풀 사용)
-            const { getSharedDailyState, getSharedWorkRestBalance } = await import('@/lib/shared-context');
-            const [dailyState, workRest, patterns] = await Promise.all([
+            const { getSharedDailyState, getSharedWorkRestBalance, getSharedSuggestionPreferences } = await import('@/lib/shared-context');
+            const [dailyState, workRest, patterns, suggestionPrefs] = await Promise.all([
                 getSharedDailyState(this.userEmail).catch(() => null) as Promise<any>,
                 getSharedWorkRestBalance(this.userEmail).catch(() => null) as Promise<any>,
                 import('@/lib/schedule-pattern-analyzer').then(m => m.analyzeSchedulePatterns(this.userEmail)).catch(() => null),
+                getSharedSuggestionPreferences(this.userEmail).catch(() => null) as Promise<any>,
             ]);
 
             // 오늘 일정 가져오기 (cached)
@@ -480,9 +589,9 @@ export class ToolExecutor {
             }
             if (effectiveFocus === 'auto') effectiveFocus = 'balanced';
 
-            // 추천 일정 생성
+            // 추천 일정 생성 (선호도 반영)
             const suggestions = generateScheduleSuggestions(
-                effectiveFocus, count, freeSlots, profile, dailyState, workRest, patterns
+                effectiveFocus, count, freeSlots, profile, dailyState, workRest, patterns, suggestionPrefs
             );
 
             const summaryParts = suggestions.map(s => `${s.startTime} ${s.text}`);
@@ -707,10 +816,12 @@ export class ToolExecutor {
     // 유틸리티
     // ================================================
 
+    /** KST 기준 YYYY-MM-DD (서버 TZ와 무관하게 일관된 날짜) */
     private formatDate(date: Date): string {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+        const kst = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const year = kst.getFullYear();
+        const month = String(kst.getMonth() + 1).padStart(2, '0');
+        const day = String(kst.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
 }
@@ -774,6 +885,7 @@ function generateScheduleSuggestions(
     dailyState: { stress_level: number; energy_level: number; completion_rate?: number } | null,
     workRest: { workIntensity?: string; restStatus?: string; recommendationType?: string; emptyHoursToday?: number } | null,
     patterns: unknown,
+    prefs?: { categoryWeights?: Record<string, number>; timeCategoryScores?: Record<string, Record<string, number>> } | null,
 ): ScheduleSuggestion[] {
     const pool = SUGGESTION_POOL[focus] || SUGGESTION_POOL.balanced;
     const suggestions: ScheduleSuggestion[] = [];
@@ -783,8 +895,13 @@ function generateScheduleSuggestions(
     const userField = profile?.field || '';
     const interests = profile?.interests || [];
 
-    // 풀에서 랜덤하게 선택 (빈 시간에 맞춰)
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    // 선호도 기반 가중 셔플 (weight 높을수록 상위 노출)
+    const shuffled = [...pool]
+        .map(item => ({
+            ...item,
+            _sort: Math.random() * (prefs?.categoryWeights?.[item.category] ?? 1.0),
+        }))
+        .sort((a, b) => b._sort - a._sort);
     const usedSlots = new Set<string>();
 
     for (const item of shuffled) {

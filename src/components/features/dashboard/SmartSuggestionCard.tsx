@@ -68,7 +68,28 @@ export function SmartSuggestionCard() {
             }
 
             const data = await response.json();
-            setSuggestions(data.suggestions || []);
+            const items = data.suggestions || [];
+            setSuggestions(items);
+            // 추천 노출 이벤트 로깅
+            if (items.length > 0) {
+                fetch("/api/user/events/log", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        eventType: "ai_suggestion_shown",
+                        startAt: new Date().toISOString(),
+                        metadata: {
+                            suggestions: items.map((s: any) => ({
+                                id: s.id,
+                                category: s.type || s.category,
+                                title: s.title,
+                            })),
+                            source: "smart_suggestion_card",
+                            hour: new Date().getHours(),
+                        },
+                    }),
+                }).catch(() => {});
+            }
         } catch (err) {
             console.error('[SmartSuggestion] Error:', err);
             setError("제안을 불러오는데 실패했습니다");
@@ -83,6 +104,24 @@ export function SmartSuggestionCard() {
 
     const handleDismiss = (id: string) => {
         setDismissedIds(prev => new Set([...prev, id]));
+        // 추천 거부 이벤트 로깅
+        const dismissed = suggestions.find(s => s.id === id);
+        if (dismissed) {
+            fetch("/api/user/events/log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    eventType: "ai_suggestion_dismissed",
+                    startAt: new Date().toISOString(),
+                    metadata: {
+                        suggestion_id: id,
+                        category: dismissed.type || dismissed.category,
+                        title: dismissed.title,
+                        source: "smart_suggestion_card",
+                    },
+                }),
+            }).catch(() => {});
+        }
     };
 
     const visibleSuggestions = suggestions.filter(s => !dismissedIds.has(s.id));

@@ -4,12 +4,11 @@ import { logger } from "@/lib/logger";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
+import { getUserPlan } from "@/lib/user-plan";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
-
-const FINAL_MODEL = MODELS.GPT_5_2;
 
 interface QuizResult {
   question: string;
@@ -31,6 +30,10 @@ interface EssayResult {
 
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { quiz, answers, type } = await request.json();
+
+    // Max → GPT-5.2, Free/Pro → GPT-5-mini (비용 최적화)
+    const planInfo = await getUserPlan(email);
+    const gradingModel = planInfo.plan === 'max' ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
 
 
     // Grade T/F (straightforward)
@@ -94,7 +97,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
 }`;
 
       const grading = await openai.chat.completions.create({
-        model: FINAL_MODEL,
+        model: gradingModel,
         messages: [
           {
             role: "system",
@@ -115,7 +118,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
       if (usage) {
         await logOpenAIUsage(
           email,
-          FINAL_MODEL,
+          gradingModel,
           "grade-quiz/essay",
           usage.prompt_tokens,
           usage.completion_tokens
@@ -183,7 +186,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
 2-3문장으로 구체적이고 실행 가능한 학습 조언을 제공하세요.`;
 
     const adviceResult = await openai.chat.completions.create({
-      model: FINAL_MODEL,
+      model: gradingModel,
       messages: [
         {
           role: "system",
@@ -201,7 +204,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
     if (adviceUsage) {
       await logOpenAIUsage(
         email,
-        FINAL_MODEL,
+        gradingModel,
         "grade-quiz/advice",
         adviceUsage.prompt_tokens,
         adviceUsage.completion_tokens

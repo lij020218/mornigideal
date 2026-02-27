@@ -6,15 +6,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserIdFromRequest, getUserEmailFromRequest } from '@/lib/auth-utils';
+import { getUserIdWithAuth } from '@/lib/auth-utils';
 import { dualWriteUpdate } from '@/lib/schedule-dual-write';
+import { logger } from '@/lib/logger';
+import { invalidateUserContext } from '@/lib/shared-context';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await getUserIdFromRequest(request);
+    const userId = await getUserIdWithAuth(request);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -37,7 +39,7 @@ export async function POST(
         .eq('id', id);
 
       if (updateError) {
-        console.error('일정 완료 처리 오류:', updateError);
+        logger.error('일정 완료 처리 오류:', updateError);
         return NextResponse.json({ error: 'Failed to complete schedule' }, { status: 500 });
       }
 
@@ -71,18 +73,19 @@ export async function POST(
       .eq('id', userId);
 
     if (updateError) {
-      console.error('customGoals 완료 처리 오류:', updateError);
+      logger.error('customGoals 완료 처리 오류:', updateError);
       return NextResponse.json({ error: 'Failed to complete schedule' }, { status: 500 });
     }
 
-    // Dual-write to schedules table
+    // 캐시 무효화 + Dual-write to schedules table
     if (user.email) {
+      invalidateUserContext(user.email);
       await dualWriteUpdate(user.email, id, { completed: newCompleted });
     }
 
     return NextResponse.json({ success: true, completed: newCompleted });
   } catch (error) {
-    console.error('일정 완료 처리 오류:', error);
+    logger.error('일정 완료 처리 오류:', error);
     return NextResponse.json({ error: 'Failed to complete schedule' }, { status: 500 });
   }
 }

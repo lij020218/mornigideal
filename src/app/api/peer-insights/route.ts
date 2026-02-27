@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/api-handler";
+import { kvGet, kvSet } from "@/lib/kv-store";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -12,7 +14,17 @@ const searchModel = genAI.getGenerativeModel({
     }
 });
 
-export async function POST(request: Request) {
+const CACHE_TTL_HOURS = 6;
+const KV_KEY = 'peer_insights_cache';
+
+interface PeerInsightsCache {
+    achievements: { person: string; achievement: string }[];
+    job: string;
+    level: string;
+    generatedAt: string;
+}
+
+export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     try {
         const { job, level } = await request.json();
 
@@ -23,6 +35,17 @@ export async function POST(request: Request) {
             );
         }
 
+        // 6시간 캐시 확인
+        const cached = await kvGet<PeerInsightsCache>(userEmail, KV_KEY);
+        if (cached && cached.job === job && cached.level === level) {
+            const age = Date.now() - new Date(cached.generatedAt).getTime();
+            if (age < CACHE_TTL_HOURS * 60 * 60 * 1000) {
+                return NextResponse.json({
+                    achievements: cached.achievements,
+                    cached: true,
+                });
+            }
+        }
 
         // Determine if job is student-like or professional
         const isStudent = /학생|대학생|고등학생|중학생|취준생|수험생/i.test(job);
@@ -60,7 +83,7 @@ export async function POST(request: Request) {
         let achievements: any[] = [];
 
         try {
-            const GEMINI_TIMEOUT = 10000; // 10초
+            const GEMINI_TIMEOUT = 45000; // 45초 (웹 검색 grounding 포함)
             const result = await Promise.race([
                 searchModel.generateContent(searchPrompt),
                 new Promise<never>((_, reject) =>
@@ -94,7 +117,7 @@ export async function POST(request: Request) {
 
             // Fallback: Use diverse examples with higher temperature
             const fallbackModel = genAI.getGenerativeModel({
-                model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
+                model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
                 generationConfig: {
                     temperature: 1.5, // High temperature for variety
                 }
@@ -118,23 +141,38 @@ ${isStudent ? `예시 형식:
   { "person": "배민 서비스기획", "achievement": "월간 사용자 피드백 500건 이상 분석" }
 ]`}`;
 
-            const FALLBACK_TIMEOUT = 8000; // 8초
-            const fallbackResult = await Promise.race([
-                fallbackModel.generateContent(fallbackPrompt),
-                new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Gemini fallback timed out')), FALLBACK_TIMEOUT)
-                ),
-            ]);
-            const fallbackResponse = await fallbackResult.response;
-            const fallbackText = fallbackResponse.text();
+            try {
+                const FALLBACK_TIMEOUT = 8000; // 8초
+                const fallbackResult = await Promise.race([
+                    fallbackModel.generateContent(fallbackPrompt),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('Gemini fallback timed out')), FALLBACK_TIMEOUT)
+                    ),
+                ]);
+                const fallbackResponse = await fallbackResult.response;
+                const fallbackText = fallbackResponse.text();
 
-            let fallbackJson = fallbackText.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");
-            const fallbackMatch = fallbackJson.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+                let fallbackJson = fallbackText.trim().replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+                const fallbackMatch = fallbackJson.match(/\[\s*\{[\s\S]*?\}\s*\]/);
 
-            if (fallbackMatch) {
-                achievements = JSON.parse(fallbackMatch[0]);
-            } else {
-                // Ultimate fallback
+                if (fallbackMatch) {
+                    achievements = JSON.parse(fallbackMatch[0]);
+                } else {
+                    throw new Error("No valid JSON in fallback response");
+                }
+            } catch (fallbackError) {
+                console.error("⚠️ Gemini fallback also failed:", fallbackError);
+
+                // 캐시가 있으면 만료되었더라도 반환 (stale cache)
+                if (cached?.achievements) {
+                    return NextResponse.json({
+                        achievements: cached.achievements,
+                        cached: true,
+                        stale: true,
+                    });
+                }
+
+                // Ultimate fallback - 하드코딩된 데이터
                 achievements = isStudent
                     ? [
                         { person: `우수 ${job}`, achievement: "체계적인 학습으로 상위 10% 성적 유지" },
@@ -149,15 +187,24 @@ ${isStudent ? `예시 형식:
             }
         }
 
+        // 캐시 저장 (6시간)
+        await kvSet(userEmail, KV_KEY, {
+            achievements,
+            job,
+            level,
+            generatedAt: new Date().toISOString(),
+        } as PeerInsightsCache).catch(() => {});
+
         return NextResponse.json({
-            achievements: achievements
+            achievements: achievements,
+            cached: false,
         });
 
     } catch (error) {
-        console.error("💥 Error generating peer achievements:", error);
+        console.error("Error generating peer achievements:", error);
         return NextResponse.json(
             { error: "Failed to generate achievements" },
             { status: 500 }
         );
     }
-}
+});

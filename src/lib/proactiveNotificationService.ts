@@ -11,7 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { TIMING, THRESHOLDS, LIMITS, DAILY_ROUTINE_KEYWORDS, IMPORTANT_SCHEDULE_KEYWORDS, DAY_NAMES_KR } from '@/lib/constants';
 import type { CustomGoal, LongTermGoal, ChatMessage, MemoryRow, UserProfile, ImportantEvent } from '@/lib/types';
 import { kvGet } from '@/lib/kv-store';
-import { isProOrAbove, isMaxPlan } from '@/lib/user-plan';
+import { isProOrAbove, isMaxPlan, type UserPlanType } from '@/lib/user-plan';
 import { logger } from '@/lib/logger';
 
 export interface ProactiveNotification {
@@ -31,6 +31,7 @@ export interface UserContext {
     todaySchedules: CustomGoal[];
     uncompletedGoals: CustomGoal[];
     userProfile: UserProfile;
+    planType?: UserPlanType;
     recentActivity?: CustomGoal[];
     // 메모리 기반 컨텍스트
     userMemory?: {
@@ -101,15 +102,32 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         notifications.push(...morningNotifications);
     }
 
-    // 2.5 어제 미완료 작업 알림 - 아침 이외 시간에도 표시 (오전 중 미확인 시)
+    // 2.5 오전 11시 이후 일정 미등록 시 권유
+    if (currentHour >= 11 && currentHour < TIMING.EVENING_START && todaySchedules.length === 0) {
+        const userName = userProfile?.name || '';
+        const greeting = userName ? `${userName}님, ` : '';
+        notifications.push({
+            id: `no-schedule-nudge-${new Date().toISOString().split('T')[0]}`,
+            type: 'context_suggestion',
+            priority: 'low',
+            title: '📅 오늘 일정이 비어있어요',
+            message: `${greeting}오늘은 아직 등록된 일정이 없어요. 간단한 할 일이라도 추가해보면 하루가 더 알차질 거예요!`,
+            actionType: 'open_add_schedule',
+        });
+    }
+
+    // 2.6 어제 미완료 작업 알림 - 아침 이외 시간에도 표시 (오전 중 미확인 시)
     // 오후에도 미완료 작업이 있으면 알림 표시
     if (currentHour >= TIMING.MORNING_END && currentHour < TIMING.EVENING_START && uncompletedGoals.length > 0) {
+        const goalNames = uncompletedGoals.map(g => g.text).slice(0, 5);
+        const goalList = goalNames.map(n => `• ${n}`).join('\n');
+        const extra = uncompletedGoals.length > 5 ? `\n외 ${uncompletedGoals.length - 5}개` : '';
         notifications.push({
             id: `uncompleted-afternoon-${new Date().toISOString().split('T')[0]}`,
             type: 'urgent_alert',
             priority: 'medium',
             title: '📋 어제 미완료 작업',
-            message: `어제 완료하지 못한 작업이 ${uncompletedGoals.length}개 있어요. 오늘 처리할까요?`,
+            message: `어제 완료하지 못한 작업이 ${uncompletedGoals.length}개 있어요:\n${goalList}${extra}\n\n오늘 처리할까요?`,
             actionType: 'view_uncompleted',
             actionPayload: { goals: uncompletedGoals }
         });
@@ -123,15 +141,115 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         notifications.push(...eveningNotifications);
     }
 
-    // 3.5 저녁 회고 알림 (21시)
-    if (currentHour === TIMING.EVENING_CHECK_HOUR && todaySchedules.length > 0) {
+    // 3.5 저녁 마무리 알림 (21시) — 오늘 활동 요약 + 피드백 + 내일 일정 + 일정 생성 권유
+    if (currentHour === TIMING.EVENING_CHECK_HOUR) {
+        const completedCount = todaySchedules.filter(s => s.completed).length;
+        const totalCount = todaySchedules.length;
+        const skippedCount = todaySchedules.filter(s => s.skipped).length;
+        const incompleteSchedules = todaySchedules.filter(s => !s.completed && !s.skipped);
+        const completedSchedules = todaySchedules.filter(s => s.completed);
+        const rate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+        const userName = context.userProfile?.name || '사용자';
+
+        let message = `${userName}님, 오늘 하루 수고 많으셨어요.\n`;
+
+        // ─── 1. 오늘 활동 요약 ───
+        message += '\n━━━ 📊 오늘 활동 요약 ━━━\n';
+        if (totalCount > 0) {
+            message += `전체 ${totalCount}개 일정 중 ${completedCount}개 완료 (달성률 ${rate}%)`;
+            if (skippedCount > 0) message += `, ${skippedCount}개 건너뜀`;
+            message += '\n';
+
+            if (completedSchedules.length > 0) {
+                message += '\n✅ 완료:\n';
+                completedSchedules.slice(0, 6).forEach(s => {
+                    message += `  • ${s.text}${s.startTime ? ` (${s.startTime})` : ''}\n`;
+                });
+                if (completedSchedules.length > 6) message += `  ...외 ${completedSchedules.length - 6}개\n`;
+            }
+
+            if (incompleteSchedules.length > 0) {
+                message += '\n⏳ 미완료:\n';
+                incompleteSchedules.slice(0, 4).forEach(s => {
+                    message += `  • ${s.text}\n`;
+                });
+                if (incompleteSchedules.length > 4) message += `  ...외 ${incompleteSchedules.length - 4}개\n`;
+            }
+        } else {
+            message += '오늘은 등록된 일정이 없었어요.\n';
+        }
+
+        // ─── 2. 피드백 ───
+        message += '\n━━━ 💬 피드백 ━━━\n';
+        if (totalCount === 0) {
+            message += '일정이 없는 날도 괜찮아요. 쉬는 것도 중요하니까요.\n내일은 간단한 일정부터 시작해보는 건 어떨까요?\n';
+        } else if (rate >= 90) {
+            message += `${completedCount}개 모두 해내다니 대단해요! 🎉\n이 페이스를 유지하면 목표 달성이 눈앞이에요.\n`;
+        } else if (rate >= 70) {
+            message += `${completedCount}개나 완료하셨네요, 잘하고 계세요! 💪\n`;
+            if (incompleteSchedules.length > 0) {
+                message += `남은 "${incompleteSchedules[0].text}"은(는) 내일 이어서 해도 괜찮아요.\n`;
+            }
+        } else if (rate >= 40) {
+            message += '오늘 쉽지 않은 하루였나 봐요.\n';
+            message += '그래도 절반 가까이 해낸 건 충분히 의미 있어요.\n';
+            if (incompleteSchedules.length > 0) {
+                message += `내일 "${incompleteSchedules[0].text}" 부터 다시 시작해보면 어떨까요?\n`;
+            }
+        } else if (totalCount > 0) {
+            message += '바쁘거나 컨디션이 안 좋은 날도 있는 거예요. 🤗\n';
+            message += '오늘 하루를 보낸 것만으로도 충분해요.\n';
+            message += '내일은 일정을 조금 가볍게 잡아보는 게 어떨까요?\n';
+        }
+
+        // ─── 3. 내일 일정 미리보기 ───
+        const tomorrow = new Date(currentTime);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+        const tomorrowDayOfWeek = tomorrow.getDay();
+        const tomorrowDayName = DAY_NAMES_KR[tomorrowDayOfWeek];
+
+        const allGoals = context.allCustomGoals || [];
+        const tomorrowSchedules = allGoals.filter((goal: CustomGoal) => {
+            if (goal.specificDate === tomorrowStr) return true;
+            if (goal.daysOfWeek?.includes(tomorrowDayOfWeek) && !goal.specificDate) return true;
+            return false;
+        });
+
+        message += `\n━━━ 📅 내일 (${tomorrowDayName}요일) ━━━\n`;
+        if (tomorrowSchedules.length > 0) {
+            const sorted = [...tomorrowSchedules].sort((a, b) =>
+                (a.startTime || '99:99').localeCompare(b.startTime || '99:99')
+            );
+            message += `예정된 일정 ${sorted.length}개:\n`;
+            sorted.slice(0, 6).forEach(s => {
+                const time = s.startTime ? `${s.startTime}` : '';
+                message += `  • ${time ? time + ' ' : ''}${s.text}\n`;
+            });
+            if (sorted.length > 6) message += `  ...외 ${sorted.length - 6}개\n`;
+
+            const firstSchedule = sorted[0];
+            if (firstSchedule.startTime) {
+                message += `\n💡 내일 첫 일정이 ${firstSchedule.startTime}에 "${firstSchedule.text}"이에요.\n충분한 수면 취하시고 여유 있게 준비하세요!\n`;
+            }
+        } else {
+            message += '아직 등록된 일정이 없어요.\n';
+            message += '✨ 내일 하루를 미리 계획하면 훨씬 알차게 보낼 수 있어요!\n';
+            message += '간단한 일정이라도 추가해보세요.\n';
+        }
+
+        // ─── 4. 마무리 ───
+        message += '\n오늘도 수고하셨어요. 편안한 밤 되세요 🌙';
+
         notifications.push({
-            id: `evening-check-${Date.now()}`,
-            type: 'context_suggestion',
+            id: `evening-check-${new Date().toISOString().split('T')[0]}`,
+            type: 'daily_wrap',
             priority: 'medium',
             title: '🌙 하루 마무리',
-            message: '오늘 하루 어떠셨나요? 저녁 회고를 통해 하루를 정리해보세요.',
-            actionType: 'open_evening_check'
+            message: message.trim(),
+            actionType: tomorrowSchedules.length === 0 ? 'open_add_schedule_tomorrow' : undefined,
+            actionPayload: tomorrowSchedules.length === 0 ? { tomorrowDate: tomorrowStr } : undefined,
         });
     }
 
@@ -283,6 +401,14 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         logger.error('[ProactiveNotif] Weekly review failed:', e instanceof Error ? e.message : e);
     }
 
+    // 24. 트렌드 브리핑 미독 추천 (10시, 14시, 18시)
+    try {
+        const trendReminder = await getTrendBriefingReminderNotification(context);
+        notifications.push(...trendReminder);
+    } catch (e) {
+        logger.error('[ProactiveNotif] Trend briefing reminder failed:', e instanceof Error ? e.message : e);
+    }
+
     return notifications;
 }
 
@@ -354,7 +480,7 @@ function getMorningBriefingNotifications(context: UserContext): ProactiveNotific
                 .join('\n');
 
             notifications.push({
-                id: `morning-briefing-${Date.now()}`,
+                id: `morning-briefing-${new Date().toISOString().split('T')[0]}`,
                 type: 'morning_briefing',
                 priority: 'high',
                 title: '☀️ 좋은 아침이에요!',
@@ -367,12 +493,15 @@ function getMorningBriefingNotifications(context: UserContext): ProactiveNotific
 
     // 어제 미완료 작업이 있다면
     if (uncompletedGoals.length > 0) {
+        const goalNames = uncompletedGoals.map(g => g.text).slice(0, 5);
+        const goalList = goalNames.map(n => `• ${n}`).join('\n');
+        const extra = uncompletedGoals.length > 5 ? `\n외 ${uncompletedGoals.length - 5}개` : '';
         notifications.push({
-            id: `uncompleted-reminder-${Date.now()}`,
+            id: `uncompleted-reminder-${new Date().toISOString().split('T')[0]}`,
             type: 'urgent_alert',
             priority: 'medium',
             title: '📋 어제 미완료 작업',
-            message: `어제 완료하지 못한 작업이 ${uncompletedGoals.length}개 있어요. 오늘 처리할까요?`,
+            message: `어제 완료하지 못한 작업이 ${uncompletedGoals.length}개 있어요:\n${goalList}${extra}\n\n오늘 처리할까요?`,
             actionType: 'view_uncompleted',
             actionPayload: { goals: uncompletedGoals }
         });
@@ -428,7 +557,7 @@ function getGoalNudgeNotifications(uncompletedGoals: CustomGoal[]): ProactiveNot
 
     if (staleGoals.length > 0) {
         notifications.push({
-            id: `goal-nudge-${Date.now()}`,
+            id: `goal-nudge-${new Date().toISOString().split('T')[0]}`,
             type: 'goal_nudge',
             priority: 'low',
             title: '🎯 잊지 않으셨죠?',
@@ -695,15 +824,135 @@ function detectOneTimeRecurringCandidates(customGoals: CustomGoal[]): RecurringC
     return candidates;
 }
 
+/**
+ * 연속 일자 반복 후보 감지
+ * 같은 텍스트 + 비슷한 시간(±30분)에 3일 연속 등록된 일정 찾기
+ */
+interface ConsecutiveCandidate {
+    text: string;
+    startTime: string;
+    consecutiveDates: string[];
+    scheduleIds: string[];
+    daysOfWeek: number[];
+    color?: string;
+}
+
+function detectConsecutiveDayCandidates(customGoals: CustomGoal[]): ConsecutiveCandidate[] {
+    const oneTimeGoals = customGoals.filter((g) =>
+        g.specificDate && (!g.daysOfWeek || g.daysOfWeek.length === 0) && g.startTime
+    );
+
+    const existingRecurringTexts = new Set(
+        customGoals
+            .filter((g) => g.daysOfWeek && g.daysOfWeek.length > 0)
+            .map((g) => normalizeScheduleText(g.text))
+    );
+
+    // 그룹핑: normalizedText + timeSlot (요일 무관)
+    const groups = new Map<string, { goals: CustomGoal[]; text: string; color?: string }>();
+
+    oneTimeGoals.forEach((goal) => {
+        const normalized = normalizeScheduleText(goal.text);
+        if (existingRecurringTexts.has(normalized)) return;
+
+        const timeSlot = getTimeSlot(goal.startTime!);
+        const key = `${normalized}|${timeSlot}`;
+
+        if (!groups.has(key)) {
+            groups.set(key, { goals: [], text: goal.text, color: goal.color });
+        }
+        groups.get(key)!.goals.push(goal);
+    });
+
+    const candidates: ConsecutiveCandidate[] = [];
+
+    groups.forEach((group) => {
+        if (group.goals.length < 3) return;
+
+        // 날짜 정렬
+        const sorted = group.goals
+            .filter((g) => g.specificDate)
+            .sort((a, b) => a.specificDate!.localeCompare(b.specificDate!));
+
+        // 연속 시퀀스 찾기
+        let streak: CustomGoal[] = [sorted[0]];
+        let bestStreak: CustomGoal[] = [];
+
+        for (let i = 1; i < sorted.length; i++) {
+            const prevDate = new Date(sorted[i - 1].specificDate + 'T00:00:00');
+            const currDate = new Date(sorted[i].specificDate + 'T00:00:00');
+            const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 1) {
+                streak.push(sorted[i]);
+            } else {
+                if (streak.length > bestStreak.length) bestStreak = streak;
+                streak = [sorted[i]];
+            }
+        }
+        if (streak.length > bestStreak.length) bestStreak = streak;
+
+        if (bestStreak.length >= 3) {
+            const dates = bestStreak.map((g) => g.specificDate!);
+            const daysOfWeek = [...new Set(dates.map((d) => new Date(d + 'T00:00:00').getDay()))].sort();
+
+            candidates.push({
+                text: group.text,
+                startTime: bestStreak[bestStreak.length - 1].startTime ?? '',
+                consecutiveDates: dates,
+                scheduleIds: bestStreak.map((g) => g.id).filter((id): id is string => id !== undefined),
+                daysOfWeek: daysOfWeek.length >= 5 ? [0, 1, 2, 3, 4, 5, 6] : daysOfWeek,
+                color: group.color,
+            });
+        }
+    });
+
+    return candidates;
+}
+
 function getRecurringConversionNotifications(context: UserContext): ProactiveNotification[] {
     const notifications: ProactiveNotification[] = [];
     const customGoals = context.allCustomGoals || [];
 
     if (customGoals.length === 0) return notifications;
 
+    // 1) 연속 일자 후보 (3일 연속 → 매일 반복 제안)
+    const consecutiveCandidates = detectConsecutiveDayCandidates(customGoals);
+    const consecutiveScheduleIds = new Set<string>();
+
+    consecutiveCandidates.forEach((candidate) => {
+        const normalized = normalizeScheduleText(candidate.text);
+        const firstDate = candidate.consecutiveDates[0];
+        const lastDate = candidate.consecutiveDates[candidate.consecutiveDates.length - 1];
+        const shortFirst = firstDate.slice(5).replace('-', '/');
+        const shortLast = lastDate.slice(5).replace('-', '/');
+
+        candidate.scheduleIds.forEach((id) => consecutiveScheduleIds.add(id));
+
+        notifications.push({
+            id: `recurring-daily-${normalized}`,
+            type: 'context_suggestion',
+            priority: 'medium',
+            title: '🔄 반복 일정 제안',
+            message: `"${candidate.text}" 일정을 ${candidate.consecutiveDates.length}일 연속(${shortFirst}~${shortLast}) 같은 시간(${candidate.startTime})에 등록하셨어요. 매일 반복 일정으로 설정할까요?`,
+            actionType: 'convert_to_recurring_daily',
+            actionPayload: {
+                text: candidate.text,
+                daysOfWeek: candidate.daysOfWeek,
+                startTime: candidate.startTime,
+                scheduleIds: candidate.scheduleIds,
+                color: candidate.color,
+            },
+        });
+    });
+
+    // 2) 같은 요일 후보 (기존 로직, 연속 일자에 이미 포함된 일정은 제외)
     const candidates = detectOneTimeRecurringCandidates(customGoals);
 
     candidates.forEach((candidate) => {
+        // 연속 일자 후보에 이미 포함된 일정이면 스킵
+        if (candidate.scheduleIds.some((id) => consecutiveScheduleIds.has(id))) return;
+
         const dayName = DAY_NAMES_KR[candidate.dayOfWeek];
         const normalized = normalizeScheduleText(candidate.text);
 
@@ -1210,7 +1459,7 @@ async function getMoodCheckInReminderNotification(context: UserContext): Promise
  * 최근 3일간 기분≤2, 에너지≤2 → 번아웃 위험
  */
 async function getBurnoutWarningNotification(context: UserContext): Promise<ProactiveNotification[]> {
-    const { currentTime, userEmail } = context;
+    const { currentTime, userEmail, planType } = context;
     const currentHour = currentTime.getHours();
     const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
 
@@ -1218,7 +1467,8 @@ async function getBurnoutWarningNotification(context: UserContext): Promise<Proa
     if (currentHour < TIMING.MORNING_START || currentHour >= TIMING.MORNING_END) return [];
 
     // Pro+ 전용
-    if (!(await isProOrAbove(userEmail))) return [];
+    const isPro = planType ? (planType === 'pro' || planType === 'max') : await isProOrAbove(userEmail);
+    if (!isPro) return [];
 
     try {
         const monthKey = `mood_checkins_${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}`;
@@ -1364,7 +1614,7 @@ async function getFocusStreakNotification(context: UserContext): Promise<Proacti
  * 수면 < 6시간 2일 연속 등
  */
 async function getHealthInsightNotification(context: UserContext): Promise<ProactiveNotification[]> {
-    const { currentTime, userEmail } = context;
+    const { currentTime, userEmail, planType } = context;
     const currentHour = currentTime.getHours();
     const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
 
@@ -1372,7 +1622,8 @@ async function getHealthInsightNotification(context: UserContext): Promise<Proac
     if (currentHour < TIMING.MORNING_START || currentHour >= TIMING.MORNING_END) return [];
 
     // Pro+ 전용
-    if (!(await isProOrAbove(userEmail))) return [];
+    const isPro = planType ? (planType === 'pro' || planType === 'max') : await isProOrAbove(userEmail);
+    if (!isPro) return [];
 
     try {
         // 최근 3일 건강 데이터 조회
@@ -1409,14 +1660,15 @@ async function getHealthInsightNotification(context: UserContext): Promise<Proac
  * 오후 8시+, 오늘 커밋 없음 → 스트릭 끊김 경고
  */
 async function getGitHubStreakNotification(context: UserContext): Promise<ProactiveNotification[]> {
-    const { currentTime, userEmail } = context;
+    const { currentTime, userEmail, planType } = context;
     const currentHour = currentTime.getHours();
     const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
 
     if (currentHour < TIMING.GITHUB_STREAK_START || currentHour >= TIMING.GITHUB_STREAK_END) return [];
 
     // Max 전용
-    if (!(await isMaxPlan(userEmail))) return [];
+    const isMax = planType ? (planType === 'max') : await isMaxPlan(userEmail);
+    if (!isMax) return [];
 
     try {
         const { isGitHubLinked, getContributionStats } = await import('@/lib/githubService');
@@ -1776,7 +2028,7 @@ function getPreDepartureWrapNotification(context: UserContext): ProactiveNotific
  * 일요일 저녁 19-21시
  */
 async function getWeeklyReviewNotification(context: UserContext): Promise<ProactiveNotification[]> {
-    const { currentTime, userEmail, userProfile } = context;
+    const { currentTime, userEmail, userProfile, planType } = context;
     const dayOfWeek = currentTime.getDay();
     const currentHour = currentTime.getHours();
     const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;
@@ -1786,7 +2038,8 @@ async function getWeeklyReviewNotification(context: UserContext): Promise<Proact
     if (currentHour < TIMING.WEEKLY_REVIEW_START || currentHour >= TIMING.WEEKLY_REVIEW_END) return [];
 
     // Pro+ 전용
-    if (!(await isProOrAbove(userEmail))) return [];
+    const isPro = planType ? (planType === 'pro' || planType === 'max') : await isProOrAbove(userEmail);
+    if (!isPro) return [];
 
     const longTermGoals = userProfile?.longTermGoals || {};
     const weeklyGoals = (longTermGoals.weekly || []) as LongTermGoal[];
@@ -1954,4 +2207,51 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
         logger.error('[ProactiveNotification] Failed to get user context:', error);
         return null;
     }
+}
+
+/**
+ * 24. 트렌드 브리핑 미독 추천 알림
+ * 10시, 14시, 18시에 오늘 읽지 않은 브리핑 중 하나를 추천
+ */
+async function getTrendBriefingReminderNotification(context: UserContext): Promise<ProactiveNotification[]> {
+    const { currentTime, userEmail } = context;
+    const hour = currentTime.getHours();
+
+    // 10시, 14시, 18시에만 알림
+    if (hour !== 10 && hour !== 14 && hour !== 18) return [];
+
+    const today = currentTime.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
+    // trends_cache에서 오늘 브리핑 조회
+    const { data, error } = await supabaseAdmin
+        .from('trends_cache')
+        .select('trends')
+        .eq('email', userEmail)
+        .eq('date', today)
+        .maybeSingle();
+
+    if (error || !data?.trends || !Array.isArray(data.trends) || data.trends.length === 0) return [];
+
+    const allTrends = data.trends as Array<{ id: string; title: string; category?: string }>;
+
+    // 읽은 브리핑 ID 조회
+    const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
+
+    // 읽지 않은 브리핑만 필터
+    const unread = allTrends.filter(t => !readIds.includes(t.id));
+    if (unread.length === 0) return [];
+
+    // 시간대별 다른 브리핑 추천 (안 읽은 것 중에서 돌아가며)
+    const slotIndex = hour === 10 ? 0 : hour === 14 ? 1 : 2;
+    const pick = unread[slotIndex % unread.length];
+
+    return [{
+        id: `trend-reminder-${today}-${hour}`,
+        type: 'context_suggestion',
+        priority: 'low',
+        title: '📰 트렌드 브리핑 추천',
+        message: `"${pick.title}" — 잠깐 읽어보시겠어요?`,
+        actionType: 'open_trend_briefing',
+        actionPayload: { briefingId: pick.id, title: pick.title },
+    }];
 }

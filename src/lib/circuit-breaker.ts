@@ -9,6 +9,8 @@
  * OpenAI API 장애 시 30초 타임아웃 × N 요청 → 연쇄 장애 방지
  */
 
+import { logger } from '@/lib/logger';
+
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 interface CircuitBreakerOptions {
@@ -76,7 +78,7 @@ export class CircuitBreaker {
             return await this.execute(fn);
         } catch (error) {
             if (error instanceof CircuitOpenError) {
-                console.warn(error.message);
+                logger.warn(error.message);
             }
             return fallback;
         }
@@ -99,7 +101,7 @@ export class CircuitBreaker {
 
         if (this.failureCount >= this.options.failureThreshold) {
             this.state = 'OPEN';
-            console.error(
+            logger.error(
                 `[CircuitBreaker:${this.options.name}] Opened after ${this.failureCount} failures. Will retry in ${this.options.resetTimeoutMs / 1000}s`
             );
         }

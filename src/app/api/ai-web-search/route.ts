@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { tavily } from "@tavily/core";
 import { withAuth } from "@/lib/api-handler";
 
-const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY || "" });
+let tvly: ReturnType<typeof tavily> | null = null;
+function getTavily() {
+    if (!tvly) {
+        tvly = tavily({ apiKey: process.env.TAVILY_API_KEY || "" });
+    }
+    return tvly;
+}
 
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { query, activity, context } = await request.json();
@@ -13,7 +19,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
 
 
     // Tavily 검색 실행
-    const searchResult = await tvly.search(query, {
+    const searchResult = await getTavily().search(query, {
         searchDepth: "basic",
         maxResults: 5,
         includeAnswer: true,

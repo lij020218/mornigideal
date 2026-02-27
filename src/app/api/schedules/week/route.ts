@@ -8,16 +8,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailFromRequest } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 import { isValidDate } from '@/lib/validation';
 
-export async function GET(request: NextRequest) {
-  try {
-    const userEmail = await getUserEmailFromRequest(request);
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
     const { searchParams } = new URL(request.url);
     const startParam = searchParams.get('start');
     const endParam = searchParams.get('end');
@@ -34,7 +29,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (error) {
-      console.error('[schedules/week] 조회 오류:', error);
+      logger.error('[schedules/week] 조회 오류:', error);
       return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
     }
 
@@ -89,8 +84,4 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ schedules: allSchedules });
-  } catch (error) {
-    console.error('[schedules/week] 오류:', error);
-    return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
-  }
-}
+});

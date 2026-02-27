@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/api-handler";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -7,9 +8,8 @@ const model = genAI.getGenerativeModel({
     model: process.env.GEMINI_MODEL || "gemini-3-pro-preview",
 });
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: NextRequest, _userEmail: string) => {
     try {
-
         if (!process.env.GEMINI_API_KEY) {
             console.error("[analyze-strengths] GEMINI_API_KEY is missing");
             return NextResponse.json({
@@ -100,4 +100,4 @@ JSON 형식으로만 응답하세요:
             error: "Failed to analyze strengths"
         }, { status: 500 });
     }
-}
+});

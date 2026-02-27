@@ -15,6 +15,7 @@ import {
     type SchedulePrepParams,
     type SchedulePrepResult,
 } from '@/lib/agent-capabilities';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -147,17 +148,18 @@ export async function generateSchedulePrep(
 
 **중요:** 일정 이름에 맞는 실용적인 준비 항목만 작성. 불필요한 조언 금지.`;
 
-        const modelName = MODELS.GPT_4O_MINI;
+        const modelName = MODELS.GPT_5_MINI;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [
                 {
                     role: "system",
-                    content: "일정 시간 알림 + 준비 체크리스트 2-3개만 작성. 자연스러운 존댓말로 작성."
+                    content: "일정 시간 알림 + 준비 체크리스트 2-3개만 작성. 자연스러운 존댓말로 작성. 항상 JSON 형식으로만 응답하세요."
                 },
                 { role: "user", content: prompt },
             ],
             temperature: 0.5,
+            response_format: { type: "json_object" },
         });
 
         const advice = completion.choices[0]?.message?.content || `${displayTimeUntil}분 후 "${scheduleText}" 시간이에요! 준비하세요 🕐`;
@@ -174,7 +176,7 @@ export async function generateSchedulePrep(
             cachedHit: false,
         };
     } catch (error) {
-        console.error('[SchedulePrep] Error:', error);
+        logger.error('[SchedulePrep] Error:', error);
         return { success: false, error: 'Failed to generate prep advice', costTier: 'cheap', cachedHit: false };
     }
 }

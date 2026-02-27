@@ -5,6 +5,7 @@ import Parser from 'rss-parser';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { getUserByEmail } from '@/lib/users';
+import { kvGet } from '@/lib/kv-store';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const parser = new Parser();
@@ -93,9 +94,6 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
 
 export const GET = withAuth(async (request: NextRequest, email: string) => {
     const { searchParams } = new URL(request.url);
-    const job = searchParams.get("job") || "Marketer";
-    const goal = searchParams.get("goal");
-    const interests = searchParams.get("interests");
     const forceRefresh = searchParams.get("forceRefresh") === "true";
     const excludeTitles = searchParams.get("exclude")?.split("|||") || []; // 이미 본 뉴스 제목
 
@@ -103,9 +101,12 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     const userEmail = email;
 
-    // 사용자 이름 조회 (프리생성 프롬프트에 사용)
+    // 사용자 프로필 조회 — DB 기반으로 직업/목표/관심사 확정 (쿼리 파라미터 폴백)
     const currentUser = await getUserByEmail(userEmail);
     const userName = currentUser?.profile?.name || currentUser?.name || '사용자';
+    const job = currentUser?.profile?.job || searchParams.get("job") || "전문가";
+    const goal = currentUser?.profile?.goal || searchParams.get("goal");
+    const interests = (currentUser?.profile?.interests || []).join(',') || searchParams.get("interests");
 
     // Check cache first (only if not force refreshing and no exclusions)
     if (!forceRefresh && excludeTitles.length === 0) {
@@ -156,10 +157,12 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             }
 
             if (isCacheValid) {
+                const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
                 return NextResponse.json({
                     trends: cachedData.trends,
                     cached: true,
-                    lastUpdated: cachedData.lastUpdated
+                    lastUpdated: cachedData.lastUpdated,
+                    readIds,
                 });
             }
         }
@@ -485,37 +488,43 @@ OTHER RULES:
         logger.error('[API] Error in detail pre-generation:', err);
     }
 
+    // 새로 생성한 브리핑이라도 오늘 읽은 기록 반환
+    const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
+
     return NextResponse.json({
         trends,
         cached: false,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        readIds,
     });
 });
 
 export const POST = withAuth(async (request: NextRequest, email: string) => {
-    const { title, level, job, originalUrl, summary, trendId } = await request.json();
+    const { title, level, originalUrl, summary, trendId } = await request.json();
 
     const userEmail = email;
+
+    // 사용자 프로필 조회 — DB 기반으로 직업 확정 (클라이언트 값 무시)
+    const postUser = await getUserByEmail(userEmail);
+    const postUserName = postUser?.profile?.name || postUser?.name || '사용자';
+    const job = postUser?.profile?.job || '전문가';
+    const postUserGoal = postUser?.profile?.goal || '전문성 향상';
+    const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
 
     // Check cache first
     if (trendId) {
         const cachedDetail = await getDetailCache(trendId, userEmail);
 
         if (cachedDetail) {
+            // 캐시된 내용의 직업 정보가 현재 프로필과 다르면 캐시 무효화
+            const hasWrongJob = cachedDetail.content && !cachedDetail.content.includes(job);
 
             // Validate cache has required fields
-            if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems) {
+            if (cachedDetail.content && cachedDetail.keyTakeaways && cachedDetail.actionItems && !hasWrongJob) {
                 return NextResponse.json({ detail: cachedDetail, cached: true });
-            } else {
             }
         }
     }
-
-    // 사용자 이름 조회
-    const postUser = await getUserByEmail(userEmail);
-    const postUserName = postUser?.profile?.name || postUser?.name || '사용자';
-    const postUserGoal = postUser?.profile?.goal || '전문성 향상';
-    const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
 
     // Check API key
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;

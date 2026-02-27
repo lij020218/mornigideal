@@ -6,6 +6,7 @@
  */
 
 import { FOCUS_KEYWORDS as FOCUS_KEYWORDS_CONST } from '@/lib/constants';
+import { PERSONA_LABELS } from '@/lib/prompts/persona';
 import { logger } from '@/lib/logger';
 
 // ============================================
@@ -320,10 +321,10 @@ export function getExamplesForIntent(intent: UserIntent, currentDate: string): s
     if (intent === 'schedule') {
         return `## Examples
 User: "오후 3시에 헬스장에서 운동 잡아줘"
-{"message": "...", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "${currentDate}", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
+{"message": "오후 3시 운동 추가했어요! 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "${currentDate}", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
 
 User: "매일 아침 9시 기상 삭제해줘"
-{"message": "...", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}`;
+{"message": "매일 오전 9시 기상 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}`;
     }
 
     if (intent === 'search') {
@@ -613,15 +614,15 @@ export function buildSystemPrompt(params: {
 }): string {
     const { intent, userPlan, contextBlocks, actionSchema, currentDate, personaStyle } = params;
 
-    // 페르소나 스타일 기반 응답 스타일 결정
-    let responseStyle: string;
-    if (personaStyle === 'professional' || (userPlan === "Max" && personaStyle !== 'friendly')) {
-        responseStyle = `**비서 모드**: 실행 중심. "~반영했습니다" 완료형. 간결하게 2-3문장. 이모지 최소화. 데이터/수치 포함.`;
-    } else if (personaStyle === 'brief') {
-        responseStyle = `**간결 모드**: 핵심만 전달. 2문장 이내. 이모지 사용 안 함. 인사말/감탄사 최소화.`;
-    } else {
-        responseStyle = `**친구 모드**: "~해드릴게요", "~할까요?", "~어때요?" 같은 부드러운 존댓말. 2-3문장. 이모지 1-2개로 친근하게.`;
-    }
+    // 페르소나 스타일 기반 응답 스타일 결정 (라벨은 persona.ts 중앙 관리)
+    const effectiveStyle = (personaStyle === 'professional' || (userPlan === "Max" && personaStyle !== 'friendly'))
+        ? 'professional' : (personaStyle === 'brief' ? 'brief' : 'friendly');
+    const styleConfig: Record<string, string> = {
+        professional: `**${PERSONA_LABELS.professional.name}**: 실행 중심. "~반영했습니다" 완료형. 간결하게 2-3문장. 이모지 최소화. 데이터/수치 포함.`,
+        brief: `**${PERSONA_LABELS.brief.name}**: 핵심만 전달. 2문장 이내. 이모지 사용 안 함. 인사말/감탄사 최소화.`,
+        friendly: `**${PERSONA_LABELS.friendly.name}**: 부드러운 존댓말. 2-3문장. 이모지 1-2개로 친근하게. 액션 실행 시 완료형("~했어요/~할게요"), 제안 시 "~할까요?/~어때요?".`,
+    };
+    const responseStyle = styleConfig[effectiveStyle];
 
     const prompt = `# Fi.eri AI Assistant
 
@@ -634,11 +635,13 @@ ${getResponseLengthGuide(intent)}
 
 ## Core Rules
 1. **즉시 실행**: 요청 → 바로 actions에 포함. 불필요한 질문 금지.
-2. **휴식 존중**: 여가 일정 앞에서 생산성 조언 금지.
-3. **시간 제약**: 오늘 일정만 현재 시간 이후. 내일/미래는 제약 없음.
-4. 항상 **1인칭 시점**으로 직접 말하세요 ("Fi.eri가~" 같은 3인칭 금지)
-5. 반드시 한국어로만 응답하세요
-6. **반드시 존댓말(해요체/합쇼체)을 사용하세요.** 반말 절대 금지. 올바른 문법을 지키세요.
+2. **완료형 어미**: actions에 실행 동작이 포함되면 message는 완료형으로 작성. "추가했어요/삭제했어요/변경했어요" (O), "추가해드릴게요/삭제해드릴게요" (X). 액션이 곧 실행이므로 미래형 금지.
+3. **자연스러운 확인**: "오후 3시 운동 추가했어요!" 처럼 핵심(시간+이름+동작)만 간결하게. 불필요한 장식 금지. 시간은 일정의 시각을 나타내므로 "~에 삭제/추가" (X, 동작 시점으로 오해) → "~ 일정 삭제/추가했어요" (O). 예: "오전 11시 10분 아침 루틴 삭제했어요!" (O), "오전 11시 10분에 삭제해드릴게요" (X).
+4. **휴식 존중**: 여가 일정 앞에서 생산성 조언 금지.
+5. **시간 제약**: 오늘 일정만 현재 시간 이후. 내일/미래는 제약 없음.
+6. 항상 **1인칭 시점**으로 직접 말하세요 ("Fi.eri가~" 같은 3인칭 금지)
+7. 반드시 한국어로만 응답하세요
+8. **반드시 존댓말(해요체/합쇼체)을 사용하세요.** 반말 절대 금지. 올바른 문법을 지키세요.
 
 ## Action Schema
 \`\`\`typescript

@@ -8,14 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { kvGet } from '@/lib/kv-store';
 import { sendBulkPushNotifications } from '@/lib/pushService';
+import { withCron } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 
-export async function GET(request: NextRequest) {
-    // Verify cron secret
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withCron(async (_request: NextRequest) => {
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
@@ -91,7 +87,7 @@ export async function GET(request: NextRequest) {
                 data: { type: 'morning_summary', deepLink: 'fieri://dashboard' },
             });
         } catch (e) {
-            console.error(`[MorningPush] Error for ${user.email}:`, e instanceof Error ? e.message : e);
+            logger.error(`[MorningPush] Error for ${user.email}:`, e instanceof Error ? e.message : e);
         }
     }
 
@@ -107,4 +103,4 @@ export async function GET(request: NextRequest) {
         total: users.length,
         date: todayStr,
     });
-}
+});

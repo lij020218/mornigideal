@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserIdFromRequest } from '@/lib/auth-utils';
+import { getUserIdWithAuth } from '@/lib/auth-utils';
+import { logger } from '@/lib/logger';
 
 export interface StreakData {
     schedule: {
@@ -80,7 +81,7 @@ function calculateScheduleStreak(dailyStats: Map<string, { total: number; comple
 
 export async function GET(request: NextRequest) {
     try {
-        const userId = await getUserIdFromRequest(request);
+        const userId = await getUserIdWithAuth(request);
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (error) {
-            console.error('[Streaks] Error fetching user:', error);
+            logger.error('[Streaks] Error fetching user:', error);
             return NextResponse.json({ error: 'Failed to fetch user data' }, { status: 500 });
         }
 
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(streakData);
 
     } catch (error) {
-        console.error('[Streaks] Error:', error);
+        logger.error('[Streaks] Error:', error);
         return NextResponse.json({ error: 'Failed to calculate streaks' }, { status: 500 });
     }
 }

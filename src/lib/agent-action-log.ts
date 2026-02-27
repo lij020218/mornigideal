@@ -6,6 +6,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logger } from '@/lib/logger';
 
 export type AgentType = 'jarvis' | 'react' | 'proactive';
 
@@ -54,7 +55,7 @@ export async function logAgentAction(
             updated_at: new Date().toISOString()
         }, { onConflict: 'user_email,key' });
     } catch (e) {
-        console.error('[AgentActionLog] Failed to log action:', e);
+        logger.error('[AgentActionLog] Failed to log action:', e);
     }
 }
 
@@ -83,7 +84,7 @@ export async function getRecentActions(
             a => new Date(a.timestamp) > cutoff
         );
     } catch (e) {
-        console.error('[AgentActionLog] Failed to get recent actions:', e);
+        logger.error('[AgentActionLog] Failed to get recent actions:', e);
         return [];
     }
 }

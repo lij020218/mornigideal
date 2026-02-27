@@ -32,12 +32,43 @@ export function FieriSuggestionCard({
 
     const handleDismiss = () => {
         setIsDismissing(true);
+        // 추천 거부 이벤트 로깅
+        fetch("/api/user/events/log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                eventType: "ai_suggestion_dismissed",
+                startAt: new Date().toISOString(),
+                metadata: {
+                    suggestion_id: id,
+                    actionType,
+                    message: message?.substring(0, 50),
+                    source: "fieri_suggestion_card",
+                },
+            }),
+        }).catch(() => {});
         setTimeout(() => {
             onDismiss?.(id);
         }, 300);
     };
 
     const handleAccept = () => {
+        // 추천 수락 이벤트 로깅
+        fetch("/api/user/events/log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                eventType: "ai_suggestion_accepted",
+                startAt: new Date().toISOString(),
+                metadata: {
+                    suggestion_id: id,
+                    actionType,
+                    message: message?.substring(0, 50),
+                    hour: new Date().getHours(),
+                    source: "fieri_suggestion_card",
+                },
+            }),
+        }).catch(() => {});
         onAccept?.(id);
     };
 

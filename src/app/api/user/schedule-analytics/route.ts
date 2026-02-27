@@ -29,25 +29,36 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // Fetch user's schedules (custom goals)
+    // Get user_id from email
+    const { data: userData } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+    if (!userData) {
+        return NextResponse.json({ analytics: null });
+    }
+
+    // Fetch user's schedules (daily_goals uses user_id)
     const { data: schedules, error: schedulesError } = await supabaseAdmin
-        .from('custom_goals')
+        .from('daily_goals')
         .select('*')
-        .eq('user_email', email)
-        .gte('created_at', startDate.toISOString());
+        .eq('user_id', userData.id)
+        .gte('date', startDate.toISOString().split('T')[0]);
 
     if (schedulesError) {
         logger.error('[Schedule Analytics] Error fetching schedules:', schedulesError);
         return NextResponse.json({ error: schedulesError.message }, { status: 500 });
     }
 
-    // Fetch schedule completion activities
+    // Fetch schedule completion activities (user_events uses email)
     const { data: activities, error: activitiesError } = await supabaseAdmin
-        .from('user_activity_logs')
+        .from('user_events')
         .select('*')
-        .eq('user_email', email)
-        .in('activity_type', ['schedule_complete', 'schedule_skip'])
-        .gte('timestamp', startDate.toISOString());
+        .eq('email', email)
+        .in('event_type', ['schedule_complete', 'schedule_skip'])
+        .gte('created_at', startDate.toISOString());
 
     if (activitiesError) {
         logger.error('[Schedule Analytics] Error fetching activities:', activitiesError);

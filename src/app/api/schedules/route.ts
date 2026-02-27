@@ -7,19 +7,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserEmailFromRequest } from '@/lib/auth-utils';
+import { withAuth } from '@/lib/api-handler';
+import { logger } from '@/lib/logger';
 import { dualWriteAdd } from '@/lib/schedule-dual-write';
 import { isValidDate } from '@/lib/validation';
 import { scheduleCreateSchema, validateBody } from '@/lib/schemas';
+import { invalidateUserContext } from '@/lib/shared-context';
 
 // 일정 조회 (customGoals 기반)
-export async function GET(request: NextRequest) {
-  try {
-    const userEmail = await getUserEmailFromRequest(request);
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
     // URL에서 date 파라미터 가져오기 (없으면 오늘 KST)
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
@@ -38,7 +34,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (error) {
-      console.error('일정 조회 오류:', error);
+      logger.error('일정 조회 오류:', error);
       return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
     }
 
@@ -77,20 +73,10 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({ schedules: formattedSchedules });
-  } catch (error) {
-    console.error('일정 조회 오류:', error);
-    return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
-  }
-}
+});
 
 // 일정 추가
-export async function POST(request: NextRequest) {
-  try {
-    const userEmail = await getUserEmailFromRequest(request);
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     const body = await request.json();
     const v = validateBody(scheduleCreateSchema, body);
     if (!v.success) return v.response;
@@ -122,7 +108,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (fetchError || !user) {
-      console.error('[schedules/POST] 사용자 조회 오류:', fetchError);
+      logger.error('[schedules/POST] 사용자 조회 오류:', fetchError);
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -137,9 +123,12 @@ export async function POST(request: NextRequest) {
       .eq('email', userEmail);
 
     if (updateError) {
-      console.error('[schedules/POST] 일정 추가 오류:', updateError);
+      logger.error('[schedules/POST] 일정 추가 오류:', updateError);
       return NextResponse.json({ error: '일정 추가에 실패했습니다.' }, { status: 500 });
     }
+
+    // 캐시 무효화
+    invalidateUserContext(userEmail);
 
     // Dual-write to schedules table
     await dualWriteAdd(userEmail, newGoal, scheduleDate);
@@ -154,8 +143,4 @@ export async function POST(request: NextRequest) {
         date: scheduleDate,
       }
     });
-  } catch (error) {
-    console.error('일정 추가 오류:', error);
-    return NextResponse.json({ error: 'Failed to add schedule' }, { status: 500 });
-  }
-}
+});

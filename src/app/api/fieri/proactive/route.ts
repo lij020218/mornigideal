@@ -17,15 +17,21 @@ import { getEscalationDecision, applyEscalation } from '@/lib/escalationService'
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
+import { getUserPlan } from '@/lib/user-plan';
+import { LIMITS } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
 export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
-        // 1. 사용자 컨텍스트 수집
-        const context = await getUserContext(userEmail);
+        // 1. 사용자 컨텍스트 수집 + 플랜 조회 (1회만)
+        const [context, userPlan] = await Promise.all([
+            getUserContext(userEmail),
+            getUserPlan(userEmail),
+        ]);
         if (!context) {
             return NextResponse.json({ notifications: [] });
         }
+        context.planType = userPlan.plan;
 
         // 2. 선제적 알림 생성
         const generatedNotifications = await generateProactiveNotifications(context);
@@ -105,8 +111,23 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
             priorityOrder[a.priority] - priorityOrder[b.priority]
         );
 
+        // 8. 플랜별 일일 한도 적용 (free: 5, pro: 10, max: 무제한)
+        const dailyLimit = LIMITS.PROACTIVE_DAILY[userPlan.plan] ?? LIMITS.PROACTIVE_DAILY.free;
+
+        const countKey = `proactive_count_${todayStr}`;
+        const { data: countData } = await supabaseAdmin
+            .from('user_kv_store')
+            .select('value')
+            .eq('user_email', userEmail)
+            .eq('key', countKey)
+            .maybeSingle();
+
+        const shownCount: number = countData?.value ?? 0;
+        const remaining = Math.max(0, dailyLimit - shownCount);
+        const limitedNotifications = finalNotifications.slice(0, Math.min(remaining, 5));
+
         return NextResponse.json({
-            notifications: finalNotifications.slice(0, 5), // 최대 5개
+            notifications: limitedNotifications,
             context: {
                 todaySchedulesCount: context.todaySchedules.length,
                 uncompletedCount: context.uncompletedGoals.length
@@ -166,6 +187,35 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             return NextResponse.json({ success: true });
         }
 
+        if (action === 'dismiss_today') {
+            // 오늘만 해제 — type을 오늘의 shown 목록에 추가 (streak 증가 안 함)
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+            const typeKey = `proactive_shown_${todayStr}`;
+
+            const { data: existingTypes } = await supabaseAdmin
+                .from('user_kv_store')
+                .select('value')
+                .eq('user_email', userEmail)
+                .eq('key', typeKey)
+                .maybeSingle();
+
+            const shownTypes: string[] = existingTypes?.value || [];
+            if (notificationType && !shownTypes.includes(notificationType)) {
+                shownTypes.push(notificationType);
+
+                await supabaseAdmin
+                    .from('user_kv_store')
+                    .upsert({
+                        user_email: userEmail,
+                        key: typeKey,
+                        value: shownTypes,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'user_email,key' });
+            }
+
+            return NextResponse.json({ success: true });
+        }
+
         if (action === 'mark_shown') {
             // 오늘 표시한 알림 타입 + ID 기록
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -202,19 +252,37 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     }, { onConflict: 'user_email,key' });
             }
 
-            // Save shown notification ID
+            // Save shown notification ID + increment daily count
             const shownIds: string[] = existingIds?.value || [];
             if (notificationId && !shownIds.includes(notificationId)) {
                 shownIds.push(notificationId);
 
-                await supabaseAdmin
+                const countKey = `proactive_count_${todayStr}`;
+                const { data: countData } = await supabaseAdmin
                     .from('user_kv_store')
-                    .upsert({
-                        user_email: userEmail,
-                        key: idKey,
-                        value: shownIds,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'user_email,key' });
+                    .select('value')
+                    .eq('user_email', userEmail)
+                    .eq('key', countKey)
+                    .maybeSingle();
+
+                await Promise.all([
+                    supabaseAdmin
+                        .from('user_kv_store')
+                        .upsert({
+                            user_email: userEmail,
+                            key: idKey,
+                            value: shownIds,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'user_email,key' }),
+                    supabaseAdmin
+                        .from('user_kv_store')
+                        .upsert({
+                            user_email: userEmail,
+                            key: countKey,
+                            value: (countData?.value ?? 0) + 1,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'user_email,key' }),
+                ]);
             }
 
             return NextResponse.json({ success: true });
@@ -267,6 +335,48 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     return NextResponse.json({ error: 'Failed to convert schedule' }, { status: 500 });
                 }
 
+            }
+
+            // 연속 일자 → 매일 반복 전환 처리
+            if (actionType === 'convert_to_recurring_daily' && actionPayload) {
+                const { text, daysOfWeek, startTime, scheduleIds, color } = actionPayload;
+
+                const { data: userData, error: userFetchError } = await supabaseAdmin
+                    .from('users')
+                    .select('profile')
+                    .eq('email', userEmail)
+                    .maybeSingle();
+
+                if (userFetchError || !userData) {
+                    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+                }
+
+                const profile = userData.profile || {};
+                const customGoals = profile.customGoals || [];
+
+                const removeSet = new Set(scheduleIds as string[]);
+                const filteredGoals = customGoals.filter((g: any) => !removeSet.has(g.id));
+
+                const newRecurringGoal: Record<string, any> = {
+                    id: `recurring_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    text,
+                    startTime,
+                    daysOfWeek: (daysOfWeek as number[]) || [0, 1, 2, 3, 4, 5, 6],
+                    completed: false,
+                    ...(color ? { color } : {}),
+                };
+
+                filteredGoals.push(newRecurringGoal);
+
+                const { error: updateError } = await supabaseAdmin
+                    .from('users')
+                    .update({ profile: { ...profile, customGoals: filteredGoals } })
+                    .eq('email', userEmail);
+
+                if (updateError) {
+                    logger.error('[Proactive API] Failed to convert to recurring daily:', updateError);
+                    return NextResponse.json({ error: 'Failed to convert schedule' }, { status: 500 });
+                }
             }
 
             // Dismiss streak 리셋 (사용자가 수락했으므로)

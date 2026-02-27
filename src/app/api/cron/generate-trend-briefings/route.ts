@@ -5,6 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateTrendId, saveDetailCache } from "@/lib/newsCache";
 import { MODELS } from "@/lib/models";
 import Parser from 'rss-parser';
+import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
+import { sendPushNotification } from "@/lib/pushService";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -229,8 +231,8 @@ export async function GET(request: Request) {
                 userBatch.map(async (user) => {
                     const userProfile = user.profile as any;
                     const name = userProfile.name || '사용자';
-                    const job = userProfile.job || 'Professional';
-                    const goal = userProfile.goal || 'Growth';
+                    const job = userProfile.job || '전문가';
+                    const goal = userProfile.goal || '전문성 향상';
                     const interests = userProfile.interests || [];
                     const level = userProfile.level || 'Intermediate';
                     const interestList = interests.join(', ');
@@ -356,6 +358,29 @@ Select now.`;
                     if (saveError) {
                         return { email: user.email, status: 'error', error: saveError.message };
                     }
+
+                    // 트렌드 브리핑 도착 알림 전송
+                    const topTitles = trends.slice(0, 2).map((t: any) => t.title).join(', ');
+                    const notification = {
+                        id: `trend-briefing-${today}`,
+                        type: 'morning_briefing' as const,
+                        priority: 'low' as const,
+                        title: '📰 오늘의 트렌드 브리핑',
+                        message: `${name}님 맞춤 뉴스 ${trends.length}개가 도착했어요! ${topTitles}`,
+                        actionType: 'open_trend_briefing',
+                    };
+
+                    await saveProactiveNotification(user.email, notification);
+                    await sendPushNotification(user.email, {
+                        title: notification.title,
+                        body: notification.message,
+                        data: {
+                            notificationId: notification.id,
+                            type: notification.type,
+                            actionType: notification.actionType,
+                        },
+                    }).catch(() => {}); // 푸시 실패는 무시
+
                     return { email: user.email, status: 'success', trends: trends.length };
                 })
             );

@@ -255,9 +255,9 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                     .then(data => {
                         const notifications = data.notifications || [];
 
-                        // 중요한 알림만 메시지로 추가 (high priority만)
+                        // 중요한 알림만 메시지로 추가 (high/medium priority + schedule_reminder)
                         const importantNotifs = notifications.filter((n: any) =>
-                            n.priority === 'high' || n.type === 'schedule_reminder'
+                            n.priority === 'high' || n.priority === 'medium' || n.type === 'schedule_reminder'
                         );
 
                         if (importantNotifs.length > 0) {
@@ -265,20 +265,41 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
                             importantNotifs.forEach((notif: any, index: number) => {
                                 setTimeout(() => {
+                                    // 알림 타입별 액션 버튼 구성
+                                    let actions: Message['actions'];
+                                    if (notif.actionType === 'open_briefing') {
+                                        actions = [{
+                                            type: 'open_briefing' as const,
+                                            label: '브리핑 열기',
+                                            data: {}
+                                        }];
+                                    } else if (notif.actionType === 'view_schedule') {
+                                        actions = [{
+                                            type: 'add_schedule' as const,
+                                            label: '일정 보기',
+                                            data: { scheduleId: notif.actionPayload?.scheduleId }
+                                        }];
+                                    } else if (notif.actionType === 'view_uncompleted') {
+                                        actions = [
+                                            {
+                                                type: 'show_goals' as const,
+                                                label: '설정하기',
+                                                data: {}
+                                            },
+                                            {
+                                                type: 'dismiss_today_proactive' as const,
+                                                label: '다음에',
+                                                data: { notificationId: notif.id, notificationType: notif.type }
+                                            },
+                                        ];
+                                    }
+
                                     const message: Message = {
                                         id: `proactive-${notif.id}-${Date.now()}`,
                                         role: 'assistant',
                                         content: `${notif.title}\n\n${notif.message}`,
                                         timestamp: new Date(),
-                                        actions: notif.actionType === 'open_briefing' ? [{
-                                            type: 'open_briefing' as const,
-                                            label: '브리핑 열기',
-                                            data: {}
-                                        }] : notif.actionType === 'view_schedule' ? [{
-                                            type: 'add_schedule' as const,
-                                            label: '일정 보기',
-                                            data: { scheduleId: notif.actionPayload?.scheduleId }
-                                        }] : undefined
+                                        actions,
                                     };
                                     setMessages(prev => [...prev, message]);
 

@@ -28,7 +28,8 @@ export interface ChatAction {
         | "show_analysis"
         | "set_reminder"
         | "save_learning"
-        | "resolve_conflict";
+        | "resolve_conflict"
+        | "dismiss_today_proactive";
     label: string;
     data: Record<string, any>;
 }

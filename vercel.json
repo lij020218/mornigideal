@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/generate-greetings",
-      "schedule": "0 21 * * *"
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/cron/daily-cleanup",
@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/heartbeat",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/idle-schedule-nudge",
+      "schedule": "0 1,5,9 * * *"
     }
   ],
   "functions": {

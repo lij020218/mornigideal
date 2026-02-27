@@ -18,6 +18,7 @@ import {
     type ResourceRecommendParams,
     type ResourceRecommendResult,
 } from '@/lib/agent-capabilities';
+import { logger } from '@/lib/logger';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -59,7 +60,7 @@ ${memories.map((m: any, i: number) => `${i + 1}. [${m.content_type}] ${m.content
 
 이 과거 기억을 참고하여 더 개인화된 조언을 제공하세요.`;
     } catch (error) {
-        console.error("[ResourceRecommend] RAG fetch error:", error);
+        logger.error("[ResourceRecommend] RAG fetch error:", error);
         return "";
     }
 }
@@ -138,7 +139,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
         });
 
         // OpenAI 호출
-        const modelName = MODELS.GPT_4_1_MINI;
+        const modelName = MODELS.GPT_5_MINI;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [
@@ -173,7 +174,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
             cachedHit: false,
         };
     } catch (error) {
-        console.error('[ResourceRecommend] Error:', error);
+        logger.error('[ResourceRecommend] Error:', error);
         return { success: false, error: 'Failed to generate resource recommendation', costTier: 'moderate', cachedHit: false };
     }
 }
