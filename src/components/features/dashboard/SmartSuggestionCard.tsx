@@ -115,7 +115,7 @@ export function SmartSuggestionCard() {
                     startAt: new Date().toISOString(),
                     metadata: {
                         suggestion_id: id,
-                        category: dismissed.type || dismissed.category,
+                        category: dismissed.type,
                         title: dismissed.title,
                         source: "smart_suggestion_card",
                     },

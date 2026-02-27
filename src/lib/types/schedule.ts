@@ -27,11 +27,15 @@ export interface CustomGoal {
 
 export interface LongTermGoal {
     id?: string;
+    type?: 'weekly' | 'monthly' | 'yearly';
     title: string;
+    description?: string;
     progress: number;
     completed?: boolean;
     category?: string;
+    targetDate?: string;
     createdAt?: string;
+    updatedAt?: string;
     milestones?: Array<{ text: string; done: boolean }>;
 }
 

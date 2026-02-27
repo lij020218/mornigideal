@@ -55,7 +55,13 @@ describe('THRESHOLDS', () => {
 describe('LIMITS', () => {
     it('has positive limits', () => {
         for (const [key, value] of Object.entries(LIMITS)) {
-            expect(value, `LIMITS.${key}`).toBeGreaterThan(0);
+            if (typeof value === 'number') {
+                expect(value, `LIMITS.${key}`).toBeGreaterThan(0);
+            } else if (typeof value === 'object' && value !== null) {
+                for (const [subKey, subVal] of Object.entries(value)) {
+                    expect(subVal, `LIMITS.${key}.${subKey}`).toBeGreaterThan(0);
+                }
+            }
         }
     });
 });

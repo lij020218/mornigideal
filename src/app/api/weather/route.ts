@@ -113,15 +113,15 @@ export async function GET(request: Request) {
         };
 
         // Update cache in background
-        supabaseAdmin
-            .from('weather_cache')
-            .upsert({
-                location: cacheKey,
-                weather_data: response,
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'location' })
-            .then(() => {})
-            .catch(() => {});
+        Promise.resolve(
+            supabaseAdmin
+                .from('weather_cache')
+                .upsert({
+                    location: cacheKey,
+                    weather_data: response,
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'location' })
+        ).catch(() => {});
 
         return NextResponse.json(response);
 
