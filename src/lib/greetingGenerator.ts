@@ -22,6 +22,7 @@ interface GreetingDecision {
     weatherAdvice: string | null;
     scheduleHighlight: string | null;
     trendPick: string | null;
+    emailHighlight: string | null;
     patternInsight: string | null;
     closingMessage: string;
 }
@@ -37,6 +38,7 @@ interface GreetingContext {
     importantSchedules: any[];
     topTrend: any;
     slack: any;
+    gmail: { totalUnread: number; topSubjects: string[] } | null;
     multiDayTrend: string;
     isMonday: boolean;
     hasWeeklyGoals: boolean;
@@ -60,7 +62,7 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
     const todayStr = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
 
     // 모든 데이터를 병렬로 fetch
-    const [user, weatherResult, trendsResult, multiDayResult, slackResult] = await Promise.all([
+    const [user, weatherResult, trendsResult, multiDayResult, slackResult, gmailResult] = await Promise.all([
         getUserByEmail(userEmail),
         (async () => {
             try {
@@ -81,6 +83,7 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
             } catch (e) {}
             return null;
         })(),
+        fetchGmailUnreadSummary(userEmail),
     ]);
 
     const profile: any = user?.profile || {};
@@ -125,6 +128,7 @@ export async function generateGreetingForUser(userEmail: string): Promise<string
         importantSchedules,
         topTrend,
         slack: slackResult && slackResult.totalUnread > 0 ? slackResult : null,
+        gmail: gmailResult,
         multiDayTrend: multiDayResult || '',
         isMonday: dayOfWeek === 1,
         hasWeeklyGoals,
@@ -165,6 +169,7 @@ async function getAIDecision(ctx: GreetingContext, userEmail: string): Promise<G
   "weatherAdvice": "날씨 기반 조언 한 문장 (옷차림/우산 등, 날씨 데이터 없으면 null)",
   "scheduleHighlight": "오늘 일정 중 주목할 포인트 한 문장 (일정 없으면 null)",
   "trendPick": "트렌드 중 사용자에게 관련 있는 1개 추천 한 문장 (없으면 null)",
+  "emailHighlight": "미읽 이메일 중 주목할 포인트 한 문장 (이메일 데이터 없으면 null)",
   "patternInsight": "최근 행동 패턴 기반 인사이트 한 문장 (데이터 없으면 null)",
   "closingMessage": "마무리 응원 한 문장"
 }`
@@ -201,6 +206,7 @@ async function getAIDecision(ctx: GreetingContext, userEmail: string): Promise<G
             weatherAdvice: parsed.weatherAdvice ?? fallback.weatherAdvice,
             scheduleHighlight: parsed.scheduleHighlight ?? fallback.scheduleHighlight,
             trendPick: parsed.trendPick ?? fallback.trendPick,
+            emailHighlight: parsed.emailHighlight ?? fallback.emailHighlight,
             patternInsight: parsed.patternInsight ?? fallback.patternInsight,
             closingMessage: parsed.closingMessage || fallback.closingMessage,
         };
@@ -239,6 +245,11 @@ function buildContextSummary(ctx: GreetingContext): string {
 
     if (ctx.slack) {
         parts.push(`슬랙 미읽: ${ctx.slack.totalUnread}건`);
+    }
+
+    if (ctx.gmail) {
+        const subjects = ctx.gmail.topSubjects.slice(0, 3).join(', ');
+        parts.push(`이메일 미읽: ${ctx.gmail.totalUnread}건${subjects ? ` (${subjects})` : ''}`);
     }
 
     if (ctx.multiDayTrend) {
@@ -284,6 +295,14 @@ function assembleGreeting(decision: GreetingDecision, ctx: GreetingContext): str
     // 6. 슬랙
     if (ctx.slack) {
         parts.push(`💬 슬랙에 미확인 메시지 ${ctx.slack.totalUnread}건이 있어요`);
+    }
+
+    // 6.5. 이메일
+    if (ctx.gmail) {
+        parts.push(`📧 미확인 이메일 ${ctx.gmail.totalUnread}건이 있어요`);
+    }
+    if (decision.emailHighlight) {
+        parts.push(`📧 ${decision.emailHighlight}`);
     }
 
     // 7. 행동 패턴 인사이트
@@ -351,14 +370,103 @@ function getDefaultDecision(ctx: GreetingContext): GreetingDecision {
         '멋진 하루가 될 거예요! 🌟',
     ];
 
+    let emailHighlight: string | null = null;
+    if (ctx.gmail && ctx.gmail.totalUnread > 0 && ctx.gmail.topSubjects.length > 0) {
+        emailHighlight = `"${ctx.gmail.topSubjects[0]}" 등 미확인 메일을 확인해보세요`;
+    }
+
     return {
         greeting: timeGreeting,
         weatherAdvice,
         scheduleHighlight,
         trendPick: ctx.topTrend ? `**${ctx.topTrend.title}** — 오늘의 트렌드예요` : null,
+        emailHighlight,
         patternInsight: null,
         closingMessage: closings[Math.floor(Math.random() * closings.length)],
     };
+}
+
+// ============================================
+// Gmail: 미읽 메일 간단 요약 (인사말용)
+// ============================================
+
+async function fetchGmailUnreadSummary(
+    userEmail: string
+): Promise<{ totalUnread: number; topSubjects: string[] } | null> {
+    try {
+        // Gmail 토큰 조회
+        const { data, error } = await supabaseAdmin
+            .from('gmail_tokens')
+            .select('access_token, refresh_token, expires_at')
+            .eq('user_email', userEmail)
+            .maybeSingle();
+
+        if (error || !data) return null;
+
+        let accessToken = data.access_token;
+
+        // 토큰 만료 시 갱신
+        if (data.expires_at < Date.now()) {
+            if (!data.refresh_token) return null;
+            const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: process.env.GOOGLE_CLIENT_ID!,
+                    client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                    refresh_token: data.refresh_token,
+                    grant_type: 'refresh_token',
+                }),
+            });
+            if (!refreshRes.ok) return null;
+            const tokens = await refreshRes.json();
+            accessToken = tokens.access_token;
+
+            // DB 업데이트
+            await supabaseAdmin
+                .from('gmail_tokens')
+                .update({
+                    access_token: accessToken,
+                    expires_at: Date.now() + (tokens.expires_in * 1000),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('user_email', userEmail);
+        }
+
+        // 미읽 메일 목록 조회 (최근 24시간, 최대 10개)
+        const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+        const listRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread after:${oneDayAgo}&maxResults=10`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        if (!listRes.ok) return null;
+        const listData = await listRes.json();
+        const messageIds: { id: string }[] = listData.messages || [];
+
+        if (messageIds.length === 0) return null;
+
+        // 상위 5개만 제목 가져오기 (가볍게)
+        const topSubjects: string[] = [];
+        for (const { id } of messageIds.slice(0, 5)) {
+            const msgRes = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (msgRes.ok) {
+                const msgData = await msgRes.json();
+                const subject = msgData.payload?.headers?.find(
+                    (h: any) => h.name === 'Subject'
+                )?.value;
+                if (subject) topSubjects.push(subject);
+            }
+        }
+
+        return { totalUnread: messageIds.length, topSubjects };
+    } catch (err) {
+        logger.error('[GreetingGenerator] Gmail summary failed:', err);
+        return null;
+    }
 }
 
 // ============================================

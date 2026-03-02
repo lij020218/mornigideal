@@ -11,159 +11,124 @@ const openai = new OpenAI({
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { todaySchedules, completedCount, totalCount, userProfile, tomorrowSchedules, userPlan } = await request.json();
 
-
-    // Build user context
-    let userContext = "";
-    if (userProfile) {
-        userContext = `
-사용자 정보:
-- 이름: ${userProfile.name || '사용자'}
-- 직업: ${userProfile.job || '미설정'}
-- 목표: ${userProfile.goal || '미설정'}
-- 관심사: ${(userProfile.interests || []).join(', ') || '미설정'}
-- 플랜: ${userPlan || 'Free'}
-`;
-    }
-
-    // Build schedule summary
-    let scheduleList = '';
-    if (todaySchedules && todaySchedules.length > 0) {
-        scheduleList = todaySchedules
-            .map((s: any) => `  ${s.completed ? '✅' : '⏸️'} ${s.startTime} - ${s.text}`)
-            .join('\n');
-    }
-
-    // Build tomorrow's schedule
-    let tomorrowScheduleList = '';
-    if (tomorrowSchedules && tomorrowSchedules.length > 0) {
-        tomorrowScheduleList = tomorrowSchedules
-            .map((s: any) => `  ${s.startTime} - ${s.text}`)
-            .join('\n');
-    }
-
     const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
     const isMaxUser = userPlan === 'Max';
+    const userName = userProfile?.name || '사용자';
 
-    const prompt = isMaxUser ? `당신은 Fi.eri Max 플랜의 AI 비서 Jarvis입니다. 오늘 하루가 모두 끝났고, 내일 일정을 미리 확인하여 사용자를 완벽하게 준비시켜야 합니다.
-${userContext}
+    // 완료/미완료 일정
+    const completed = (todaySchedules || []).filter((s: any) => s.completed);
+    const uncompleted = (todaySchedules || []).filter((s: any) => !s.completed && !s.skipped);
+    const tomorrowList = (tomorrowSchedules || []).slice(0, 5);
 
-오늘의 일정:
-${scheduleList || '- 일정 없음'}
+    // AI에게 JSON 컴포넌트만 요청 (포맷/조립은 코드)
+    const contextParts: string[] = [];
+    contextParts.push(`${userName}, ${userProfile?.job || '직장인'}, 목표:${userProfile?.goal || '없음'}`);
+    contextParts.push(`완료:${completedCount}/${totalCount}(${completionRate}%)`);
+    if (completed.length > 0) contextParts.push(`완료일정:${completed.slice(0, 5).map((s: any) => s.text).join(',')}`);
+    if (uncompleted.length > 0) contextParts.push(`미완료:${uncompleted.slice(0, 3).map((s: any) => s.text).join(',')}`);
+    if (isMaxUser && tomorrowList.length > 0) contextParts.push(`내일:${tomorrowList.map((s: any) => `${s.startTime || '?'} ${s.text}`).join(',')}`);
 
-성과:
-- 완료: ${completedCount}/${totalCount}개 (${completionRate}%)
-
-내일의 일정:
-${tomorrowScheduleList || '- 일정 없음'}
-
-**Max 플랜 비서 역할:**
-1. 오늘과 내일의 일정을 **연결**하여 생각하기
-2. 내일 중요 일정이 있다면 **구체적인 준비사항** 제시
-3. 사용자의 장기 목표를 고려한 **전략적 조언**
-4. 수술, 병원, 중요 미팅 등은 **우선순위 최상**으로 처리
-5. 회복 기간 동안의 학습/업무 유지 전략 제안
-
-**응답 형식:**
-[하루 마무리 인사] 🌙
-[오늘 하루 마무리 + 내일 준비 연결]
-
-오늘의 하이라이트:
-[오늘 완료한 핵심 일정 + 내일과의 연관성]
-
-[내일 일정 브리핑 및 준비사항]
-- 시간: [내일 첫 일정 시간]
-- 일정: [내일 중요 일정]
-- 준비사항: [구체적 체크리스트 3-5개]
-
-[장기 목표 관점의 전략적 조언]
-
-**예시 (내일 수술 일정):**
-"오늘 하루 모두 마무리하느라 정말 수고 많으셨습니다. 내일 09:00 어깨 수술을 앞두고 계시네요 🏥
-
-오늘의 하이라이트:
-17:00 '입원'을 완료하셨습니다. 수술 전 안정을 취하는 것이 최우선이므로 다른 일정을 완료하지 못하셨어도 전혀 문제없습니다.
-
-[내일 수술 준비 체크리스트]
-✅ 자정 이후 금식 (물 포함)
-✅ 귀중품은 보호자에게 미리 전달
-✅ 수술 동의서 및 신분증 확인
-✅ 편한 옷 준비 (단추 옷 권장)
-✅ 보호자 연락처 재확인
-
-[AI 스타트업 목표 유지 전략]
-회복 기간(예상 2-4주)에도 목표를 잃지 않도록:
-- 1주차: 침대에서 AI 트렌드 팟캐스트 청취 (손 사용 최소화)
-- 2주차: 짧은 아티클 읽기 + 음성 메모로 아이디어 기록
-- 3주차: 간단한 시장 조사 재개 (PC 작업 15분씩)
-
-수술 잘 받으시고, 회복에 집중하세요. 건강이 가장 큰 자산입니다 💪"
-
-**중요:**
-- 내일 일정을 **반드시** 언급하고 연결 지어 생각
-- 수술/병원/중요 미팅은 구체적 준비사항 필수
-- 사용자 목표와 현재 상황을 통합적으로 고려`
-    : `당신은 Fi.eri 앱의 AI 어시스턴트입니다. 오늘 하루가 모두 끝났습니다.
-${userContext}
-
-오늘의 일정:
-${scheduleList || '- 일정 없음'}
-
-성과:
-- 완료: ${completedCount}/${totalCount}개 (${completionRate}%)
-
-**요청사항:**
-1. 따뜻한 하루 마무리 인사 (1-2문장, 존댓말)
-2. 오늘의 성과에 대한 긍정적인 피드백 (구체적으로)
-3. 개선 제안 또는 내일을 위한 격려 (1-2문장)
-4. 사용자의 목표를 고려한 맞춤형 조언
-5. 이모지 1-2개 포함
-
-**피드백 가이드:**
-- 완료율 80% 이상: 열정적인 칭찬과 격려
-- 완료율 50-79%: 긍정적 피드백 + 부드러운 개선 제안
-- 완료율 50% 미만: 공감과 위로 + 작은 성공 강조
-
-**응답 형식:**
-[하루 마무리 인사] 🌙
-
-오늘의 하이라이트:
-[오늘 완료한 일정 중 의미 있는 것 언급]
-
-[피드백 및 내일을 위한 조언]
-
-**중요:** 사용자의 목표와 오늘 완료한 일정을 구체적으로 언급하며, 따뜻하고 격려하는 톤으로 작성하세요.`;
-
-    // Max → GPT-5.2, Free/Pro → GPT-5-mini (비용 최적화)
     const modelName = isMaxUser ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
+
+    const systemPrompt = isMaxUser
+        ? `하루 마무리 비서. JSON만: {"closing":"마무리 인사 한 문장","highlight":"오늘 핵심 성과 한 문장","feedback":"피드백 한 문장","tomorrowPrep":"내일 준비사항 한 문장","strategy":"장기 목표 조언 한 문장"}`
+        : `하루 마무리 비서. JSON만: {"closing":"마무리 인사 한 문장","highlight":"오늘 핵심 성과 한 문장","feedback":"피드백+격려 한 문장"}`;
+
     const completion = await openai.chat.completions.create({
         model: modelName,
         messages: [
-            {
-                role: "system",
-                content: "당신은 Fi.eri 앱의 AI 비서입니다. 사용자의 하루를 돌아보며 따뜻한 피드백과 격려를 제공하세요."
-            },
-            {
-                role: "user",
-                content: prompt,
-            },
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: contextParts.join('. ') },
         ],
-        temperature: 0.8,
+        temperature: 1.0,
+        response_format: { type: 'json_object' },
     });
 
-    const summary = completion.choices[0]?.message?.content ||
-        `오늘 하루 고생 많으셨어요! 🌙\n\n오늘의 성과: ${completedCount}/${totalCount}개 완료\n\n충분한 휴식 취하시고, 내일 또 만나요!`;
+    const content = completion.choices[0]?.message?.content || '{}';
 
-    // Log usage
     const usage = completion.usage;
     if (usage) {
-        await logOpenAIUsage(
-            email,
-            modelName,
-            '/api/ai-day-summary',
-            usage.prompt_tokens,
-            usage.completion_tokens
-        );
+        await logOpenAIUsage(email, modelName, '/api/ai-day-summary', usage.prompt_tokens, usage.completion_tokens);
     }
+
+    let parsed: any;
+    try {
+        parsed = JSON.parse(content);
+    } catch {
+        parsed = {};
+    }
+
+    // 코드가 최종 메시지 조립
+    const summary = assembleDaySummary({
+        userName, completedCount, totalCount, completionRate,
+        completed, uncompleted, tomorrowList, isMaxUser,
+        closing: parsed.closing,
+        highlight: parsed.highlight,
+        feedback: parsed.feedback,
+        tomorrowPrep: parsed.tomorrowPrep,
+        strategy: parsed.strategy,
+    });
 
     return NextResponse.json({ summary });
 });
+
+function assembleDaySummary(ctx: {
+    userName: string;
+    completedCount: number;
+    totalCount: number;
+    completionRate: number;
+    completed: any[];
+    uncompleted: any[];
+    tomorrowList: any[];
+    isMaxUser: boolean;
+    closing?: string;
+    highlight?: string;
+    feedback?: string;
+    tomorrowPrep?: string;
+    strategy?: string;
+}): string {
+    const parts: string[] = [];
+
+    // 1. 마무리 인사
+    parts.push(ctx.closing || `${ctx.userName}님, 오늘 하루 수고 많으셨어요! 🌙`);
+
+    // 2. 성과 요약 (코드)
+    if (ctx.totalCount > 0) {
+        parts.push(`📊 오늘의 성과: ${ctx.completedCount}/${ctx.totalCount}개 완료 (${ctx.completionRate}%)`);
+    }
+
+    // 3. 하이라이트 (AI)
+    if (ctx.highlight) {
+        parts.push(`✨ ${ctx.highlight}`);
+    } else if (ctx.completed.length > 0) {
+        parts.push(`✨ 오늘 완료: ${ctx.completed.slice(0, 3).map((s: any) => s.text).join(', ')}`);
+    }
+
+    // 4. 미완료 (코드)
+    if (ctx.uncompleted.length > 0) {
+        const items = ctx.uncompleted.slice(0, 2).map((s: any) => s.text).join(', ');
+        parts.push(`⏳ 미완료: ${items} — 내일 이어서 해도 괜찮아요`);
+    }
+
+    // 5. 피드백 (AI)
+    if (ctx.feedback) {
+        parts.push(ctx.feedback);
+    }
+
+    // 6. Max 전용: 내일 준비 + 전략 (AI)
+    if (ctx.isMaxUser) {
+        if (ctx.tomorrowPrep) {
+            parts.push(`📋 내일 준비: ${ctx.tomorrowPrep}`);
+        } else if (ctx.tomorrowList.length > 0) {
+            parts.push(`📋 내일 첫 일정: ${ctx.tomorrowList[0].startTime || '?'} ${ctx.tomorrowList[0].text}`);
+        }
+        if (ctx.strategy) {
+            parts.push(`💡 ${ctx.strategy}`);
+        }
+    }
+
+    // 7. 마무리 (코드)
+    parts.push('충분한 휴식 취하시고, 내일 또 만나요! 💤');
+
+    return parts.join('\n\n');
+}

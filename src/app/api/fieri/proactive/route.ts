@@ -33,8 +33,37 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
         }
         context.planType = userPlan.plan;
 
-        // 2. 선제적 알림 생성
-        const generatedNotifications = await generateProactiveNotifications(context);
+        // 2. 선제적 알림 생성 + cron이 저장한 알림 병합
+        const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+        const [generatedNotifications, cronNotifications] = await Promise.all([
+            generateProactiveNotifications(context),
+            // jarvis_notifications에서 오늘 생성된 미확인 알림 조회
+            supabaseAdmin
+                .from('jarvis_notifications')
+                .select('id, type, message, action_type, action_payload, created_at')
+                .eq('user_email', userEmail)
+                .gte('created_at', `${todayDate}T00:00:00+09:00`)
+                .order('created_at', { ascending: false })
+                .limit(10)
+                .then(({ data }) => (data || []).map((row: any) => ({
+                    id: row.action_payload?.notification_ref_id || row.id,
+                    type: row.type as ProactiveNotification['type'],
+                    priority: 'medium' as const,
+                    title: row.message?.split('\n\n')[0]?.replace(/\*\*/g, '') || '',
+                    message: row.message?.split('\n\n').slice(1).join('\n\n') || row.message || '',
+                    actionType: row.action_type,
+                    actionPayload: row.action_payload,
+                } as ProactiveNotification))),
+        ]);
+
+        // cron 알림과 실시간 알림 병합 (ID 중복 제거)
+        const seenIds = new Set(generatedNotifications.map(n => n.id));
+        for (const cronNotif of cronNotifications) {
+            if (!seenIds.has(cronNotif.id)) {
+                generatedNotifications.push(cronNotif);
+                seenIds.add(cronNotif.id);
+            }
+        }
 
         // 3. 이미 해제된 알림 필터링
         const dismissedKey = `proactive_dismissed_${userEmail}`;

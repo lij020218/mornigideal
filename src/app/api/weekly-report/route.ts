@@ -30,23 +30,25 @@ function getISOWeekNumber(date: Date): number {
 }
 
 // 분석 대상 주의 주차 번호 계산 (DB 쿼리 없이, KST 기준)
-// 일요일이면 해당 주(월~일), 월~토이면 지난 주(월~일)
+// 일요일 21시 이후: 이번 주(월~일) 리포트 생성
+// 그 외: 지난 주(월~일) 리포트
 function getTargetWeekNumber(): number {
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const currentHour = now.getHours();
     now.setHours(0, 0, 0, 0);
 
     const dayOfWeek = now.getDay();
 
     let targetMonday: Date;
-    if (dayOfWeek === 0) {
-        // 일요일: 이번 주(월~일) 완료됨
+    if (dayOfWeek === 0 && currentHour >= 21) {
+        // 일요일 21시 이후: 이번 주(월~일) 완료됨
         targetMonday = new Date(now);
         targetMonday.setDate(now.getDate() - 6);
     } else {
-        // 월~토: 지난 주
-        const daysToSubtract = dayOfWeek - 1;
+        // 월~토, 또는 일요일 21시 이전: 지난 주
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         const thisMonday = new Date(now);
-        thisMonday.setDate(now.getDate() - daysToSubtract);
+        thisMonday.setDate(now.getDate() - daysToMonday);
         targetMonday = new Date(thisMonday);
         targetMonday.setDate(thisMonday.getDate() - 7);
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/api-handler";
 import { logger } from "@/lib/logger";
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getPlanName } from '@/lib/user-plan';
 import { kvGet } from "@/lib/kv-store";
 import { LIMITS } from "@/lib/constants";
 
@@ -9,8 +10,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
     // 유저 플랜 + 트렌드 데이터 + 읽음 정보 병렬 조회
-    const [{ data: userData }, { data, error }, readIds] = await Promise.all([
-        supabaseAdmin.from('users').select('plan').eq('email', email).maybeSingle(),
+    const [normalizedPlan, { data, error }, readIds] = await Promise.all([
+        getPlanName(email),
         supabaseAdmin
             .from('trends_cache')
             .select('trends, last_updated')
@@ -20,8 +21,6 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         kvGet<string[]>(email, `read_trend_ids_${today}`),
     ]);
 
-    const userPlan = (userData?.plan || 'Free');
-    const normalizedPlan = userPlan.charAt(0).toUpperCase() + userPlan.slice(1).toLowerCase();
     const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
     const refreshLimit = LIMITS.TREND_REFRESH_DAILY[normalizedPlan] ?? 0;
 

@@ -177,6 +177,23 @@ export class ToolExecutor {
         }
 
         const customGoals = userData.profile?.customGoals || [];
+
+        // specificDate와 daysOfWeek 동시 설정 방지
+        if (args.specificDate && args.daysOfWeek && args.daysOfWeek.length > 0) {
+            // specificDate 우선 (일회성 일정으로 처리)
+            args.daysOfWeek = undefined;
+        }
+
+        // 중복 일정 체크 (같은 텍스트 + 같은 시간 + 같은 날짜)
+        const scheduleDate = args.specificDate || null;
+        const isDuplicate = customGoals.some((g: any) =>
+            g.text === args.text && g.startTime === args.startTime &&
+            (g.specificDate || null) === scheduleDate
+        );
+        if (isDuplicate) {
+            return { success: false, error: '중복 일정', humanReadableSummary: `"${args.text}" 일정이 이미 같은 시간에 존재합니다.` };
+        }
+
         const newGoal = {
             id: `goal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             text: args.text,

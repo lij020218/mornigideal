@@ -147,7 +147,7 @@ ${userProfile.major ? `- 전공: ${userProfile.major}` : ''}`;
                 { role: "user", content: prompt },
             ],
             response_format: { type: "json_object" },
-            temperature: 0.7,
+            temperature: 1.0,
         });
 
         const rawContent = completion.choices[0]?.message?.content || '{}';

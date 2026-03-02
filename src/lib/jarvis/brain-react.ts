@@ -18,7 +18,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { PlanType } from '@/types/jarvis';
 import { getAvailableTools, ToolDefinition, ToolCall, ToolResult } from './tools';
 import { ToolExecutor } from './tool-executor';
-import { llmCircuit } from '@/lib/circuit-breaker';
+import { reactCircuit } from '@/lib/circuit-breaker';
 import { getPersonaBlock, resolvePersonaStyle, type PersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from "@/lib/models";
 import { logger } from '@/lib/logger';
@@ -145,25 +145,35 @@ export class ReActBrain {
         let totalLlmCalls = 0;
         let wasTerminatedEarly = false;
         const loopStartTime = Date.now();
-        const LOOP_TIMEOUT = 60000; // 전체 루프 60초 제한
+        const LOOP_TIMEOUT = 50000; // 전체 루프 50초 제한 (Vercel 60s 내에 응답 필수)
 
         for (let i = 0; i < effectiveMaxIterations; i++) {
-            // 전체 루프 타임아웃 체크
-            if (Date.now() - loopStartTime > LOOP_TIMEOUT) {
-                logger.warn(`[ReActBrain] Loop timeout reached after ${i} iterations (${Date.now() - loopStartTime}ms)`);
+            // 전체 루프 타임아웃 체크 (남은 시간이 LLM 1회 호출 불가능하면 종료)
+            const elapsed = Date.now() - loopStartTime;
+            if (elapsed > LOOP_TIMEOUT) {
+                logger.warn(`[ReActBrain] Loop timeout reached after ${i} iterations (${elapsed}ms)`);
                 wasTerminatedEarly = true;
                 break;
             }
-            // 1. LLM 호출 (classified retry with exponential backoff)
+            // 1. LLM 호출 (1회 재시도, 남은 시간 기반 동적 타임아웃)
             const prompt = this.buildIterationPrompt(userMessage, scratchpad);
 
             let llmResponse: string | null = null;
             let lastError: unknown = null;
-            const MAX_RETRIES = 2;
+            const MAX_RETRIES = 1; // 2→1: 타임아웃 캐스케이드 방지
 
             for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                // 남은 시간 기반 동적 타임아웃 (최소 8초, 최대 20초)
+                const remainingMs = LOOP_TIMEOUT - (Date.now() - loopStartTime);
+                if (remainingMs < 5000) {
+                    logger.warn(`[ReActBrain] Not enough time for LLM call (${remainingMs}ms remaining)`);
+                    wasTerminatedEarly = true;
+                    break;
+                }
+                const dynamicTimeout = Math.min(Math.max(remainingMs - 3000, 8000), 20000);
+
                 try {
-                    llmResponse = await this.callLLM(systemPrompt, prompt);
+                    llmResponse = await this.callLLM(systemPrompt, prompt, dynamicTimeout);
                     totalLlmCalls++;
                     break;
                 } catch (error) {
@@ -177,7 +187,7 @@ export class ReActBrain {
                     }
 
                     if (attempt < MAX_RETRIES) {
-                        const backoffMs = Math.min(500 * Math.pow(2, attempt), 4000);
+                        const backoffMs = 500;
                         logger.warn(`[ReActBrain] ${errorType} error at step ${i + 1}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}):`, error);
                         await new Promise(resolve => setTimeout(resolve, backoffMs));
                     } else {
@@ -240,53 +250,54 @@ export class ReActBrain {
                 };
             }
 
-            // 4. 도구 실행 (병렬 지원)
-            if (parsed.parallelActions && parsed.parallelActions.length > 1) {
-                // 병렬 실행: Promise.all로 독립 도구들 동시 호출
-                const results = await Promise.all(
-                    parsed.parallelActions.map(async (pa) => {
-                        const tc: ToolCall = { toolName: pa.action, arguments: pa.actionInput };
-                        try {
-                            return await this.toolExecutor.execute(tc);
-                        } catch (error) {
-                            return {
-                                success: false,
-                                error: String(error),
-                                humanReadableSummary: `도구 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
-                            } as ToolResult;
-                        }
-                    })
-                );
-
-                // 각 결과를 개별 스크래치패드 스텝으로 기록
-                const observations = parsed.parallelActions.map((pa, idx) =>
-                    `[${pa.action}] ${results[idx].humanReadableSummary}`
-                ).join('\n');
-
-                const step: ReActStep = {
-                    thought: parsed.thought,
-                    action: parsed.parallelActions.map(pa => pa.action).join('+'),
-                    actionInput: { parallel: parsed.parallelActions },
-                    observation: observations,
-                };
-                scratchpad.push(step);
-            } else {
-                // 단일 실행 (기존 로직)
-                const toolCall: ToolCall = {
-                    toolName: parsed.action,
-                    arguments: parsed.actionInput,
-                };
-
-                let result: ToolResult;
+            // 4. 도구 실행 (병렬 지원, 타임아웃 포함)
+            const TOOL_TIMEOUT = 15000; // 도구 실행 15초 제한
+            const executeWithTimeout = async (tc: ToolCall): Promise<ToolResult> => {
                 try {
-                    result = await this.toolExecutor.execute(toolCall);
+                    return await Promise.race([
+                        this.toolExecutor.execute(tc),
+                        new Promise<ToolResult>((_, reject) =>
+                            setTimeout(() => reject(new Error(`Tool "${tc.toolName}" timed out (${TOOL_TIMEOUT / 1000}s)`)), TOOL_TIMEOUT)
+                        ),
+                    ]);
                 } catch (error) {
-                    result = {
+                    return {
                         success: false,
                         error: String(error),
                         humanReadableSummary: `도구 실행 실패: ${error instanceof Error ? error.message : String(error)}`,
                     };
                 }
+            };
+
+            if (parsed.parallelActions && parsed.parallelActions.length > 0) {
+                // 메인 액션 + 병렬 액션 모두 동시 실행
+                const allActions = [
+                    { action: parsed.action, actionInput: parsed.actionInput },
+                    ...parsed.parallelActions,
+                ];
+                const results = await Promise.all(
+                    allActions.map(pa => executeWithTimeout({ toolName: pa.action, arguments: pa.actionInput }))
+                );
+
+                const observations = allActions.map((pa, idx) =>
+                    `[${pa.action}] ${results[idx].humanReadableSummary}`
+                ).join('\n');
+
+                const step: ReActStep = {
+                    thought: parsed.thought,
+                    action: allActions.map(pa => pa.action).join('+'),
+                    actionInput: { parallel: allActions },
+                    observation: observations,
+                };
+                scratchpad.push(step);
+            } else {
+                // 단일 실행
+                const toolCall: ToolCall = {
+                    toolName: parsed.action,
+                    arguments: parsed.actionInput,
+                };
+
+                const result = await executeWithTimeout(toolCall);
 
                 // 5. Observation 기록
                 const step: ReActStep = {
@@ -302,14 +313,28 @@ export class ReActBrain {
 
         // 반복 제한 초과 또는 에러 → 마지막 scratchpad로 응답 생성
         if (scratchpad.length > 0) {
-            const fallbackResult = await this.generateFallbackResponse(
-                systemPrompt, userMessage, scratchpad
-            );
-            totalLlmCalls++;
+            const remainingForFallback = LOOP_TIMEOUT - (Date.now() - loopStartTime);
+            if (remainingForFallback > 5000) {
+                // 남은 시간이 충분하면 LLM fallback 생성
+                const fallbackResult = await this.generateFallbackResponse(
+                    systemPrompt, userMessage, scratchpad, Math.min(remainingForFallback - 2000, 15000)
+                );
+                totalLlmCalls++;
 
+                return {
+                    message: fallbackResult.message,
+                    actions: fallbackResult.actions,
+                    steps: scratchpad,
+                    totalLlmCalls,
+                    wasTerminatedEarly: true,
+                };
+            }
+
+            // 남은 시간 부족 → scratchpad에서 직접 응답 조립
+            const lastStep = scratchpad[scratchpad.length - 1];
             return {
-                message: fallbackResult.message,
-                actions: fallbackResult.actions,
+                message: lastStep.observation || '요청을 처리하다가 시간이 부족했어요. 다시 시도해주세요.',
+                actions: [],
                 steps: scratchpad,
                 totalLlmCalls,
                 wasTerminatedEarly: true,
@@ -333,8 +358,8 @@ export class ReActBrain {
     /**
      * 플랜별 프로바이더에 따라 LLM 호출 (타임아웃 포함)
      */
-    private async callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
-        const LLM_TIMEOUT = 30000; // 30초 타임아웃
+    private async callLLM(systemPrompt: string, userPrompt: string, timeoutMs?: number): Promise<string> {
+        const LLM_TIMEOUT = timeoutMs || 20000; // 동적 타임아웃 (기본 20초)
 
         if (this.config.provider === 'anthropic' && anthropic) {
             const response = await Promise.race([
@@ -357,7 +382,7 @@ export class ReActBrain {
         }
 
         // OpenAI (Free, Pro, 또는 Anthropic 폴백)
-        const response = await llmCircuit.execute(() =>
+        const response = await reactCircuit.execute(() =>
             Promise.race([
                 openai.chat.completions.create({
                     model: this.config.model,
@@ -397,18 +422,26 @@ export class ReActBrain {
             plan: input.userPlan.toLowerCase(),
         });
 
+        // 도구 설명 압축: 필수 파라미터만 표시, 설명 간결화
         const toolDescriptions = this.availableTools
             .map(t => {
-                const params = t.parameters.length > 0
-                    ? `\n    파라미터: ${t.parameters.map(p => `${p.name}(${p.type}${p.required ? ', 필수' : ''}): ${p.description}`).join(', ')}`
+                const requiredParams = t.parameters.filter(p => p.required);
+                const params = requiredParams.length > 0
+                    ? ` (${requiredParams.map(p => `${p.name}: ${p.type}`).join(', ')})`
                     : '';
-                const confirm = t.requiresConfirmation ? ' [확인 필요]' : '';
-                return `  - ${t.name}: ${t.description}${confirm}${params}`;
+                return `  - ${t.name}${params}: ${t.description}`;
             })
             .join('\n');
 
         const maxSteps = this.complexity === 1 ? Math.min(this.config.maxIterations, 2) : this.config.maxIterations;
         const simpleHint = this.complexity === 1 ? '\n⚡ 이 요청은 단순합니다. 1단계에서 도구 실행 후 바로 respond_to_user하세요.' : '';
+
+        // 내일/모레 날짜 계산
+        const [cy, cm, cd] = input.context.currentDate.split('-').map(Number);
+        const tomorrowD = new Date(cy, cm - 1, cd + 1);
+        const tomorrowStr = `${tomorrowD.getFullYear()}-${String(tomorrowD.getMonth() + 1).padStart(2, '0')}-${String(tomorrowD.getDate()).padStart(2, '0')}`;
+        const dayAfterD = new Date(cy, cm - 1, cd + 2);
+        const dayAfterStr = `${dayAfterD.getFullYear()}-${String(dayAfterD.getMonth() + 1).padStart(2, '0')}-${String(dayAfterD.getDate()).padStart(2, '0')}`;
 
         return `${personaBlock}
 
@@ -419,10 +452,16 @@ export class ReActBrain {
 ## 도구 목록
 ${toolDescriptions}
 
+## 📅 날짜 매핑 (specificDate에 반드시 이 값을 사용)
+- 오늘 → "${input.context.currentDate}"
+- 내일 → "${tomorrowStr}"
+- 모레 → "${dayAfterStr}"
+
 ## 의사결정 트리 (이 순서대로 판단)
 
 1. 사용자가 일정 추가를 요청? (잡아줘/등록해줘/추가해줘/넣어줘)
-   → action: "add_schedule", actionInput: {text, startTime, endTime, specificDate: "${input.context.currentDate}"}
+   → action: "add_schedule", actionInput: {text, startTime, endTime, specificDate: "해당 날짜"}
+   → "내일"이면 specificDate: "${tomorrowStr}", "모레"면 specificDate: "${dayAfterStr}", 기본은 "${input.context.currentDate}"
    → endTime 없으면 startTime + 1시간
 
 2. 사용자가 일정 삭제를 요청? (삭제해줘/지워줘/취소해줘/빼줘)
@@ -456,6 +495,10 @@ ${toolDescriptions}
 - **간결 응답**: 2-3문장. 묻지 않은 추천/조언 금지
 - **일정 이름 정규화**: 아침→"아침 식사", 점심→"점심 식사", 저녁→"저녁 식사", 잠→"취침", 일어나→"기상", 헬스→"운동"
 - **반복 일정**: 매일=[0,1,2,3,4,5,6], 평일=[1,2,3,4,5], 주말=[0,6]. specificDate와 daysOfWeek 중 하나만
+- **시간 추론**: 사용자가 "5시", "3시"처럼 오전/오후 없이 시간만 말하면 **24시간 형식(HH:MM)**으로 변환할 때 현재 시각 기준으로 추론하세요:
+  - 해당 시각이 현재 시간보다 과거라면 → 12시간을 더해서 오후로 해석 (예: 현재 11:00, "5시" → "17:00")
+  - 해당 시각이 현재 시간보다 미래라면 → 그대로 사용 (예: 현재 03:00, "5시" → "05:00")
+  - 내일/미래 날짜 일정이면 상식적으로 판단 (예: "내일 7시 기상" → "07:00", "내일 6시 저녁" → "18:00")
 - **삭제/수정**: text+startTime 필수 (update는 originalText+originalTime)
 - **존재하지 않는 일정을 "이미 있다"고 하지 마세요**
 - **respond_to_user의 actions**: [{type: "add_schedule", label: "일정 추가", data: {text, startTime, ...}}]
@@ -469,6 +512,9 @@ ${SAFETY_SYSTEM_RULES}
 
 (Observation: "운동" 일정을 15:00에 추가했습니다.)
 출력: {"thought": "완료", "action": "respond_to_user", "actionInput": {"message": "오후 3시 운동 추가했어요! 💪", "actions": []}}
+
+입력: "내일 5시에 기상 잡아줘"
+출력: {"thought": "내일 기상 일정 추가. 기상은 아침이므로 05:00", "action": "add_schedule", "actionInput": {"text": "기상", "startTime": "05:00", "endTime": "06:00", "specificDate": "${tomorrowStr}"}}
 
 입력: "아침 루틴 삭제해줘"
 출력: {"thought": "삭제", "action": "delete_schedule", "actionInput": {"text": "아침 루틴", "startTime": "07:00"}}
@@ -560,9 +606,12 @@ ${JSON.stringify(scratchpadJson, null, 2)}
                 fixed.specificDate = context.currentDate;
             }
 
+            // 내일/미래 일정이면 AM/PM 추론 스킵 (LLM이 활동명으로 판단)
+            const isNotToday = fixed.specificDate && fixed.specificDate !== context.currentDate;
+
             // startTime 포맷 수정 (예: "3시" → "15:00", "15" → "15:00")
             if (fixed.startTime) {
-                fixed.startTime = this.normalizeTime(fixed.startTime, context.currentTime);
+                fixed.startTime = this.normalizeTime(fixed.startTime, context.currentTime, isNotToday);
             }
 
             // endTime 누락 → startTime + 1시간
@@ -578,15 +627,15 @@ ${JSON.stringify(scratchpadJson, null, 2)}
         }
 
         if (action === 'delete_schedule' || action === 'update_schedule') {
-            // startTime 포맷 수정
+            // 삭제/수정은 기존 일정 시간 참조 → AM/PM 추론 스킵
             if (fixed.startTime) {
-                fixed.startTime = this.normalizeTime(fixed.startTime, context.currentTime);
+                fixed.startTime = this.normalizeTime(fixed.startTime, context.currentTime, true);
             }
             if (fixed.originalTime) {
-                fixed.originalTime = this.normalizeTime(fixed.originalTime, context.currentTime);
+                fixed.originalTime = this.normalizeTime(fixed.originalTime, context.currentTime, true);
             }
             if (fixed.newStartTime) {
-                fixed.newStartTime = this.normalizeTime(fixed.newStartTime, context.currentTime);
+                fixed.newStartTime = this.normalizeTime(fixed.newStartTime, context.currentTime, true);
             }
             // 텍스트 정규화
             if (fixed.text) fixed.text = this.normalizeScheduleName(fixed.text);
@@ -613,23 +662,36 @@ ${JSON.stringify(scratchpadJson, null, 2)}
 
     /**
      * 시간 문자열 정규화 → HH:MM
+     * @param skipInference true면 AM/PM 추론 스킵 (삭제/수정/내일 일정)
      */
-    private normalizeTime(time: string, currentTime: string): string {
-        if (/^\d{2}:\d{2}$/.test(time)) return time;
+    private normalizeTime(time: string, currentTime: string, skipInference = false): string {
+        // 이미 HH:MM 형식 → 범위 검증 후 반환
+        if (/^\d{2}:\d{2}$/.test(time)) {
+            const [h, m] = time.split(':').map(Number);
+            if (h > 23 || m > 59) return '09:00'; // 범위 초과 → 기본값
+            return skipInference ? time : this.inferAmPm(time, currentTime);
+        }
 
         // "15:0" → "15:00"
         const colonMatch = time.match(/^(\d{1,2}):(\d{1,2})$/);
         if (colonMatch) {
-            return `${colonMatch[1].padStart(2, '0')}:${colonMatch[2].padStart(2, '0')}`;
+            const h = parseInt(colonMatch[1]);
+            const m = parseInt(colonMatch[2]);
+            if (h > 23 || m > 59) return '09:00'; // 범위 초과 → 기본값
+            const result = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            return skipInference ? result : this.inferAmPm(result, currentTime);
         }
 
         // "15" → "15:00"
         const hourOnly = time.match(/^(\d{1,2})$/);
         if (hourOnly) {
-            return `${hourOnly[1].padStart(2, '0')}:00`;
+            const h = parseInt(hourOnly[1]);
+            if (h > 23) return '09:00'; // 범위 초과 → 기본값
+            const result = `${String(h).padStart(2, '0')}:00`;
+            return skipInference ? result : this.inferAmPm(result, currentTime);
         }
 
-        // "오후 3시" → "15:00"
+        // "오후 3시" → "15:00" (명시적 오전/오후 → 추론 불필요)
         const koreanMatch = time.match(/(오전|오후)\s*(\d{1,2})시?\s*(\d{1,2})?분?/);
         if (koreanMatch) {
             let h = parseInt(koreanMatch[2]);
@@ -640,6 +702,32 @@ ${JSON.stringify(scratchpadJson, null, 2)}
         }
 
         return time; // 수정 불가 → 그대로 반환
+    }
+
+    /**
+     * 오전/오후 미지정 시간 추론: 1-12시 범위이고 현재 시간보다 과거면 +12시간
+     * 예: 현재 11:00, "05:00" → "17:00" (이미 지난 시간이므로 오후로 추론)
+     * 예: 현재 03:00, "05:00" → "05:00" (아직 안 지난 시간이므로 그대로)
+     * 13시 이상이면 이미 24시간 형식이므로 추론 불필요
+     */
+    private inferAmPm(time: string, currentTime: string): string {
+        const [h, m] = time.split(':').map(Number);
+
+        // 13시 이상이면 이미 명확한 24시간 형식
+        if (h >= 13) return time;
+        // 0시는 자정이므로 추론하지 않음
+        if (h === 0) return time;
+
+        const [currentH] = currentTime.split(':').map(Number);
+        const timeMinutes = h * 60 + (m || 0);
+        const currentMinutes = currentH * 60;
+
+        // 현재 시간보다 과거(이미 지남)이고 +12시간이 23시 이하면 오후로 추론
+        if (timeMinutes < currentMinutes && (h + 12) <= 23) {
+            return `${String(h + 12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+
+        return time;
     }
 
     /**
@@ -679,12 +767,12 @@ ${JSON.stringify(scratchpadJson, null, 2)}
                     logger.error('[ReActBrain] No valid tools in parallel actions');
                     return null;
                 }
-                // 첫 번째를 메인으로, 나머지를 parallelActions로
+                // 첫 번째를 메인으로, 2번째부터를 parallelActions로
                 return {
                     thought: parsed.thought || '',
                     action: validActions[0].action,
                     actionInput: validActions[0].actionInput || {},
-                    parallelActions: validActions.length > 1 ? validActions : undefined,
+                    parallelActions: validActions.length > 1 ? validActions.slice(1) : undefined,
                 };
             }
 
@@ -773,7 +861,8 @@ ${JSON.stringify(scratchpadJson, null, 2)}
     private async generateFallbackResponse(
         systemPrompt: string,
         userMessage: string,
-        scratchpad: ReActStep[]
+        scratchpad: ReActStep[],
+        timeoutMs?: number
     ): Promise<{ message: string; actions: any[] }> {
         const observations = scratchpad
             .map(s => `[${s.action}] ${s.observation}`)
@@ -790,7 +879,7 @@ ${observations}
 {"message": "한국어 응답", "actions": []}`;
 
         try {
-            const content = await this.callLLM(systemPrompt, fallbackPrompt);
+            const content = await this.callLLM(systemPrompt, fallbackPrompt, timeoutMs);
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
@@ -841,11 +930,33 @@ export function getRequestComplexity(messages: Array<{ role: string; content: st
 
     const text = lastMessage.content;
 
-    // 15자 미만이면 단순
-    if (text.length < 15) return 0;
+    // 10자 미만이면 단순
+    if (text.length < 10) return 0;
+
+    // 복합 키워드가 포함되면 단순 CRUD 아님
+    const hasCompoundKeyword = /먼저|그리고|다음에|그런 다음|그 후에/.test(text);
+
+    // 단순 일정 CRUD는 단발 GPT가 더 빠르고 정확 → complexity 0
+    // 복합 키워드 없이 CRUD 접미사로 끝나면 단순 요청
+    if (!hasCompoundKeyword) {
+        const simpleCrudPatterns = [
+            /(잡아|추가해?|등록해?|넣어|만들어)\s*(줘|줘요|주세요|줄래)?$/,
+            /(삭제해?|지워|취소해?|빼)\s*(줘|줘요|주세요|줄래)?$/,
+            /(바꿔|옮겨|변경해)\s*(줘|줘요|주세요|줄래)?$/,
+            /(완료|했어|끝났어|끝|다 했어)$/,
+        ];
+        if (simpleCrudPatterns.some(pattern => pattern.test(text)) && text.length < 80) return 0;
+    }
 
     // 레벨 2: 다단계 추론/분석이 필요한 복합 요청
     const highComplexPatterns = [
+        
+
+
+
+
+
+
         /준비해\s?줘/,
         /분석해\s?줘/,
         /계획\s?세워/,

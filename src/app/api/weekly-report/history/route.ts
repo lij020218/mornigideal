@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/api-handler";
 import { logger } from "@/lib/logger";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getPlanName } from "@/lib/user-plan";
 
 /**
  * Weekly Report History API
@@ -24,14 +25,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const userEmail = email;
     const supabase = supabaseAdmin;
 
-    // Get user's plan
-    const { data: userData } = await supabase
-        .from('users')
-        .select('plan')
-        .eq('email', userEmail)
-        .maybeSingle();
-
-    const userPlan = userData?.plan || 'standard';
+    // Get user's plan (user_subscriptions 기반)
+    const userPlan = await getPlanName(userEmail);
     const weekLimit = PLAN_LIMITS[userPlan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.standard;
 
     // Calculate the date limit

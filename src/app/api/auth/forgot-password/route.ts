@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { signToken } from '@/lib/auth-utils';
 import { logger } from '@/lib/logger';
+import { sendPasswordResetEmail } from '@/lib/email';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'user_email,key' });
 
-        // TODO: 실제 이메일 발송 (Resend, SendGrid 등)
-        // 현재는 토큰만 저장하고 성공 응답
+        // 이메일 발송
+        await sendPasswordResetEmail(normalizedEmail, resetToken);
         logger.info(`[Auth] Password reset requested for ${normalizedEmail}`);
 
         return NextResponse.json({

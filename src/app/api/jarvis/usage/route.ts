@@ -8,25 +8,12 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { PLAN_CONFIGS, PlanType } from '@/types/jarvis';
+import { getPlanName } from '@/lib/user-plan';
 
 export const dynamic = 'force-dynamic';
 
 export const GET = withAuth(async (request: NextRequest, email: string) => {
-    // 사용자 플랜 조회
-    const { data: userData, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('profile')
-        .eq('email', email)
-        .maybeSingle();
-
-    if (userError || !userData) {
-        return NextResponse.json(
-            { error: 'User not found' },
-            { status: 404 }
-        );
-    }
-
-    const userPlan = userData.profile?.plan || 'Free';
+    const userPlan = await getPlanName(email);
     const planConfig = PLAN_CONFIGS[userPlan as PlanType];
 
     // 무제한 플랜은 -1 리턴

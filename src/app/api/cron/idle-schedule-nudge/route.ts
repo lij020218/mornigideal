@@ -80,7 +80,17 @@ async function markNudgeSent(email: string, todayStr: string, slotLabel: string)
     }, { onConflict: 'user_email,key' });
 }
 
-// AI 추천 생성
+// 시간대별 인사말 템플릿
+const SLOT_GREETINGS: Record<string, string[]> = {
+    '아침': ['상쾌한 아침이에요!', '좋은 아침이에요!', '아침 시간을 알차게 보내볼까요?'],
+    '오전': ['오전 시간이 여유롭네요!', '오전에 할 수 있는 활동을 추천드려요!'],
+    '점심': ['점심 이후 여유 시간이 있으시네요!', '오후를 준비하는 시간이에요!'],
+    '오후': ['오후 시간이 비어있어요!', '오후를 알차게 보내볼까요?'],
+    '저녁': ['저녁 시간을 활용해볼까요?', '하루를 마무리하며 할 수 있는 활동이에요!'],
+    '밤': ['밤 시간을 활용해볼까요?'],
+};
+
+// AI 추천 생성 — JSON 항목만 받고 코드가 조립
 async function generateRecommendation(
     profile: any,
     currentHour: number,
@@ -90,66 +100,47 @@ async function generateRecommendation(
     const job = profile?.onboarding?.userType === '대학생'
         ? `${profile?.onboarding?.major || ''} 대학생`
         : profile?.onboarding?.field || profile?.job || '직장인';
-    const goal = profile?.onboarding?.goal || '';
     const interests = (profile?.onboarding?.interests || []).join(', ');
     const userName = profile?.name || '';
-
-    const recentText = recentCompletedTexts.length > 0
-        ? `\n최근 완료한 활동: ${recentCompletedTexts.slice(0, 5).join(', ')}`
+    const exclude = recentCompletedTexts.length > 0
+        ? ` 제외:${recentCompletedTexts.slice(0, 3).join(',')}`
         : '';
 
-    const prompt = `당신은 한국어로 대화하는 AI 일정 비서입니다.
-
-사용자 정보:
-- 직업/신분: ${job}
-- 목표: ${goal}
-- 관심사: ${interests}
-- 현재 시간대: ${slotLabel} (${currentHour}시)${recentText}
-
-현재 향후 4시간 동안 일정이 비어있습니다. 이 시간대에 적합한 활동 2-3개를 추천해주세요.
-
-규칙:
-1. ${slotLabel} 시간대에 현실적으로 할 수 있는 활동만 추천
-2. 사용자의 직업, 목표, 관심사를 고려
-3. 최근 완료한 활동과 겹치지 않게
-4. 구체적인 활동명 (예: "30분 스트레칭", "영어 뉴스 읽기 20분")
-5. 반드시 JSON만 출력 (다른 텍스트 없이)
-
-JSON 형식:
-{
-  "greeting": "사용자에게 보내는 자연스러운 한 문장 인사 (${userName ? userName + '님' : ''}에게)",
-  "suggestions": [
-    { "text": "구체적 활동명", "duration": "소요 시간", "reason": "추천 이유 한 줄" }
-  ]
-}`;
-
     try {
+        // AI에게 추천 항목 JSON만 요청
         const completion = await openai.chat.completions.create({
             model: MODELS.GPT_5_MINI,
             messages: [
-                { role: 'system', content: '일정 추천 AI입니다. 반드시 유효한 JSON만 응답하세요.' },
-                { role: 'user', content: prompt },
+                {
+                    role: 'system',
+                    content: `${job}, 관심사:${interests || '없음'}, ${slotLabel} ${currentHour}시.${exclude} 활동 2개 추천. JSON만: {"s":[{"t":"활동명","d":"시간","r":"이유"}]}`
+                },
             ],
-            temperature: 0.8,
-            max_tokens: 500,
+            temperature: 1.0,
             response_format: { type: 'json_object' },
         });
 
         const text = completion.choices[0]?.message?.content || '{}';
         const parsed = JSON.parse(text);
+        const items = parsed.s || parsed.suggestions || [];
+        if (!items || items.length === 0) return null;
 
-        if (!parsed.suggestions || parsed.suggestions.length === 0) return null;
-
-        const suggestionTexts = parsed.suggestions.map(
-            (s: any) => `${s.text} (${s.duration})`
+        // 코드가 템플릿 조립
+        const suggestionTexts = items.map(
+            (s: any) => `${s.t || s.text} (${s.d || s.duration})`
         );
-        const suggestionList = parsed.suggestions.map(
-            (s: any, i: number) => `${i + 1}. ${s.text} — ${s.duration}\n   ${s.reason}`
-        ).join('\n');
+        const suggestionList = items.map(
+            (s: any, i: number) => `${i + 1}. ${s.t || s.text} — ${s.d || s.duration}\n${s.r || s.reason}`
+        ).join('\n\n');
+
+        const greetings = SLOT_GREETINGS[slotLabel] || SLOT_GREETINGS['오후'];
+        const greeting = userName
+            ? `${userName}님, ${greetings[Math.floor(Math.random() * greetings.length)]}`
+            : greetings[Math.floor(Math.random() * greetings.length)];
 
         return {
             title: `${slotLabel} 시간이 비어있어요`,
-            message: `${parsed.greeting || '지금 여유 시간이 있으시네요!'}\n\n추천 활동:\n${suggestionList}\n\n채팅에서 \"일정 추가\"라고 말하면 바로 등록할 수 있어요.`,
+            message: `${greeting}\n\n추천 활동:\n${suggestionList}\n\n채팅에서 \"일정 추가\"라고 말하면 바로 등록할 수 있어요.`,
             suggestions: suggestionTexts,
         };
     } catch (error) {
@@ -244,6 +235,47 @@ export const GET = withCron(async (_request: NextRequest) => {
                     suggestions: recommendation.suggestions,
                 },
             });
+
+            // 채팅 기록에도 저장 (웹/모바일 채팅 히스토리에 남도록)
+            try {
+                const { data: userData } = await supabaseAdmin
+                    .from('users')
+                    .select('id')
+                    .eq('email', user.email)
+                    .maybeSingle();
+
+                if (userData) {
+                    const chatMessage = {
+                        id: `idle-nudge-${todayStr}-${slotLabel}-${Date.now()}`,
+                        role: 'assistant',
+                        content: `**${recommendation.title}**\n\n${recommendation.message}`,
+                        timestamp: new Date().toISOString(),
+                    };
+
+                    // 기존 채팅 기록 가져오기
+                    const { data: existingChat } = await supabaseAdmin
+                        .from('chat_history')
+                        .select('messages')
+                        .eq('user_id', userData.id)
+                        .eq('date', todayStr)
+                        .maybeSingle();
+
+                    const existingMessages = existingChat?.messages || [];
+                    const updatedMessages = [...existingMessages, chatMessage];
+
+                    await supabaseAdmin
+                        .from('chat_history')
+                        .upsert({
+                            user_id: userData.id,
+                            date: todayStr,
+                            messages: updatedMessages,
+                            title: existingChat ? undefined : todayStr,
+                            updated_at: new Date().toISOString(),
+                        }, { onConflict: 'user_id,date' });
+                }
+            } catch (chatError) {
+                logger.error(`[IdleNudge] Chat history save failed for ${user.email}:`, chatError instanceof Error ? chatError.message : chatError);
+            }
 
             // 전송 기록
             await markNudgeSent(user.email, todayStr, slotLabel);

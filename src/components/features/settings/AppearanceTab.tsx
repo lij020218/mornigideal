@@ -3,12 +3,10 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Sun, Palette, Moon, Monitor, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppearanceSettings } from "./settingsConstants";
-import { SettingsRow } from "./SettingsShared";
 
 interface AppearanceTabProps {
     appearance: AppearanceSettings;
@@ -61,73 +59,31 @@ export function AppearanceTab({ appearance, setAppearance }: AppearanceTabProps)
                         <p className="text-xs text-muted-foreground">다크 모드는 현재 개발 중입니다.</p>
                     </div>
 
-                    <div className="space-y-3">
-                        <Label>글자 크기</Label>
-                        <div className="flex gap-2">
-                            {[
-                                { id: "small", label: "작게", size: "text-sm" },
-                                { id: "medium", label: "보통", size: "text-base" },
-                                { id: "large", label: "크게", size: "text-lg" },
-                            ].map((font) => (
-                                <button
-                                    key={font.id}
-                                    onClick={() => setAppearance({ ...appearance, fontSize: font.id as AppearanceSettings["fontSize"] })}
-                                    className={cn(
-                                        "flex-1 p-3 rounded-xl transition-all border",
-                                        appearance.fontSize === font.id
-                                            ? "bg-primary/10 border-primary"
-                                            : "bg-muted/50 border-transparent hover:bg-muted"
-                                    )}
-                                >
-                                    <span className={cn("font-medium", font.size)}>{font.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <SettingsRow
-                        label="컴팩트 모드"
-                        description="UI 요소 간격을 줄여 더 많은 정보를 표시합니다"
-                    >
-                        <Switch
-                            checked={appearance.compactMode}
-                            onCheckedChange={(checked) => setAppearance({ ...appearance, compactMode: checked })}
-                        />
-                    </SettingsRow>
-
-                    <SettingsRow
-                        label="애니메이션 효과"
-                        description="부드러운 전환 효과를 사용합니다"
-                    >
-                        <Switch
-                            checked={appearance.animationsEnabled}
-                            onCheckedChange={(checked) => setAppearance({ ...appearance, animationsEnabled: checked })}
-                        />
-                    </SettingsRow>
                 </CardContent>
             </Card>
 
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Languages className="w-5 h-5 text-primary" />
+                        <Languages className="w-5 h-5 text-muted-foreground" />
                         언어
+                        <Badge variant="secondary" className="text-xs ml-auto">준비 중</Badge>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 opacity-50">
                         {[
                             { id: "ko", label: "한국어", flag: "🇰🇷" },
                             { id: "en", label: "English", flag: "🇺🇸" },
                         ].map((lang) => (
                             <button
                                 key={lang.id}
-                                onClick={() => setAppearance({ ...appearance, language: lang.id as AppearanceSettings["language"] })}
+                                disabled
                                 className={cn(
-                                    "flex-1 flex items-center justify-center gap-2 p-3 rounded-xl transition-all border",
-                                    appearance.language === lang.id
+                                    "flex-1 flex items-center justify-center gap-2 p-3 rounded-xl transition-all border cursor-not-allowed",
+                                    lang.id === "ko"
                                         ? "bg-primary/10 border-primary"
-                                        : "bg-muted/50 border-transparent hover:bg-muted"
+                                        : "bg-muted/50 border-transparent"
                                 )}
                             >
                                 <span>{lang.flag}</span>

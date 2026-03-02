@@ -105,8 +105,11 @@ export function SettingsContent({ username, email }: SettingsContentProps) {
                 if (!serverSettings) return;
 
                 if (serverSettings.profile) {
-                    setProfile(prev => ({ ...prev, ...serverSettings.profile }));
-                    localStorage.setItem("user_profile", JSON.stringify({ ...JSON.parse(savedProfile || '{}'), ...serverSettings.profile }));
+                    // 서버 값 중 빈 문자열/undefined는 로컬 값 유지
+                    const merged = { ...serverSettings.profile };
+                    if (!merged.name) delete merged.name;
+                    setProfile(prev => ({ ...prev, ...merged }));
+                    localStorage.setItem("user_profile", JSON.stringify({ ...JSON.parse(savedProfile || '{}'), ...merged }));
                 }
                 if (serverSettings.notifications) {
                     setNotifications(prev => ({ ...prev, ...serverSettings.notifications }));

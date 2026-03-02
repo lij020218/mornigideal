@@ -32,22 +32,30 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
   const dayOfWeek = kstNow.getDay(); // 0 = Sunday
 
 
-  // 오늘 일정 필터링 (특정 날짜 또는 반복 일정)
+  // 오늘 일정 필터링 (특정 날짜 또는 반복 일정, ID 기준 중복 제거)
+  const seenIds = new Set<string>();
   const todaySchedules = customGoals.filter((schedule: any) => {
+    let matches = false;
+
     // 특정 날짜 일정
     if (schedule.specificDate === todayStr) {
-      return true;
+      matches = true;
     }
 
     // 반복 일정 (daysOfWeek 배열에 오늘 요일 포함)
-    if (schedule.daysOfWeek && schedule.daysOfWeek.includes(dayOfWeek)) {
+    if (!matches && schedule.daysOfWeek && schedule.daysOfWeek.includes(dayOfWeek)) {
       // 시작/종료 날짜 체크
       if (schedule.startDate && todayStr < schedule.startDate) return false;
       if (schedule.endDate && todayStr > schedule.endDate) return false;
-      return true;
+      matches = true;
     }
 
-    return false;
+    if (!matches) return false;
+
+    // ID 기준 중복 제거
+    if (seenIds.has(schedule.id)) return false;
+    seenIds.add(schedule.id);
+    return true;
   });
 
   // 시간순 정렬
@@ -67,6 +75,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     completed: s.completed || false,
     color: s.color || undefined,
     date: todayStr,
+    linkedGoalId: s.linkedGoalId || undefined,
   }));
 
   return NextResponse.json({ schedules: formattedSchedules });

@@ -74,6 +74,55 @@ export async function PUT(
     if (!v.success) return v.response;
     const { text, startTime, endTime, completed } = v.data;
 
+    // customGoals에서 수정 (goal_, learning-, recurring_ 접두사)
+    if (id.startsWith('goal_') || id.startsWith('learning-') || id.startsWith('recurring_')) {
+      const { data: user, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('profile')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userError || !user) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
+      const customGoals: any[] = user.profile?.customGoals || [];
+      let found = false;
+      const updatedGoals = customGoals.map((g: any) => {
+        if (g.id === id) {
+          found = true;
+          return {
+            ...g,
+            ...(text ? { text } : {}),
+            ...(startTime ? { startTime } : {}),
+            ...(endTime !== undefined ? { endTime: endTime || undefined } : {}),
+            ...(completed !== undefined ? { completed } : {}),
+          };
+        }
+        return g;
+      });
+
+      if (!found) {
+        return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({ profile: { ...user.profile, customGoals: updatedGoals } })
+        .eq('id', userId);
+
+      if (updateError) {
+        logger.error('customGoals 수정 오류:', updateError);
+        return NextResponse.json({ error: 'Failed to update schedule' }, { status: 500 });
+      }
+
+      const editEmail = await getUserEmailFromRequest(request);
+      if (editEmail) invalidateUserContext(editEmail);
+
+      return NextResponse.json({ success: true });
+    }
+
+    // schedules 테이블에서 수정 (기존 로직)
     const updateData: any = {};
     if (text) updateData.title = text;
     if (startTime) updateData.start_time = startTime;

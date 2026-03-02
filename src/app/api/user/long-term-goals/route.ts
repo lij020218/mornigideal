@@ -129,8 +129,39 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         currentGoals[goalType] = currentGoals[goalType].filter(
             (g) => g.id !== goal.id
         );
+
+        // 연관 일정(customGoals에서 linkedGoalId가 이 목표인 것)도 함께 삭제
+        const customGoals: any[] = user.profile?.customGoals || [];
+        const filteredGoals = customGoals.filter(
+            (s: any) => s.linkedGoalId !== goal.id
+        );
+        if (filteredGoals.length !== customGoals.length) {
+            const removedCount = customGoals.length - filteredGoals.length;
+            logger.info(`[long-term-goals] 목표 ${goal.id} 삭제 시 연관 일정 ${removedCount}개 함께 삭제`);
+            await updateProfile({
+                longTermGoals: currentGoals,
+                customGoals: filteredGoals,
+            });
+            return NextResponse.json({ success: true, goals: currentGoals, removedSchedules: removedCount });
+        }
     } else if (action === "complete") {
-        // 목표 완료 처리
+        // 목표 완료 처리 — 연관 일정이 모두 완료되었는지 체크
+        const customGoals = user.profile?.customGoals || [];
+        const linkedSchedules = customGoals.filter(
+            (s: any) => s.linkedGoalId === goal.id
+        );
+
+        if (linkedSchedules.length > 0) {
+            const incompleteSchedules = linkedSchedules.filter(
+                (s: any) => !s.completed
+            );
+            if (incompleteSchedules.length > 0) {
+                return NextResponse.json({
+                    error: `연관된 일정 ${incompleteSchedules.length}개를 먼저 완료해야 목표를 달성할 수 있어요.`,
+                }, { status: 400 });
+            }
+        }
+
         const goalList = currentGoals[goalType];
         const index = goalList.findIndex((g) => g.id === goal.id);
         if (index !== -1) {

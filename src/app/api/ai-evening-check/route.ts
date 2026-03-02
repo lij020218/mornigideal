@@ -15,6 +15,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { saveDailyLog, extractMemoryFromConversation, updateUserMemory } from "@/lib/memoryService";
 import { saveStateSnapshot } from "@/lib/multiDayTrendService";
 import { resolvePersonaStyle, getPersonaBlock, completionRateToTone } from "@/lib/prompts/persona";
+import { getPlanName } from "@/lib/user-plan";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 
@@ -60,59 +61,82 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     // AI 저녁 회고 메시지 생성
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
+    const userPlan = await getPlanName(email);
+
     const personaBlock = getPersonaBlock({
-        style: resolvePersonaStyle(userProfile, userProfile?.plan),
+        style: resolvePersonaStyle(userProfile, userPlan),
         tone: completionRateToTone(completionRate),
         userName: userProfile?.name,
         userJob: userProfile?.job,
-        plan: userProfile?.plan,
+        plan: userPlan,
     });
 
-    const prompt = `${personaBlock}
+    const userName = userProfile?.name || '사용자';
 
-저녁 회고 메시지를 생성하세요.
+    // AI에게 JSON 컴포넌트만 요청
+    const contextParts: string[] = [];
+    contextParts.push(`${userName}, ${userProfile?.job || '직장인'}`);
+    contextParts.push(`완료:${completedCount}/${totalSchedules}(${completionRate}%)`);
+    if (completedSchedules.length > 0) contextParts.push(`완료:${completedSchedules.slice(0, 4).map((s: any) => s.text).join(',')}`);
+    if (uncompletedSchedules.length > 0) contextParts.push(`미완료:${uncompletedSchedules.slice(0, 3).map((s: any) => s.text).join(',')}`);
+    if (tomorrowSchedules.length > 0) contextParts.push(`내일:${tomorrowSchedules.slice(0, 3).map((s: any) => `${s.startTime||'?'} ${s.text}`).join(',')}`);
 
-**사용자 정보:**
-- 이름: ${userProfile?.name || '사용자'}
-- 직업: ${userProfile?.job || '미설정'}
+    const prompt = `${personaBlock}\n${contextParts.join('. ')}. JSON만(이모지 제외): {"closing":"마무리 인사 한 문장","encouragement":"격려 한 문장","tomorrowTip":"내일 준비 팁 한 문장","windDown":"수면/휴식 제안 한 문장"}`;
 
-**오늘 일정 현황:**
-- 전체: ${totalSchedules}개
-- 완료: ${completedCount}개 (${completionRate}%)
-- 미완료: ${uncompletedSchedules.length}개
-- 건너뜀: ${skippedSchedules.length}개
+    const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+    });
+    const responseText = result.response.text();
 
-**완료한 일정:**
-${completedSchedules.length > 0
-    ? completedSchedules.map((s: any) => `• ${s.text}`).join('\n')
-    : '• 없음'}
+    let parsed: any;
+    try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    } catch {
+        parsed = {};
+    }
 
-**미완료 일정:**
-${uncompletedSchedules.length > 0
-    ? uncompletedSchedules.map((s: any) => `• ${s.text}`).join('\n')
-    : '• 없음'}
+    // 코드가 최종 메시지 조립
+    const eveningParts: string[] = [];
 
-**내일 일정 (${tomorrowSchedules.length}개):**
-${tomorrowSchedules.length > 0
-    ? tomorrowSchedules.slice(0, 5).map((s: any) => `• ${s.startTime || '시간 미정'}: ${s.text}`).join('\n')
-    : '• 등록된 일정 없음'}
+    // 1. 마무리 인사
+    eveningParts.push(parsed.closing || `${userName}님, 오늘 하루 수고 많으셨어요 🌙`);
 
-**요청사항:**
-1. 오늘 하루를 따뜻하게 마무리하는 인사 (1-2문장)
-2. 완료율에 따른 격려 메시지
-   - 80% 이상: 축하와 칭찬
-   - 50-79%: 격려와 긍정적 피드백
-   - 50% 미만: 따뜻한 위로와 내일 응원
-3. 미완료 작업에 대한 부드러운 언급 (있다면)
-4. 내일 준비 tip (첫 번째 일정 기준)
-5. Wind-down 제안 (휴식, 수면 준비 등)
+    // 2. 성과 (코드)
+    if (totalSchedules > 0) {
+        eveningParts.push(`📊 오늘의 성과: ${completedCount}/${totalSchedules}개 완료 (${completionRate}%)`);
+    }
 
-**응답 형식:**
-자연스러운 한국어 메시지로 작성하세요. 이모지를 적절히 사용하세요.
-존댓말을 사용하고, 200자 내외로 간결하게 작성하세요.`;
+    // 3. 격려 (AI)
+    if (parsed.encouragement) {
+        eveningParts.push(parsed.encouragement);
+    } else if (completionRate >= 80) {
+        eveningParts.push('오늘 정말 잘해내셨어요! 👏');
+    } else if (completionRate >= 50) {
+        eveningParts.push('절반 이상 해내신 것도 대단해요 💪');
+    } else {
+        eveningParts.push('쉬어가는 것도 중요해요. 내일 다시 시작하면 돼요 ☕');
+    }
 
-    const result = await model.generateContent(prompt);
-    const eveningMessage = result.response.text();
+    // 4. 미완료 (코드)
+    if (uncompletedSchedules.length > 0 && uncompletedSchedules.length <= 3) {
+        eveningParts.push(`⏳ ${uncompletedSchedules.map((s: any) => s.text).join(', ')} — 내일로 미뤄도 괜찮아요`);
+    }
+
+    // 5. 내일 준비 (AI)
+    if (parsed.tomorrowTip) {
+        eveningParts.push(`📋 ${parsed.tomorrowTip}`);
+    }
+
+    // 6. Wind-down (AI)
+    if (parsed.windDown) {
+        eveningParts.push(`🌙 ${parsed.windDown}`);
+    } else {
+        eveningParts.push('🌙 편안한 밤 보내세요 😴');
+    }
+
+    const eveningMessage = eveningParts.join('\n\n');
 
     // 기분 분석 (완료율 기반)
     let mood: 'positive' | 'neutral' | 'negative' = 'neutral';

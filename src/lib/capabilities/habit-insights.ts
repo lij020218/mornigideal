@@ -1,14 +1,11 @@
 /**
  * Habit Insights Capability
  *
- * habit-analysis API 라우트에서 추출한 핵심 로직.
- * 7일 패턴 분석 + GPT-5-MINI, 6시간 Supabase 캐시.
+ * 7일 패턴 분석 — AI 호출 제거, 규칙 기반 인사이트 생성.
+ * 6시간 Supabase 캐시 유지.
  */
 
-import OpenAI from 'openai';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { logOpenAIUsage } from '@/lib/openai-usage';
-import { MODELS } from '@/lib/models';
 import {
     registerCapability,
     type CapabilityResult,
@@ -17,9 +14,78 @@ import {
 } from '@/lib/agent-capabilities';
 import { logger } from '@/lib/logger';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+/**
+ * 카테고리 분류
+ */
+function categorizeSchedule(text: string): string {
+    const t = text.toLowerCase();
+    if (/운동|헬스|조깅|스트레칭|요가|필라테스|러닝|수영|등산|웨이트|자전거/.test(t)) return 'exercise';
+    if (/공부|독서|학습|강의|수업|시험|과제|코딩|영어|토익/.test(t)) return 'study';
+    if (/업무|회의|미팅|출근|퇴근|발표|보고서|프로젝트/.test(t)) return 'work';
+    if (/휴식|취침|명상|수면|낮잠|기상|힐링/.test(t)) return 'rest';
+    return 'hobby';
+}
+
+/**
+ * 규칙 기반 인사이트 생성
+ */
+function generateRuleBasedInsight(
+    categories: Record<string, number>,
+    totalCount: number,
+    completedCount: number,
+): HabitInsightsResult {
+    const total = totalCount;
+    const rate = total > 0 ? completedCount / total : 0;
+
+    // 우선순위 규칙 (위에서부터 매칭되면 반환)
+
+    // 1. 일정 자체가 없음
+    if (total === 0) {
+        return { insight: '이번 주 일정이 비어있어요', suggestion: '작은 일정부터 추가해보시는 건 어떨까요', emoji: '📝', category: 'consistency' };
+    }
+
+    // 2. 완료율 기반
+    if (rate >= 0.9 && total >= 5) {
+        return { insight: '이번 주 완료율이 뛰어나요', suggestion: '이 페이스를 유지해보세요!', emoji: '🏆', category: 'consistency' };
+    }
+    if (rate < 0.3 && total >= 3) {
+        return { insight: '이번 주 완료율이 낮아요', suggestion: '일정을 줄여 집중해보시는 건 어떨까요', emoji: '🎯', category: 'productivity' };
+    }
+
+    // 3. 운동 없음
+    if (categories.exercise === 0 && total >= 3) {
+        return { insight: '이번 주 운동 일정이 없어요', suggestion: '가벼운 스트레칭부터 시작해보세요', emoji: '💪', category: 'exercise' };
+    }
+
+    // 4. 휴식 없이 공부/업무만
+    if (categories.rest === 0 && (categories.study + categories.work) >= 4) {
+        return { insight: '공부와 업무에 집중하고 계시네요', suggestion: '충분한 휴식도 챙겨보시는 건 어떨까요', emoji: '☕', category: 'balance' };
+    }
+
+    // 5. 공부에 집중
+    if (categories.study >= 3 && categories.study > categories.work) {
+        return { insight: '학습에 열심히 투자하고 계세요', suggestion: '이 흐름을 이어가면 목표에 가까워져요', emoji: '📚', category: 'productivity' };
+    }
+
+    // 6. 운동 꾸준
+    if (categories.exercise >= 3) {
+        return { insight: '운동을 꾸준히 하고 계시네요', suggestion: '이 루틴을 유지하면 좋겠어요!', emoji: '🔥', category: 'exercise' };
+    }
+
+    // 7. 다양한 활동
+    const activeCategories = Object.values(categories).filter(v => v > 0).length;
+    if (activeCategories >= 3) {
+        return { insight: '다양한 활동을 하고 계세요', suggestion: '이 균형을 유지해보세요!', emoji: '🌈', category: 'balance' };
+    }
+
+    // 8. 꾸준함
+    if (total >= 5) {
+        return { insight: '꾸준히 일정을 관리하고 계세요', suggestion: '이 페이스를 유지하면 목표 달성!', emoji: '🔥', category: 'consistency' };
+    }
+
+    // 9. 기본
+    return { insight: '일정 관리를 시작하셨군요', suggestion: '하루 2-3개 목표가 적당해요', emoji: '✨', category: 'productivity' };
+}
 
 /**
  * 습관 인사이트 핵심 로직
@@ -85,91 +151,13 @@ export async function generateHabitInsights(
         };
 
         recentSchedules.forEach((s: any) => {
-            const text = s.text?.toLowerCase() || '';
-            if (text.includes('운동') || text.includes('헬스') || text.includes('조깅') || text.includes('스트레칭')) {
-                categories.exercise++;
-            } else if (text.includes('공부') || text.includes('독서') || text.includes('학습') || text.includes('강의')) {
-                categories.study++;
-            } else if (text.includes('업무') || text.includes('회의') || text.includes('미팅')) {
-                categories.work++;
-            } else if (text.includes('휴식') || text.includes('취침') || text.includes('명상')) {
-                categories.rest++;
-            } else {
-                categories.hobby++;
-            }
+            categories[categorizeSchedule(s.text || '')]++;
         });
 
-        // GPT로 인사이트 생성
-        const schedulesSummary = recentSchedules.map((s: any) =>
-            `${s.text} (${s.startTime || '시간없음'})`
-        ).join(', ');
+        const completedCount = recentSchedules.filter((s: any) => s.completed).length;
 
-        const prompt = `사용자의 최근 7일 일정을 분석하여 전문 비서처럼 인사이트를 제공해주세요.
-
-사용자 정보:
-- 직업: ${profile.job || '직장인'}
-- 목표: ${profile.goal || '자기계발'}
-
-최근 일정 목록: ${schedulesSummary || '없음'}
-
-카테고리별 일정 수:
-- 운동: ${categories.exercise}개
-- 공부/학습: ${categories.study}개
-- 업무/회의: ${categories.work}개
-- 휴식: ${categories.rest}개
-
-중요한 규칙:
-1. insight와 suggestion은 논리적으로 일관성이 있어야 합니다.
-2. 부족한 것을 지적했으면, 그것을 보완하는 제안을 해주세요.
-3. 전문 비서처럼 정중하고 격식있는 말투를 사용하세요.
-4. insight는 현재 상황을 간결하게, suggestion은 구체적인 행동을 제안하세요.
-
-다음 JSON 형식으로만 응답해주세요:
-{
-  "insight": "현재 상태 분석 (15자 이내, 명사형)",
-  "suggestion": "정중한 제안 (25자 이내, ~하시는 건 어떨까요 형식)",
-  "emoji": "관련 이모지 1개",
-  "category": "exercise/productivity/balance/consistency 중 하나"
-}`;
-
-        const response = await openai.chat.completions.create({
-            model: MODELS.GPT_5_MINI,
-            messages: [
-                { role: 'system', content: '당신은 전문 개인 비서입니다. 정중하고 격식있는 말투로 사용자의 일정을 분석합니다. 항상 JSON 형식으로만 응답하세요.' },
-                { role: 'user', content: prompt }
-            ],
-            temperature: 1.0,
-            response_format: { type: "json_object" },
-        });
-
-        const content = response.choices[0]?.message?.content || '';
-
-        const usage = response.usage;
-        if (usage) {
-            await logOpenAIUsage(email, MODELS.GPT_5_MINI, 'habit-analysis', usage.prompt_tokens, usage.completion_tokens);
-        }
-
-        let result: HabitInsightsResult;
-
-        try {
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                result = JSON.parse(jsonMatch[0]);
-            } else {
-                throw new Error('No JSON in response');
-            }
-        } catch {
-            // Fallback
-            if (categories.exercise === 0 && recentSchedules.length > 0) {
-                result = { insight: '이번 주 운동 일정이 없어요', suggestion: '가벼운 스트레칭부터 시작해보세요!', emoji: '💪', category: 'exercise' };
-            } else if (categories.study > categories.rest) {
-                result = { insight: '열심히 공부 중이시네요!', suggestion: '충분한 휴식도 잊지 마세요', emoji: '📚', category: 'balance' };
-            } else if (recentSchedules.length >= 5) {
-                result = { insight: '꾸준히 일정을 관리 중!', suggestion: '이 페이스 유지하면 목표 달성!', emoji: '🔥', category: 'consistency' };
-            } else {
-                result = { insight: '일정을 더 채워보세요', suggestion: '작은 목표부터 시작해봐요', emoji: '✨', category: 'productivity' };
-            }
-        }
+        // 규칙 기반 인사이트 생성
+        const result = generateRuleBasedInsight(categories, recentSchedules.length, completedCount);
 
         // Supabase 캐시 저장
         await supabaseAdmin
@@ -183,14 +171,14 @@ export async function generateHabitInsights(
                 onConflict: 'email,date'
             });
 
-        return { success: true, data: result, costTier: 'cheap', cachedHit: false };
+        return { success: true, data: result, costTier: 'free', cachedHit: false };
     } catch (error) {
         logger.error('[HabitInsights] Error:', error);
         return {
             success: false,
             error: 'Failed to generate habit insights',
             data: { insight: '분석 준비 중', suggestion: '잠시 후 다시 확인해주세요', emoji: '⏳', category: 'consistency' },
-            costTier: 'cheap',
+            costTier: 'free',
             cachedHit: false,
         };
     }
@@ -200,6 +188,6 @@ export async function generateHabitInsights(
 registerCapability<HabitInsightsParams, HabitInsightsResult>({
     name: 'habit_insights',
     description: '7일 습관 패턴 분석',
-    costTier: 'cheap',
+    costTier: 'free',
     execute: generateHabitInsights,
 });

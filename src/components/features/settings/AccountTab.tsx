@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
     Trash2, RefreshCw, Check, X,
     User, AlertTriangle, Eye, EyeOff,
-    Download, Info, Shield,
+    Download, Info, Shield, Lock,
     Mail, Database, Hash, CalendarDays, FileText
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,17 +33,14 @@ interface AccountTabProps {
 }
 
 export function AccountTab({ email, username, session, isGoogleConnected, router, profile, userSettings, notifications, appearance, aiSettings }: AccountTabProps) {
-    // Gmail states
-    const [gmailLinking, setGmailLinking] = useState(false);
-    const [gmailLinked, setGmailLinked] = useState<string | null>(null);
-
-    // Slack states
-    const [slackLinking, setSlackLinking] = useState(false);
-    const [slackLinked, setSlackLinked] = useState<{ teamName: string; slackUserId: string } | null>(null);
-
-    // Google Calendar states
-    const [gcalLinking, setGcalLinking] = useState(false);
-    const [gcalLinked, setGcalLinked] = useState(false);
+    // Password change states
+    const [showPasswordChange, setShowPasswordChange] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [showCurrentPw, setShowCurrentPw] = useState(false);
+    const [showNewPw, setShowNewPw] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
 
     // Account deletion states
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -50,207 +48,43 @@ export function AccountTab({ email, username, session, isGoogleConnected, router
     const [showPassword, setShowPassword] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
-    // Check Gmail link
-    React.useEffect(() => {
-        const checkGmailLinked = async () => {
-            try {
-                const response = await fetch('/api/auth/check-gmail-link');
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.linked) setGmailLinked(data.gmailEmail);
-                }
-            } catch (error) {
-                console.error('Failed to check Gmail link:', error);
-            }
-        };
-
-        if (!isGoogleConnected && session?.user?.email) {
-            checkGmailLinked();
+    const handleChangePassword = async () => {
+        if (!currentPassword || !newPassword) {
+            toast.warning("모든 필드를 입력해주세요.");
+            return;
         }
-    }, [session, isGoogleConnected]);
-
-    // Check Slack link
-    React.useEffect(() => {
-        const checkSlackLinked = async () => {
-            try {
-                const response = await fetch('/api/auth/check-slack-link');
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.linked) {
-                        setSlackLinked({ teamName: data.teamName, slackUserId: data.slackUserId });
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to check Slack link:', error);
-            }
-        };
-
-        if (session?.user?.email) {
-            checkSlackLinked();
+        if (newPassword.length < 8) {
+            toast.warning("새 비밀번호는 8자 이상이어야 합니다.");
+            return;
         }
-    }, [session]);
-
-    // Check Google Calendar link (localStorage 캐시 기반)
-    React.useEffect(() => {
-        if (session?.user?.email) {
-            const cached = localStorage.getItem('gcal_linked');
-            if (cached === 'true') {
-                setGcalLinked(true);
-            }
-        }
-    }, [session]);
-
-    const handleLinkGmail = async () => {
-        if (!session?.user?.email) {
-            toast.error('로그인이 필요합니다');
+        if (newPassword !== confirmPassword) {
+            toast.warning("새 비밀번호가 일치하지 않습니다.");
             return;
         }
 
-        setGmailLinking(true);
+        setChangingPassword(true);
         try {
-            const response = await fetch('/api/auth/link-gmail');
-            const { authUrl } = await response.json();
+            const response = await fetch("/api/user/account", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ currentPassword, newPassword }),
+            });
 
-            const width = 600;
-            const height = 700;
-            const left = window.screen.width / 2 - width / 2;
-            const top = window.screen.height / 2 - height / 2;
+            const data = await response.json();
 
-            const popup = window.open(
-                authUrl,
-                'Gmail 연동',
-                `width=${width},height=${height},left=${left},top=${top}`
-            );
-
-            let safetyTimeout: NodeJS.Timeout;
-
-            const handleMessage = (event: MessageEvent) => {
-                if (event.data.type === 'gmail-link-success') {
-                    clearTimeout(safetyTimeout);
-                    setGmailLinked(event.data.data.gmailEmail);
-                    setGmailLinking(false);
-                    window.removeEventListener('message', handleMessage);
-                } else if (event.data.type === 'gmail-link-error') {
-                    clearTimeout(safetyTimeout);
-                    setGmailLinking(false);
-                    toast.error('Gmail 연동에 실패했습니다');
-                    window.removeEventListener('message', handleMessage);
-                }
-            };
-
-            window.addEventListener('message', handleMessage);
-            safetyTimeout = setTimeout(() => {
-                setGmailLinking(false);
-                window.removeEventListener('message', handleMessage);
-            }, 120000);
+            if (response.ok) {
+                toast.success("비밀번호가 변경되었습니다.");
+                setShowPasswordChange(false);
+                setCurrentPassword("");
+                setNewPassword("");
+                setConfirmPassword("");
+            } else {
+                toast.error(data.error || "비밀번호 변경에 실패했습니다.");
+            }
         } catch (error) {
-            console.error('Link Gmail error:', error);
-            toast.error('Gmail 연동 중 오류가 발생했습니다');
-            setGmailLinking(false);
-        }
-    };
-
-    const handleLinkGcal = async () => {
-        if (!session?.user?.email) {
-            toast.error('로그인이 필요합니다');
-            return;
-        }
-
-        setGcalLinking(true);
-        try {
-            const response = await fetch('/api/auth/link-google-calendar');
-            const { authUrl } = await response.json();
-
-            const width = 600;
-            const height = 700;
-            const left = window.screen.width / 2 - width / 2;
-            const top = window.screen.height / 2 - height / 2;
-
-            const popup = window.open(
-                authUrl,
-                'Google 캘린더 연동',
-                `width=${width},height=${height},left=${left},top=${top}`
-            );
-
-            let safetyTimeout: NodeJS.Timeout;
-
-            const handleMessage = (event: MessageEvent) => {
-                if (event.data.type === 'gcal-link-success') {
-                    clearTimeout(safetyTimeout);
-                    setGcalLinked(true);
-                    localStorage.setItem('gcal_linked', 'true');
-                    setGcalLinking(false);
-                    window.removeEventListener('message', handleMessage);
-                } else if (event.data.type === 'gcal-link-error') {
-                    clearTimeout(safetyTimeout);
-                    setGcalLinking(false);
-                    toast.error('Google 캘린더 연동에 실패했습니다');
-                    window.removeEventListener('message', handleMessage);
-                }
-            };
-
-            window.addEventListener('message', handleMessage);
-            safetyTimeout = setTimeout(() => {
-                setGcalLinking(false);
-                window.removeEventListener('message', handleMessage);
-            }, 120000);
-        } catch (error) {
-            console.error('Link GCal error:', error);
-            toast.error('Google 캘린더 연동 중 오류가 발생했습니다');
-            setGcalLinking(false);
-        }
-    };
-
-    const handleLinkSlack = async () => {
-        if (!session?.user?.email) {
-            toast.error('로그인이 필요합니다');
-            return;
-        }
-
-        setSlackLinking(true);
-        try {
-            const response = await fetch('/api/auth/link-slack');
-            const { authUrl } = await response.json();
-
-            const width = 600;
-            const height = 700;
-            const left = window.screen.width / 2 - width / 2;
-            const top = window.screen.height / 2 - height / 2;
-
-            const popup = window.open(
-                authUrl,
-                '슬랙 연동',
-                `width=${width},height=${height},left=${left},top=${top}`
-            );
-
-            let safetyTimeout: NodeJS.Timeout;
-
-            const handleMessage = (event: MessageEvent) => {
-                if (event.data.type === 'slack-link-success') {
-                    clearTimeout(safetyTimeout);
-                    setSlackLinked({
-                        teamName: event.data.data.teamName,
-                        slackUserId: event.data.data.slackUserId,
-                    });
-                    setSlackLinking(false);
-                    window.removeEventListener('message', handleMessage);
-                } else if (event.data.type === 'slack-link-error') {
-                    clearTimeout(safetyTimeout);
-                    setSlackLinking(false);
-                    toast.error('슬랙 연동에 실패했습니다');
-                    window.removeEventListener('message', handleMessage);
-                }
-            };
-
-            window.addEventListener('message', handleMessage);
-            safetyTimeout = setTimeout(() => {
-                setSlackLinking(false);
-                window.removeEventListener('message', handleMessage);
-            }, 120000);
-        } catch (error) {
-            console.error('Link Slack error:', error);
-            toast.error('슬랙 연동 중 오류가 발생했습니다');
-            setSlackLinking(false);
+            toast.error("비밀번호 변경 중 오류가 발생했습니다.");
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -328,165 +162,132 @@ export function AccountTab({ email, username, session, isGoogleConnected, router
                 </CardContent>
             </Card>
 
-            {/* Gmail Connection */}
+            {/* Password Change */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <Mail className="w-5 h-5 text-primary" />
-                        구글 계정 연동
+                        <Lock className="w-5 h-5 text-primary" />
+                        비밀번호 변경
                     </CardTitle>
-                    <CardDescription>Gmail 이메일 요약 기능을 사용하세요</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isGoogleConnected || gmailLinked ? (
-                        <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-green-500" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-green-700 dark:text-green-300">Gmail 연동됨</p>
-                                    <p className="text-sm text-green-600 dark:text-green-400">
-                                        {gmailLinked || session?.user?.email}
-                                    </p>
-                                </div>
-                            </div>
-                            <Button variant="outline" size="sm" className="text-red-500 border-red-500/30 hover:bg-red-500/10">
-                                <X className="w-4 h-4 mr-2" />
-                                해제
-                            </Button>
-                        </div>
+                    {!showPasswordChange ? (
+                        <Button
+                            variant="outline"
+                            className="w-full justify-start gap-2"
+                            onClick={() => setShowPasswordChange(true)}
+                        >
+                            <Lock className="w-4 h-4" />
+                            비밀번호 변경하기
+                        </Button>
                     ) : (
                         <div className="space-y-4">
-                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                                <p className="text-sm mb-3">구글 계정 연동 시 사용 가능한 기능:</p>
-                                <ul className="space-y-2 text-sm">
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-blue-500" />
-                                        읽지 않은 중요 이메일 선별
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-blue-500" />
-                                        AI 기반 이메일 요약
-                                    </li>
-                                </ul>
+                            <div className="space-y-2">
+                                <Label>현재 비밀번호</Label>
+                                <div className="relative">
+                                    <Input
+                                        type={showCurrentPw ? "text" : "password"}
+                                        value={currentPassword}
+                                        onChange={(e) => setCurrentPassword(e.target.value)}
+                                        placeholder="현재 비밀번호"
+                                        className="pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCurrentPw(!showCurrentPw)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                    >
+                                        {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
-                            <Button className="w-full gap-2" onClick={handleLinkGmail} disabled={gmailLinking}>
-                                {gmailLinking ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Mail className="w-4 h-4" />
-                                )}
-                                {gmailLinking ? "연동 중..." : "Gmail 연동하기"}
-                            </Button>
+                            <div className="space-y-2">
+                                <Label>새 비밀번호</Label>
+                                <div className="relative">
+                                    <Input
+                                        type={showNewPw ? "text" : "password"}
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="8자 이상"
+                                        className="pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPw(!showNewPw)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                    >
+                                        {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>새 비밀번호 확인</Label>
+                                <Input
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    placeholder="새 비밀번호 재입력"
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={() => {
+                                        setShowPasswordChange(false);
+                                        setCurrentPassword("");
+                                        setNewPassword("");
+                                        setConfirmPassword("");
+                                    }}
+                                >
+                                    취소
+                                </Button>
+                                <Button
+                                    className="flex-1"
+                                    onClick={handleChangePassword}
+                                    disabled={changingPassword}
+                                >
+                                    {changingPassword ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                                    {changingPassword ? "변경 중..." : "변경"}
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </CardContent>
             </Card>
 
-            {/* Google Calendar Connection */}
-            <Card>
+            {/* External Integrations - Coming Soon */}
+            <Card className="opacity-60">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <CalendarDays className="w-5 h-5 text-primary" />
-                        Google 캘린더 연동
+                        <Mail className="w-5 h-5 text-muted-foreground" />
+                        외부 서비스 연동
+                        <Badge variant="secondary" className="text-xs ml-auto">준비 중</Badge>
                     </CardTitle>
-                    <CardDescription>캘린더 일정을 자동으로 동기화합니다</CardDescription>
+                    <CardDescription>아래 연동 기능은 향후 업데이트에서 제공됩니다</CardDescription>
                 </CardHeader>
-                <CardContent>
-                    {gcalLinked ? (
-                        <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-green-500" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-green-700 dark:text-green-300">캘린더 연동됨</p>
-                                    <p className="text-sm text-green-600 dark:text-green-400">자동 동기화 활성</p>
-                                </div>
-                            </div>
+                <CardContent className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                        <Mail className="w-5 h-5 text-muted-foreground" />
+                        <div className="flex-1">
+                            <p className="text-sm font-medium">Gmail 연동</p>
+                            <p className="text-xs text-muted-foreground">이메일 요약 및 일정 자동 추출</p>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                                <p className="text-sm mb-3">Google 캘린더 연동 시 사용 가능한 기능:</p>
-                                <ul className="space-y-2 text-sm">
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-blue-500" />
-                                        캘린더 일정 자동 가져오기
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-blue-500" />
-                                        AI가 추가한 일정 캘린더에 반영
-                                    </li>
-                                </ul>
-                            </div>
-                            <Button className="w-full gap-2" onClick={handleLinkGcal} disabled={gcalLinking}>
-                                {gcalLinking ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <CalendarDays className="w-4 h-4" />
-                                )}
-                                {gcalLinking ? "연동 중..." : "Google 캘린더 연동하기"}
-                            </Button>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                        <CalendarDays className="w-5 h-5 text-muted-foreground" />
+                        <div className="flex-1">
+                            <p className="text-sm font-medium">Google 캘린더 연동</p>
+                            <p className="text-xs text-muted-foreground">캘린더 일정 자동 동기화</p>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Slack Connection */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Hash className="w-5 h-5 text-primary" />
-                        슬랙 연동
-                    </CardTitle>
-                    <CardDescription>슬랙 미확인 메시지 요약 및 알림 전송</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {slackLinked ? (
-                        <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-green-500" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-green-700 dark:text-green-300">슬랙 연동됨</p>
-                                    <p className="text-sm text-green-600 dark:text-green-400">
-                                        {slackLinked.teamName} 워크스페이스
-                                    </p>
-                                </div>
-                            </div>
-                            <Button variant="outline" size="sm" className="text-red-500 border-red-500/30 hover:bg-red-500/10">
-                                <X className="w-4 h-4 mr-2" />
-                                해제
-                            </Button>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                        <Hash className="w-5 h-5 text-muted-foreground" />
+                        <div className="flex-1">
+                            <p className="text-sm font-medium">Slack 연동</p>
+                            <p className="text-xs text-muted-foreground">미확인 메시지 요약 및 알림</p>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                                <p className="text-sm mb-3">슬랙 연동 시 사용 가능한 기능:</p>
-                                <ul className="space-y-2 text-sm">
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-purple-500" />
-                                        미확인 메시지/DM 아침 요약
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <Check className="w-4 h-4 text-purple-500" />
-                                        Fi.eri 알림을 슬랙으로 전송
-                                    </li>
-                                </ul>
-                            </div>
-                            <Button className="w-full gap-2" onClick={handleLinkSlack} disabled={slackLinking}>
-                                {slackLinking ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Hash className="w-4 h-4" />
-                                )}
-                                {slackLinking ? "연동 중..." : "슬랙 연동하기"}
-                            </Button>
-                        </div>
-                    )}
+                    </div>
                 </CardContent>
             </Card>
 

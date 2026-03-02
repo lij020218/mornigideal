@@ -108,7 +108,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
           { role: "user", content: gradingPrompt }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.3,
+        temperature: 1.0,
       });
 
       const result = JSON.parse(grading.choices[0].message.content || "{}");
@@ -194,7 +194,7 @@ ${q.keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')}
         },
         { role: "user", content: advicePrompt }
       ],
-      temperature: 0.7,
+      temperature: 1.0,
     });
 
     const advice = adviceResult.choices[0].message.content || "계속해서 학습을 이어가세요!";

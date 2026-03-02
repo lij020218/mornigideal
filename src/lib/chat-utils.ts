@@ -107,9 +107,21 @@ export function parseRepeatDays(text: string): number[] | null {
 // 시간 검증 및 조정 (과거 시간 방지)
 // ============================================
 
-export function validateAndAdjustTime(suggestedTime: string, currentTime: string): string {
-    const [suggestedHour, suggestedMinute] = suggestedTime.split(":").map(Number);
+export function validateAndAdjustTime(suggestedTime: string, currentTime: string, isToday = true): string {
+    // 내일/미래 일정이면 AM/PM 추론 + 과거 시간 조정 모두 스킵
+    if (!isToday) return suggestedTime;
+
+    let [suggestedHour, suggestedMinute] = suggestedTime.split(":").map(Number);
     const [currentHour, currentMinute] = currentTime.split(":").map(Number);
+
+    // AM/PM 추론: 1-12시 범위이고 현재 시간보다 과거면 오후(+12)로 해석
+    if (suggestedHour >= 1 && suggestedHour <= 12) {
+        const suggestedMin = suggestedHour * 60 + (suggestedMinute || 0);
+        const currentMin = currentHour * 60 + currentMinute;
+        if (suggestedMin < currentMin && (suggestedHour + 12) <= 23) {
+            suggestedHour += 12;
+        }
+    }
 
     const suggestedMinutes = suggestedHour * 60 + (suggestedMinute || 0);
     const currentMinutes = currentHour * 60 + currentMinute;
@@ -124,7 +136,7 @@ export function validateAndAdjustTime(suggestedTime: string, currentTime: string
         }
         return "";
     }
-    return suggestedTime;
+    return `${String(suggestedHour).padStart(2, "0")}:${String(suggestedMinute || 0).padStart(2, "0")}`;
 }
 
 // ============================================
@@ -250,6 +262,7 @@ export function getBehaviorGuide(intent: UserIntent): string {
     const guides: Record<UserIntent, string> = {
         schedule: `## 행동 가이드
 - **즉시 실행**: "추가해줘/잡아줘/등록해줘" → 바로 actions에 포함. 질문 금지.
+- **날짜 매핑 필수**: "내일", "모레" 등은 위 📅 날짜 매핑의 정확한 날짜 문자열을 specificDate에 사용. 절대 오늘 날짜로 넣지 마세요.
 - **일정 이름 정규화**: 아침/점심/저녁→"아침 식사"/"점심 식사"/"저녁 식사", 잠→"취침", 일어나→"기상", 헬스→"운동"
 - **메모 패턴**: "'세부내용'으로 일정" → text: "일정유형", memo: "세부내용"
 - **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]
@@ -319,10 +332,18 @@ export function getBehaviorGuide(intent: UserIntent): string {
 // ============================================
 
 export function getExamplesForIntent(intent: UserIntent, currentDate: string): string {
+    // 내일 날짜 계산 (예시용)
+    const [y, m, d] = currentDate.split('-').map(Number);
+    const tomorrowDate = new Date(y, m - 1, d + 1);
+    const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
+
     if (intent === 'schedule') {
         return `## Examples
 User: "오후 3시에 헬스장에서 운동 잡아줘"
 {"message": "오후 3시 운동 추가했어요! 💪", "actions": [{"type": "add_schedule", "label": "운동 추가", "data": {"text": "운동", "startTime": "15:00", "endTime": "16:00", "specificDate": "${currentDate}", "daysOfWeek": null, "color": "primary", "location": "헬스장", "memo": ""}}]}
+
+User: "내일 5시에 기상 잡아줘"
+{"message": "내일 오전 5시 기상 일정 추가했어요! ☀️", "actions": [{"type": "add_schedule", "label": "기상 추가", "data": {"text": "기상", "startTime": "05:00", "endTime": "06:00", "specificDate": "${tomorrowStr}", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}
 
 User: "매일 아침 9시 기상 삭제해줘"
 {"message": "매일 오전 9시 기상 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}`;
@@ -468,7 +489,10 @@ export function postProcessActions(
                 action.data.text = normalizeScheduleName(action.data.text);
             }
             if (action.data.startTime && currentTime) {
-                const adjusted = validateAndAdjustTime(action.data.startTime, currentTime);
+                // 내일/미래 일정이면 AM/PM 추론 + 과거 시간 조정 스킵
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                const isToday = !action.data.specificDate || action.data.specificDate === todayStr;
+                const adjusted = validateAndAdjustTime(action.data.startTime, currentTime, isToday);
                 if (adjusted === "") {
                     return null;
                 }
@@ -602,6 +626,23 @@ export function assembleContextBlocks(params: {
 }
 
 // ============================================
+// Max 플랜 전용 고맥락 응답 가이드 (정적 상수)
+// ============================================
+
+const MAX_PLAN_GUIDE = `
+## 고맥락 응답 가이드 (자비스 모드)
+
+🎯 핵심 원칙: "조언(Advice) < 전략적 판단(Strategic Judgment) + 실행(Action)"
+
+1. **일정 연쇄 관리**: 일정 하나가 아닌 연쇄(체인)로 관리. 충돌/간격은 자동 조정 후 보고. "~하세요" 대신 "~했습니다" 완료형.
+2. **인과관계 설명**: "내일 [시간]에 [일정]이 있어 [X]시간 수면 확보" 식으로 연결.
+3. **뻔한 조언 금지**: "카페인 피하세요" 대신 "방해 금지 모드를 켤까요?" 등 실질적 제안.
+4. **성과 요약 보고**: 구체적 수치 포함. "완료율 X%로 지난주 대비 Y% 상승/하락".
+5. **참모 역할**: "등록했습니다" → "반영했습니다". "잘 자세요" → "내일 브리핑 준비해두겠습니다".
+6. **데이터 기반 인사이트**: 완료율 추이, 카테고리별 성과, 벤치마크 제공.
+`;
+
+// ============================================
 // 시스템 프롬프트 조립
 // ============================================
 
@@ -654,6 +695,8 @@ ${getBehaviorGuide(intent)}
 ${getExamplesForIntent(intent, currentDate)}
 
 **CRITICAL**: 요청에 실행할 동작이 있으면 반드시 actions에 포함!
+
+${userPlan === 'Max' ? MAX_PLAN_GUIDE : ''}
 
 ${SAFETY_SYSTEM_RULES}
 

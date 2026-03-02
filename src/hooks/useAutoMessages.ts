@@ -368,6 +368,10 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                     });
             }
 
+            // 빈 시간대 일정 추천은 서버 크론(idle-schedule-nudge)이 처리
+            // → proactive notification으로 저장 → 위 proactive 체크에서 채팅에 표시
+            // → chat_history에도 자동 저장됨
+
             // 일정이 없으면 여기서 종료
             if (todaySchedules.length === 0) {
                 return;
@@ -443,9 +447,6 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
 
 
                 if (currentMinutes >= startMinutes && currentMinutes < startMinutes + 5 && !alreadySentStart) {
-                    // busy 모드: 중요 일정만 start 발송
-                    if (dayDensity === 'busy' && !isImportantSchedule(schedule.text)) {
-                    } else {
                     localStorage.setItem(sentStartKey, 'true');
 
                     // 일정 특성에 맞는 시작 메시지 생성
@@ -532,8 +533,7 @@ export function useAutoMessages(deps: AutoMessageDeps): void {
                         content: startContent,
                         timestamp: new Date(),
                     };
-                    sendAutoMessage(message);
-                    } // end busy gate
+                    sendAutoMessage(message, true);
                 }
 
                 // 2.5. 일정 시작 30분 후 인사이트 (T+30) - work_mode 기반 결정

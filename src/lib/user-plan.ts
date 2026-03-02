@@ -200,6 +200,86 @@ async function createFreeSubscription(userId: string): Promise<void> {
 }
 
 /**
+ * 플랜명만 빠르게 조회 (단일 JOIN 쿼리)
+ * 대부분의 API 라우트에서 플랜명만 필요할 때 사용
+ */
+export async function getPlanName(email: string): Promise<string> {
+    try {
+        const userId = await getUserIdByEmail(email);
+        if (!userId) return "Free";
+
+        const { data } = await supabaseAdmin
+            .from("user_subscriptions")
+            .select("plan")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (!data) return "Free";
+        const plan = data.plan as string;
+        return plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase();
+    } catch {
+        return "Free";
+    }
+}
+
+/**
+ * 배치 플랜 조회 (cron 등 대량 처리용)
+ * emails → Map<email, planName>
+ */
+export async function getPlanNamesBatch(emails: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (emails.length === 0) return result;
+
+    try {
+        // 1. 이메일 → userId 매핑
+        const { data: users } = await supabaseAdmin
+            .from("users")
+            .select("id, email")
+            .in("email", emails);
+
+        if (!users || users.length === 0) {
+            emails.forEach(e => result.set(e, "Free"));
+            return result;
+        }
+
+        const userIdToEmail = new Map<string, string>();
+        const userIds: string[] = [];
+        for (const u of users) {
+            userIdToEmail.set(u.id, u.email);
+            userIds.push(u.id);
+        }
+
+        // 2. userId → subscription 매핑
+        const { data: subs } = await supabaseAdmin
+            .from("user_subscriptions")
+            .select("user_id, plan")
+            .in("user_id", userIds);
+
+        const subMap = new Map<string, string>();
+        if (subs) {
+            for (const s of subs) {
+                const plan = (s.plan as string) || "free";
+                subMap.set(s.user_id, plan.charAt(0).toUpperCase() + plan.slice(1).toLowerCase());
+            }
+        }
+
+        // 3. 결과 조립
+        for (const email of emails) {
+            const user = users.find(u => u.email === email);
+            if (user && subMap.has(user.id)) {
+                result.set(email, subMap.get(user.id)!);
+            } else {
+                result.set(email, "Free");
+            }
+        }
+    } catch {
+        emails.forEach(e => result.set(e, "Free"));
+    }
+
+    return result;
+}
+
+/**
  * 특정 기능 사용 가능 여부 확인
  */
 export async function canUseFeature(

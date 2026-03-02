@@ -362,130 +362,19 @@ export default function GrowthPage() {
                         />
                     </TabsContent>
 
-                    {/* Learning Tab */}
+                    {/* Learning Tab - 준비 중 */}
                     <TabsContent value="learning" className="space-y-4 sm:space-y-6">
-                        {selectedCurriculum ? (
-                            <LearningCurriculumView
-                                curriculum={selectedCurriculum}
-                                userPlan={userPlan}
-                                onClose={() => setSelectedCurriculum(null)}
-                                onStartDay={handleStartDay}
-                            />
-                        ) : (
-                            <div className="space-y-4 sm:space-y-6">
-                                {/* Plan Badge */}
-                                <div className={cn(
-                                    "flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 rounded-xl",
-                                    userPlan === "max"
-                                        ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20"
-                                        : userPlan === "pro"
-                                        ? "bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20"
-                                        : "bg-white/[0.03] border border-border/50"
-                                )}>
-                                    <div className="flex items-center gap-2 sm:gap-3">
-                                        {userPlan === "max" ? (
-                                            <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
-                                        ) : userPlan === "pro" ? (
-                                            <Star className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
-                                        ) : (
-                                            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
-                                        )}
-                                        <div>
-                                            <p className="font-medium text-xs sm:text-sm">
-                                                {userPlan === "max" ? "Max 플랜" : userPlan === "pro" ? "Pro 플랜" : "Free 플랜"}
-                                            </p>
-                                            <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                                {userPlan === "max"
-                                                    ? "AI 커리큘럼 + 15쪽 학습 슬라이드 제공"
-                                                    : "AI 맞춤 커리큘럼 제공"
-                                                }
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        onClick={() => setShowCurriculumWizard(true)}
-                                        size="sm"
-                                        className="gap-1.5 sm:gap-2 rounded-xl text-xs sm:text-sm w-full sm:w-auto"
-                                    >
-                                        <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                        새 커리큘럼
-                                    </Button>
-                                </div>
-
-                                {/* Curriculum List */}
-                                {isLoadingCurriculums ? (
-                                    <div className="flex items-center justify-center py-10 sm:py-12">
-                                        <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-primary" />
-                                    </div>
-                                ) : curriculums.length === 0 ? (
-                                    <div className="text-center py-10 sm:py-16 px-4 bg-white/[0.02] rounded-xl sm:rounded-2xl">
-                                        <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                                            <GraduationCap className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
-                                        </div>
-                                        <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">맞춤형 학습을 시작하세요</h3>
-                                        <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 max-w-sm mx-auto">
-                                            배우고 싶은 분야와 목표를 알려주시면 AI가 맞춤형 커리큘럼을 만들어 드려요
-                                        </p>
-                                        <Button
-                                            onClick={() => setShowCurriculumWizard(true)}
-                                            className="gap-1.5 sm:gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-sm"
-                                            size="sm"
-                                        >
-                                            <GraduationCap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                            학습 시작하기
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="grid gap-3 sm:gap-4">
-                                        {curriculums.map((curriculum) => (
-                                            <div
-                                                key={curriculum.id}
-                                                className="relative group"
-                                            >
-                                                <button
-                                                    onClick={() => setSelectedCurriculum(curriculum)}
-                                                    className="w-full p-3 sm:p-5 rounded-lg sm:rounded-xl bg-white/[0.03] hover:bg-white/[0.06] transition-all text-left border border-transparent hover:border-purple-500/30"
-                                                >
-                                                    <div className="flex items-start gap-3 sm:gap-4">
-                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center flex-shrink-0">
-                                                            <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
-                                                                <h3 className="font-semibold text-sm sm:text-base">{curriculum.topic}</h3>
-                                                                {curriculum.hasSlides && (
-                                                                    <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] sm:text-xs flex items-center gap-0.5 sm:gap-1">
-                                                                        <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                                                        슬라이드
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1 mb-1 sm:mb-2">
-                                                                {curriculum.reason}
-                                                            </p>
-                                                            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-muted-foreground">
-                                                                <span>
-                                                                    {LEVEL_LABELS[curriculum.currentLevel]} → {LEVEL_LABELS[curriculum.targetLevel]}
-                                                                </span>
-                                                                <span>{curriculum.duration}일 과정</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </button>
-                                                {/* Delete button */}
-                                                <button
-                                                    onClick={(e) => handleDeleteCurriculum(curriculum.id, e)}
-                                                    className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                                                    title="삭제"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                        <div className="text-center py-16 sm:py-24 px-4 bg-white/[0.02] rounded-xl sm:rounded-2xl border border-border/30">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                <GraduationCap className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
                             </div>
-                        )}
+                            <h3 className="text-lg sm:text-xl font-bold mb-2 sm:mb-3">학습 기능 준비 중</h3>
+                            <p className="text-sm sm:text-base text-muted-foreground max-w-md mx-auto">
+                                AI 맞춤형 커리큘럼과 학습 슬라이드 기능을 준비하고 있어요.
+                                <br />
+                                곧 만나볼 수 있습니다!
+                            </p>
+                        </div>
                     </TabsContent>
 
                     {/* Analytics Tab */}

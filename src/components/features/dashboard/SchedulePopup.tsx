@@ -383,11 +383,8 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
         if (isRecurring) {
-            // Determine the day of week for recurring schedule
-            // Note: weekly view should NOT create recurring schedules
-            const targetDayOfWeek = viewMode === 'daily-detail'
-                ? (selectedDate?.getDay() ?? new Date().getDay())
-                : new Date().getDay();
+            // Recurring: 반복 일정 생성
+            const targetDayOfWeek = selectedDate?.getDay() ?? new Date().getDay();
 
             // Check for time conflict
             if (hasTimeConflict(selectedTimeSlot, endTime, undefined, targetDayOfWeek)) {
@@ -470,18 +467,13 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
         const timeOfDay = getTimeOfDay(selectedTimeSlot);
 
         if (viewMode === 'weekly') {
-            // Calculate the specific date for this day in the selected week
-            const targetDate = new Date(selectedWeekStart);
-            const daysToAdd = selectedDayOfWeek === 0 ? 6 : selectedDayOfWeek - 1; // Convert to offset from Monday
-            targetDate.setDate(selectedWeekStart.getDate() + daysToAdd);
-
             // Check for time conflict
-            if (hasTimeConflict(selectedTimeSlot, endTime, targetDate)) {
+            if (hasTimeConflict(selectedTimeSlot, endTime, undefined, selectedDayOfWeek)) {
                 toast.warning('해당 시간대에 이미 일정이 있습니다.');
                 return;
             }
 
-            // Add as specific date goal (not recurring)
+            // Add as recurring schedule for the selected day
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: selectedActivity.label,
@@ -489,7 +481,7 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 startTime: selectedTimeSlot,
                 endTime: endTime,
                 color: selectedActivity.color,
-                specificDate: formatDate(targetDate), // 특정 날짜에만 추가
+                daysOfWeek: [selectedDayOfWeek],
                 notificationEnabled: notificationEnabled,
                 ...(linkedGoal && {
                     linkedGoalId: linkedGoal.id,
@@ -540,9 +532,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 return;
             }
 
-            // 목표 연결 시 날짜 범위 적용 (반복 일정)
-            const goalDateRange = linkedGoal ? getGoalDateRange(linkedGoal.type) : null;
-
             const newGoal: CustomGoal = {
                 id: Date.now().toString(),
                 text: customActivityText,
@@ -551,8 +540,6 @@ export function SchedulePopup({ isOpen, onClose, initialSchedule, initialCustomG
                 endTime: endTime,
                 color: 'primary',
                 daysOfWeek: [selectedDayOfWeek],
-                startDate: goalDateRange?.startDate || formatDate(new Date()), // 목표 시작일 또는 오늘
-                ...(goalDateRange && { endDate: goalDateRange.endDate }), // 목표 종료일
                 notificationEnabled: notificationEnabled,
                 ...(linkedGoal && { linkedGoalId: linkedGoal.id, linkedGoalType: linkedGoal.type }),
             };

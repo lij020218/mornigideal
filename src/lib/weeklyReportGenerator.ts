@@ -85,20 +85,22 @@ function getLastCompletedWeek(date: Date): { start: Date; end: Date; weekNumber:
 
     const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, ...
 
+    // 일요일 21시 이후: 이번 주(월~일) 완료로 간주
+    // 그 외: 지난 주(월~일) 반환
+    const currentHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getHours();
+
     let targetMonday: Date;
     let targetSunday: Date;
-
-    if (dayOfWeek === 0) {
-        // 일요일: 이번 주(월~일)가 완료됨 → 이번 주의 월요일 = 6일 전
+    if (dayOfWeek === 0 && currentHour >= 21) {
+        // 일요일 21시 이후: 이번 주(월~일)
         targetMonday = new Date(d);
         targetMonday.setDate(d.getDate() - 6);
         targetSunday = new Date(d);
     } else {
-        // 월~토: 지난 주(월~일) 반환
-        const daysToSubtract = dayOfWeek - 1; // 월=0, 화=1, ...
+        // 월~토, 또는 일요일 21시 이전: 지난 주
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         const thisMonday = new Date(d);
-        thisMonday.setDate(d.getDate() - daysToSubtract);
-
+        thisMonday.setDate(d.getDate() - daysToMonday);
         targetMonday = new Date(thisMonday);
         targetMonday.setDate(thisMonday.getDate() - 7);
         targetSunday = new Date(targetMonday);
@@ -161,24 +163,58 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const profile = userData?.profile || {};
     const customGoals = profile.customGoals || [];
 
-    // 1. Schedule Analysis (지난 주간 월~일 일정 분석)
-    const lastWeekSchedules = customGoals.filter((goal: CustomGoal) => {
-        if (!goal.specificDate) return false;
-        const goalDate = new Date(goal.specificDate);
-        return goalDate >= oneWeekAgo && goalDate <= weekEnd;
-    });
+    // 주간 날짜 목록 생성 (월~일, 7일)
+    const getWeekDates = (weekStart: Date): { dateStr: string; dayOfWeek: number }[] => {
+        const dates: { dateStr: string; dayOfWeek: number }[] = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(weekStart);
+            d.setDate(weekStart.getDate() + i);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            dates.push({ dateStr, dayOfWeek: d.getDay() });
+        }
+        return dates;
+    };
 
-    const previousWeekSchedules = customGoals.filter((goal: CustomGoal) => {
-        if (!goal.specificDate) return false;
-        const goalDate = new Date(goal.specificDate);
-        return goalDate >= twoWeeksAgo && goalDate <= twoWeeksAgoEnd;
-    });
+    // 일정이 특정 주에 해당하는 횟수 계산 (반복 일정 포함)
+    const getSchedulesForWeek = (goals: CustomGoal[], weekStart: Date, weekEnd: Date) => {
+        const weekDates = getWeekDates(weekStart);
+        const result: { goal: CustomGoal; date: string }[] = [];
+
+        for (const goal of goals) {
+            // specificDate 일정: 해당 주에 속하는지 확인
+            if (goal.specificDate) {
+                const goalDate = new Date(goal.specificDate);
+                if (goalDate >= weekStart && goalDate <= weekEnd) {
+                    result.push({ goal, date: goal.specificDate });
+                }
+            }
+            // 반복 일정: daysOfWeek의 각 요일이 해당 주에 해당하면 추가
+            else if (goal.daysOfWeek && goal.daysOfWeek.length > 0) {
+                // startDate/endDate 범위 체크
+                for (const wd of weekDates) {
+                    if (!goal.daysOfWeek.includes(wd.dayOfWeek)) continue;
+                    if (goal.startDate && wd.dateStr < goal.startDate) continue;
+                    if (goal.endDate && wd.dateStr > goal.endDate) continue;
+                    result.push({ goal, date: wd.dateStr });
+                }
+            }
+        }
+        return result;
+    };
+
+    // 1. Schedule Analysis (지난 주간 월~일 일정 분석)
+    const lastWeekEntries = getSchedulesForWeek(customGoals, oneWeekAgo, weekEnd);
+    const previousWeekEntries = getSchedulesForWeek(customGoals, twoWeeksAgo, twoWeeksAgoEnd);
+
+    // 호환성 유지: lastWeekSchedules는 goal 배열 (중복 포함)
+    const lastWeekSchedules = lastWeekEntries.map(e => e.goal);
+    const previousWeekSchedules = previousWeekEntries.map(e => e.goal);
 
     const totalSchedules = lastWeekSchedules.length;
     const completedSchedules = lastWeekSchedules.filter((g: CustomGoal) => g.completed).length;
     const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
 
-    // Category breakdown
+    // Category breakdown (키워드 범위 확대)
     const categoryBreakdown = {
         work: 0,
         learning: 0,
@@ -187,25 +223,28 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
         other: 0,
     };
 
+    const WORK_KEYWORDS = ['업무', '회의', '미팅', '출근', '퇴근', '근무', '야근', 'work', '수업', '강의', '과제'];
+    const LEARNING_KEYWORDS = ['학습', '공부', '강의', '읽기', '독서', '스터디', '코딩', '개발', '사이드프로젝트', '포트폴리오', 'study', 'learn'];
+    const EXERCISE_KEYWORDS = ['운동', '헬스', '요가', '러닝', '조깅', '필라테스', '수영', '등산', '산책', '스트레칭', '근력', '축구', '농구', '테니스', '배드민턴', '자전거', '걷기', 'workout', 'gym'];
+    const WELLNESS_KEYWORDS = ['명상', '휴식', '수면', '취침', '기상', '낮잠', '웰빙', '마사지', '사우나', '반신욕', 'wellness', 'rest', 'sleep'];
+
+    const categorizeSchedule = (text: string) => {
+        const t = text.toLowerCase();
+        if (WORK_KEYWORDS.some(k => t.includes(k))) return 'work';
+        if (LEARNING_KEYWORDS.some(k => t.includes(k))) return 'learning';
+        if (EXERCISE_KEYWORDS.some(k => t.includes(k))) return 'exercise';
+        if (WELLNESS_KEYWORDS.some(k => t.includes(k))) return 'wellness';
+        return 'other';
+    };
+
     lastWeekSchedules.forEach((goal: CustomGoal) => {
-        const text = (goal.text || '').toLowerCase();
-        if (text.includes('업무') || text.includes('회의') || text.includes('미팅') || text.includes('work')) {
-            categoryBreakdown.work++;
-        } else if (text.includes('학습') || text.includes('공부') || text.includes('강의') || text.includes('읽기')) {
-            categoryBreakdown.learning++;
-        } else if (text.includes('운동') || text.includes('헬스') || text.includes('요가') || text.includes('workout')) {
-            categoryBreakdown.exercise++;
-        } else if (text.includes('명상') || text.includes('휴식') || text.includes('수면') || text.includes('wellness')) {
-            categoryBreakdown.wellness++;
-        } else {
-            categoryBreakdown.other++;
-        }
+        const category = categorizeSchedule(goal.text || '');
+        categoryBreakdown[category]++;
     });
 
     // Day-by-day productivity
     const dayProductivity: Record<string, number> = {};
-    lastWeekSchedules.forEach((goal: CustomGoal) => {
-        const date = goal.specificDate ?? 'unknown';
+    lastWeekEntries.forEach(({ goal, date }) => {
         if (!dayProductivity[date]) dayProductivity[date] = 0;
         if (goal.completed) dayProductivity[date]++;
     });

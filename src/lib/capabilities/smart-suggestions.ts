@@ -320,7 +320,7 @@ ${addedSchedulesText}
                 },
                 { role: "user", content: prompt },
             ],
-            temperature: 0.8,
+            temperature: 1.0,
             response_format: { type: "json_object" }
         });
 

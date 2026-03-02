@@ -111,6 +111,16 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         logger.error('[Schedule Recommendations] Failed to fetch schedule history:', error);
     }
 
+    // 현재 시간이 22시 이후면 추천 가능 시간대가 없으므로 AI 호출 없이 빈 배열 반환
+    const kstHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getHours();
+    if (kstHour >= 22) {
+        return NextResponse.json({
+            recommendations: [],
+            usage: { current: currentCount, limit: dailyLimit },
+            message: '지금은 추천 가능한 시간대가 없어요. 내일 다시 확인해보세요!',
+        });
+    }
+
     // Analyze current day's schedule to find idle times
     const scheduleGaps = findScheduleGaps(currentSchedules || [], targetDate);
 
@@ -383,8 +393,9 @@ ${freqLines.length > 0 ? `\n최근 등록한 일정 (빈도순):\n${freqLines.jo
     const userContext = `
 **사용자 프로필:**
 - 이름: ${profile?.name || '사용자'}
-- 목표: ${profile?.goal || 'N/A'}
 - 직업: ${profile?.job || 'N/A'}
+- 경력 수준: ${profile?.level || 'N/A'}
+- 커리어 목표: ${profile?.goal || 'N/A'}
 - 관심사: ${(profile?.interests || []).join(', ') || 'N/A'}
 
 **운동 패턴:**
@@ -489,7 +500,7 @@ ${userContext}
 3. **건강 우선**: 운동이나 수면이 부족하면 이를 개선할 수 있는 일정을 우선 추천
 4. **시간대 맞춤**: 사용자가 평소 해당 활동을 하는 시간대에 추천
 5. **실현 가능성**: 비어있는 시간의 길이에 맞는 현실적인 활동만 추천
-6. **목표/직업 연결 (필수!)**: 반드시 1개 이상은 사용자의 직업("${profile?.job || 'N/A'}")이나 목표("${profile?.goal || 'N/A'}")와 직접 관련된 생산적 활동을 추천하세요. 예: 개발자면 코딩/사이드프로젝트/기술문서 읽기, 학생이면 공부/과제, 디자이너면 포트폴리오 등
+6. **목표/직업/경력 수준 연결 (필수!)**: 반드시 1개 이상은 사용자의 직업("${profile?.job || 'N/A'}"), 경력 수준("${profile?.level || 'N/A'}"), 목표("${profile?.goal || 'N/A'}")와 직접 관련된 생산적 활동을 추천하세요. 경력 수준에 맞는 난이도로 추천하세요 (주니어면 기초 학습/멘토링, 시니어면 리더십/아키텍처 등). 예: 개발자면 코딩/사이드프로젝트/기술문서 읽기, 학생이면 공부/과제, 디자이너면 포트폴리오 등
 
 **추천 형식:**
 각 추천은 다음 정보를 포함하세요:

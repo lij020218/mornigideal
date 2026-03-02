@@ -22,6 +22,7 @@ import type { CustomGoal, LongTermGoal } from '@/lib/types';
 import type { MemoryRow } from '@/lib/types';
 import { compressMessages } from '@/lib/context-summarizer';
 import { getUserByEmail } from '@/lib/users';
+import { getPlanName } from '@/lib/user-plan';
 import { generateEmbedding } from '@/lib/embeddings';
 import { logger } from '@/lib/logger';
 import { kvGet, kvSet } from '@/lib/kv-store';
@@ -104,38 +105,6 @@ ${exerciseCount > 0 ? `💪 운동 패턴:
 ${learningCount > 0 ? `📚 학습 패턴:
 - 최근 7일간 ${learningCount}회 학습 완료
 ` : ''}
-
-**고맥락 응답 가이드 (Max 플랜 - 자비스 모드):**
-
-🎯 핵심 원칙: "조언(Advice) < 전략적 판단(Strategic Judgment) + 실행(Action)"
-
-1. **일정 연쇄 관리 (Schedule Chain Management) - 가장 중요!**
-   - 일정 하나가 아니라 **연쇄(체인)로 관리**하세요
-   - 예: 영화(21:00) → 취침(23:00) → 기상(07:00)은 하나의 수면 사이클
-   - ❌ 나쁜 예: "내일 오전 7시에 기상 일정 추가했어요!"
-   - ✅ 좋은 예: "영화 21:00 종료 후 각성 시간을 고려해, 22:15부터 수면 전환 블록을 자동 삽입했습니다. 23:00 취침 → 07:00 기상으로 8시간 수면 사이클 확보. 내일 오전은 회복 우선 모드로 진입합니다."
-   - **자동 조정**: 충돌/간격 문제는 사용자에게 묻지 말고 최적값으로 자동 조정 후 보고
-   - **추천 금지**: "~하세요" 대신 "~했습니다"로 실행 완료 보고
-
-2. **내일 일정과의 인과관계 설명 (Context Connection)**
-   - ❌ 나쁜 예: "평소처럼 ${avgSleepTime ? Math.round(avgSleepTime) : 23}시에 주무시는군요"
-   - ✅ 좋은 예: "내일 오전 [시간]에 [중요 일정명]이 있습니다. 지금 주무시면 [X]시간 수면 주기를 확보해서 컨디션 100%로 준비할 수 있습니다"
-
-3. **뻔한 조언 금지, 실질적 제안으로 대체**
-   - ❌ 금지: "화면 밝기 줄이세요", "카페인 피하세요" (네이버 검색 수준)
-   - ✅ 대신: "숙면을 위해 방해 금지 모드를 켤까요?", "내일 기상 알람 [시간]으로 설정할까요?"
-
-4. **구체적 성과 요약 보고 (Executive Summary)**
-   - ❌ 나쁜 예: "완료율 ${completionRate}%로 잘하고 계시네요!"
-   - ✅ 좋은 예: "오늘 '[일정명]'과 '[일정명]'을 모두 소화하셨습니다. 이번 주 평균 수행률(${completionRate}%)이 지난주보다 [X]% ${completionRate > 80 ? '상승' : '하락'}했습니다"
-
-5. **참모 역할 강조**
-   - 일정 추가 시: "등록했습니다" (단순 확인) → "반영했습니다" (실행 완료)
-   - 마무리: "잘 자세요" → "내일 아침 브리핑 준비해두고 대기하겠습니다"
-
-6. **데이터 기반 인사이트**
-   - 완료율 추이, 지난주 대비 증감, 카테고리별 성과 등 구체적 수치 언급
-   - "상위 X% 궤도", "목표 달성률 X%" 같은 벤치마크 제공
 `;
     } catch (e) {
         logger.error("[AI Chat] Failed to get event logs:", e);
@@ -152,16 +121,15 @@ async function fetchRagContext(messages: ChatMessage[], userEmail: string, userI
 
         // userId가 없으면 DB 조회 (폴백)
         let resolvedUserId = userId;
-        let resolvedPlan = userPlan || "Free";
+        const resolvedPlan = userPlan || "Free";
         if (!resolvedUserId) {
             const { data: userData } = await supabaseAdmin
                 .from("users")
-                .select("id, plan")
+                .select("id")
                 .eq("email", userEmail)
                 .maybeSingle();
             if (!userData) return "";
             resolvedUserId = userData.id;
-            resolvedPlan = userData.plan || "Free";
         }
 
         const { embedding: queryEmbedding } = await generateEmbedding(query);
@@ -353,7 +321,7 @@ async function buildUserAndScheduleContext(userEmail: string, context: ChatConte
 }> {
     try {
         const user = await getUserByEmail(userEmail);
-        const userPlan = user?.profile?.plan || "Free";
+        const userPlan = await getPlanName(userEmail);
 
         if (!user?.profile) {
             return { userContext: "", scheduleContext: "", userPlan, userId: user?.id, profile: null };
@@ -542,17 +510,31 @@ function buildDateContext(context: ChatContext | undefined): string {
         const [currentHour] = context.currentTime.split(':').map(Number);
         const timeOfDayKorean = currentHour < 12 ? '오전' : currentHour < 18 ? '오후' : '저녁';
 
+        // 내일/모레 날짜 계산
+        const tomorrowDate = new Date(dateObj);
+        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+        const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
+        const dayAfterDate = new Date(dateObj);
+        dayAfterDate.setDate(dayAfterDate.getDate() + 2);
+        const dayAfterStr = `${dayAfterDate.getFullYear()}-${String(dayAfterDate.getMonth() + 1).padStart(2, '0')}-${String(dayAfterDate.getDate()).padStart(2, '0')}`;
+
         return `
 현재 날짜: ${year}년 ${month}월 ${day}일 ${weekday}
 현재 시간: ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)
 현재 연도: ${year}년
 
+📅 **날짜 매핑** (specificDate에 반드시 이 값을 사용):
+- 오늘 → "${context.currentDate}"
+- 내일 → "${tomorrowStr}"
+- 모레 → "${dayAfterStr}"
+
 🚨 **시간 관련 규칙**:
 - 현재 시간은 ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)입니다.
 - **오늘** 일정: 현재 시간(${currentHour}시) 이후만 추천 가능
 - **내일/미래 날짜** 일정: 시간 제약 없음! 오전/오후/저녁 모두 가능
-- 예: "내일 오후 1시 점심" → 13:00에 등록 OK (미래 날짜이므로)
+- 예: "내일 오후 1시 점심" → specificDate: "${tomorrowStr}", startTime: "13:00"
 - 예: "오늘 저녁" (현재 ${currentHour}시) → ${currentHour}시 이후만 가능
+- **오전/오후 미지정 시 추론**: 사용자가 "5시", "3시"처럼 오전/오후 없이 시간만 말하면, 오늘 일정일 경우 현재 시간(${currentHour}시) 기준으로 추론하세요. 해당 시각이 이미 지났으면 오후(+12시간)로 해석합니다. 예: 현재 ${currentHour}시에 "5시 일정 잡아줘" → ${currentHour > 5 ? '17:00 (오후 5시)' : '05:00 (오전 5시)'}. 내일/미래 날짜면 활동명으로 상식 판단 (기상/아침→오전, 저녁 식사/운동→오후)
 
 중요: 사용자가 "오늘" 또는 "today"라고 하면 ${year}년 ${month}월 ${day}일을 의미합니다.
 `;
@@ -712,18 +694,20 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             );
         }
 
-        // 컨텍스트 융합 엔진 — schedule 단순 추가/삭제에는 불필요 (의도 게이팅)
-        if (intent !== 'schedule') {
+        // 컨텍스트 융합 엔진 — 분석/목표/검색에만 사용 (chat/settings/schedule은 불필요)
+        if (intent !== 'schedule' && intent !== 'chat' && intent !== 'settings') {
             asyncFetches.push(
                 withTimeout(getFusedContextForAI(userEmail), 5000, "").then(result => { fusedContextStr = result; })
             );
         }
 
-        // 메시지 압축도 병렬로 시작 (13개 이상일 때만 LLM 호출)
-        let compressedMessages = messages.slice(-10); // 기본값: 최근 10개
-        asyncFetches.push(
-            withTimeout(compressMessages(messages), 8000, messages.slice(-10)).then(result => { compressedMessages = result; })
-        );
+        // 메시지 압축 (13개 초과일 때만 LLM 호출, 이하면 slice로 충분)
+        let compressedMessages = messages.slice(-10);
+        if (messages.length > 13) {
+            asyncFetches.push(
+                withTimeout(compressMessages(messages), 8000, messages.slice(-10)).then(result => { compressedMessages = result; })
+            );
+        }
 
         // 병렬 실행 (개별 타임아웃으로 관리, 전체는 allSettled로 완료 대기)
         await Promise.allSettled(asyncFetches);
@@ -831,6 +815,7 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
         }
 
         if (finishReason === 'length') {
+            logger.warn(`[AI Chat] Response truncated (finish_reason=length) for user=${userEmail}`);
         }
 
         // 10. 응답 파싱 + 후처리

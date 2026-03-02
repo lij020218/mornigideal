@@ -138,6 +138,13 @@ export const llmCircuit = new CircuitBreaker({
     resetTimeoutMs: 30_000,
 });
 
+/** ReAct 에이전트 전용 서킷 (일반 LLM 호출과 격리) */
+export const reactCircuit = new CircuitBreaker({
+    name: 'react-agent',
+    failureThreshold: 3,
+    resetTimeoutMs: 30_000,
+});
+
 /** OpenAI Embeddings 서킷 */
 export const embeddingCircuit = new CircuitBreaker({
     name: 'openai-embedding',

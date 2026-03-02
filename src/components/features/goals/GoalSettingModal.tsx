@@ -188,30 +188,79 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
         }
     };
 
+    // 오늘 날짜 (KST) - 지나간 요일 비활성화용
+    const todayKST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const todayDateStr = `${todayKST.getFullYear()}-${String(todayKST.getMonth() + 1).padStart(2, '0')}-${String(todayKST.getDate()).padStart(2, '0')}`;
+
+    // 주간 목표에서 해당 요일이 이미 지났는지 확인
+    const isDayPastForWeeklyGoal = (dayOfWeek: number, schedule: ScheduleRecommendation): boolean => {
+        if (addedGoalInfo?.type !== 'weekly' || !schedule.startDate || !schedule.endDate) return false;
+        const start = new Date(schedule.startDate);
+        const end = new Date(schedule.endDate);
+        // 해당 요일에 대응하는 실제 날짜가 모두 지났는지 확인
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            if (d.getDay() === dayOfWeek) {
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                if (dateStr >= todayDateStr) return false; // 아직 안 지남
+            }
+        }
+        return true; // 모든 해당 요일의 날짜가 지남
+    };
+
     const handleAddSchedules = async () => {
         if (selectedSchedules.size === 0 || !onScheduleAdd) {
             setShowScheduleRecommendation(false);
             return;
         }
 
-        const schedulesToAdd = scheduleRecommendations
-            .filter((_, index) => selectedSchedules.has(index))
-            .map((schedule) => ({
-                id: `goal-schedule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                text: schedule.text,
-                time: "morning" as const,
-                startTime: schedule.startTime,
-                endTime: schedule.endTime,
-                color: schedule.color,
-                daysOfWeek: schedule.daysOfWeek,
-                notificationEnabled: true,
-                // Link schedule to the goal for progress tracking
-                linkedGoalId: addedGoalInfo?.id,
-                linkedGoalType: addedGoalInfo?.type,
-                // 목표 기간 제한 - 이 기간 내에서만 일정이 표시됨
-                startDate: schedule.startDate,
-                endDate: schedule.endDate,
-            }));
+        const selectedRecs = scheduleRecommendations.filter((_, index) => selectedSchedules.has(index));
+
+        // 주간 목표: daysOfWeek를 specificDate 여러 개로 펼침
+        // 월간/연간 목표: daysOfWeek + startDate/endDate 범위로 저장 (반복)
+        const schedulesToAdd: any[] = [];
+
+        for (const schedule of selectedRecs) {
+            if (addedGoalInfo?.type === 'weekly' && schedule.daysOfWeek?.length && schedule.startDate && schedule.endDate) {
+                // 주간 목표 → 기간 내 해당 요일의 실제 날짜를 계산하여 specificDate로 각각 추가
+                const start = new Date(schedule.startDate);
+                const end = new Date(schedule.endDate);
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    if (schedule.daysOfWeek.includes(d.getDay())) {
+                        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        // 지나간 날짜는 건너뛰기
+                        if (dateStr < todayDateStr) continue;
+                        schedulesToAdd.push({
+                            id: `goal-schedule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                            text: schedule.text,
+                            time: "morning" as const,
+                            startTime: schedule.startTime,
+                            endTime: schedule.endTime,
+                            color: schedule.color,
+                            specificDate: dateStr,
+                            notificationEnabled: true,
+                            linkedGoalId: addedGoalInfo?.id,
+                            linkedGoalType: addedGoalInfo?.type,
+                        });
+                    }
+                }
+            } else {
+                // 월간/연간 목표 → 반복 일정 (daysOfWeek + 기간 제한)
+                schedulesToAdd.push({
+                    id: `goal-schedule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                    text: schedule.text,
+                    time: "morning" as const,
+                    startTime: schedule.startTime,
+                    endTime: schedule.endTime,
+                    color: schedule.color,
+                    daysOfWeek: schedule.daysOfWeek,
+                    notificationEnabled: true,
+                    linkedGoalId: addedGoalInfo?.id,
+                    linkedGoalType: addedGoalInfo?.type,
+                    startDate: schedule.startDate,
+                    endDate: schedule.endDate,
+                });
+            }
+        }
 
         onScheduleAdd(schedulesToAdd);
         setShowScheduleRecommendation(false);
@@ -353,11 +402,22 @@ export function GoalSettingModal({ isOpen, onClose, onGoalsUpdated, onScheduleAd
                                                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                                             <span>{schedule.startTime} - {schedule.endTime}</span>
                                                             <span className="flex gap-1">
-                                                                {schedule.daysOfWeek.map((d) => (
-                                                                    <span key={d} className="px-1.5 py-0.5 rounded bg-white/10">
-                                                                        {DAYS_LABEL[d]}
-                                                                    </span>
-                                                                ))}
+                                                                {schedule.daysOfWeek.map((d) => {
+                                                                    const isPast = isDayPastForWeeklyGoal(d, schedule);
+                                                                    return (
+                                                                        <span
+                                                                            key={d}
+                                                                            className={cn(
+                                                                                "px-1.5 py-0.5 rounded",
+                                                                                isPast
+                                                                                    ? "bg-white/5 text-muted-foreground/40 line-through"
+                                                                                    : "bg-white/10"
+                                                                            )}
+                                                                        >
+                                                                            {DAYS_LABEL[d]}
+                                                                        </span>
+                                                                    );
+                                                                })}
                                                             </span>
                                                         </div>
                                                         {schedule.reason && (

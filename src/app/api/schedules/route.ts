@@ -40,15 +40,20 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
 
     const customGoals: any[] = user?.profile?.customGoals || [];
 
-    // 해당 날짜의 일정 필터 (specificDate 매칭 + 반복 일정)
+    // 해당 날짜의 일정 필터 (specificDate 매칭 + 반복 일정, ID 기준 중복 제거)
+    const seenIds = new Set<string>();
     const daySchedules = customGoals.filter((g: any) => {
-      if (g.specificDate === targetDateStr) return true;
-      if (g.daysOfWeek && g.daysOfWeek.includes(dayOfWeek)) {
+      let matches = false;
+      if (g.specificDate === targetDateStr) matches = true;
+      if (!matches && g.daysOfWeek && g.daysOfWeek.includes(dayOfWeek)) {
         if (g.startDate && targetDateStr < g.startDate) return false;
         if (g.endDate && targetDateStr > g.endDate) return false;
-        return true;
+        matches = true;
       }
-      return false;
+      if (!matches) return false;
+      if (seenIds.has(g.id)) return false;
+      seenIds.add(g.id);
+      return true;
     });
 
     // startTime 기준 정렬
@@ -70,6 +75,7 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
       location: g.location || undefined,
       memo: g.memo || undefined,
       date: targetDateStr,
+      linkedGoalId: g.linkedGoalId || undefined,
     }));
 
     return NextResponse.json({ schedules: formattedSchedules });
@@ -114,6 +120,15 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
 
     const existingProfile = user.profile || {};
     const customGoals = existingProfile.customGoals || [];
+
+    // 중복 일정 체크 (같은 날짜 + 같은 텍스트 + 같은 시간)
+    const isDuplicate = customGoals.some((g: any) =>
+      g.text === text && g.startTime === startTime && g.specificDate === scheduleDate
+    );
+    if (isDuplicate) {
+      return NextResponse.json({ error: '동일한 일정이 이미 존재합니다.' }, { status: 409 });
+    }
+
     customGoals.push(newGoal);
 
 

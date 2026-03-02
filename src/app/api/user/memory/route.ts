@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/api-handler";
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getPlanName } from "@/lib/user-plan";
 import { generateEmbedding, prepareTextForEmbedding, generateContentHash } from "@/lib/embeddings";
 
 // 플랜별 RAG 설정
@@ -48,7 +49,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     // Get user ID
     const { data: userData, error: userError } = await supabaseAdmin
         .from("users")
-        .select("id, plan")
+        .select("id")
         .eq("email", email)
         .maybeSingle();
 
@@ -56,8 +57,8 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // 플랜별 용량 한도 체크
-    const userPlan = userData.plan || "Free";
+    // 플랜별 용량 한도 체크 (user_subscriptions 기반)
+    const userPlan = await getPlanName(email);
     const planConfig = RAG_PLAN_CONFIG[userPlan] || RAG_PLAN_CONFIG.Free;
 
     const { data: storageData } = await supabaseAdmin.rpc('get_user_memory_size_mb', {
@@ -132,7 +133,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     // Get user ID
     const { data: userData, error: userError } = await supabaseAdmin
         .from("users")
-        .select("id, plan")
+        .select("id")
         .eq("email", email)
         .maybeSingle();
 
@@ -140,8 +141,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // 플랜별 차등 검색 설정
-    const userPlan = userData.plan || "Free";
+    // 플랜별 차등 검색 설정 (user_subscriptions 기반)
+    const userPlan = await getPlanName(email);
     const planConfig = RAG_PLAN_CONFIG[userPlan] || RAG_PLAN_CONFIG.Free;
 
     // 클라이언트 파라미터 대신 플랜 설정 우선 적용

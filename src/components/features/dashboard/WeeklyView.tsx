@@ -167,36 +167,50 @@ export function WeeklyView({
                         {/* Time column header */}
                         <div className="w-10 md:w-16 shrink-0 p-1 md:p-2 border-r border-border/30" />
                         {/* Day headers */}
-                        {DAYS_OF_WEEK.map((day) => (
-                            <div
-                                key={day.id}
-                                onClick={() => {
-                                    setSelectedDayOfWeek(day.id);
-                                    resetPickers();
-                                }}
-                                className={cn(
-                                    "flex-1 py-2 md:py-4 text-center cursor-pointer transition-all border-r border-border/30 last:border-r-0",
-                                    selectedDayOfWeek === day.id
-                                        ? "bg-gradient-to-br from-primary/10 to-purple-500/5"
-                                        : "hover:bg-muted/30",
-                                )}
-                            >
-                                <span className={cn(
-                                    "text-xs md:text-sm font-bold transition-colors",
-                                    selectedDayOfWeek === day.id && "text-primary",
-                                    day.id === 0 && selectedDayOfWeek !== day.id && "text-red-500",
-                                    day.id === 6 && selectedDayOfWeek !== day.id && "text-blue-500"
-                                )}>
-                                    {day.label}
-                                </span>
-                                {selectedDayOfWeek === day.id && (
-                                    <motion.div
-                                        layoutId="weeklyDayIndicator"
-                                        className="mx-auto mt-1 md:mt-1.5 w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-primary"
-                                    />
-                                )}
-                            </div>
-                        ))}
+                        {DAYS_OF_WEEK.map((day) => {
+                            // Calculate the actual date for this day in the selected week
+                            const dayDate = new Date(selectedWeekStart);
+                            dayDate.setDate(selectedWeekStart.getDate() + (day.id === 0 ? 6 : day.id - 1));
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const isPast = dayDate < today;
+
+                            return (
+                                <div
+                                    key={day.id}
+                                    onClick={() => {
+                                        if (isPast) return;
+                                        setSelectedDayOfWeek(day.id);
+                                        resetPickers();
+                                    }}
+                                    className={cn(
+                                        "flex-1 py-2 md:py-4 text-center transition-all border-r border-border/30 last:border-r-0",
+                                        isPast
+                                            ? "opacity-40 cursor-not-allowed"
+                                            : "cursor-pointer",
+                                        !isPast && selectedDayOfWeek === day.id
+                                            ? "bg-gradient-to-br from-primary/10 to-purple-500/5"
+                                            : !isPast && "hover:bg-muted/30",
+                                    )}
+                                >
+                                    <span className={cn(
+                                        "text-xs md:text-sm font-bold transition-colors",
+                                        isPast && "line-through",
+                                        !isPast && selectedDayOfWeek === day.id && "text-primary",
+                                        !isPast && day.id === 0 && selectedDayOfWeek !== day.id && "text-red-500",
+                                        !isPast && day.id === 6 && selectedDayOfWeek !== day.id && "text-blue-500"
+                                    )}>
+                                        {day.label}
+                                    </span>
+                                    {!isPast && selectedDayOfWeek === day.id && (
+                                        <motion.div
+                                            layoutId="weeklyDayIndicator"
+                                            className="mx-auto mt-1 md:mt-1.5 w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-primary"
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Scrollable time grid */}
@@ -555,7 +569,7 @@ export function WeeklyView({
                                     text: activityName,
                                     time: sH < 12 ? "morning" : sH < 18 ? "afternoon" : "evening",
                                     daysOfWeek: [selectedDayOfWeek],
-                                    startDate: formatDate(new Date()), // 오늘부터 반복 시작
+                                    startDate: formatDate(new Date()),
                                     startTime,
                                     endTime,
                                     color: activityColor,

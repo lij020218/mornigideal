@@ -7,7 +7,6 @@
 
 import OpenAI from 'openai';
 import { logOpenAIUsage } from '@/lib/openai-usage';
-import { resolvePersonaStyle } from '@/lib/prompts/persona';
 import { MODELS } from '@/lib/models';
 import {
     registerCapability,
@@ -136,17 +135,13 @@ export async function generateSchedulePrep(
             };
         }
 
-        // === 운동/업무/공부: AI 호출 ===
-        const prompt = `${displayTimeUntil}분 후 "${scheduleText}" 일정이 시작됩니다.
-
-일정 유형: ${isExercise ? '운동' : isWork ? '업무/회의' : isStudy ? '공부' : '활동'}
-
-**규칙:**
-1. 첫 줄: "${displayTimeUntil}분 후 "${scheduleText}" 시간이에요 [적절한 이모지]"
-2. 빈 줄
-3. "준비 체크:" + 2-3개 체크 항목 (해당 일정에 맞는 것만)
-
-**중요:** 일정 이름에 맞는 실용적인 준비 항목만 작성. 불필요한 조언 금지.`;
+        // === 운동/업무/공부: AI에게 체크 항목 JSON만 요청, 코드가 조립 ===
+        const activityType = isExercise ? '운동' : isWork ? '업무/회의' : isStudy ? '공부' : '활동';
+        const prepType = isExercise ? 'exercise' : isWork ? 'work' : isStudy ? 'study' : 'activity';
+        const typeEmojis: Record<string, string> = {
+            exercise: '💪', work: '💼', study: '📖', activity: '🕐',
+        };
+        const emoji = typeEmojis[prepType];
 
         const modelName = MODELS.GPT_5_MINI;
         const completion = await openai.chat.completions.create({
@@ -154,24 +149,35 @@ export async function generateSchedulePrep(
             messages: [
                 {
                     role: "system",
-                    content: "일정 시간 알림 + 준비 체크리스트 2-3개만 작성. 자연스러운 존댓말로 작성. 항상 JSON 형식으로만 응답하세요."
+                    content: `"${scheduleText}" (${activityType}) 준비 체크 항목 3개를 JSON 배열로만 응답. 예: {"items":["항목1","항목2","항목3"]}`
                 },
-                { role: "user", content: prompt },
             ],
-            temperature: 0.5,
+            temperature: 1.0,
             response_format: { type: "json_object" },
         });
 
-        const advice = completion.choices[0]?.message?.content || `${displayTimeUntil}분 후 "${scheduleText}" 시간이에요! 준비하세요 🕐`;
-
+        const content = completion.choices[0]?.message?.content || '{}';
         const usage = completion.usage;
         if (usage) {
             await logOpenAIUsage(email, modelName, '/api/ai-schedule-prep', usage.prompt_tokens, usage.completion_tokens);
         }
 
+        let items: string[];
+        try {
+            const parsed = JSON.parse(content);
+            items = Array.isArray(parsed.items) ? parsed.items.slice(0, 3) : [];
+        } catch {
+            items = [];
+        }
+
+        // 코드가 최종 텍스트 조립
+        const advice = items.length > 0
+            ? `${displayTimeUntil}분 후 "${scheduleText}" 시간이에요 ${emoji}\n\n준비 체크:\n${items.map(t => `• ${t}`).join('\n')}`
+            : `${displayTimeUntil}분 후 "${scheduleText}" 시간이에요 ${emoji}\n\n준비하세요!`;
+
         return {
             success: true,
-            data: { advice, prepType: isExercise ? 'exercise' : isWork ? 'work' : isStudy ? 'study' : 'activity' },
+            data: { advice, prepType },
             costTier: 'cheap',
             cachedHit: false,
         };

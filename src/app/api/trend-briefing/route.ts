@@ -5,6 +5,7 @@ import Parser from 'rss-parser';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { getUserByEmail } from '@/lib/users';
+import { getPlanName } from '@/lib/user-plan';
 import { kvGet, kvSet } from '@/lib/kv-store';
 import { LIMITS } from '@/lib/constants';
 
@@ -58,6 +59,7 @@ interface RSSArticle {
     pubDate?: string;
     contentSnippet?: string;
     sourceName: string;
+    category: string;
 }
 
 // Fetch articles from RSS feeds
@@ -81,7 +83,8 @@ async function fetchRSSArticles(): Promise<RSSArticle[]> {
                         link: item.link || '',
                         pubDate: item.pubDate,
                         contentSnippet: item.contentSnippet || item.content,
-                        sourceName: feed.name
+                        sourceName: feed.name,
+                        category: feed.category
                     });
                 }
             });
@@ -108,8 +111,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const job = currentUser?.profile?.job || searchParams.get("job") || "전문가";
     const goal = currentUser?.profile?.goal || searchParams.get("goal");
     const interests = (currentUser?.profile?.interests || []).join(',') || searchParams.get("interests");
-    const userPlan = ((currentUser as any)?.plan || 'Free');
-    const normalizedPlan = userPlan.charAt(0).toUpperCase() + userPlan.slice(1).toLowerCase();
+    const normalizedPlan = await getPlanName(userEmail);
     const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
     const refreshLimit = LIMITS.TREND_REFRESH_DAILY[normalizedPlan] ?? 0;
 
@@ -224,7 +226,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     // Step 2: Use Gemini to filter and select relevant articles
     const model = genAI.getGenerativeModel({
-        model: "gemini-3.0-flash",
+        model: "gemini-3-flash-preview",
         generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -247,13 +249,13 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             }
             return true;
         })
-        .slice(0, 100)
+        .slice(0, 80)
         .map((article, index) => ({
             id: index,
-            title: article.title,
-            source: article.sourceName,
-            date: article.pubDate,
-            recencyScore: article.recencyScore
+            t: article.title,
+            s: article.sourceName,
+            c: article.category,
+            d: article.ageInDays < 1 ? 'today' : article.ageInDays < 2 ? '1d' : `${Math.floor(article.ageInDays)}d`,
         }));
 
     // 제외할 뉴스가 있으면 필터링
@@ -261,23 +263,23 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     if (excludeTitles.length > 0) {
         filteredArticles = articlesForPrompt.filter(article =>
             !excludeTitles.some(excludeTitle =>
-                article.title.toLowerCase().includes(excludeTitle.toLowerCase()) ||
-                excludeTitle.toLowerCase().includes(article.title.toLowerCase())
+                article.t.toLowerCase().includes(excludeTitle.toLowerCase()) ||
+                excludeTitle.toLowerCase().includes(article.t.toLowerCase())
             )
         );
     }
 
     if (filteredArticles.length < articleCount) {
-        // 더 많은 뉴스가 필요하면 전체 풀 사용 (recency score 포함)
-        filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
+        // 더 많은 뉴스가 필요하면 전체 풀 사용
+        filteredArticles = sortedArticles.slice(0, 80).map((article, index) => ({
             id: index,
-            title: article.title,
-            source: article.sourceName,
-            date: article.pubDate,
-            recencyScore: article.recencyScore
+            t: article.title,
+            s: article.sourceName,
+            c: article.category,
+            d: article.ageInDays < 1 ? 'today' : article.ageInDays < 2 ? '1d' : `${Math.floor(article.ageInDays)}d`,
         })).filter(article =>
             !excludeTitles.some(excludeTitle =>
-                article.title.toLowerCase().includes(excludeTitle.toLowerCase())
+                article.t.toLowerCase().includes(excludeTitle.toLowerCase())
             )
         );
     }
@@ -298,12 +300,12 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const intlCount = Math.ceil(articleCount / 2);
     const krCount = articleCount - intlCount;
 
-    const prompt = `You are selecting ${articleCount} COMPLETELY NEW news articles for a ${job}.
+    const prompt = `Select ${articleCount} NEW articles for a ${job}.
 ${excludeInfo}
 ${sportsWarning}
 
-ARTICLES (${filteredArticles.length} available):
-${JSON.stringify(filteredArticles.slice(0, 50), null, 2)}
+ARTICLES (fields: id,t=title,s=source,c=category,d=age):
+${JSON.stringify(filteredArticles.slice(0, 40))}
 
 USER:
 - Job: ${job}
@@ -392,7 +394,7 @@ Select now.`;
     const sourceCount: Record<string, number> = {};
     selectedArticles = selectedArticles.filter((article: any) => {
         const filteredArticle = filteredArticles[article.id];
-        const sourceName = filteredArticle?.source || 'Unknown';
+        const sourceName = filteredArticle?.s || 'Unknown';
 
         if (!sourceCount[sourceName]) {
             sourceCount[sourceName] = 0;
@@ -412,8 +414,8 @@ Select now.`;
         // Find the original article by matching the id from filteredArticles
         const filteredArticle = filteredArticles[selected.id];
         const originalArticle = rssArticles.find(article =>
-            article.title === filteredArticle?.title &&
-            article.sourceName === filteredArticle?.source
+            article.title === filteredArticle?.t &&
+            article.sourceName === filteredArticle?.s
         );
         const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
 
@@ -444,7 +446,7 @@ Select now.`;
 
     // Pre-generate details for all trends - MUST await to ensure cache is ready
     const detailModel = genAI.getGenerativeModel({
-        model: "gemini-3.0-flash",
+        model: "gemini-3-flash-preview",
         generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -574,7 +576,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         throw new Error('Gemini API key not configured');
     }
 
-    const modelName = process.env.GEMINI_MODEL_2 || "gemini-3.0-flash";
+    const modelName = process.env.GEMINI_MODEL_2 || "gemini-3-flash-preview";
     const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: { responseMimeType: "application/json" }

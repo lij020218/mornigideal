@@ -22,7 +22,7 @@ function buildGmailAuthUrl(userEmail: string, redirectUri: string): string {
         scope: "https://www.googleapis.com/auth/gmail.readonly email profile",
         access_type: "offline",
         prompt: "consent",
-        state: userEmail,
+        state: `${userEmail}:gmail`,
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
@@ -32,7 +32,7 @@ function buildNaverMailAuthUrl(userEmail: string, redirectUri: string): string {
         client_id: process.env.NAVER_CLIENT_ID!,
         redirect_uri: redirectUri,
         response_type: "code",
-        state: userEmail,
+        state: `${userEmail}:naver`,
     });
     return `https://nid.naver.com/oauth2.0/authorize?${params.toString()}`;
 }
@@ -43,7 +43,7 @@ function buildKakaoMailAuthUrl(userEmail: string, redirectUri: string): string {
         redirect_uri: redirectUri,
         response_type: "code",
         scope: "talk_message account_email",
-        state: userEmail,
+        state: `${userEmail}:kakao`,
     });
     return `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
 }
@@ -54,7 +54,7 @@ function buildOutlookAuthUrl(userEmail: string, redirectUri: string): string {
         redirect_uri: redirectUri,
         response_type: "code",
         scope: "openid email Mail.Read offline_access",
-        state: userEmail,
+        state: `${userEmail}:outlook`,
     });
     return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
 }
@@ -129,7 +129,8 @@ async function exchangeOutlookToken(code: string, redirectUri: string) {
 
 export const GET = withAuth(async (request: NextRequest, email: string) => {
     const provider = request.nextUrl.searchParams.get('provider');
-    const redirectUri = request.nextUrl.searchParams.get('redirect_uri') || `${BASE_URL}/api/auth/link-gmail/callback`;
+    // 서버 콜백 URL을 redirect_uri로 사용 (모바일 커스텀 스킴은 Google OAuth에서 불가)
+    const redirectUri = `${BASE_URL}/api/auth/link-email/callback`;
 
     let authUrl = '';
 
@@ -167,7 +168,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ error: "Missing code" }, { status: 400 });
     }
 
-    const redirectUri = redirect_uri || `${BASE_URL}/api/auth/link-gmail/callback`;
+    const redirectUri = redirect_uri || `${BASE_URL}/api/auth/link-email/callback`;
 
     let tokens;
     switch (provider) {
