@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     let user;
+    let isNewUser = false;
 
     if (existingUser) {
       // 기존 사용자 - 정보 업데이트 (이름, 이미지)
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
       }
 
       user = newUser;
+      isNewUser = true;
 
       // Account 테이블에 OAuth 정보 저장 (선택적)
       if (providerId) {
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       token,
+      isNewUser,
       user: {
         id: user.id,
         email: user.email,
