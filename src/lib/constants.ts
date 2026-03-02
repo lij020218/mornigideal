@@ -52,10 +52,10 @@ export const TIMING = {
     /** Skipped pattern analysis window end hour */
     SKIPPED_PATTERN_END: 11,
 
-    /** Mood check-in reminder window start hour */
-    MOOD_REMINDER_START: 14,
+    /** Mood check-in reminder default start hour (기상 일정 없을 때) */
+    MOOD_REMINDER_DEFAULT_HOUR: 9,
     /** Mood check-in reminder window end hour */
-    MOOD_REMINDER_END: 20,
+    MOOD_REMINDER_END: 22,
 
     /** Post-lunch energy boost window start hour */
     ENERGY_BOOST_START: 13,

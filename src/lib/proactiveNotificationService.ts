@@ -1424,13 +1424,36 @@ function getSkippedPatternSuggestions(context: UserContext): ProactiveNotificati
 
 /**
  * 1. 기분 체크인 리마인더
- * 오후 2시 이후 오늘 기분 기록이 없으면 리마인드
+ * 기상 일정 직후 (없으면 오전 9시) ~ 22시, 오늘 기분 기록이 없으면 리마인드
  */
 async function getMoodCheckInReminderNotification(context: UserContext): Promise<ProactiveNotification[]> {
-    const { currentTime, userEmail } = context;
+    const { currentTime, userEmail, todaySchedules } = context;
     const currentHour = currentTime.getHours();
+    const currentMinutes = currentTime.getMinutes();
 
-    if (currentHour < TIMING.MOOD_REMINDER_START || currentHour >= TIMING.MOOD_REMINDER_END) return [];
+    if (currentHour >= TIMING.MOOD_REMINDER_END) return [];
+
+    // 기상 일정에서 시작 시간 추출
+    const wakeSchedule = todaySchedules.find(s =>
+        s.text === '기상' || s.text === 'wake' || s.text.includes('기상')
+    );
+
+    let moodStartHour: number = TIMING.MOOD_REMINDER_DEFAULT_HOUR;
+    let moodStartMinute = 0;
+
+    if (wakeSchedule?.startTime) {
+        // startTime 형식: "HH:MM"
+        const [h, m] = wakeSchedule.startTime.split(':').map(Number);
+        if (!isNaN(h)) {
+            moodStartHour = h;
+            moodStartMinute = m || 0;
+        }
+    }
+
+    // 현재 시간이 기상 시간 이전이면 아직 표시 안 함
+    if (currentHour < moodStartHour || (currentHour === moodStartHour && currentMinutes < moodStartMinute)) {
+        return [];
+    }
 
     const monthKey = `mood_checkins_${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}`;
     const todayStr = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')}`;

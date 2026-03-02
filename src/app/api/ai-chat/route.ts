@@ -320,8 +320,11 @@ async function buildUserAndScheduleContext(userEmail: string, context: ChatConte
     profile: UserProfile | null;
 }> {
     try {
-        const user = await getUserByEmail(userEmail);
-        const userPlan = await getPlanName(userEmail);
+        // 병렬 조회: getUserByEmail + getPlanName 동시 실행 (기존 순차 호출 대비 ~200-400ms 절약)
+        const [user, userPlan] = await Promise.all([
+            getUserByEmail(userEmail),
+            getPlanName(userEmail),
+        ]);
 
         if (!user?.profile) {
             return { userContext: "", scheduleContext: "", userPlan, userId: user?.id, profile: null };
@@ -560,12 +563,16 @@ function buildDateContext(context: ChatContext | undefined): string {
 
 export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     try {
-        // 1. 일일 AI 호출 제한 체크
+        // 1+2. 일일 제한 체크 + 요청 파싱을 병렬 실행
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
         const dailyCountKey = `ai_chat_count_${todayStr}`;
-        const currentCount = await kvGet<number>(userEmail, dailyCountKey) ?? 0;
 
-        // 사용자 플랜은 아래에서 조회하므로, 먼저 간이 체크 (최대 플랜 한도로)
+        const [currentCount, body] = await Promise.all([
+            kvGet<number>(userEmail, dailyCountKey).then(v => v ?? 0),
+            request.json(),
+        ]);
+
+        // 최대 플랜 한도 간이 체크
         const maxPossibleLimit = LIMITS.AI_CHAT_DAILY.Max;
         if (currentCount >= maxPossibleLimit) {
             return NextResponse.json(
@@ -574,8 +581,6 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             );
         }
 
-        // 2. 요청 파싱
-        const body = await request.json();
         const v = validateBody(aiChatSchema, body);
         if (!v.success) return v.response;
         const { messages, context: rawContext } = v.data;
@@ -591,10 +596,10 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             }
         }
 
-        // 3. 의도 분류 (먼저!)
+        // 3. 의도 분류 (순수 함수, DB 호출 없음) + 4. 사용자 컨텍스트 빌드 즉시 시작
         const intent = classifyIntent(messages);
 
-        // 4. 사용자 프로필 + 일정 (항상 필요)
+        // 사용자 프로필 + 일정 (항상 필요)
         const { userContext, scheduleContext, userPlan, userId, profile } = await buildUserAndScheduleContext(userEmail, context);
 
         // 4.1 플랜별 일일 제한 재확인
@@ -606,8 +611,8 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             );
         }
 
-        // 호출 카운트 증가
-        await kvSet(userEmail, dailyCountKey, currentCount + 1);
+        // 호출 카운트 증가 (비동기, 응답 대기 불필요)
+        kvSet(userEmail, dailyCountKey, currentCount + 1).catch(() => {});
 
 
         // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청만)

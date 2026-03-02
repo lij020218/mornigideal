@@ -894,6 +894,27 @@ const SUGGESTION_POOL: Record<string, Array<{ text: string; duration: number; ca
     ],
 };
 
+// 목표/관심사 → 관련 카테고리 매핑
+const GOAL_CATEGORY_MAP: Record<string, string[]> = {
+    '개발': ['learning', 'work'], '프로그래밍': ['learning', 'work'], '코딩': ['learning', 'work'],
+    '건강': ['exercise', 'wellness'], '운동': ['exercise'], '다이어트': ['exercise', 'wellness'],
+    '자기계발': ['learning'], '독서': ['learning'], '공부': ['learning'],
+    '커리어': ['work', 'learning'], '취업': ['work', 'learning'], '이직': ['work', 'learning'],
+    '마케팅': ['work', 'learning'], '디자인': ['work', 'learning'],
+    '재테크': ['learning'], '투자': ['learning'],
+    '영어': ['learning'], '외국어': ['learning'],
+    '명상': ['wellness'], '마음챙김': ['wellness'],
+};
+
+// 반복 일정 title → 카테고리 추론용 키워드
+const RECURRING_CATEGORY_KEYWORDS: Record<string, RegExp> = {
+    exercise: /운동|헬스|요가|필라테스|러닝|조깅|수영|웨이트|등산|자전거|스트레칭|홈트|크로스핏|배드민턴|테니스|축구|농구|탁구/,
+    wellness: /명상|휴식|산책|스킨케어|일기|정리|청소|수면|취침|낮잠/,
+    learning: /공부|학습|독서|책|강의|스터디|과제|영어|코딩|자격증/,
+    work: /업무|회의|미팅|프로젝트|개발|기획|보고서|작업/,
+    planning: /계획|정리|리뷰|회고/,
+};
+
 function generateScheduleSuggestions(
     focus: string,
     count: number,
@@ -904,64 +925,147 @@ function generateScheduleSuggestions(
     patterns: unknown,
     prefs?: { categoryWeights?: Record<string, number>; timeCategoryScores?: Record<string, Record<string, number>> } | null,
 ): ScheduleSuggestion[] {
-    const pool = SUGGESTION_POOL[focus] || SUGGESTION_POOL.balanced;
-    const suggestions: ScheduleSuggestion[] = [];
-
-    // 사용자 관심사/직업 기반 필터링
+    const basePool = SUGGESTION_POOL[focus] || SUGGESTION_POOL.balanced;
     const userGoal = profile?.goal || '';
     const userField = profile?.field || '';
     const interests = profile?.interests || [];
 
-    // 선호도 기반 가중 셔플 (weight 높을수록 상위 노출)
-    const shuffled = [...pool]
-        .map(item => ({
-            ...item,
-            _sort: Math.random() * (prefs?.categoryWeights?.[item.category] ?? 1.0),
-        }))
-        .sort((a, b) => b._sort - a._sort);
+    // ── 1. 후보 풀 구성: 고정 풀 + 반복 일정 동적 추가 ──
+    type PoolItem = { text: string; duration: number; category: string; fromRecurring?: boolean };
+    const pool: PoolItem[] = [...basePool];
+    const typedPatterns = patterns as { recurringSchedules?: Array<{ title: string; timeBlock: string; frequency: number }> } | null;
+    const recurring = typedPatterns?.recurringSchedules || [];
+
+    // 반복 일정에서 빈도 2회 이상 → 풀에 동적 추가
+    const addedTitles = new Set(pool.map(p => p.text));
+    for (const rs of recurring) {
+        if (rs.frequency < 2 || addedTitles.has(rs.title)) continue;
+        let category = 'wellness';
+        for (const [cat, regex] of Object.entries(RECURRING_CATEGORY_KEYWORDS)) {
+            if (regex.test(rs.title)) { category = cat; break; }
+        }
+        pool.push({ text: rs.title, duration: 30, category, fromRecurring: true });
+        addedTitles.add(rs.title);
+    }
+
+    // ── 2. 목표-카테고리 매핑 ──
+    const goalCategories = new Set<string>();
+    const goalText = `${userGoal} ${interests.join(' ')}`;
+    for (const [keyword, cats] of Object.entries(GOAL_CATEGORY_MAP)) {
+        if (goalText.includes(keyword)) cats.forEach(c => goalCategories.add(c));
+    }
+
+    // ── 3. 카테고리별 완료율 계산 ──
+    const categoryCompletionRate: Record<string, number> = {};
+    // recurringSchedules에는 완료율이 없으므로 빈도를 proxy로 사용
+    // frequency 높을수록 사용자가 꾸준히 하는 활동 → 높은 점수
+    const maxFreq = Math.max(1, ...recurring.map(r => r.frequency));
+    for (const rs of recurring) {
+        let cat = 'wellness';
+        for (const [c, regex] of Object.entries(RECURRING_CATEGORY_KEYWORDS)) {
+            if (regex.test(rs.title)) { cat = c; break; }
+        }
+        // 빈도 기반 비율 (0~1)
+        const rate = rs.frequency / maxFreq;
+        categoryCompletionRate[cat] = Math.max(categoryCompletionRate[cat] || 0, rate);
+    }
+
+    // ── 4. 슬롯 시간 → 시간대 매핑 ──
+    const getTimeBlock = (hour: number): string => {
+        if (hour < 12) return 'morning';
+        if (hour < 18) return 'afternoon';
+        return 'evening';
+    };
+
+    // ── 5. (활동 × 슬롯) 조합 점수 계산 ──
+    type ScoredCandidate = {
+        item: PoolItem;
+        slot: string;
+        score: number;
+        factors: { catWeight: number; timeBonus: number; goalBonus: number; completionBonus: number; freqBonus: number };
+    };
+
+    const candidates: ScoredCandidate[] = [];
+    for (const item of pool) {
+        for (const slot of freeSlots) {
+            const hour = parseInt(slot.split(':')[0]);
+            const block = getTimeBlock(hour);
+
+            // 점수 요소 계산
+            const catWeight = prefs?.categoryWeights?.[item.category] ?? 1.0;
+            const timeBonus = prefs?.timeCategoryScores?.[block]?.[item.category] ?? 1.0;
+            const goalBonus = goalCategories.has(item.category) ? 1.5 : 1.0;
+            const completionBonus = 0.5 + (categoryCompletionRate[item.category] || 0.5);
+            const freqBonus = item.fromRecurring ? 0.5 : 0;
+
+            const score = catWeight * timeBonus * goalBonus * completionBonus + freqBonus;
+
+            // 약간의 랜덤성 추가 (±15%) — 매번 동일한 추천 방지
+            const jitter = 0.85 + Math.random() * 0.3;
+            candidates.push({
+                item, slot,
+                score: score * jitter,
+                factors: { catWeight, timeBonus, goalBonus, completionBonus, freqBonus },
+            });
+        }
+    }
+
+    // 점수 높은 순 정렬
+    candidates.sort((a, b) => b.score - a.score);
+
+    // ── 6. Greedy 할당 (같은 카테고리 최대 2개) ──
+    const suggestions: ScheduleSuggestion[] = [];
     const usedSlots = new Set<string>();
+    const usedTexts = new Set<string>();
+    const categoryCount: Record<string, number> = {};
 
-    for (const item of shuffled) {
+    for (const c of candidates) {
         if (suggestions.length >= count) break;
-        if (freeSlots.length === 0) break;
+        if (usedSlots.has(c.slot)) continue;
+        if (usedTexts.has(c.item.text)) continue;
+        if ((categoryCount[c.item.category] || 0) >= 2) continue;
 
-        // 아직 사용하지 않은 첫 번째 빈 시간 찾기
-        const slot = freeSlots.find(s => !usedSlots.has(s));
-        if (!slot) break;
+        usedSlots.add(c.slot);
+        usedTexts.add(c.item.text);
+        categoryCount[c.item.category] = (categoryCount[c.item.category] || 0) + 1;
 
-        usedSlots.add(slot);
-        const startHour = parseInt(slot.split(':')[0]);
-        const endMinutes = startHour * 60 + item.duration;
+        const startHour = parseInt(c.slot.split(':')[0]);
+        const endMinutes = startHour * 60 + c.item.duration;
         const endHour = Math.floor(endMinutes / 60);
         const endMin = endMinutes % 60;
 
-        // 이유 생성
-        let reason = '';
-        if (focus === 'rest' && dailyState) {
+        // ── 이유 텍스트: 점수 기여도 기반 동적 생성 ──
+        let reason: string;
+        const { freqBonus, goalBonus, timeBonus, completionBonus } = c.factors;
+        if (freqBonus > 0) {
+            reason = '자주 하시는 활동이에요.';
+        } else if (goalBonus > 1.0 && userGoal) {
+            reason = `'${userGoal}' 목표 달성에 도움이 돼요.`;
+        } else if (timeBonus > 1.2) {
+            reason = '이 시간대에 잘 실천하셨어요.';
+        } else if (completionBonus > 1.0) {
+            reason = '꾸준히 하고 계신 활동이에요.';
+        } else if (focus === 'rest' && dailyState) {
             reason = `스트레스 ${dailyState.stress_level}/10, 에너지 ${dailyState.energy_level}/10 — 휴식이 필요합니다.`;
         } else if (focus === 'productivity' && workRest) {
             reason = `오늘 여유 시간 ${Math.round(workRest.emptyHoursToday || 0)}시간 — 생산적으로 활용하세요.`;
-        } else if (focus === 'exercise') {
-            reason = '규칙적인 운동으로 컨디션을 유지하세요.';
-        } else if (focus === 'learning') {
-            reason = userGoal ? `"${userGoal}" 목표 달성을 위한 학습 시간입니다.` : '꾸준한 학습이 성장의 핵심입니다.';
         } else {
             reason = '균형 잡힌 하루를 위한 추천입니다.';
         }
 
         // 사용자 분야 맞춤 텍스트 조정
-        let text = item.text;
-        if (item.category === 'learning' && userField) {
+        let text = c.item.text;
+        if (c.item.category === 'learning' && userField) {
             if (text === '온라인 강의 수강') text = `${userField} 관련 강의 수강`;
             if (text === '기술 블로그 읽기') text = `${userField} 트렌드 읽기`;
         }
 
         suggestions.push({
             text,
-            startTime: slot,
+            startTime: c.slot,
             endTime: `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`,
             reason,
-            category: item.category,
+            category: c.item.category,
         });
     }
 
