@@ -64,7 +64,7 @@ async function sendSlackDM(userEmail: string, notification: ProactiveNotificatio
                         elements: [{
                             type: 'button',
                             text: { type: 'plain_text', text: 'Fi.eri에서 확인' },
-                            url: process.env.NEXT_PUBLIC_APP_URL || 'https://fieri.app',
+                            url: process.env.NEXT_PUBLIC_APP_URL || 'https://fi-eri.com',
                             action_id: `fieri_open_${notification.id}`,
                         }],
                     }] : []),

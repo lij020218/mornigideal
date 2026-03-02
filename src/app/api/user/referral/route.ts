@@ -78,7 +78,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     return NextResponse.json({
         referralCode,
         stats: referralStats,
-        shareMessage: `Fi.eri - AI 일정 비서를 추천합니다! 추천 코드: ${referralCode}\n가입 시 Pro 7일 무료!\nhttps://fieri.app/invite/${referralCode}`,
+        shareMessage: `Fi.eri - AI 일정 비서를 추천합니다! 추천 코드: ${referralCode}\n가입 시 Pro 7일 무료!\nhttps://fi-eri.com/invite/${referralCode}`,
     });
 });
 

@@ -141,7 +141,7 @@ export default function TermsPage() {
                         <thead><tr><th>구분</th><th>내용</th></tr></thead>
                         <tbody>
                             <tr><td>서비스명</td><td>Fi.eri (AI 기반 개인 성장 OS)</td></tr>
-                            <tr><td>이메일</td><td>support@fieri.app</td></tr>
+                            <tr><td>이메일</td><td>support@fi-eri.com</td></tr>
                         </tbody>
                     </table>
                 </div>

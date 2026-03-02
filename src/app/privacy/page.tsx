@@ -154,7 +154,7 @@ export default function PrivacyPage() {
                         <thead><tr><th>구분</th><th>내용</th></tr></thead>
                         <tbody>
                             <tr><td>담당자</td><td>Fi.eri 개인정보 보호 담당</td></tr>
-                            <tr><td>이메일</td><td>privacy@fieri.app</td></tr>
+                            <tr><td>이메일</td><td>privacy@fi-eri.com</td></tr>
                         </tbody>
                     </table>
                     <p>

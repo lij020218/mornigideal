@@ -59,7 +59,7 @@ export async function sendPasswordResetEmail(
     resetToken: string
 ): Promise<boolean> {
     try {
-        const resetUrl = `https://fieri.app/reset-password?token=${resetToken}`;
+        const resetUrl = `https://fi-eri.com/reset-password?token=${resetToken}`;
 
         const { error } = await resend.emails.send({
             from: FROM_EMAIL,

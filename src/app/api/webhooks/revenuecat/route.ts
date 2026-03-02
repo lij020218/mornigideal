@@ -6,7 +6,7 @@
  * - 이 엔드포인트가 플랜 상태의 진실 소스(source of truth)
  *
  * RevenueCat Dashboard → Settings → Webhooks에 등록:
- * URL: https://fieri.app/api/webhooks/revenuecat
+ * URL: https://fi-eri.com/api/webhooks/revenuecat
  * Authorization: Bearer {REVENUECAT_WEBHOOK_SECRET}
  */
 

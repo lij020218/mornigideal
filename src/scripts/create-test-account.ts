@@ -14,7 +14,7 @@ import bcrypt from 'bcryptjs';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const TEST_EMAIL = 'review@fieri.app';
+const TEST_EMAIL = 'review@fi-eri.com';
 const TEST_PASSWORD = 'FieriReview2026!';
 const TEST_NAME = 'Play Review';
 

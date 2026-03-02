@@ -335,7 +335,7 @@ export function WeeklyReportStoryShare({ isOpen, onClose, reportData }: WeeklyRe
 
             {/* Footer */}
             <div className="mt-auto px-16 pb-16 flex items-center justify-between">
-                <p className="text-base text-white/30">fieri.app</p>
+                <p className="text-base text-white/30">fi-eri.com</p>
                 <FieriLogo className="w-12 h-12 opacity-30" />
             </div>
         </div>
@@ -397,7 +397,7 @@ export function WeeklyReportStoryShare({ isOpen, onClose, reportData }: WeeklyRe
             {/* Footer */}
             <div className="mt-auto pb-16 flex flex-col items-center">
                 <FieriLogo className="w-14 h-14 opacity-30" />
-                <p className="text-base text-white/30 mt-3">fieri.app</p>
+                <p className="text-base text-white/30 mt-3">fi-eri.com</p>
             </div>
         </div>
     );
@@ -464,7 +464,7 @@ export function WeeklyReportStoryShare({ isOpen, onClose, reportData }: WeeklyRe
 
                 {/* Footer */}
                 <div className="mt-auto px-16 pb-16 flex items-center justify-between">
-                    <p className="text-base text-white/30">fieri.app</p>
+                    <p className="text-base text-white/30">fi-eri.com</p>
                     <FieriLogo className="w-12 h-12 opacity-30" />
                 </div>
             </div>
@@ -542,7 +542,7 @@ export function WeeklyReportStoryShare({ isOpen, onClose, reportData }: WeeklyRe
             {/* Footer */}
             <div className="mt-auto pb-16 flex flex-col items-center">
                 <FieriLogo className="w-14 h-14 opacity-30" />
-                <p className="text-base text-white/30 mt-3">fieri.app</p>
+                <p className="text-base text-white/30 mt-3">fi-eri.com</p>
             </div>
         </div>
     );
