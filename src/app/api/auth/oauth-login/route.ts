@@ -47,11 +47,13 @@ export async function POST(request: NextRequest) {
       user = updatedUser || existingUser;
     } else {
       // 신규 사용자 - 자동 회원가입
+      const username = email.toLowerCase().split('@')[0] + '_' + Date.now().toString(36);
       const { data: newUser, error: createError } = await supabaseAdmin
         .from('users')
         .insert({
           email: email.toLowerCase(),
           name: name || email.split('@')[0],
+          username,
           image: image || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

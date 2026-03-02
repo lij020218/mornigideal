@@ -100,12 +100,14 @@ export async function POST(request: NextRequest) {
         }
 
         // users 테이블에 INSERT
+        const username = normalizedEmail.split('@')[0] + '_' + Date.now().toString(36);
         const { data: user, error: insertError } = await supabaseAdmin
             .from('users')
             .insert({
                 email: normalizedEmail,
                 name: pending.name,
                 password: pending.hashedPassword,
+                username,
             })
             .select('id, email, name')
             .single();

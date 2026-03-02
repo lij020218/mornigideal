@@ -26,7 +26,7 @@ export async function kvGet<T = any>(email: string, key: string): Promise<T | nu
  * KV 값 저장 (upsert)
  */
 export async function kvSet(email: string, key: string, value: unknown): Promise<void> {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
         .from('user_kv_store')
         .upsert({
             user_email: email,
@@ -34,6 +34,10 @@ export async function kvSet(email: string, key: string, value: unknown): Promise
             value,
             updated_at: new Date().toISOString(),
         }, { onConflict: 'user_email,key' });
+
+    if (error) {
+        throw new Error(`kvSet failed for ${key}: ${error.message}`);
+    }
 }
 
 /**
