@@ -212,11 +212,11 @@ export const LIMITS = {
     /** Proactive notification daily limit per plan */
     PROACTIVE_DAILY: { free: 5, pro: 10, max: Infinity } as Record<string, number>,
     /** AI chat daily call limit per plan */
-    AI_CHAT_DAILY: { Free: 30, Standard: 50, Pro: 100, Max: 200 } as Record<string, number>,
+    AI_CHAT_DAILY: { Free: 15, Pro: 50, Max: 100 } as Record<string, number>,
     /** Trend briefing article count per plan */
-    TREND_BRIEFING_COUNT: { Free: 3, Standard: 6, Pro: 6, Max: 6 } as Record<string, number>,
+    TREND_BRIEFING_COUNT: { Free: 3, Pro: 6, Max: 6 } as Record<string, number>,
     /** Trend briefing daily refresh limit per plan (0 = no refresh) */
-    TREND_REFRESH_DAILY: { Free: 0, Standard: 1, Pro: 1, Max: 3 } as Record<string, number>,
+    TREND_REFRESH_DAILY: { Free: 0, Pro: 1, Max: 3 } as Record<string, number>,
 } as const;
 
 // ============================================
