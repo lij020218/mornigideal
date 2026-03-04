@@ -54,24 +54,40 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     const scheduleInsights = analyzeSchedulePatterns(schedules || []);
 
-    // Fetch wellness analytics from schedule patterns
+    // Wellness analytics: 직접 계산 (self-fetch 제거)
     let wellnessAnalytics = null;
     try {
-        const headers: Record<string, string> = {};
-        const cookie = request.headers.get('Cookie');
-        if (cookie) headers['Cookie'] = cookie;
-        const auth = request.headers.get('Authorization');
-        if (auth) headers['Authorization'] = auth;
+        const customGoals = profile?.profile?.customGoals || [];
+        const exerciseKeywords = ['운동', '헬스', '러닝', '조깅', '요가', '필라테스', '수영', '등산', '산책', '스트레칭', '웨이트'];
+        const sleepKeywords = ['취침', '수면', '잠자기'];
 
-        const wellnessResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/api/user/schedule-analytics?days=30`, {
-            headers,
-        });
-        if (wellnessResponse.ok) {
-            const data = await wellnessResponse.json();
-            wellnessAnalytics = data.analytics;
-        }
+        const exerciseGoals = customGoals.filter((g: any) =>
+            exerciseKeywords.some(k => (g.text || '').includes(k))
+        );
+        const sleepGoals = customGoals.filter((g: any) =>
+            sleepKeywords.some(k => (g.text || '').includes(k))
+        );
+
+        wellnessAnalytics = {
+            exerciseAnalytics: {
+                preferredExerciseTimes: exerciseGoals
+                    .filter((g: any) => g.startTime)
+                    .map((g: any) => g.startTime)
+                    .slice(0, 3),
+            },
+            sleepAnalytics: {
+                recommendation: sleepGoals.length === 0 ? '규칙적인 취침 시간을 설정해보세요' : null,
+            },
+            wellnessInsights: {
+                exerciseStatus: exerciseGoals.length >= 3 ? 'good' : exerciseGoals.length >= 1 ? 'moderate' : 'insufficient',
+                sleepStatus: sleepGoals.length > 0 ? 'good' : 'unknown',
+                recommendations: [],
+                alerts: [],
+            },
+            timeSlotPatterns: {},
+        };
     } catch (error) {
-        logger.error('[Enhanced Profile] Failed to fetch wellness analytics:', error);
+        logger.error('[Enhanced Profile] Failed to compute wellness analytics:', error);
     }
 
     // Build enhanced profile

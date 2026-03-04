@@ -68,24 +68,52 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         .maybeSingle();
     const profile = userData ? { ...userData.profile, name: userData.name, email: userData.email } : null;
 
-    // Fetch enhanced profile with behavioral insights
+    // Enhanced profile: 직접 DB 조회 (self-fetch 제거)
     let enhancedProfile = null;
     try {
-        const headers: Record<string, string> = {};
-        const cookie = request.headers.get('Cookie');
-        if (cookie) headers['Cookie'] = cookie;
-        const auth = request.headers.get('Authorization');
-        if (auth) headers['Authorization'] = auth;
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const profileResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3001'}/api/user/enhanced-profile`, {
-            headers,
-        });
-        if (profileResponse.ok) {
-            const data = await profileResponse.json();
-            enhancedProfile = data.profile;
-        }
+        const { data: activities } = await supabaseAdmin
+            .from('user_events')
+            .select('*')
+            .eq('email', email)
+            .gte('created_at', thirtyDaysAgo.toISOString());
+
+        // 간단한 행동 분석
+        const exerciseEvents = (activities || []).filter(a => a.event_type === 'workout_completed');
+        const sleepEvents = (activities || []).filter(a => a.event_type === 'sleep_end');
+        const scheduleCompleted = (activities || []).filter(a => a.event_type === 'schedule_complete');
+
+        const avgWorkoutsPerWeek = exerciseEvents.length / 4;
+        const avgSleepDuration = sleepEvents.length > 0
+            ? sleepEvents.reduce((sum: number, e: any) => sum + (e.metadata?.durationMinutes || 0), 0) / sleepEvents.length / 60
+            : 0;
+
+        enhancedProfile = {
+            behavioral_insights: {
+                exercise_analytics: {
+                    avgWorkoutsPerWeek,
+                    mostFrequentExercise: null,
+                    preferredExerciseTimes: [],
+                },
+                sleep_analytics: {
+                    avgSleepDuration: avgSleepDuration.toFixed(1),
+                    avgBedtime: null,
+                    avgWakeTime: null,
+                },
+                wellness_insights: {
+                    exerciseStatus: avgWorkoutsPerWeek >= 3 ? 'good' : avgWorkoutsPerWeek >= 1 ? 'moderate' : 'insufficient',
+                    sleepStatus: avgSleepDuration >= 7 ? 'good' : avgSleepDuration >= 5 ? 'moderate' : 'insufficient',
+                    recommendations: [],
+                },
+                time_slot_patterns: {},
+                preferred_briefing_categories: [],
+                overall_completion_rate: scheduleCompleted.length,
+            },
+        };
     } catch (error) {
-        logger.error('[Schedule Recommendations] Failed to fetch enhanced profile:', error);
+        logger.error('[Schedule Recommendations] Failed to build enhanced profile:', error);
     }
 
     // Extract past schedule history from customGoals (already fetched above)
