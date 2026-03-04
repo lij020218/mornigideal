@@ -8,10 +8,27 @@
  * 2. 앱이 없으면 웹에서 직접 비밀번호 재설정
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={styles.container}>
+          <div style={styles.card}>
+            <div style={styles.spinner} />
+            <h2 style={styles.title}>로딩 중...</h2>
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
 
