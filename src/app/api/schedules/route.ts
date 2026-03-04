@@ -86,13 +86,16 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
     const body = await request.json();
     const v = validateBody(scheduleCreateSchema, body);
     if (!v.success) return v.response;
-    const { text, startTime, endTime, date, specificDate, color } = v.data;
+    const { text, startTime, endTime, date, specificDate, color, daysOfWeek } = v.data;
 
     // KST 기준 날짜 계산
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
-    const scheduleDate = specificDate || date || todayStr;
+
+    // 반복 일정이면 specificDate 없이 daysOfWeek만 저장
+    const isRecurring = daysOfWeek && daysOfWeek.length > 0;
+    const scheduleDate = isRecurring ? undefined : (specificDate || date || todayStr);
 
     // customGoals에 추가 (profile.customGoals 배열에 push)
     const newGoal: Record<string, any> = {
@@ -101,9 +104,9 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       time: 'morning' as const,
       startTime,
       endTime: endTime || undefined,
-      specificDate: scheduleDate,
       completed: false,
       ...(color ? { color } : {}),
+      ...(isRecurring ? { daysOfWeek } : { specificDate: scheduleDate }),
     };
 
 
@@ -121,10 +124,16 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
     const existingProfile = user.profile || {};
     const customGoals = existingProfile.customGoals || [];
 
-    // 중복 일정 체크 (같은 날짜 + 같은 텍스트 + 같은 시간)
-    const isDuplicate = customGoals.some((g: any) =>
-      g.text === text && g.startTime === startTime && g.specificDate === scheduleDate
-    );
+    // 중복 일정 체크 (같은 텍스트 + 같은 시간 + 같은 날짜/반복 요일)
+    const isDuplicate = customGoals.some((g: any) => {
+      if (g.text !== text || g.startTime !== startTime) return false;
+      if (isRecurring && g.daysOfWeek) {
+        const sorted1 = [...daysOfWeek].sort().join(',');
+        const sorted2 = [...g.daysOfWeek].sort().join(',');
+        return sorted1 === sorted2;
+      }
+      return (g.specificDate || null) === (scheduleDate || null);
+    });
     if (isDuplicate) {
       return NextResponse.json({ error: '동일한 일정이 이미 존재합니다.' }, { status: 409 });
     }

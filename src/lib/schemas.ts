@@ -117,6 +117,7 @@ export const scheduleCreateSchema = z.object({
     date: dateSchema.optional(),
     specificDate: dateSchema.optional(),
     color: z.string().max(50).optional(),
+    daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
 });
 
 // PUT /api/schedules/[id]
