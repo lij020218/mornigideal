@@ -8,11 +8,12 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { TIMING, THRESHOLDS, LIMITS, DAILY_ROUTINE_KEYWORDS, IMPORTANT_SCHEDULE_KEYWORDS, DAY_NAMES_KR } from '@/lib/constants';
+import { TIMING, THRESHOLDS, LIMITS, DAILY_ROUTINE_KEYWORDS, IMPORTANT_SCHEDULE_KEYWORDS, FOCUS_KEYWORDS, EXERCISE_KEYWORDS, DAY_NAMES_KR } from '@/lib/constants';
 import type { CustomGoal, LongTermGoal, ChatMessage, MemoryRow, UserProfile, ImportantEvent } from '@/lib/types';
 import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove, isMaxPlan, type UserPlanType } from '@/lib/user-plan';
 import { logger } from '@/lib/logger';
+import { getChatDate } from '@/lib/scheduleUtils';
 
 export interface ProactiveNotification {
     id: string;
@@ -107,7 +108,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const userName = userProfile?.name || '';
         const greeting = userName ? `${userName}님, ` : '';
         notifications.push({
-            id: `no-schedule-nudge-${new Date().toISOString().split('T')[0]}`,
+            id: `no-schedule-nudge-${getChatDate()}`,
             type: 'context_suggestion',
             priority: 'low',
             title: '📅 오늘 일정이 비어있어요',
@@ -123,7 +124,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         const goalList = goalNames.map(n => `• ${n}`).join('\n');
         const extra = uncompletedGoals.length > 5 ? `\n외 ${uncompletedGoals.length - 5}개` : '';
         notifications.push({
-            id: `uncompleted-afternoon-${new Date().toISOString().split('T')[0]}`,
+            id: `uncompleted-afternoon-${getChatDate()}`,
             type: 'urgent_alert',
             priority: 'medium',
             title: '📋 어제 미완료 작업',
@@ -243,7 +244,7 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         message += '\n오늘도 수고하셨어요. 편안한 밤 되세요 🌙';
 
         notifications.push({
-            id: `evening-check-${new Date().toISOString().split('T')[0]}`,
+            id: `evening-check-${getChatDate()}`,
             type: 'daily_wrap',
             priority: 'medium',
             title: '🌙 하루 마무리',
@@ -431,36 +432,78 @@ function getUpcomingScheduleNotifications(
 
         const diffMinutes = Math.round((scheduleTime.getTime() - currentTime.getTime()) / (1000 * 60));
 
-        // 10분 전 알림
-        if (diffMinutes === TIMING.REMINDER_LATE_MIN) {
+        // 10분 전 알림 (8~12분 범위)
+        if (diffMinutes >= 8 && diffMinutes <= 12) {
             notifications.push({
                 id: `schedule-10min-${schedule.id}`,
                 type: 'schedule_reminder',
                 priority: 'high',
                 title: '⏰ 10분 후 일정',
-                message: `"${schedule.text}" 일정이 10분 후에 시작됩니다.`,
-                actionType: 'view_schedule',
-                actionPayload: { scheduleId: schedule.id },
-                expiresAt: scheduleTime
+                message: `"${schedule.text}" 일정이 곧 시작됩니다.`,
+                expiresAt: scheduleTime,
             });
         }
 
-        // 20분 전 알림 (회의, 미팅 등 중요 일정)
-        if (diffMinutes === TIMING.REMINDER_EARLY_MIN && isImportantSchedule(schedule.text)) {
+        // 20분 전 알림 (18~22분 범위, 중요 일정)
+        if (diffMinutes >= 18 && diffMinutes <= 22 && isImportantSchedule(schedule.text)) {
             notifications.push({
                 id: `schedule-20min-${schedule.id}`,
                 type: 'schedule_reminder',
                 priority: 'medium',
                 title: '📅 20분 후 중요 일정',
                 message: `"${schedule.text}" 일정이 20분 후에 시작됩니다. 준비하세요!`,
-                actionType: 'view_schedule',
-                actionPayload: { scheduleId: schedule.id },
-                expiresAt: scheduleTime
+                expiresAt: scheduleTime,
             });
+        }
+
+        // 일정 시작 알림 (집중 대상이면 집중 모드 버튼 포함)
+        if (diffMinutes >= 0 && diffMinutes <= 2 && !schedule.completed) {
+            const focusEligible = isFocusEligible(schedule.text);
+
+            if (focusEligible) {
+                let focusMinutes = 45;
+                if (schedule.endTime) {
+                    const [endH, endM] = schedule.endTime.split(':').map(Number);
+                    focusMinutes = (endH * 60 + endM) - (scheduleHour * 60 + scheduleMin);
+                    if (focusMinutes <= 0) focusMinutes = 45;
+                }
+
+                notifications.push({
+                    id: `schedule-start-${schedule.id}`,
+                    type: 'schedule_reminder',
+                    priority: 'high',
+                    title: '📋 일정 시작',
+                    message: `"${schedule.text}" 시간이에요!\n집중 모드를 켜고 몰입해보세요.`,
+                    actionType: 'start_focus_mode',
+                    actionPayload: {
+                        scheduleId: schedule.id,
+                        scheduleText: schedule.text,
+                        focusDuration: focusMinutes,
+                    },
+                    expiresAt: new Date(scheduleTime.getTime() + 5 * 60 * 1000),
+                });
+            } else {
+                notifications.push({
+                    id: `schedule-start-${schedule.id}`,
+                    type: 'schedule_reminder',
+                    priority: 'high',
+                    title: '📋 일정 시작',
+                    message: `"${schedule.text}" 일정이 시작되었습니다.`,
+                    expiresAt: new Date(scheduleTime.getTime() + 5 * 60 * 1000),
+                });
+            }
         }
     });
 
     return notifications;
+}
+
+/**
+ * 집중 모드 대상 일정 판별 (업무/학습/운동 키워드)
+ */
+function isFocusEligible(text: string): boolean {
+    const lower = text.toLowerCase();
+    return [...FOCUS_KEYWORDS, ...EXERCISE_KEYWORDS].some(kw => lower.includes(kw));
 }
 
 /**
@@ -480,7 +523,7 @@ function getMorningBriefingNotifications(context: UserContext): ProactiveNotific
                 .join('\n');
 
             notifications.push({
-                id: `morning-briefing-${new Date().toISOString().split('T')[0]}`,
+                id: `morning-briefing-${getChatDate()}`,
                 type: 'morning_briefing',
                 priority: 'high',
                 title: '☀️ 좋은 아침이에요!',
@@ -497,7 +540,7 @@ function getMorningBriefingNotifications(context: UserContext): ProactiveNotific
         const goalList = goalNames.map(n => `• ${n}`).join('\n');
         const extra = uncompletedGoals.length > 5 ? `\n외 ${uncompletedGoals.length - 5}개` : '';
         notifications.push({
-            id: `uncompleted-reminder-${new Date().toISOString().split('T')[0]}`,
+            id: `uncompleted-reminder-${getChatDate()}`,
             type: 'urgent_alert',
             priority: 'medium',
             title: '📋 어제 미완료 작업',
@@ -557,7 +600,7 @@ function getGoalNudgeNotifications(uncompletedGoals: CustomGoal[]): ProactiveNot
 
     if (staleGoals.length > 0) {
         notifications.push({
-            id: `goal-nudge-${new Date().toISOString().split('T')[0]}`,
+            id: `goal-nudge-${getChatDate()}`,
             type: 'goal_nudge',
             priority: 'low',
             title: '🎯 잊지 않으셨죠?',
@@ -2164,7 +2207,7 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
         // 어제 날짜 계산 (KST)
         const yesterday = new Date(kstTime);
         yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
         const yesterdayDayOfWeek = yesterday.getDay();
 
 

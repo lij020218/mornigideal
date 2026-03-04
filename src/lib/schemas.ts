@@ -112,8 +112,8 @@ export const aiChatSchema = z.object({
 // POST /api/schedules
 export const scheduleCreateSchema = z.object({
     text: z.string().min(1).max(500),
-    startTime: z.string().min(1),
-    endTime: z.string().optional(),
+    startTime: timeSchema,
+    endTime: timeSchema.optional(),
     date: dateSchema.optional(),
     specificDate: dateSchema.optional(),
     color: z.string().max(50).optional(),

@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getUserIdWithAuth } from '@/lib/auth-utils';
+import { getUserIdWithAuth, getUserEmailFromRequest } from '@/lib/auth-utils';
 import { dualWriteUpdate } from '@/lib/schedule-dual-write';
 import { logger } from '@/lib/logger';
 import { invalidateUserContext } from '@/lib/shared-context';
@@ -36,12 +36,17 @@ export async function POST(
       const { error: updateError } = await supabaseAdmin
         .from('schedules')
         .update({ completed: !schedule.completed })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', userId);
 
       if (updateError) {
         logger.error('일정 완료 처리 오류:', updateError);
         return NextResponse.json({ error: 'Failed to complete schedule' }, { status: 500 });
       }
+
+      // 캐시 무효화
+      const editEmail = await getUserEmailFromRequest(request);
+      if (editEmail) invalidateUserContext(editEmail);
 
       return NextResponse.json({ success: true, completed: !schedule.completed });
     }

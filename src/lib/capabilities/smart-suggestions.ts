@@ -131,6 +131,31 @@ export async function generateSmartSuggestions(
             ? sp.recurringSchedules.slice(0, 5).map((r: any) => `  - ${r.title} (${r.dayOfWeek} ${r.timeBlock}, ${r.frequency}회)`).join('\n')
             : '  없음';
 
+        // 현재 요일+시간대에 매칭되는 반복 일정 찾기
+        const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+        const todayDayName = dayNames[now.getDay()];
+        const currentTimeBlock = hour < 12 ? '오전' : hour < 18 ? '오후' : '저녁';
+
+        const matchingRecurring = sp.recurringSchedules.filter((r: any) => {
+            const dayMatch = r.dayOfWeek === todayDayName || r.dayOfWeek?.includes(todayDayName);
+            const blockMatch = r.timeBlock === currentTimeBlock;
+            // 이미 추가된 일정이 아닌지 확인
+            const notDuplicate = !existingSchedules.some((s: string) =>
+                s.includes(r.title) || r.title.includes(s)
+            );
+            return dayMatch && blockMatch && notDuplicate;
+        });
+
+        const recurringPriorityText = matchingRecurring.length > 0
+            ? `\n**[🔥 반복 패턴 매칭 — 1순위 추천 필수] 🚨 최우선**
+이 사용자는 매주 이 요일(${todayDayName}) ${currentTimeBlock} 시간대에 다음 활동을 반복적으로 수행합니다:
+${matchingRecurring.map((r: any) => `  - "${r.title}" (최근 4주간 ${r.frequency}회 수행)`).join('\n')}
+
+→ **위 활동 중 최소 1개를 반드시 추천 목록의 1번째(최우선)로 포함할 것**
+→ 사용자의 확립된 루틴이므로 다른 새로운 활동보다 우선합니다
+→ 이미 오늘 추가된 일정과 중복되는 경우에만 제외 가능\n`
+            : '';
+
         const prompt = `당신은 사용자의 데이터를 기반으로 개인화된 일정을 추천하는 AI 코치입니다.
 
 **[사용자 프로필]**
@@ -142,6 +167,7 @@ export async function generateSmartSuggestions(
 **[⏰ 시간대별 추천 제약 - 절대 준수] 🚨 최우선 규칙**
 ${timeAppropriateCategories}
 
+${recurringPriorityText}
 **[실제 생활 패턴 - 일정 분석 기반]**
 ${patternText}
 - 정기 반복 일정 (최근 4주):

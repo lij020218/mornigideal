@@ -500,6 +500,7 @@ ${toolDescriptions}
   - 해당 시각이 현재 시간보다 미래라면 → 그대로 사용 (예: 현재 03:00, "5시" → "05:00")
   - 내일/미래 날짜 일정이면 상식적으로 판단 (예: "내일 7시 기상" → "07:00", "내일 6시 저녁" → "18:00")
 - **삭제/수정**: text+startTime 필수 (update는 originalText+originalTime)
+- **삭제 금지**: 사용자가 "삭제/지워/빼/취소" 등 명시적으로 삭제를 요청한 경우에만 delete_schedule 사용. 일정 추가 요청 시 기존 일정을 자동으로 삭제하거나 "교체"하지 마세요. 추가만 하세요.
 - **존재하지 않는 일정을 "이미 있다"고 하지 마세요**
 - **respond_to_user의 actions**: [{type: "add_schedule", label: "일정 추가", data: {text, startTime, ...}}]
 
@@ -515,6 +516,12 @@ ${SAFETY_SYSTEM_RULES}
 
 입력: "내일 5시에 기상 잡아줘"
 출력: {"thought": "내일 기상 일정 추가. 기상은 아침이므로 05:00", "action": "add_schedule", "actionInput": {"text": "기상", "startTime": "05:00", "endTime": "06:00", "specificDate": "${tomorrowStr}"}}
+
+입력: "매주 화수목 아침 8시에 기상 잡아줘"
+출력: {"thought": "반복 일정. 화=2,수=3,목=4", "action": "add_schedule", "actionInput": {"text": "기상", "startTime": "08:00", "endTime": "09:00", "daysOfWeek": [2, 3, 4]}}
+
+(Observation: "기상" 일정을 08:00에 추가했습니다.)
+출력: {"thought": "완료. 기존 일정은 건드리지 않는다", "action": "respond_to_user", "actionInput": {"message": "매주 화·수·목 오전 8시 기상 일정 추가했어요! ☀️", "actions": []}}
 
 입력: "아침 루틴 삭제해줘"
 출력: {"thought": "삭제", "action": "delete_schedule", "actionInput": {"text": "아침 루틴", "startTime": "07:00"}}

@@ -184,12 +184,20 @@ export class ToolExecutor {
             args.daysOfWeek = undefined;
         }
 
-        // 중복 일정 체크 (같은 텍스트 + 같은 시간 + 같은 날짜)
+        // 중복 일정 체크 (같은 텍스트 + 같은 시간 + 같은 날짜/반복 요일)
         const scheduleDate = args.specificDate || null;
-        const isDuplicate = customGoals.some((g: any) =>
-            g.text === args.text && g.startTime === args.startTime &&
-            (g.specificDate || null) === scheduleDate
-        );
+        const scheduleDays = args.daysOfWeek || null;
+        const isDuplicate = customGoals.some((g: any) => {
+            if (g.text !== args.text || g.startTime !== args.startTime) return false;
+            // 반복 일정 중복: 같은 daysOfWeek 조합
+            if (scheduleDays && g.daysOfWeek) {
+                const sorted1 = [...scheduleDays].sort().join(',');
+                const sorted2 = [...g.daysOfWeek].sort().join(',');
+                return sorted1 === sorted2;
+            }
+            // 단일 일정 중복: 같은 specificDate
+            return (g.specificDate || null) === scheduleDate;
+        });
         if (isDuplicate) {
             return { success: false, error: '중복 일정', humanReadableSummary: `"${args.text}" 일정이 이미 같은 시간에 존재합니다.` };
         }
@@ -229,10 +237,15 @@ export class ToolExecutor {
             logger.error('[ToolExecutor] GCal sync failed (push):', e instanceof Error ? e.message : e);
         }
 
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+        const repeatInfo = args.daysOfWeek && args.daysOfWeek.length > 0
+            ? ` (매주 ${args.daysOfWeek.map(d => dayNames[d]).join('·')} 반복)`
+            : args.specificDate ? ` (${args.specificDate})` : '';
+
         return {
             success: true,
             data: newGoal,
-            humanReadableSummary: `"${args.text}" 일정을 ${args.startTime}에 추가했습니다.`,
+            humanReadableSummary: `"${args.text}" 일정을 ${args.startTime}에 추가했습니다.${repeatInfo}`,
         };
     }
 
@@ -243,14 +256,40 @@ export class ToolExecutor {
         }
 
         const customGoals = userData.profile?.customGoals || [];
-        const targetText = (args.text || '').toLowerCase();
+        const targetText = (args.text || '').toLowerCase().trim();
         const targetTime = args.startTime || '';
 
-        const filtered = customGoals.filter((g: CustomGoal) => {
+        // 정확 매칭 우선, 없으면 부분 매칭 (1개만 매칭될 때)
+        const exactMatches = customGoals.filter((g: CustomGoal) => {
+            const matchesText = (g.text || '').toLowerCase().trim() === targetText;
+            const matchesTime = !targetTime || g.startTime === targetTime;
+            return matchesText && matchesTime;
+        });
+
+        const partialMatches = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().includes(targetText);
             const matchesTime = !targetTime || g.startTime === targetTime;
-            return !(matchesText && matchesTime);
+            return matchesText && matchesTime;
         });
+
+        const toDelete = exactMatches.length > 0 ? exactMatches : partialMatches;
+
+        if (toDelete.length === 0) {
+            return { success: false, error: '일정 없음', humanReadableSummary: `"${args.text}" 일정을 찾을 수 없습니다.` };
+        }
+
+        // 부분 매칭으로 여러 개 걸리면 경고 후 정확 매칭만 삭제
+        if (exactMatches.length === 0 && partialMatches.length > 1) {
+            const names = partialMatches.map((g: CustomGoal) => `"${g.text}"`).join(', ');
+            return {
+                success: false,
+                error: '다중 매칭',
+                humanReadableSummary: `"${args.text}"와 유사한 일정이 ${partialMatches.length}개 있어요: ${names}. 정확한 이름을 알려주세요.`,
+            };
+        }
+
+        const toDeleteIds = new Set(toDelete.map((g: CustomGoal) => g.id));
+        const filtered = customGoals.filter((g: CustomGoal) => !toDeleteIds.has(g.id));
 
         if (filtered.length === customGoals.length) {
             return { success: false, error: '일정 없음', humanReadableSummary: `"${args.text}" 일정을 찾을 수 없습니다.` };
@@ -268,16 +307,11 @@ export class ToolExecutor {
 
         // GCal 연동된 사용자면 삭제 동기화
         try {
-            const deletedGoals = customGoals.filter((g: CustomGoal) => {
-                const matchesText = (g.text || '').toLowerCase().includes(targetText);
-                const matchesTime = !targetTime || g.startTime === targetTime;
-                return matchesText && matchesTime;
-            });
-            if (deletedGoals.length > 0) {
+            if (toDelete.length > 0) {
                 const { hasGCalLinked, GoogleCalendarService } = await import('@/lib/googleCalendarService');
                 if (await hasGCalLinked(this.userEmail)) {
                     const gcal = new GoogleCalendarService(this.userEmail);
-                    for (const goal of deletedGoals) {
+                    for (const goal of toDelete) {
                         const { data: mapping } = await supabaseAdmin
                             .from('calendar_sync_mapping')
                             .select('gcal_event_id')
@@ -547,7 +581,8 @@ export class ToolExecutor {
 
     private async suggestSchedule(args: SuggestScheduleArgs): Promise<ToolResult> {
         try {
-            const count = args.count || 3;
+            const isFree = this.userPlan === 'free';
+            const count = isFree ? 1 : (args.count || 3);
             const focusArea = args.focus || 'auto';
 
             // 병렬로 분석 데이터 수집 (공유 컨텍스트 풀 사용)
@@ -742,8 +777,9 @@ export class ToolExecutor {
     private async getSmartSuggestions(args: Record<string, any>): Promise<ToolResult> {
         try {
             const { generateSmartSuggestions } = await import('@/lib/capabilities/smart-suggestions');
+            const isFree = this.userPlan === 'free';
             const result = await generateSmartSuggestions(this.userEmail, {
-                requestCount: args.requestCount || 3,
+                requestCount: isFree ? 1 : (args.requestCount || 3),
                 currentHour: args.currentHour,
             });
 
