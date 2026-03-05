@@ -37,8 +37,11 @@ export async function generateDailyBriefings() {
     yesterday.setDate(now.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // Yesterday YYYY-MM-DD in KST
 
-    // 3. Process each user
-    for (const user of users) {
+    // 3. Process each user (병렬 배치 처리)
+    const CONCURRENCY = 5;
+    for (let i = 0; i < users.length; i += CONCURRENCY) {
+        const batch = users.slice(i, i + CONCURRENCY);
+        await Promise.allSettled(batch.map(async (user) => {
         try {
 
             const profile = user.profile || {};
@@ -92,7 +95,10 @@ export async function generateDailyBriefings() {
             const finalTrends = userTrends.slice(0, 3);
 
             // B. Generate Content with Gemini
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+            const model = genAI.getGenerativeModel({
+                model: "gemini-2.0-flash-exp",
+                generationConfig: { responseMimeType: "application/json" }
+            });
 
             const prompt = `Create a morning briefing for ${user.name} (Job: ${job}).
 
@@ -156,11 +162,7 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
 
             let content: DailyBriefingContent;
             try {
-                // Sanitize json - remove markdown code blocks and control characters
-                let jsonStr = responseText.replace(/```json|```/g, "").trim();
-                // Remove control characters (0x00-0x1F except whitespace like \n, \r, \t)
-                jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
-                content = JSON.parse(jsonStr);
+                content = JSON.parse(responseText);
             } catch (e) {
                 console.error("Failed to parse Gemini briefing", e);
                 console.error("Response text:", responseText);
@@ -194,6 +196,7 @@ ${finalTrends.map((t: any, idx: number) => `               Article ${idx + 1}:
         } catch (err) {
             console.error(`[DailyBriefing] CRITICAL Error processing user ${user.id}:`, err);
         }
+        }));
     }
 
 }

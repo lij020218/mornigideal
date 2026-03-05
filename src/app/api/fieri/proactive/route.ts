@@ -11,7 +11,8 @@ import {
     generateProactiveNotifications,
     getUserContext,
     saveProactiveNotification,
-    ProactiveNotification
+    ProactiveNotification,
+    TYPE_DISPLAY_ORDER,
 } from '@/lib/proactiveNotificationService';
 import { getEscalationDecision, applyEscalation } from '@/lib/escalationService';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -53,6 +54,7 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
                     message: row.message?.split('\n\n').slice(1).join('\n\n') || row.message || '',
                     actionType: row.action_type,
                     actionPayload: row.action_payload,
+                    displayOrder: TYPE_DISPLAY_ORDER[row.type] ?? 150,
                 } as ProactiveNotification))),
         ]);
 
@@ -106,7 +108,7 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
 
         // Type-singleton notifications: 하루에 한 번만 (morning_briefing, goal_nudge 등)
         // Instance notifications: 같은 ID가 이미 표시됐으면 제외
-        const typeSingletons = ['morning_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
+        const typeSingletons = ['morning_briefing', 'trend_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
         const filteredNotifications = activeNotifications.filter(n => {
             if (typeSingletons.includes(n.type)) {
                 if (shownTypes.includes(n.type)) return false;
@@ -134,11 +136,13 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
             }
         }
 
-        // 7. 우선순위로 정렬 (high > medium > low)
+        // 7. displayOrder(시간순) 정렬 — 같은 순서면 우선순위로
         const priorityOrder = { high: 0, medium: 1, low: 2 };
-        finalNotifications.sort((a, b) =>
-            priorityOrder[a.priority] - priorityOrder[b.priority]
-        );
+        finalNotifications.sort((a, b) => {
+            const orderDiff = (a.displayOrder ?? 150) - (b.displayOrder ?? 150);
+            if (orderDiff !== 0) return orderDiff;
+            return priorityOrder[a.priority] - priorityOrder[b.priority];
+        });
 
         // 8. 플랜별 일일 한도 적용 (free: 5, pro: 10, max: 무제한)
         const dailyLimit = LIMITS.PROACTIVE_DAILY[userPlan.plan] ?? LIMITS.PROACTIVE_DAILY.free;

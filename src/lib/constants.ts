@@ -158,6 +158,7 @@ export const NOTIFICATION_COOLDOWNS: Record<string, number> = {
     schedule_reminder: 30,
     /** Minutes between morning briefings */
     morning_briefing: 720,  // 12 hours
+    trend_briefing: 720,  // 12 hours
     /** Minutes between goal nudges */
     goal_nudge: 1440,  // 24 hours
     /** Minutes between evening prep */

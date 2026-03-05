@@ -17,14 +17,47 @@ import { getChatDate } from '@/lib/scheduleUtils';
 
 export interface ProactiveNotification {
     id: string;
-    type: 'schedule_reminder' | 'morning_briefing' | 'urgent_alert' | 'context_suggestion' | 'goal_nudge' | 'memory_suggestion' | 'pattern_reminder' | 'lifestyle_recommend' | 'schedule_prep' | 'mood_reminder' | 'burnout_warning' | 'focus_streak' | 'health_insight' | 'github_streak' | 'schedule_overload' | 'weekly_goal_deadline' | 'routine_break' | 'inactive_return' | 'learning_reminder' | 'energy_boost' | 'daily_wrap' | 'weekly_review';
+    type: 'schedule_reminder' | 'morning_briefing' | 'trend_briefing' | 'urgent_alert' | 'context_suggestion' | 'goal_nudge' | 'memory_suggestion' | 'pattern_reminder' | 'lifestyle_recommend' | 'schedule_prep' | 'mood_reminder' | 'burnout_warning' | 'focus_streak' | 'health_insight' | 'github_streak' | 'schedule_overload' | 'weekly_goal_deadline' | 'routine_break' | 'inactive_return' | 'learning_reminder' | 'energy_boost' | 'daily_wrap' | 'weekly_review';
     priority: 'high' | 'medium' | 'low';
     title: string;
     message: string;
     actionType?: string;
     actionPayload?: Record<string, unknown>;
     expiresAt?: Date;
+    /** 채팅 내 표시 순서 (낮을수록 먼저 표시, 시간순) */
+    displayOrder?: number;
 }
+
+/** 알림 타입별 논리적 시간 순서 (낮을수록 먼저 표시) */
+export const TYPE_DISPLAY_ORDER: Record<string, number> = {
+    // 아침 (6-12시)
+    morning_briefing: 10,
+    trend_briefing: 15,
+    mood_reminder: 20,
+    schedule_prep: 30,
+    schedule_reminder: 35,
+    urgent_alert: 40,
+    // 오전~오후
+    context_suggestion: 50,
+    memory_suggestion: 55,
+    pattern_reminder: 60,
+    goal_nudge: 65,
+    lifestyle_recommend: 70,
+    learning_reminder: 75,
+    focus_streak: 80,
+    health_insight: 85,
+    github_streak: 90,
+    burnout_warning: 95,
+    energy_boost: 100,
+    // 오후~저녁
+    schedule_overload: 110,
+    weekly_goal_deadline: 115,
+    routine_break: 120,
+    inactive_return: 125,
+    // 저녁
+    daily_wrap: 200,
+    weekly_review: 210,
+};
 
 export interface UserContext {
     userEmail: string;
@@ -410,6 +443,12 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         logger.error('[ProactiveNotif] Trend briefing reminder failed:', e instanceof Error ? e.message : e);
     }
 
+    // displayOrder 부여 후 시간순 정렬
+    for (const n of notifications) {
+        n.displayOrder = TYPE_DISPLAY_ORDER[n.type] ?? 150;
+    }
+    notifications.sort((a, b) => (a.displayOrder ?? 150) - (b.displayOrder ?? 150));
+
     return notifications;
 }
 
@@ -570,7 +609,7 @@ function getEveningPrepNotifications(context: UserContext): ProactiveNotificatio
         // 취침 1시간 전
         if (currentHour === sleepHour - 1) {
             notifications.push({
-                id: `sleep-prep-${Date.now()}`,
+                id: `sleep-prep-${getChatDate()}`,
                 type: 'context_suggestion',
                 priority: 'low',
                 title: '🌙 취침 준비 시간',
@@ -2135,9 +2174,25 @@ export async function saveProactiveNotification(
     notification: ProactiveNotification
 ): Promise<boolean> {
     try {
-        // notification.id는 문자열 (e.g. "schedule-10min-goal_123") 이므로
-        // UUID PK인 jarvis_notifications.id에는 넣지 않고 자동생성에 맡김
-        // 대신 notification.id를 action_payload에 포함하여 추적 가능하게 함
+        // 중복 방지: 같은 notification_ref_id가 오늘 이미 저장되어 있으면 스킵
+        const now = new Date();
+        const todayStart = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        todayStart.setHours(0, 0, 0, 0);
+        // KST → UTC로 변환 (KST는 UTC+9)
+        const todayStartUTC = new Date(todayStart.getTime() - 9 * 60 * 60 * 1000);
+
+        const { data: existing } = await supabaseAdmin
+            .from('jarvis_notifications')
+            .select('id')
+            .eq('user_email', userEmail)
+            .gte('created_at', todayStartUTC.toISOString())
+            .contains('action_payload', { notification_ref_id: notification.id })
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            return true; // 이미 저장됨
+        }
+
         const { error } = await supabaseAdmin
             .from('jarvis_notifications')
             .insert({
@@ -2149,7 +2204,7 @@ export async function saveProactiveNotification(
                     ...notification.actionPayload,
                     notification_ref_id: notification.id,
                 },
-                created_at: new Date().toISOString()
+                created_at: now.toISOString()
             });
 
         if (error) {

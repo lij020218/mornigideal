@@ -131,6 +131,60 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         }
     });
 
+    // 사용자 간 집중 시간 퍼센타일 계산 (focus 요청 시에만)
+    let focusPercentile: { rank: number; totalUsers: number; percentile: number; avgMinutesAll: number } | null = null;
+    if (eventType === 'focus' && focusSessions > 0 && startDate) {
+        try {
+            // 같은 기간 동안 집중한 모든 사용자의 총 집중 시간 집계
+            const { data: allFocusData } = await supabaseAdmin
+                .from('user_events')
+                .select('email, metadata')
+                .eq('event_type', 'focus_end')
+                .gte('created_at', `${startDate}T00:00:00`)
+                .not('metadata->duration', 'is', null);
+
+            if (allFocusData && allFocusData.length > 0) {
+                // 사용자별 총 집중 시간 집계
+                const userTotals = new Map<string, number>();
+                for (const e of allFocusData) {
+                    const dur = e.metadata?.duration || 0;
+                    const mins = Math.floor(dur / 60);
+                    userTotals.set(e.email, (userTotals.get(e.email) || 0) + mins);
+                }
+
+                const allMinutes = Array.from(userTotals.values()).sort((a, b) => a - b);
+                const totalUsers = allMinutes.length;
+                const myMinutes = userTotals.get(email) || 0;
+
+                // 나보다 적은 사용자 수 → 퍼센타일
+                const belowCount = allMinutes.filter(m => m < myMinutes).length;
+                const percentile = totalUsers > 1
+                    ? Math.round((belowCount / (totalUsers - 1)) * 100)
+                    : 100; // 혼자면 상위 100%
+
+                const avgAll = Math.round(allMinutes.reduce((a, b) => a + b, 0) / totalUsers);
+
+                focusPercentile = {
+                    rank: totalUsers - belowCount,
+                    totalUsers,
+                    percentile: Math.min(percentile, 100),
+                    avgMinutesAll: avgAll,
+                };
+            }
+        } catch (err) {
+            logger.debug('[Mode Events] Percentile calculation failed:', err);
+        }
+    }
+
+    // 글로벌 벤치마크 (연구 기반 고정값)
+    // 출처: Hubstaff 2026, Anders Ericsson, Cal Newport
+    // 직장인 평균 하루 2-3시간 → 주간 약 105분 (15분/일)
+    const globalBenchmark = {
+        avgDailyMinutes: 150,   // 일반인 평균: 하루 2.5시간(150분) 집중
+        topPerformerMinutes: 240, // 상위 10%: 하루 4시간(240분) 집중
+        source: 'Hubstaff 2026, Cal Newport Deep Work',
+    };
+
     return NextResponse.json({
         events: data,
         statistics: {
@@ -146,5 +200,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                 avgSleepHours: sleepSessions > 0 ? (totalSleepMinutes / sleepSessions / 60).toFixed(1) : 0,
             },
         },
+        focusPercentile,
+        globalBenchmark,
     });
 });

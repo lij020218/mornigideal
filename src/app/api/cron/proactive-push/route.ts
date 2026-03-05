@@ -105,7 +105,7 @@ export const GET = withCron(async (_request: NextRequest) => {
             const shownIds: string[] = shownIdsToday?.value || [];
 
             // 만료/해제/이미표시 필터링
-            const typeSingletons = ['morning_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
+            const typeSingletons = ['morning_briefing', 'trend_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
             const filtered = notifications.filter(n => {
                 if (dismissedIds.includes(n.id)) return false;
                 if (n.expiresAt && new Date(n.expiresAt) < now) return false;
@@ -162,9 +162,13 @@ export const GET = withCron(async (_request: NextRequest) => {
                 continue;
             }
 
-            // 우선순위 정렬 후 한도 적용
+            // displayOrder(시간순) 정렬 후 한도 적용
             const priorityOrder = { high: 0, medium: 1, low: 2 };
-            pushable.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+            pushable.sort((a, b) => {
+                const orderDiff = (a.displayOrder ?? 150) - (b.displayOrder ?? 150);
+                if (orderDiff !== 0) return orderDiff;
+                return priorityOrder[a.priority] - priorityOrder[b.priority];
+            });
             const toSend = pushable.slice(0, Math.min(remaining, 3)); // 한 번에 최대 3개
 
             let userPushed = 0;

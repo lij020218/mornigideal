@@ -96,7 +96,7 @@ async function generateRecommendation(
     currentHour: number,
     slotLabel: string,
     recentCompletedTexts: string[]
-): Promise<{ title: string; message: string; suggestions: string[] } | null> {
+): Promise<{ title: string; message: string; suggestions: string[]; items: Array<{ text: string; duration: string; reason: string }> } | null> {
     const job = profile?.onboarding?.userType === '대학생'
         ? `${profile?.onboarding?.major || ''} 대학생`
         : profile?.onboarding?.field || profile?.job || '직장인';
@@ -138,10 +138,18 @@ async function generateRecommendation(
             ? `${userName}님, ${greetings[Math.floor(Math.random() * greetings.length)]}`
             : greetings[Math.floor(Math.random() * greetings.length)];
 
+        // 구조화된 추천 항목 (카드 UI용)
+        const structuredItems = items.map((s: any) => ({
+            text: s.t || s.text || '',
+            duration: s.d || s.duration || '',
+            reason: s.r || s.reason || '',
+        }));
+
         return {
             title: `${slotLabel} 시간이 비어있어요`,
             message: `${greeting}\n\n추천 활동:\n${suggestionList}\n\n채팅에서 \"일정 추가\"라고 말하면 바로 등록할 수 있어요.`,
             suggestions: suggestionTexts,
+            items: structuredItems,
         };
     } catch (error) {
         logger.error('[IdleNudge] AI generation failed:', error);
@@ -175,9 +183,12 @@ export const GET = withCron(async (_request: NextRequest) => {
     let sent = 0;
     let skipped = 0;
 
+    // Phase 1: 대상 유저 필터링 + 프로필 그룹핑 (AI 호출 최소화)
+    type EligibleUser = { email: string; profile: any; userName: string };
+    const eligibleUsers: EligibleUser[] = [];
+
     for (const user of users) {
         try {
-            // 이미 이 시간대에 nudge 보냈으면 스킵
             if (await hasNudgeBeenSent(user.email, todayStr, slotLabel)) {
                 skipped++;
                 continue;
@@ -185,103 +196,132 @@ export const GET = withCron(async (_request: NextRequest) => {
 
             const profile = user.profile || {};
             const customGoals: CustomGoal[] = profile.customGoals || [];
-
-            // 향후 4시간 일정 체크
             const upcoming = getUpcomingSchedules(customGoals, todayStr, dayOfWeek, currentHour, 4);
 
-            // 일정이 있으면 스킵
             if (upcoming.length > 0) {
                 skipped++;
                 continue;
             }
 
-            // 최근 완료한 일정 텍스트 (패턴 참고용)
-            const recentCompleted = customGoals
-                .filter((g: CustomGoal) => g.completed && g.specificDate && g.specificDate >= todayStr.slice(0, 8))
-                .map((g: CustomGoal) => g.text)
-                .slice(0, 10);
+            eligibleUsers.push({ email: user.email, profile, userName: profile?.name || '' });
+        } catch (error) {
+            logger.error(`[IdleNudge] Filter error for ${user.email}:`, error instanceof Error ? error.message : error);
+        }
+    }
 
-            // AI 추천 생성
+    // Phase 2: 같은 (job, interests) 유저들은 AI 추천 1회 공유
+    const groupMap = new Map<string, EligibleUser[]>();
+    for (const u of eligibleUsers) {
+        const p = u.profile;
+        const job = p?.onboarding?.userType === '대학생'
+            ? `${p?.onboarding?.major || ''} 대학생`
+            : p?.onboarding?.field || p?.job || '직장인';
+        const interests = (p?.onboarding?.interests || []).sort().join(',');
+        const groupKey = `${job}|${interests}`;
+        if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
+        groupMap.get(groupKey)!.push(u);
+    }
+
+    logger.info(`[IdleNudge] ${eligibleUsers.length} eligible users grouped into ${groupMap.size} groups (saving ${Math.max(0, eligibleUsers.length - groupMap.size)} AI calls)`);
+
+    // Phase 3: 그룹별 AI 추천 1회 → 그룹 내 유저에게 배포
+    for (const [, groupUsers] of groupMap) {
+        try {
+            const representative = groupUsers[0];
             const recommendation = await generateRecommendation(
-                profile,
+                representative.profile,
                 currentHour,
                 slotLabel,
-                recentCompleted
+                [] // 그룹 공유이므로 개인 완료 이력은 제외
             );
 
             if (!recommendation) {
-                skipped++;
+                skipped += groupUsers.length;
                 continue;
             }
 
-            // proactive notification 저장 (모바일이 폴링으로 수신)
-            await saveProactiveNotification(user.email, {
-                id: `idle-nudge-${todayStr}-${slotLabel}`,
-                type: 'context_suggestion',
-                priority: 'low',
-                title: recommendation.title,
-                message: recommendation.message,
-                actionType: 'open_add_schedule',
-                actionPayload: { suggestions: recommendation.suggestions, timeSlot: slotLabel },
-            });
+            // 그룹 내 각 유저에게 배포
+            for (const user of groupUsers) {
+                try {
+                    // 이름 개인화
+                    const personalizedMessage = user.userName
+                        ? recommendation.message.replace(
+                            /^.*?님,/,
+                            `${user.userName}님,`
+                          ).replace(
+                            /^([^님]*$)/,
+                            recommendation.message
+                          )
+                        : recommendation.message;
 
-            // 푸시 알림 전송
-            await sendPushNotification(user.email, {
-                title: recommendation.title,
-                body: recommendation.suggestions[0] || '일정을 추가해보세요',
-                data: {
-                    type: 'idle_schedule_nudge',
-                    deepLink: 'fieri://dashboard',
-                    suggestions: recommendation.suggestions,
-                },
-            });
+                    await saveProactiveNotification(user.email, {
+                        id: `idle-nudge-${todayStr}-${slotLabel}`,
+                        type: 'context_suggestion',
+                        priority: 'low',
+                        title: recommendation.title,
+                        message: personalizedMessage,
+                        actionType: 'open_add_schedule',
+                        actionPayload: { suggestions: recommendation.suggestions, items: recommendation.items, timeSlot: slotLabel },
+                    });
 
-            // 채팅 기록에도 저장 (웹/모바일 채팅 히스토리에 남도록)
-            try {
-                const { data: userData } = await supabaseAdmin
-                    .from('users')
-                    .select('id')
-                    .eq('email', user.email)
-                    .maybeSingle();
+                    await sendPushNotification(user.email, {
+                        title: recommendation.title,
+                        body: recommendation.suggestions[0] || '일정을 추가해보세요',
+                        data: {
+                            type: 'idle_schedule_nudge',
+                            deepLink: 'fieri://dashboard',
+                            suggestions: recommendation.suggestions,
+                        },
+                    });
 
-                if (userData) {
-                    const chatMessage = {
-                        id: `idle-nudge-${todayStr}-${slotLabel}-${Date.now()}`,
-                        role: 'assistant',
-                        content: `**${recommendation.title}**\n\n${recommendation.message}`,
-                        timestamp: new Date().toISOString(),
-                    };
+                    // 채팅 기록 저장
+                    try {
+                        const { data: userData } = await supabaseAdmin
+                            .from('users')
+                            .select('id')
+                            .eq('email', user.email)
+                            .maybeSingle();
 
-                    // 기존 채팅 기록 가져오기
-                    const { data: existingChat } = await supabaseAdmin
-                        .from('chat_history')
-                        .select('messages')
-                        .eq('user_id', userData.id)
-                        .eq('date', todayStr)
-                        .maybeSingle();
+                        if (userData) {
+                            const chatMessage = {
+                                id: `idle-nudge-${todayStr}-${slotLabel}-${Date.now()}`,
+                                role: 'assistant',
+                                content: `**${recommendation.title}**\n\n${personalizedMessage}`,
+                                timestamp: new Date().toISOString(),
+                            };
 
-                    const existingMessages = existingChat?.messages || [];
-                    const updatedMessages = [...existingMessages, chatMessage];
+                            const { data: existingChat } = await supabaseAdmin
+                                .from('chat_history')
+                                .select('messages')
+                                .eq('user_id', userData.id)
+                                .eq('date', todayStr)
+                                .maybeSingle();
 
-                    await supabaseAdmin
-                        .from('chat_history')
-                        .upsert({
-                            user_id: userData.id,
-                            date: todayStr,
-                            messages: updatedMessages,
-                            title: existingChat ? undefined : todayStr,
-                            updated_at: new Date().toISOString(),
-                        }, { onConflict: 'user_id,date' });
+                            const existingMessages = existingChat?.messages || [];
+                            const updatedMessages = [...existingMessages, chatMessage];
+
+                            await supabaseAdmin
+                                .from('chat_history')
+                                .upsert({
+                                    user_id: userData.id,
+                                    date: todayStr,
+                                    messages: updatedMessages,
+                                    title: existingChat ? undefined : todayStr,
+                                    updated_at: new Date().toISOString(),
+                                }, { onConflict: 'user_id,date' });
+                        }
+                    } catch (chatError) {
+                        logger.error(`[IdleNudge] Chat history save failed for ${user.email}:`, chatError instanceof Error ? chatError.message : chatError);
+                    }
+
+                    await markNudgeSent(user.email, todayStr, slotLabel);
+                    sent++;
+                } catch (error) {
+                    logger.error(`[IdleNudge] Delivery error for ${user.email}:`, error instanceof Error ? error.message : error);
                 }
-            } catch (chatError) {
-                logger.error(`[IdleNudge] Chat history save failed for ${user.email}:`, chatError instanceof Error ? chatError.message : chatError);
             }
-
-            // 전송 기록
-            await markNudgeSent(user.email, todayStr, slotLabel);
-            sent++;
         } catch (error) {
-            logger.error(`[IdleNudge] Error for ${user.email}:`, error instanceof Error ? error.message : error);
+            logger.error(`[IdleNudge] Group error:`, error instanceof Error ? error.message : error);
         }
     }
 

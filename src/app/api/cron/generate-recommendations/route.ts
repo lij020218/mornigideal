@@ -163,52 +163,68 @@ export async function GET(request: Request) {
 
         const results: any[] = [];
 
-        // Process users in parallel batches of 3 (YouTube API rate limits)
-        const CONCURRENCY = 3;
-        for (let i = 0; i < allUsers.length; i += CONCURRENCY) {
-            const batch = allUsers.slice(i, i + CONCURRENCY);
-            const batchResults = await Promise.allSettled(
-                batch.map(async (user) => {
-                    const userProfile = user.profile as any;
-                    const job = userProfile.job || 'Professional';
-                    const goal = userProfile.goal || 'Growth';
-                    const interests = userProfile.interests || [];
+        // 프로필 그룹핑: 같은 (job, goal, interests) 유저는 추천 결과 공유
+        const userGroups = new Map<string, typeof allUsers>();
+        for (const user of allUsers) {
+            const p = user.profile as any;
+            const job = p.job || 'Professional';
+            const goal = p.goal || 'Growth';
+            const interests = (p.interests || []).sort().join(',');
+            const groupKey = `${job}|${goal}|${interests}`;
+            if (!userGroups.has(groupKey)) userGroups.set(groupKey, []);
+            userGroups.get(groupKey)!.push(user);
+        }
 
-                    const recommendations = await generateRecommendationsForUser(user.email, job, goal, interests);
+        console.log(`[CRON] ${allUsers.length} users grouped into ${userGroups.size} groups (saving ${allUsers.length - userGroups.size} Gemini+YouTube calls)`);
 
-                    if (!recommendations || recommendations.length === 0) {
-                        return { email: user.email, status: 'no_recommendations' };
+        // 그룹별 추천 1회 생성 → 그룹 내 유저에게 배포
+        for (const [, groupUsers] of userGroups) {
+            const representative = groupUsers[0];
+            const p = representative.profile as any;
+            const job = p.job || 'Professional';
+            const goal = p.goal || 'Growth';
+            const interests = p.interests || [];
+
+            try {
+                const recommendations = await generateRecommendationsForUser(representative.email, job, goal, interests);
+
+                if (!recommendations || recommendations.length === 0) {
+                    for (const u of groupUsers) {
+                        results.push({ email: u.email, status: 'no_recommendations' });
                     }
+                    continue;
+                }
 
-                    const { error: saveError } = await supabaseAdmin
-                        .from('recommendations_cache')
-                        .upsert({
-                            email: user.email,
-                            date: today,
-                            recommendations,
-                            created_at: new Date().toISOString()
-                        }, { onConflict: 'email,date' });
+                // 그룹 내 유저에게 동일 추천 저장
+                const saveResults = await Promise.allSettled(
+                    groupUsers.map(async (user) => {
+                        const { error: saveError } = await supabaseAdmin
+                            .from('recommendations_cache')
+                            .upsert({
+                                email: user.email,
+                                date: today,
+                                recommendations,
+                                created_at: new Date().toISOString()
+                            }, { onConflict: 'email,date' });
 
-                    if (saveError) {
-                        return { email: user.email, status: 'error', error: saveError.message };
-                    }
-                    return { email: user.email, status: 'success', count: recommendations.length };
-                })
-            );
+                        if (saveError) {
+                            return { email: user.email, status: 'error', error: saveError.message };
+                        }
+                        return { email: user.email, status: 'success', count: recommendations.length };
+                    })
+                );
 
-            for (const result of batchResults) {
-                if (result.status === 'fulfilled') {
-                    results.push(result.value);
-                } else {
-                    const email = batch[batchResults.indexOf(result)]?.email || 'unknown';
-                    results.push({ email, status: 'error', error: result.reason?.message });
+                for (const result of saveResults) {
+                    results.push(result.status === 'fulfilled' ? result.value : { email: 'unknown', status: 'error', error: result.reason?.message });
+                }
+            } catch (error: any) {
+                for (const u of groupUsers) {
+                    results.push({ email: u.email, status: 'error', error: error?.message });
                 }
             }
 
-            // Rate limiting between batches
-            if (i + CONCURRENCY < allUsers.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+            // Rate limiting between groups
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
 

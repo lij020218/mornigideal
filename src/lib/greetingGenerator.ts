@@ -446,21 +446,24 @@ async function fetchGmailUnreadSummary(
 
         if (messageIds.length === 0) return null;
 
-        // 상위 5개만 제목 가져오기 (가볍게)
-        const topSubjects: string[] = [];
-        for (const { id } of messageIds.slice(0, 5)) {
-            const msgRes = await fetch(
-                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject`,
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            if (msgRes.ok) {
+        // 상위 3개만 제목 가져오기 (병렬, 가볍게)
+        const subjectResults = await Promise.allSettled(
+            messageIds.slice(0, 3).map(async ({ id }) => {
+                const msgRes = await fetch(
+                    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject`,
+                    { headers: { Authorization: `Bearer ${accessToken}` } }
+                );
+                if (!msgRes.ok) return null;
                 const msgData = await msgRes.json();
-                const subject = msgData.payload?.headers?.find(
+                return msgData.payload?.headers?.find(
                     (h: any) => h.name === 'Subject'
-                )?.value;
-                if (subject) topSubjects.push(subject);
-            }
-        }
+                )?.value || null;
+            })
+        );
+
+        const topSubjects = subjectResults
+            .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled' && !!r.value)
+            .map(r => r.value);
 
         return { totalUnread: messageIds.length, topSubjects };
     } catch (err) {
@@ -494,43 +497,52 @@ export async function generateGreetingsForAllUsers() {
     let successCount = 0;
     let failCount = 0;
 
-    for (const user of users) {
-        if (!user.email) continue;
+    // 병렬 배치 처리 (5명씩)
+    const CONCURRENCY = 5;
+    const validUsers = users.filter(u => u.email);
 
-        try {
-            const greeting = await generateGreetingForUser(user.email);
+    for (let i = 0; i < validUsers.length; i += CONCURRENCY) {
+        const batch = validUsers.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.allSettled(
+            batch.map(async (user) => {
+                const greeting = await generateGreetingForUser(user.email);
 
-            await supabaseAdmin.from('user_events').upsert({
-                id: `greeting-${user.email}-${dateStr}`,
-                user_email: user.email,
-                event_type: 'morning_greeting_generated',
-                start_at: new Date().toISOString(),
-                metadata: {
-                    date: dateStr,
-                    greeting,
-                    generated_at: new Date().toISOString(),
-                },
-            }, { onConflict: 'id' });
+                await supabaseAdmin.from('user_events').upsert({
+                    id: `greeting-${user.email}-${dateStr}`,
+                    user_email: user.email,
+                    event_type: 'morning_greeting_generated',
+                    start_at: new Date().toISOString(),
+                    metadata: {
+                        date: dateStr,
+                        greeting,
+                        generated_at: new Date().toISOString(),
+                    },
+                }, { onConflict: 'id' });
 
-            // 푸시 알림 전송
-            const pushBody = greeting.split('\n\n').slice(0, 2).join(' ').slice(0, 100);
-            try {
+                // 푸시 알림 전송
+                const pushBody = greeting.split('\n\n').slice(0, 2).join(' ').slice(0, 100);
                 await sendPushNotification(user.email, {
                     title: '☀️ 좋은 아침이에요!',
                     body: pushBody,
                     data: { type: 'morning_greeting', date: dateStr },
                     channelId: 'morning',
                     priority: 'high',
+                }).catch(pushErr => {
+                    logger.error(`[GreetingGenerator] Push failed for ${user.email}:`, pushErr);
                 });
-            } catch (pushErr) {
-                logger.error(`[GreetingGenerator] Push failed for ${user.email}:`, pushErr);
-            }
 
-            successCount++;
-            logger.debug(`[GreetingGenerator] Generated greeting for ${user.name || user.email}`);
-        } catch (err) {
-            failCount++;
-            logger.error(`[GreetingGenerator] Failed for ${user.email}:`, err);
+                return user;
+            })
+        );
+
+        for (const result of batchResults) {
+            if (result.status === 'fulfilled') {
+                successCount++;
+                logger.debug(`[GreetingGenerator] Generated greeting for ${result.value.name || result.value.email}`);
+            } else {
+                failCount++;
+                logger.error(`[GreetingGenerator] Failed:`, result.reason);
+            }
         }
     }
 
