@@ -13,6 +13,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
             scheduleId,
             originalText,
             originalTime,
+            specificDate,
             newText,
             newStartTime,
             newEndTime,
@@ -42,12 +43,13 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
             // Find by ID
             scheduleIndex = customGoals.findIndex((g: any) => g.id === scheduleId);
         } else {
-            // Find by text and time (approximate match)
+            // Find by text, time, and date (approximate match)
             scheduleIndex = customGoals.findIndex((g: any) => {
                 const textMatch = g.text?.toLowerCase().includes(originalText!.toLowerCase()) ||
                     originalText!.toLowerCase().includes(g.text?.toLowerCase());
                 const timeMatch = !originalTime || g.startTime === originalTime;
-                return textMatch && timeMatch;
+                const dateMatch = !specificDate || g.specificDate === specificDate;
+                return textMatch && timeMatch && dateMatch;
             });
         }
 

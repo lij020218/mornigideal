@@ -220,7 +220,7 @@ export function getActionSchemaForIntent(intent: UserIntent, userPlan: string, c
 type Action =
   | { type: "add_schedule"; label: string; data: { text: string; startTime: string; endTime: string; specificDate: string|null; daysOfWeek: number[]|null; color: "primary"; location: string; memo: string } }
   | { type: "delete_schedule"; label: string; data: { text: string; startTime: string; isRepeating?: boolean; specificDate?: string } }
-  | { type: "update_schedule"; label: string; data: { originalText: string; originalTime: string; newText?: string; newStartTime?: string; newEndTime?: string; newLocation?: string; newMemo?: string } }`;
+  | { type: "update_schedule"; label: string; data: { originalText: string; originalTime: string; specificDate?: string; newText?: string; newStartTime?: string; newEndTime?: string; newLocation?: string; newMemo?: string } }`;
 
     if (intent === 'search') {
         schema += `
@@ -269,8 +269,8 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - **메모 패턴**: "'세부내용'으로 일정" → text: "일정유형", memo: "세부내용"
 - **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]
 - **시간 표시**: 메시지에서 "오전/오후" 명시 (6시 X → 오후 6시 O)
-- **삭제**: delete_schedule에 text, startTime 필수. 반복이면 isRepeating:true
-- **수정**: "바꿔줘/변경해줘" → update_schedule (originalText, originalTime 필수)
+- **삭제**: delete_schedule에 text, startTime 필수. 반복이면 isRepeating:true. 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
+- **수정**: "바꿔줘/변경해줘" → update_schedule (originalText, originalTime 필수). 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
 - **휴식 존중**: 여가 일정(게임/영화/운동) 앞에서 생산성 조언 금지
 - **일정 시작 안내 시 관련 앱 실행 open_link 버튼 적극 포함**`,
 
@@ -348,7 +348,13 @@ User: "내일 5시에 기상 잡아줘"
 {"message": "내일 오전 5시 기상 일정 추가했어요! ☀️", "actions": [{"type": "add_schedule", "label": "기상 추가", "data": {"text": "기상", "startTime": "05:00", "endTime": "06:00", "specificDate": "${tomorrowStr}", "daysOfWeek": null, "color": "primary", "location": "", "memo": ""}}]}
 
 User: "매일 아침 9시 기상 삭제해줘"
-{"message": "매일 오전 9시 기상 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}`;
+{"message": "매일 오전 9시 기상 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "기상 삭제", "data": {"text": "기상", "startTime": "09:00", "isRepeating": true}}]}
+
+User: "내일 3시 운동 삭제해줘"
+{"message": "내일 오후 3시 운동 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "운동 삭제", "data": {"text": "운동", "startTime": "15:00", "specificDate": "${tomorrowStr}"}}]}
+
+User: "내일 운동 시간 4시로 바꿔줘"
+{"message": "내일 운동 시간을 오후 4시로 변경했어요! 💪", "actions": [{"type": "update_schedule", "label": "운동 수정", "data": {"originalText": "운동", "originalTime": "15:00", "specificDate": "${tomorrowStr}", "newStartTime": "16:00", "newEndTime": "17:00"}}]}`;
     }
 
     if (intent === 'search') {

@@ -151,6 +151,7 @@ export const scheduleModifySchema = z.object({
     scheduleId: z.string().max(200).optional(),
     originalText: z.string().max(500).optional(),
     originalTime: timeSchema.optional(),
+    specificDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
     newText: z.string().min(1).max(500).optional(),
     newStartTime: timeSchema.optional(),
     newEndTime: timeSchema.optional(),

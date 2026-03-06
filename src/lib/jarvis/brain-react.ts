@@ -468,10 +468,12 @@ ${toolDescriptions}
    → endTime 없으면 startTime + 1시간
 
 2. 사용자가 일정 삭제를 요청? (삭제해줘/지워줘/취소해줘/빼줘)
-   → action: "delete_schedule", actionInput: {text, startTime}
+   → action: "delete_schedule", actionInput: {text, startTime, specificDate?}
+   → 특정 날짜 일정이면 specificDate를 YYYY-MM-DD 형식으로 반드시 포함
 
 3. 사용자가 일정 수정을 요청? (바꿔줘/옮겨줘/변경해줘)
-   → action: "update_schedule", actionInput: {originalText, originalTime, newText?, newStartTime?}
+   → action: "update_schedule", actionInput: {originalText, originalTime, specificDate?, newText?, newStartTime?}
+   → 특정 날짜 일정이면 specificDate를 YYYY-MM-DD 형식으로 반드시 포함
 
 4. 사용자가 일정 조회를 요청? (보여줘/알려줘/뭐 있어)
    → action: "get_today_schedules" 또는 "get_schedule_by_date"
@@ -528,6 +530,9 @@ ${SAFETY_SYSTEM_RULES}
 
 입력: "아침 루틴 삭제해줘"
 출력: {"thought": "삭제", "action": "delete_schedule", "actionInput": {"text": "아침 루틴", "startTime": "07:00"}}
+
+입력: "내일 운동 삭제해줘"
+출력: {"thought": "내일 날짜의 운동 삭제", "action": "delete_schedule", "actionInput": {"text": "운동", "startTime": "15:00", "specificDate": "${tomorrowStr}"}}
 
 입력: "오늘 일정 보여줘"
 출력: {"thought": "조회", "action": "get_today_schedules", "actionInput": {}}

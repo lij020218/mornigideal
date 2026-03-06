@@ -258,18 +258,21 @@ export class ToolExecutor {
         const customGoals = userData.profile?.customGoals || [];
         const targetText = (args.text || '').toLowerCase().trim();
         const targetTime = args.startTime || '';
+        const targetDate = args.specificDate || '';
 
         // 정확 매칭 우선, 없으면 부분 매칭 (1개만 매칭될 때)
         const exactMatches = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().trim() === targetText;
             const matchesTime = !targetTime || g.startTime === targetTime;
-            return matchesText && matchesTime;
+            const matchesDate = !targetDate || g.specificDate === targetDate;
+            return matchesText && matchesTime && matchesDate;
         });
 
         const partialMatches = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().includes(targetText);
             const matchesTime = !targetTime || g.startTime === targetTime;
-            return matchesText && matchesTime;
+            const matchesDate = !targetDate || g.specificDate === targetDate;
+            return matchesText && matchesTime && matchesDate;
         });
 
         const toDelete = exactMatches.length > 0 ? exactMatches : partialMatches;
@@ -339,10 +342,14 @@ export class ToolExecutor {
 
         const customGoals = userData.profile?.customGoals || [];
         const targetText = (args.originalText || '').toLowerCase();
+        const targetDate = args.specificDate || '';
         let found = false;
 
         const updated = customGoals.map((g: CustomGoal) => {
-            if ((g.text || '').toLowerCase().includes(targetText) && g.startTime === args.originalTime) {
+            const matchesText = (g.text || '').toLowerCase().includes(targetText);
+            const matchesTime = g.startTime === args.originalTime;
+            const matchesDate = !targetDate || g.specificDate === targetDate;
+            if (matchesText && matchesTime && matchesDate) {
                 found = true;
                 return {
                     ...g,

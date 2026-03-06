@@ -36,11 +36,13 @@ export interface AddScheduleArgs {
 export interface DeleteScheduleArgs {
     text: string;
     startTime?: string;
+    specificDate?: string;
 }
 
 export interface UpdateScheduleArgs {
     originalText: string;
     originalTime: string;
+    specificDate?: string;
     newText?: string;
     newStartTime?: string;
     newEndTime?: string;
