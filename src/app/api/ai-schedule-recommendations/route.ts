@@ -611,9 +611,39 @@ JSON 형식으로만 응답하세요:
             })
             .filter(Boolean);
 
+        // 기존 일정과 시간 충돌 제거
+        const existingSlots = currentSchedules
+            .filter((s: any) => s.startTime || s.start_time)
+            .map((s: any) => {
+                const start = s.startTime || s.start_time?.split('T')[1]?.substring(0, 5) || '';
+                const end = s.endTime || s.end_time?.split('T')[1]?.substring(0, 5) || '';
+                const [sH, sM] = start.split(':').map(Number);
+                const startMin = sH * 60 + (sM || 0);
+                // 종료 시간이 없으면 기본 60분으로 가정
+                let endMin = startMin + 60;
+                if (end) {
+                    const [eH, eM] = end.split(':').map(Number);
+                    endMin = eH * 60 + (eM || 0);
+                }
+                return { startMin, endMin };
+            });
+
+        const noConflictRecs = filteredRecs.filter((rec: any) => {
+            if (!rec.suggestedStartTime) return true;
+            const [rH, rM] = rec.suggestedStartTime.split(':').map(Number);
+            const recStart = rH * 60 + (rM || 0);
+            const recDuration = rec.suggestedDuration || 60;
+            const recEnd = recStart + recDuration;
+
+            // 기존 일정과 겹치면 제거
+            return !existingSlots.some(({ startMin, endMin }) =>
+                recStart < endMin && recEnd > startMin
+            );
+        });
+
         // 시간 분산 강제: 2시간 이내 중복 제거
         const validatedRecommendations: any[] = [];
-        for (const rec of filteredRecs) {
+        for (const rec of noConflictRecs) {
             const [rH, rM] = (rec.suggestedStartTime || '00:00').split(':').map(Number);
             const recMin = rH * 60 + (rM || 0);
             const tooClose = validatedRecommendations.some((existing: any) => {
