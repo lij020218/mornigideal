@@ -110,7 +110,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       startTime,
       endTime: endTime || undefined,
       completed: false,
-      ...(color ? { color } : {}),
+      ...(color && color.startsWith('#') ? { color } : {}),
       ...(location ? { location } : {}),
       ...(memo ? { memo } : {}),
       ...(isRecurring ? { daysOfWeek } : { specificDate: scheduleDate }),
