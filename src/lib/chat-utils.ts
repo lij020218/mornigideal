@@ -263,6 +263,8 @@ export function getBehaviorGuide(intent: UserIntent): string {
         schedule: `## 행동 가이드
 - **즉시 실행**: "추가해줘/잡아줘/등록해줘" → 바로 actions에 포함. 질문 금지.
 - **날짜 매핑 필수**: "내일", "모레" 등은 위 📅 날짜 매핑의 정확한 날짜 문자열을 specificDate에 사용. 절대 오늘 날짜로 넣지 마세요.
+- **구체적 날짜**: "3월 8일", "4월 1일" 등 구체적 날짜는 현재 연도를 사용해 "YYYY-MM-DD" 형식으로 specificDate에 넣으세요 (예: "3월 8일" → specificDate: "현재연도-03-08").
+- **specificDate vs daysOfWeek**: 특정 날짜 일정은 반드시 specificDate를 설정하고 daysOfWeek는 null로. 반복 일정만 daysOfWeek를 사용.
 - **일정 이름 정규화**: 아침/점심/저녁→"아침 식사"/"점심 식사"/"저녁 식사", 잠→"취침", 일어나→"기상", 헬스→"운동"
 - **메모 패턴**: "'세부내용'으로 일정" → text: "일정유형", memo: "세부내용"
 - **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]
@@ -487,6 +489,15 @@ export function postProcessActions(
         if (action.type === "add_schedule" && action.data) {
             if (action.data.text) {
                 action.data.text = normalizeScheduleName(action.data.text);
+            }
+            // specificDate/daysOfWeek 둘 다 없으면 오늘 날짜로 fallback
+            const todayFallback = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+            if (!action.data.specificDate && (!action.data.daysOfWeek || action.data.daysOfWeek.length === 0)) {
+                action.data.specificDate = todayFallback;
+            }
+            // daysOfWeek가 빈 배열이면 null로 정리
+            if (action.data.daysOfWeek && action.data.daysOfWeek.length === 0) {
+                action.data.daysOfWeek = null;
             }
             if (action.data.startTime && currentTime) {
                 // 내일/미래 일정이면 AM/PM 추론 + 과거 시간 조정 스킵

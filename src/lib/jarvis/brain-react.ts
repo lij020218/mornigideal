@@ -456,12 +456,15 @@ ${toolDescriptions}
 - 오늘 → "${input.context.currentDate}"
 - 내일 → "${tomorrowStr}"
 - 모레 → "${dayAfterStr}"
+- 구체적 날짜 (예: "3월 8일", "4월 1일") → "${cy}-MM-DD" 형식으로 변환 (현재 연도: ${cy}년)
+- ⚠️ 특정 날짜 일정은 반드시 specificDate를 YYYY-MM-DD 형식으로 설정하고, daysOfWeek는 포함하지 마세요
 
 ## 의사결정 트리 (이 순서대로 판단)
 
 1. 사용자가 일정 추가를 요청? (잡아줘/등록해줘/추가해줘/넣어줘)
    → action: "add_schedule", actionInput: {text, startTime, endTime, specificDate: "해당 날짜"}
-   → "내일"이면 specificDate: "${tomorrowStr}", "모레"면 specificDate: "${dayAfterStr}", 기본은 "${input.context.currentDate}"
+   → "내일"이면 specificDate: "${tomorrowStr}", "모레"면 specificDate: "${dayAfterStr}", "3월 8일"이면 specificDate: "${cy}-03-08"
+   → 기본(날짜 미지정)은 "${input.context.currentDate}"
    → endTime 없으면 startTime + 1시간
 
 2. 사용자가 일정 삭제를 요청? (삭제해줘/지워줘/취소해줘/빼줘)

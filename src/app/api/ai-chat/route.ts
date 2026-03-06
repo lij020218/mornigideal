@@ -530,6 +530,8 @@ function buildDateContext(context: ChatContext | undefined): string {
 - 오늘 → "${context.currentDate}"
 - 내일 → "${tomorrowStr}"
 - 모레 → "${dayAfterStr}"
+- 구체적 날짜 (예: "3월 8일", "4월 1일") → "${year}-MM-DD" 형식으로 변환 (현재 연도: ${year}년)
+- ⚠️ 특정 날짜 일정은 반드시 specificDate를 YYYY-MM-DD 형식으로 설정하고, daysOfWeek는 null로 두세요
 
 🚨 **시간 관련 규칙**:
 - 현재 시간은 ${context.currentTime} (${timeOfDayKorean} ${currentHour}시)입니다.

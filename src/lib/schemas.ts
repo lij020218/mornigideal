@@ -113,11 +113,13 @@ export const aiChatSchema = z.object({
 export const scheduleCreateSchema = z.object({
     text: z.string().min(1).max(500),
     startTime: timeSchema,
-    endTime: timeSchema.optional(),
-    date: dateSchema.optional(),
-    specificDate: dateSchema.optional(),
-    color: z.string().max(50).optional(),
-    daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+    endTime: timeSchema.optional().nullable().transform(v => v ?? undefined),
+    date: dateSchema.optional().nullable().transform(v => v ?? undefined),
+    specificDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
+    color: z.string().max(50).optional().nullable().transform(v => v ?? undefined),
+    daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable().transform(v => v ?? undefined),
+    location: z.string().max(500).optional().nullable().transform(v => v ?? undefined),
+    memo: z.string().max(2000).optional().nullable().transform(v => v ?? undefined),
 });
 
 // PUT /api/schedules/[id]

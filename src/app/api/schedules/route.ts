@@ -84,9 +84,14 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
 // 일정 추가
 export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     const body = await request.json();
+    logger.info('[schedules/POST] 요청 body:', JSON.stringify(body));
     const v = validateBody(scheduleCreateSchema, body);
-    if (!v.success) return v.response;
-    const { text, startTime, endTime, date, specificDate, color, daysOfWeek } = v.data;
+    if (!v.success) {
+      logger.error('[schedules/POST] 스키마 검증 실패:', JSON.stringify(body));
+      return v.response;
+    }
+    const { text, startTime, endTime, date, specificDate, color, daysOfWeek, location, memo } = v.data;
+    logger.info('[schedules/POST] 파싱 결과:', JSON.stringify({ text, startTime, specificDate, daysOfWeek, date }));
 
     // KST 기준 날짜 계산
     const now = new Date();
@@ -106,6 +111,8 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       endTime: endTime || undefined,
       completed: false,
       ...(color ? { color } : {}),
+      ...(location ? { location } : {}),
+      ...(memo ? { memo } : {}),
       ...(isRecurring ? { daysOfWeek } : { specificDate: scheduleDate }),
     };
 
