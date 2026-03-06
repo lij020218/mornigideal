@@ -114,6 +114,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const normalizedPlan = await getPlanName(userEmail);
     const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
     const refreshLimit = LIMITS.TREND_REFRESH_DAILY[normalizedPlan] ?? 0;
+    const isPro = normalizedPlan === 'Pro' || normalizedPlan === 'Max';
+    const userLevel = currentUser?.profile?.level || 'Intermediate';
 
     // 새로고침 제한 체크
     if (forceRefresh) {
@@ -136,47 +138,37 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     // Check cache first (only if not force refreshing and no exclusions)
     if (!forceRefresh && excludeTitles.length === 0) {
         const cachedData = await getTrendsCache(userEmail);
+        const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+        const isBeforeFiveAM = nowKST.getHours() < 5;
 
         if (cachedData && cachedData.trends.length > 0) {
             const lastUpdatedDate = new Date(cachedData.lastUpdated);
             const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
-            // Calculate 5 AM KST for today
-            const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-            const cutoffTime = new Date(nowKST);
-            cutoffTime.setHours(5, 0, 0, 0);
-
-            // If currently before 5 AM, we compare with yesterday's 5 AM (or just rely on date check)
-            // But simpler logic: If cache is from today, AND (it was generated after 5 AM OR it's currently before 5 AM)
-            // Actually, user wants: "New briefing at 5 AM".
-            // So if now >= 5 AM, cache must be >= 5 AM.
-            // If now < 5 AM, cache can be from anytime today (00:00-04:59).
-
             let isCacheValid = false;
             if (cacheDate === today) {
                 if (nowKST.getHours() >= 5) {
-                    // It's past 5 AM. Cache must be after 5 AM.
-                    // Convert UTC lastUpdatedDate to KST properly
+                    // 5AM 이후: 캐시도 5AM 이후에 생성된 것이어야 유효
                     const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
                         timeZone: "Asia/Seoul",
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
                         hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
                         hour12: false
                     });
-                    const lastUpdatedKST = new Date(lastUpdatedKSTStr);
-                    const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr.split(', ')[1].split(':')[0]);
-
-
+                    const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr);
                     if (lastUpdatedHourKST >= 5) {
                         isCacheValid = true;
-                    } else {
                     }
                 } else {
-                    // It's before 5 AM. Any cache from today is fine.
+                    // 5AM 이전: 오늘 날짜 캐시면 유효
+                    isCacheValid = true;
+                }
+            }
+            // 5AM 이전이고 오늘 캐시가 없으면 전날 캐시를 반환
+            if (!isCacheValid && isBeforeFiveAM) {
+                const yesterday = new Date(nowKST);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toLocaleDateString("en-CA");
+                if (cacheDate === yesterdayStr) {
                     isCacheValid = true;
                 }
             }
@@ -194,8 +186,19 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                 });
             }
         }
-    }
 
+        // 5AM 이전에 캐시가 아예 없어도 실시간 생성하지 않고 빈 응답 반환
+        if (isBeforeFiveAM) {
+            return NextResponse.json({
+                trends: [],
+                cached: true,
+                lastUpdated: null,
+                readIds: [],
+                refreshRemaining: Math.max(0, refreshLimit),
+                message: '오전 5시에 새로운 브리핑이 준비됩니다.',
+            });
+        }
+    }
 
     // Step 1: Fetch articles from RSS feeds
     const rssArticles = await fetchRSSArticles();
@@ -460,20 +463,23 @@ Select now.`;
 
             await Promise.all(batch.map(async (trend: any) => {
                 try {
-                    const detailPrompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+                    const detailSections = isPro ? `아래 6개 섹션을 순서대로 작성하세요 (프리미엄 브리핑):
 
-기사 정보:
-- 제목: "${trend.title}"
-- 요약: ${trend.summary}
-- URL: ${trend.originalUrl}
+1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 심도 있게 분석. "왜 이런 일이 일어났는지", "역사적 맥락에서 어떤 의미인지", "앞으로 어떤 변화가 예상되는지" 전문가 수준으로 설명. 경력 수준(${userLevel})에 맞는 전문 용어와 깊이로 설명하세요. 관련 데이터나 수치가 있으면 포함하세요.
+2. **산업 파급 효과**: 이 뉴스가 관련 산업 생태계에 미치는 연쇄적 영향. 경쟁사 동향, 시장 구조 변화, 공급망 영향 등 거시적 관점에서 분석. 가능하면 구체적 기업이나 사례를 언급하세요.
+3. **왜 ${job}인 ${userName}님에게 중요한가**: 이 뉴스가 ${userName}님의 직업(${job}), 경력 수준(${userLevel}), 목표(${goal || "전문성 향상"})에 구체적으로 어떤 의미인지 설명. 실무에 미치는 직접적 영향과 커리어 관점에서의 시사점을 함께 서술.
+4. **핵심 요약**: 기사의 핵심 내용을 3문장으로 압축 (각 15-20자 이내).
+5. **무엇을 할 수 있나**: ${userName}님이 지금 바로 실행할 수 있는 3가지 구체적 행동.
+6. **더 읽어볼 키워드**: 이 주제를 더 깊이 이해하기 위해 검색해볼 키워드 3개.
 
-사용자 정보:
-- 이름: ${userName}
-- 직업: ${job}
-- 목표: ${goal || "전문성 향상"}
-- 관심 분야: ${interests || "비즈니스, 기술"}
-
-아래 4개 섹션을 순서대로 작성하세요:
+OUTPUT JSON:
+{
+  "title": "한국어 제목",
+  "content": "### 심층 분석\\n\\n[배경, 맥락, 데이터 포함 심도 있는 분석]\\n\\n### 산업 파급 효과\\n\\n[관련 산업 생태계 영향, 경쟁사/시장 분석]\\n\\n### 왜 ${job}인 ${userName}님에게 중요한가\\n\\n[직업과 목표에 연결된 구체적 설명 + 커리어 시사점. **핵심 키워드**를 <mark>태그로 강조]\\n\\n### 더 읽어볼 키워드\\n\\n- 키워드 1\\n- 키워드 2\\n- 키워드 3\\n\\n### 무엇을 할 수 있나\\n\\n- **행동 1**\\n- **행동 2**\\n- **행동 3**",
+  "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
+  "originalUrl": "${trend.originalUrl}"
+}` : `아래 4개 섹션을 순서대로 작성하세요:
 
 1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 분석. 단순 요약이 아닌 "왜 이런 일이 일어났는지", "앞으로 어떤 변화가 예상되는지" 깊이 있게 설명.
 2. **왜 ${job}인 ${userName}님에게 중요한가**: 이 뉴스가 ${userName}님의 직업(${job})과 목표(${goal || "전문성 향상"})에 구체적으로 어떤 의미인지 설명. 추상적 연결이 아니라 실무에 미치는 직접적 영향을 서술.
@@ -487,7 +493,22 @@ OUTPUT JSON:
   "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${trend.originalUrl}"
-}
+}`;
+                    const detailPrompt = `${userName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+
+기사 정보:
+- 제목: "${trend.title}"
+- 요약: ${trend.summary}
+- URL: ${trend.originalUrl}
+
+사용자 정보:
+- 이름: ${userName}
+- 직업: ${job}
+- 경력 수준: ${userLevel}
+- 목표: ${goal || "전문성 향상"}
+- 관심 분야: ${interests || "비즈니스, 기술"}
+
+${detailSections}
 
 CRITICAL RULES FOR actionItems:
 - 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
@@ -553,6 +574,9 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     const job = postUser?.profile?.job || '전문가';
     const postUserGoal = postUser?.profile?.goal || '전문성 향상';
     const postUserInterests = (postUser?.profile?.interests || []).join(', ') || '비즈니스, 기술';
+    const postUserLevel = postUser?.profile?.level || level || 'Intermediate';
+    const postUserPlan = await getPlanName(userEmail);
+    const postIsPro = postUserPlan === 'Pro' || postUserPlan === 'Max';
 
     // Check cache first
     if (trendId) {
@@ -582,20 +606,23 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         generationConfig: { responseMimeType: "application/json" }
     });
 
-    const prompt = `${postUserName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+    const postDetailSections = postIsPro ? `아래 6개 섹션을 순서대로 작성하세요 (프리미엄 브리핑):
 
-기사 정보:
-- 제목: "${title}"
-- 요약: ${summary}
-- URL: ${originalUrl}
+1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 심도 있게 분석. "왜 이런 일이 일어났는지", "역사적 맥락에서 어떤 의미인지", "앞으로 어떤 변화가 예상되는지" 전문가 수준으로 설명. 경력 수준(${postUserLevel})에 맞는 전문 용어와 깊이로 설명하세요. 관련 데이터나 수치가 있으면 포함하세요.
+2. **산업 파급 효과**: 이 뉴스가 관련 산업 생태계에 미치는 연쇄적 영향. 경쟁사 동향, 시장 구조 변화, 공급망 영향 등 거시적 관점에서 분석. 가능하면 구체적 기업이나 사례를 언급하세요.
+3. **왜 ${job}인 ${postUserName}님에게 중요한가**: 이 뉴스가 ${postUserName}님의 직업(${job}), 경력 수준(${postUserLevel}), 목표(${postUserGoal})에 구체적으로 어떤 의미인지 설명. 실무에 미치는 직접적 영향과 커리어 관점에서의 시사점을 함께 서술.
+4. **핵심 요약**: 기사의 핵심 내용을 3문장으로 압축 (각 15-20자 이내).
+5. **무엇을 할 수 있나**: ${postUserName}님이 지금 바로 실행할 수 있는 3가지 구체적 행동.
+6. **더 읽어볼 키워드**: 이 주제를 더 깊이 이해하기 위해 검색해볼 키워드 3개.
 
-사용자 정보:
-- 이름: ${postUserName}
-- 직업: ${job}
-- 목표: ${postUserGoal}
-- 관심 분야: ${postUserInterests}
-
-아래 4개 섹션을 순서대로 작성하세요:
+OUTPUT JSON:
+{
+  "title": "한국어 제목",
+  "content": "### 심층 분석\\n\\n[배경, 맥락, 데이터 포함 심도 있는 분석]\\n\\n### 산업 파급 효과\\n\\n[관련 산업 생태계 영향, 경쟁사/시장 분석]\\n\\n### 왜 ${job}인 ${postUserName}님에게 중요한가\\n\\n[직업과 목표에 연결된 구체적 설명 + 커리어 시사점. **핵심 키워드**를 <mark>태그로 강조]\\n\\n### 더 읽어볼 키워드\\n\\n- 키워드 1\\n- 키워드 2\\n- 키워드 3\\n\\n### 무엇을 할 수 있나\\n\\n- **행동 1**\\n- **행동 2**\\n- **행동 3**",
+  "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
+  "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
+  "originalUrl": "${originalUrl}"
+}` : `아래 4개 섹션을 순서대로 작성하세요:
 
 1. **심층 분석**: 이 뉴스의 배경, 맥락, 업계 영향을 분석. 단순 요약이 아닌 "왜 이런 일이 일어났는지", "앞으로 어떤 변화가 예상되는지" 깊이 있게 설명.
 2. **왜 ${job}인 ${postUserName}님에게 중요한가**: 이 뉴스가 ${postUserName}님의 직업(${job})과 목표(${postUserGoal})에 구체적으로 어떤 의미인지 설명. 추상적 연결이 아니라 실무에 미치는 직접적 영향을 서술.
@@ -609,7 +636,23 @@ OUTPUT JSON:
   "keyTakeaways": ["핵심 요약 1", "핵심 요약 2", "핵심 요약 3"],
   "actionItems": ["관련 기사 읽기", "트렌드 분석 정리", "관련 뉴스 스크랩"],
   "originalUrl": "${originalUrl}"
-}
+}`;
+
+    const prompt = `${postUserName}님을 위한 맞춤 뉴스 브리핑을 작성하세요.
+
+기사 정보:
+- 제목: "${title}"
+- 요약: ${summary}
+- URL: ${originalUrl}
+
+사용자 정보:
+- 이름: ${postUserName}
+- 직업: ${job}
+- 경력 수준: ${postUserLevel}
+- 목표: ${postUserGoal}
+- 관심 분야: ${postUserInterests}
+
+${postDetailSections}
 
 CRITICAL RULES FOR actionItems:
 - 반드시 15자 이내로 작성 (예: "AI 뉴스 읽기", "트렌드 분석", "관련 기사 스크랩")
