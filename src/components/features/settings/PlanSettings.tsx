@@ -68,7 +68,7 @@ const PLAN_INFO: Record<UserPlanType, {
         price: "무료",
         description: "AI 일정 비서 + 선제적 알림",
         features: [
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 30회" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 15회" },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "AI 채팅 + 일정 관리" },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "컨텍스트 융합 (날씨+일정)" },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "선제적 알림 + 메모리 서피싱" },
@@ -77,25 +77,25 @@ const PLAN_INFO: Record<UserPlanType, {
     pro: {
         name: "Pro",
         nameKo: "프로",
-        price: "₩6,900",
-        description: "ReAct 에이전트 + 스마트 알림",
+        price: "₩10,900",
+        description: "AI가 당신의 일상을 기억합니다",
         features: [
-            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 100회" },
+            { icon: <Check className="w-4 h-4 text-green-500" />, text: "일일 AI 호출 30회" },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "Free의 모든 기능" },
+            { icon: <Brain className="w-4 h-4 text-purple-500" />, text: "AI 장기 기억 (RAG)", highlight: true },
+            { icon: <Sparkles className="w-4 h-4 text-amber-500" />, text: "자동 실행 모드", highlight: true },
             { icon: <AlertTriangle className="w-4 h-4 text-yellow-500" />, text: "리스크 알림", highlight: true },
             { icon: <Newspaper className="w-4 h-4 text-blue-500" />, text: "스마트 뉴스 브리핑", highlight: true },
         ],
     },
+    // max는 레거시 - UI에 표시되지 않지만 기존 구독자 호환용
     max: {
         name: "Max",
-        nameKo: "맥스",
-        price: "₩14,900",
-        description: "AI가 당신을 기억합니다",
+        nameKo: "프로 (레거시)",
+        price: "₩10,900",
+        description: "Pro로 통합되었습니다",
         features: [
-            { icon: <Infinity className="w-4 h-4 text-amber-500" />, text: "무제한 AI 호출", highlight: true },
             { icon: <Check className="w-4 h-4 text-green-500" />, text: "Pro의 모든 기능" },
-            { icon: <Brain className="w-4 h-4 text-purple-500" />, text: "AI 장기 기억 (RAG)", highlight: true },
-            { icon: <Sparkles className="w-4 h-4 text-amber-500" />, text: "자동 실행 모드", highlight: true },
         ],
     },
 };
@@ -214,13 +214,13 @@ export function PlanSettings() {
                 <div className="space-y-3">
                     <h4 className="font-medium text-sm text-muted-foreground">플랜 비교</h4>
 
-                    {(["free", "pro", "max"] as UserPlanType[]).map((planType) => {
+                    {(["free", "pro"] as UserPlanType[]).map((planType) => {
                         const info = PLAN_INFO[planType];
                         const style = PLAN_STYLES[planType];
-                        const isCurrent = plan.plan === planType;
+                        // Max 레거시 구독자도 Pro로 표시
+                        const isCurrent = plan.plan === planType || (planType === "pro" && plan.plan === "max");
                         const isUpgrade =
-                            (plan.plan === "free" && (planType === "pro" || planType === "max")) ||
-                            (plan.plan === "pro" && planType === "max");
+                            plan.plan === "free" && planType === "pro";
 
                         return (
                             <div
@@ -242,8 +242,8 @@ export function PlanSettings() {
                                                 {isCurrent && (
                                                     <Badge variant="outline" className="text-xs">현재</Badge>
                                                 )}
-                                                {planType === "max" && !isCurrent && (
-                                                    <Badge className="bg-amber-500/20 text-amber-600 text-xs">추천</Badge>
+                                                {planType === "pro" && !isCurrent && (
+                                                    <Badge className="bg-blue-500/20 text-blue-600 text-xs">추천</Badge>
                                                 )}
                                             </div>
                                             <p className="text-sm text-gray-600">{info.description}</p>

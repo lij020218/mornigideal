@@ -150,8 +150,8 @@ export function resolvePersonaStyle(profile: any, plan?: string): PersonaStyle {
         return profile.personaStyle as PersonaStyle;
     }
 
-    // 2. Max 플랜의 jarvis preferences에서 가져오기
-    if (plan === 'max' || plan === 'Max') {
+    // 2. Pro 이상 플랜의 jarvis preferences에서 가져오기
+    if (plan === 'pro' || plan === 'Pro' || plan === 'max' || plan === 'Max') {
         const notifStyle = profile?.jarvisPreferences?.notificationStyle;
         if (notifStyle === 'jarvis_tone') return 'professional';
         if (notifStyle === 'brief') return 'brief';

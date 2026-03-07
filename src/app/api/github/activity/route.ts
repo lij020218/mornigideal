@@ -1,17 +1,17 @@
 /**
- * GitHub 활동 요약 API (Max 전용)
+ * GitHub 활동 요약 API (Pro 이상)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api-handler';
-import { isMaxPlan } from '@/lib/user-plan';
+import { isProOrAbove } from '@/lib/user-plan';
 import { getRecentCommits, getContributionStats, isGitHubLinked } from '@/lib/githubService';
 
 export const GET = withAuth(async (request: NextRequest, email: string) => {
-    // Plan gate: Max only
-    if (!(await isMaxPlan(email))) {
+    // Plan gate: Pro 이상
+    if (!(await isProOrAbove(email))) {
         return NextResponse.json(
-            { error: 'GitHub 연동은 Max 플랜에서 사용 가능합니다.' },
+            { error: 'GitHub 연동은 Pro 플랜에서 사용 가능합니다.' },
             { status: 403 },
         );
     }

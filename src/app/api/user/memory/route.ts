@@ -6,13 +6,14 @@ import { getPlanName } from "@/lib/user-plan";
 import { generateEmbedding, prepareTextForEmbedding, generateContentHash } from "@/lib/embeddings";
 
 // 플랜별 RAG 설정
+// Max 레거시 구독자는 Pro와 동일 설정 적용
 const RAG_PLAN_CONFIG: Record<string, { threshold: number; limit: number; maxAgeDays: number | null; storageMb: number }> = {
     Free: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
     free: { threshold: 0.8, limit: 3, maxAgeDays: 30, storageMb: 50 },
-    Pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 100 },
-    pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 100 },
-    Max: { threshold: 0.7, limit: 10, maxAgeDays: null, storageMb: 1000 },
-    max: { threshold: 0.7, limit: 10, maxAgeDays: null, storageMb: 1000 },
+    Pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 200 },
+    pro: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 200 },
+    Max: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 200 },
+    max: { threshold: 0.75, limit: 5, maxAgeDays: null, storageMb: 200 },
 };
 
 export interface MemoryEntry {

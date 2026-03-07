@@ -514,8 +514,8 @@ async function cleanupUserMemory(report: CleanupReport, userEmail?: string): Pro
         // 3. 플랜별 용량 초과 사용자 정리 (오래된 것부터 삭제)
         const planLimits = [
             { plan: 'standard', limitMb: 50 },
-            { plan: 'pro', limitMb: 100 },
-            { plan: 'max', limitMb: 1000 },
+            { plan: 'pro', limitMb: 200 },
+            { plan: 'max', limitMb: 200 },  // Max 레거시 → Pro와 동일
         ];
 
         for (const { plan, limitMb } of planLimits) {

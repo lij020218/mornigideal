@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { logOpenAIUsage } from "@/lib/openai-usage";
-import { isMaxPlan } from "@/lib/user-plan";
+import { isProOrAbove } from "@/lib/user-plan";
 import { withAuth } from "@/lib/api-handler";
 import { logger } from "@/lib/logger";
 import { MODELS } from "@/lib/models";
@@ -41,11 +41,11 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export const POST = withAuth(async (request: NextRequest, email: string) => {
-    // Check if user has Max plan (from user_subscriptions table)
-    const hasMaxPlan = await isMaxPlan(email);
-    if (!hasMaxPlan) {
+    // Check if user has Pro plan or above
+    const hasPro = await isProOrAbove(email);
+    if (!hasPro) {
         return NextResponse.json(
-            { error: "Slide generation is only available for Max plan users" },
+            { error: "Slide generation is only available for Pro plan users" },
             { status: 403 }
         );
     }

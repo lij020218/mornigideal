@@ -4,7 +4,6 @@ import { logger } from "@/lib/logger";
 import OpenAI from "openai";
 import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
-import { getUserPlan } from "@/lib/user-plan";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -31,9 +30,8 @@ interface EssayResult {
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { quiz, answers, type } = await request.json();
 
-    // Max → GPT-5.2, Free/Pro → GPT-5-mini (비용 최적화)
-    const planInfo = await getUserPlan(email);
-    const gradingModel = planInfo.plan === 'max' ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
+    // 모든 플랜 GPT-5-mini (비용 최적화)
+    const gradingModel = MODELS.GPT_5_MINI;
 
 
     // Grade T/F (straightforward)

@@ -11,7 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { TIMING, THRESHOLDS, LIMITS, DAILY_ROUTINE_KEYWORDS, IMPORTANT_SCHEDULE_KEYWORDS, FOCUS_KEYWORDS, EXERCISE_KEYWORDS, DAY_NAMES_KR } from '@/lib/constants';
 import type { CustomGoal, LongTermGoal, ChatMessage, MemoryRow, UserProfile, ImportantEvent } from '@/lib/types';
 import { kvGet } from '@/lib/kv-store';
-import { isProOrAbove, isMaxPlan, type UserPlanType } from '@/lib/user-plan';
+import { isProOrAbove, type UserPlanType } from '@/lib/user-plan';
 import { logger } from '@/lib/logger';
 import { getChatDate } from '@/lib/scheduleUtils';
 
@@ -1771,9 +1771,9 @@ async function getGitHubStreakNotification(context: UserContext): Promise<Proact
 
     if (currentHour < TIMING.GITHUB_STREAK_START || currentHour >= TIMING.GITHUB_STREAK_END) return [];
 
-    // Max 전용
-    const isMax = planType ? (planType === 'max') : await isMaxPlan(userEmail);
-    if (!isMax) return [];
+    // Pro 이상 전용
+    const isPro = planType ? (planType === 'pro' || planType === 'max') : await isProOrAbove(userEmail);
+    if (!isPro) return [];
 
     try {
         const { isGitHubLinked, getContributionStats } = await import('@/lib/githubService');

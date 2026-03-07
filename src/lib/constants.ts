@@ -211,13 +211,13 @@ export const LIMITS = {
     /** Web search results */
     WEB_SEARCH_RESULTS: 5,
     /** Proactive notification daily limit per plan */
-    PROACTIVE_DAILY: { free: 5, pro: 10, max: Infinity } as Record<string, number>,
+    PROACTIVE_DAILY: { free: 5, pro: 10, max: 10 } as Record<string, number>,
     /** AI chat daily call limit per plan */
-    AI_CHAT_DAILY: { Free: 15, Pro: 50, Max: 100 } as Record<string, number>,
+    AI_CHAT_DAILY: { Free: 15, Pro: 30, Max: 100 } as Record<string, number>,
     /** Trend briefing article count per plan */
     TREND_BRIEFING_COUNT: { Free: 3, Pro: 6, Max: 6 } as Record<string, number>,
     /** Trend briefing daily refresh limit per plan (0 = no refresh) */
-    TREND_REFRESH_DAILY: { Free: 0, Pro: 1, Max: 3 } as Record<string, number>,
+    TREND_REFRESH_DAILY: { Free: 0, Pro: 3, Max: 3 } as Record<string, number>,
 } as const;
 
 // ============================================

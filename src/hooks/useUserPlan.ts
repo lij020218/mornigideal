@@ -5,9 +5,9 @@
  * - AI 사용량 모니터링
  *
  * 플랜 구조:
- * - Free (무료): 일일 AI 30회 + 컨텍스트 융합, 선제적 알림
- * - Pro (₩6,900): 일일 AI 100회 + ReAct 에이전트, 리스크 알림, 스마트 브리핑
- * - Max (₩14,900): 무제한 + 장기 기억, 자동 실행
+ * - Free (무료): 일일 AI 15회 + 컨텍스트 융합, 선제적 알림
+ * - Pro (₩10,900): 일일 AI 30회 + RAG, 자동 실행, 리스크 알림, 스마트 브리핑
+ * - Max: 레거시 (Pro로 매핑)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -122,7 +122,8 @@ export function useUserPlan(): UseUserPlanReturn {
     }, [fetchPlan]);
 
     // 편의 함수들
-    const isMaxPlan = plan?.plan === "max" && plan?.isActive === true;
+    // Max 레거시 구독자는 Pro로 취급
+    const isMaxPlan = (plan?.plan === "max" || plan?.plan === "pro") && plan?.isActive === true;
     const isProOrAbove = (plan?.plan === "pro" || plan?.plan === "max") && plan?.isActive === true;
     const isFree = plan?.plan === "free" && plan?.isActive === true;
 
@@ -160,7 +161,7 @@ export function useCanUseFeature(feature: keyof PlanFeatures): {
 
     // 기능별 필요 플랜
     const requiredPlanMap: Record<keyof PlanFeatures, string> = {
-        jarvis_memory: "맥스",
+        jarvis_memory: "프로",
         risk_alerts: "프로",
         smart_briefing: "프로",
         proactive_suggestions: "무료",
@@ -175,7 +176,8 @@ export function useCanUseFeature(feature: keyof PlanFeatures): {
 }
 
 /**
- * 맥스 플랜 여부만 확인하는 간단한 Hook
+ * 프로 이상 플랜 여부만 확인하는 간단한 Hook
+ * @deprecated useIsMaxPlan → isMaxPlan은 Pro로 매핑됨
  */
 export function useIsMaxPlan(): {
     isMax: boolean;

@@ -13,7 +13,7 @@ import { upgradePlan, UserPlanType } from "@/lib/user-plan";
 export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { plan } = await request.json();
 
-    if (!plan || !["free", "pro", "max"].includes(plan)) {
+    if (!plan || !["free", "pro", "max"].includes(plan)) { // max은 레거시 호환
         return NextResponse.json(
             { error: "유효한 플랜을 선택해주세요." },
             { status: 400 }

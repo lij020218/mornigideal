@@ -3,9 +3,8 @@
  * - 플랜 조회, 기능 접근 권한 체크, 사용량 관리
  *
  * 플랜 구조:
- * - Free (무료): 일일 AI 30회 + 컨텍스트 융합, 메모리, 선제적 알림
- * - Pro (₩6,900): 일일 AI 100회 + ReAct 에이전트, 리스크 알림, 스마트 브리핑
- * - Max (₩14,900): 무제한 + 장기 기억, 자동 실행
+ * - Free (무료): 일일 AI 15회 + 컨텍스트 융합, 메모리, 선제적 알림
+ * - Pro (₩10,900): 일일 AI 30회 + ReAct 에이전트, 장기 기억, 자동 실행
  *
  * 규칙 기반 기능 ($0 비용)은 전 플랜 제공:
  * - 의도 분류, 컨텍스트 융합, 메모리 컨텍스트, 선제적 알림, 메모리 서피싱
@@ -14,19 +13,19 @@
 import { supabaseAdmin } from "./supabase-admin";
 
 // 플랜 타입
-export type UserPlanType = "free" | "pro" | "max";
+export type UserPlanType = "free" | "pro" | "max";  // max는 레거시 호환용 (신규 가입 불가)
 
 // 플랜별 기능 정의
 export interface PlanFeatures {
-    jarvis_memory: boolean;          // 장기 기억 시스템 (Max)
-    risk_alerts: boolean;            // 리스크 알림 (Pro, Max)
-    smart_briefing: boolean;         // 스마트 브리핑 (Pro, Max)
+    jarvis_memory: boolean;          // 장기 기억 시스템 (Pro)
+    risk_alerts: boolean;            // 리스크 알림 (Pro)
+    smart_briefing: boolean;         // 스마트 브리핑 (Pro)
     proactive_suggestions: boolean;  // 선제적 제안 (전 플랜)
-    mood_patterns: boolean;          // 기분 패턴 분석 (Pro+)
-    ai_templates: boolean;           // AI 맞춤 루틴 생성 (Pro+)
-    voice_journal: boolean;          // 음성 저널 (Pro+)
-    health_sync: boolean;            // 건강 데이터 동기화 (Pro+)
-    github_sync: boolean;            // GitHub 연동 (Max)
+    mood_patterns: boolean;          // 기분 패턴 분석 (Pro)
+    ai_templates: boolean;           // AI 맞춤 루틴 생성 (Pro)
+    voice_journal: boolean;          // 음성 저널 (Pro)
+    health_sync: boolean;            // 건강 데이터 동기화 (Pro)
+    github_sync: boolean;            // GitHub 연동 (Pro)
 }
 
 // 플랜 정보
@@ -51,7 +50,7 @@ export interface UsageInfo {
 const DEFAULT_PLAN: UserPlan = {
     plan: "free",
     isActive: true,
-    dailyAiCallsLimit: 30,  // Free: 30회/일
+    dailyAiCallsLimit: 15,  // Free: 15회/일
     memoryStorageMb: 50,
     features: {
         jarvis_memory: false,
@@ -82,9 +81,9 @@ export const PLAN_DETAILS: Record<UserPlanType, {
         nameKo: "무료",
         price: 0,
         monthlyPrice: "무료",
-        dailyAiCallsLimit: 30,
+        dailyAiCallsLimit: 15,
         features: [
-            "일일 AI 호출 30회",
+            "일일 AI 호출 15회",
             "AI 채팅 + 일정 관리",
             "컨텍스트 융합 (날씨+일정)",
             "메모리 서피싱",
@@ -97,33 +96,33 @@ export const PLAN_DETAILS: Record<UserPlanType, {
     pro: {
         name: "Pro",
         nameKo: "프로",
-        price: 6900,
-        monthlyPrice: "₩6,900/월",
-        dailyAiCallsLimit: 100,
+        price: 10900,
+        monthlyPrice: "₩10,900/월",
+        dailyAiCallsLimit: 30,
         features: [
-            "일일 AI 호출 100회",
+            "일일 AI 호출 30회",
             "Free의 모든 기능",
             "ReAct 다단계 에이전트",
-            "리스크 알림",
-            "스마트 브리핑",
-            "100MB 메모리 저장소",
+            "리스크 알림 & 스마트 브리핑",
+            "AI 장기 기억 (RAG)",
+            "자동 실행 모드",
+            "200MB 메모리 저장소",
+            "베타 기능 얼리 액세스",
         ],
-        highlights: ["다단계 추론 에이전트", "일정 충돌 경고", "맞춤 브리핑"],
+        highlights: ["다단계 추론 에이전트", "AI 장기 기억", "자동 실행"],
     },
+    // max는 레거시 호환용 (기존 구독자만). 신규 가입 불가.
     max: {
         name: "Max",
-        nameKo: "맥스",
+        nameKo: "맥스 (레거시)",
         price: 14900,
         monthlyPrice: "₩14,900/월",
-        dailyAiCallsLimit: null,  // 무제한
+        dailyAiCallsLimit: null,
         features: [
             "무제한 AI 호출",
             "Pro의 모든 기능",
-            "AI 장기 기억 (RAG)",
-            "자동 실행",
-            "1GB 메모리 저장소",
         ],
-        highlights: ["AI가 과거 대화 기억", "자동 일정 최적화"],
+        highlights: ["무제한 AI"],
     },
 };
 
@@ -291,15 +290,15 @@ export async function canUseFeature(
 }
 
 /**
- * 맥스 플랜 여부 확인 (간편 함수)
+ * 맥스 플랜 여부 확인 (레거시 호환 - Pro로 매핑)
+ * @deprecated Max 폐지됨. isProOrAbove() 사용 권장
  */
 export async function isMaxPlan(email: string): Promise<boolean> {
-    const plan = await getUserPlan(email);
-    return plan.plan === "max" && plan.isActive;
+    return isProOrAbove(email);
 }
 
 /**
- * 프로 이상 플랜 여부 확인
+ * 프로 이상 플랜 여부 확인 (Max 레거시 포함)
  */
 export async function isProOrAbove(email: string): Promise<boolean> {
     const plan = await getUserPlan(email);
@@ -316,7 +315,7 @@ export async function checkAiUsageLimit(email: string): Promise<UsageInfo> {
             return {
                 canUse: false,
                 currentUsage: 0,
-                dailyLimit: 40,
+                dailyLimit: 15,
                 remaining: 0,
             };
         }
@@ -356,8 +355,8 @@ export async function checkAiUsageLimit(email: string): Promise<UsageInfo> {
         return {
             canUse: true,  // 에러 시 허용 (UX 우선)
             currentUsage: 0,
-            dailyLimit: 40,
-            remaining: 40,
+            dailyLimit: 15,
+            remaining: 15,
         };
     }
 }

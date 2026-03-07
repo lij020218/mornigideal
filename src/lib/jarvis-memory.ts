@@ -2,12 +2,12 @@
  * 자비스 장기 기억 시스템
  * - 대화, 메모, 인사이트를 벡터 임베딩으로 저장
  * - 맥락에 맞는 기억 검색 (RAG)
- * - 맥스 플랜 전용 기능
+ * - 프로 이상 플랜 기능
  */
 
 import OpenAI from "openai";
 import { supabaseAdmin } from "./supabase-admin";
-import { isMaxPlan, canUseFeature } from "./user-plan";
+import { isProOrAbove, canUseFeature } from "./user-plan";
 import { MODELS } from "@/lib/models";
 import { generateEmbedding } from "@/lib/embeddings";
 import { logger } from '@/lib/logger';

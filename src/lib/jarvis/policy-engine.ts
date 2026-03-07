@@ -37,7 +37,8 @@ export class PolicyEngine {
         }
 
         // Jarvis 도메인 설정 (maxInterventionLevel 등)
-        const planKey = centralPlan.plan === 'free' ? 'Free' : centralPlan.plan === 'pro' ? 'Pro' : centralPlan.plan === 'max' ? 'Max' : 'Free';
+        // Max 레거시 구독자는 Pro로 매핑
+        const planKey = centralPlan.plan === 'free' ? 'Free' : (centralPlan.plan === 'pro' || centralPlan.plan === 'max') ? 'Pro' : 'Free';
         const jarvisConfig = PLAN_CONFIGS[planKey as PlanType];
 
         // 2. AI 호출 횟수 체크 (중앙집중 checkAiUsageLimit 사용)
