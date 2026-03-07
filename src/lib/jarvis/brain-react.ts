@@ -26,6 +26,7 @@ import { SAFETY_SYSTEM_RULES } from '@/lib/content-safety';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
+    timeout: 30000, // 30초 SDK 레벨 타임아웃
 });
 
 // ================================================
@@ -145,7 +146,7 @@ export class ReActBrain {
         let totalLlmCalls = 0;
         let wasTerminatedEarly = false;
         const loopStartTime = Date.now();
-        const LOOP_TIMEOUT = 50000; // 전체 루프 50초 제한 (Vercel 60s 내에 응답 필수)
+        const LOOP_TIMEOUT = 55000; // 전체 루프 55초 제한 (Vercel 60s 내에 응답 필수)
 
         for (let i = 0; i < effectiveMaxIterations; i++) {
             // 전체 루프 타임아웃 체크 (남은 시간이 LLM 1회 호출 불가능하면 종료)
@@ -163,14 +164,14 @@ export class ReActBrain {
             const MAX_RETRIES = 1; // 2→1: 타임아웃 캐스케이드 방지
 
             for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-                // 남은 시간 기반 동적 타임아웃 (최소 8초, 최대 20초)
+                // 남은 시간 기반 동적 타임아웃 (최소 10초, 최대 30초)
                 const remainingMs = LOOP_TIMEOUT - (Date.now() - loopStartTime);
-                if (remainingMs < 5000) {
+                if (remainingMs < 8000) {
                     logger.warn(`[ReActBrain] Not enough time for LLM call (${remainingMs}ms remaining)`);
                     wasTerminatedEarly = true;
                     break;
                 }
-                const dynamicTimeout = Math.min(Math.max(remainingMs - 3000, 8000), 20000);
+                const dynamicTimeout = Math.min(Math.max(remainingMs - 3000, 10000), 30000);
 
                 try {
                     llmResponse = await this.callLLM(systemPrompt, prompt, dynamicTimeout);
@@ -187,7 +188,7 @@ export class ReActBrain {
                     }
 
                     if (attempt < MAX_RETRIES) {
-                        const backoffMs = 500;
+                        const backoffMs = 1500;
                         logger.warn(`[ReActBrain] ${errorType} error at step ${i + 1}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES}):`, error);
                         await new Promise(resolve => setTimeout(resolve, backoffMs));
                     } else {
@@ -359,7 +360,7 @@ export class ReActBrain {
      * 플랜별 프로바이더에 따라 LLM 호출 (타임아웃 포함)
      */
     private async callLLM(systemPrompt: string, userPrompt: string, timeoutMs?: number): Promise<string> {
-        const LLM_TIMEOUT = timeoutMs || 20000; // 동적 타임아웃 (기본 20초)
+        const LLM_TIMEOUT = timeoutMs || 30000; // 동적 타임아웃 (기본 30초)
 
         if (this.config.provider === 'anthropic' && anthropic) {
             const response = await Promise.race([

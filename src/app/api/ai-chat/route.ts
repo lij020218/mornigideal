@@ -563,6 +563,8 @@ function buildDateContext(context: ChatContext | undefined): string {
 // POST 핸들러 (흐름 제어만 담당)
 // ============================================
 
+export const maxDuration = 60; // ReAct 루프가 55초까지 사용할 수 있도록
+
 export const POST = withAuth(async (request: NextRequest, userEmail: string) => {
     try {
         // 1+2. 일일 제한 체크 + 요청 파싱을 병렬 실행
