@@ -391,29 +391,19 @@ const PLANS = [
         price: "무료",
         period: "",
         description: "AI 일정 비서 + 선제적 알림",
-        features: ["일일 AI 호출 30회", "AI 채팅 + 일정 관리", "컨텍스트 융합 (날씨+일정)", "선제적 알림 + 메모리 서피싱", "주간 리포트"],
+        features: ["일일 AI 호출 15회", "AI 채팅 + 일정 관리", "컨텍스트 융합 (날씨+일정)", "선제적 알림 + 메모리 서피싱", "주간 리포트"],
         highlight: false,
         badge: null,
     },
     {
         name: "Pro",
         nameKo: "프로",
-        price: "₩6,900",
+        price: "₩10,900",
         period: "/월",
-        description: "ReAct 에이전트 + 스마트 알림",
-        features: ["일일 AI 호출 100회", "Free의 모든 기능", "리스크 알림 (충돌/마감 감지)", "스마트 뉴스 브리핑", "ReAct 다단계 에이전트"],
+        description: "AI가 당신의 일상을 기억합니다",
+        features: ["일일 AI 호출 30회", "Free의 모든 기능", "AI 장기 기억 (RAG)", "자동 실행 모드", "리스크 알림 (충돌/마감 감지)", "스마트 뉴스 브리핑"],
         highlight: true,
-        badge: "인기",
-    },
-    {
-        name: "Max",
-        nameKo: "맥스",
-        price: "₩14,900",
-        period: "/월",
-        description: "AI가 당신을 기억합니다",
-        features: ["무제한 AI 호출", "Pro의 모든 기능", "AI 장기 기억 (RAG)", "자동 실행 모드", "1GB 메모리 저장소"],
-        highlight: false,
-        badge: "최고",
+        badge: "추천",
     },
 ];
 
@@ -636,7 +626,7 @@ export default function LandingPage() {
                     </motion.div>
 
                     <motion.div
-                        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                        className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto"
                         initial="hidden"
                         whileInView="visible"
                         viewport={{ once: true }}

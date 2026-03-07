@@ -4,9 +4,9 @@
  * - POST: 플랜 업그레이드 (관리자/결제 시스템용)
  *
  * 플랜 구조:
- * - Free (무료): 일일 AI 30회 + 컨텍스트 융합, 선제적 알림
- * - Pro (₩6,900): 일일 AI 100회 + ReAct 에이전트, 리스크 알림
- * - Max (₩14,900): 무제한 + 장기 기억, 자동 실행
+ * - Free (무료): 일일 AI 15회 + 컨텍스트 융합, 선제적 알림
+ * - Pro (₩10,900): 일일 AI 30회 + RAG, 자동 실행, 리스크 알림
+ * - Max: 레거시 (Pro로 매핑)
  */
 
 import { NextRequest, NextResponse } from "next/server";
