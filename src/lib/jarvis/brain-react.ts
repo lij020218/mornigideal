@@ -952,8 +952,8 @@ export function getRequestComplexity(messages: Array<{ role: string; content: st
     // 복합 키워드가 포함되면 단순 CRUD 아님
     const hasCompoundKeyword = /먼저|그리고|다음에|그런 다음|그 후에/.test(text);
 
-    // 단순 일정 CRUD는 단발 GPT가 더 빠르고 정확 → complexity 0
-    // 복합 키워드 없이 CRUD 접미사로 끝나면 단순 요청
+    // 단순 요청은 단발 GPT가 더 빠르고 정확 → complexity 0
+    // 복합 키워드 없이 단순 접미사로 끝나면 단순 요청
     if (!hasCompoundKeyword) {
         const simpleCrudPatterns = [
             /(잡아|추가해?|등록해?|넣어|만들어)\s*(줘|줘요|주세요|줄래)?$/,
@@ -962,6 +962,16 @@ export function getRequestComplexity(messages: Array<{ role: string; content: st
             /(완료|했어|끝났어|끝|다 했어)$/,
         ];
         if (simpleCrudPatterns.some(pattern => pattern.test(text)) && text.length < 80) return 0;
+
+        // 단순 조회/검색도 단발 GPT가 더 빠름 (일정 알려줘, 맛집 찾아줘 등)
+        const simpleQueryPatterns = [
+            /일정.{0,10}(알려|보여|뭐|어때)\s*(줘|줘요|주세요|줄래)?$/,
+            /(알려|보여)\s*(줘|줘요|주세요|줄래)\s*$/,
+            /(찾아|검색해|추천해)\s*(줘|줘요|주세요|줄래)\s*$/,
+            /뭐\s*(있어|있나|있니|있을까)\s*$/,
+            /어때\s*$/,
+        ];
+        if (simpleQueryPatterns.some(pattern => pattern.test(text)) && text.length < 50) return 0;
     }
 
     // 레벨 2: 다단계 추론/분석이 필요한 복합 요청
@@ -987,19 +997,17 @@ export function getRequestComplexity(messages: Array<{ role: string; content: st
 
     if (highComplexPatterns.some(pattern => pattern.test(text))) return 2;
 
-    // 레벨 1: 단일 도구 호출이 필요한 중간 복잡도 (조회 후 응답 등)
+    // 레벨 1: 도구 호출 + 후처리가 필요한 중간 복잡도
+    // 단순 "알려줘/보여줘/찾아줘"는 위에서 complexity 0으로 처리됨
     const midComplexPatterns = [
-        /보여\s?줘/,
-        /알려\s?줘/,
-        /어때/,
-        /확인해/,
-        /검색해/,
-        /찾아/,
-        /추천해/,
-        /일정.{0,5}(추가|잡아|등록|넣어|만들어)/,
-        /일정.{0,5}(삭제|지워|취소|빼)/,
-        /일정.{0,5}(변경|수정|바꿔|옮겨)/,
+        /확인해\s?줘/,
+        /패턴.{0,5}(분석|보여|알려)/,
+        /습관.{0,5}(분석|보여|알려)/,
+        /일정.{0,5}(추가|잡아|등록|넣어|만들어).{5,}/,  // 긴 일정 추가 요청 (조건 포함)
+        /일정.{0,5}(삭제|지워|취소|빼).{5,}/,
+        /일정.{0,5}(변경|수정|바꿔|옮겨).{5,}/,
         /목표.{0,5}(추가|세워|만들어)/,
+        /체크리스트.{0,5}(만들어|생성)/,
     ];
 
     if (midComplexPatterns.some(pattern => pattern.test(text))) return 1;
