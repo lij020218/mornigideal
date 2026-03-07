@@ -313,19 +313,22 @@ ${lines.join('\n')}
 // ============================================
 
 /**
- * LLM 없이 코드만으로 응답 가능한 단순 조회 요청 처리
- * 일정 조회 등 이미 로드된 데이터를 포맷팅해서 즉시 반환
+ * LLM 없이 코드만으로 응답 가능한 단순 요청 처리
+ * - 일정 조회: scheduleContext를 포맷팅해서 즉시 반환
+ * - 일정 추가: 정규식으로 날짜/시간/이름 파싱 → add_schedule 액션 생성
  */
 function tryCodeOnlyResponse(
     messages: ChatMessage[],
     scheduleContext: string,
     userName: string,
+    context?: ChatContext,
 ): { message: string; actions: any[] } | null {
     const lastMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastMsg?.content) return null;
     const text = lastMsg.content.trim();
+    const name = userName || '사용자';
 
-    // 단순 일정 조회 패턴
+    // ── 1. 단순 일정 조회 ──
     const scheduleViewPatterns = [
         /^(오늘|내일|모레)?\s*일정\s*(알려|보여|뭐|어때)\s*(줘|줘요|주세요|줄래)?[.?!]?$/,
         /^(오늘|내일|모레)?\s*일정\s*(있어|있나|있니|있을까)[?]?$/,
@@ -333,22 +336,151 @@ function tryCodeOnlyResponse(
     ];
 
     if (scheduleViewPatterns.some(p => p.test(text)) && text.length < 30) {
-        const name = userName || '사용자';
-
         if (!scheduleContext || scheduleContext.trim().length === 0) {
             return {
                 message: `${name}님, 오늘은 등록된 일정이 없어요! 🗓️\n\n새 일정을 추가하시려면 말씀해 주세요.`,
                 actions: [],
             };
         }
-
         return {
             message: `${name}님의 일정이에요! 📋\n\n${scheduleContext.trim()}\n\n일정 추가나 변경이 필요하면 말씀해 주세요.`,
             actions: [],
         };
     }
 
+    // ── 2. 단순 일정 추가 ──
+    const addResult = tryParseScheduleAdd(text, context);
+    if (addResult) {
+        const currentTime = context?.currentTime || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const { actions, conflictWarning } = postProcessActions(
+            [addResult.action], currentTime, context?.schedules
+        );
+
+        let msg = `${addResult.label} 추가했어요! ${addResult.emoji}`;
+        if (conflictWarning) {
+            msg += `\n\n⚠️ ${conflictWarning}`;
+        }
+
+        return { message: msg, actions };
+    }
+
     return null;
+}
+
+/** 날짜 키워드 → specificDate 변환 */
+function resolveDateKeyword(keyword: string | undefined, context?: ChatContext): string {
+    const baseDate = context?.currentDate
+        ? new Date(context.currentDate + 'T00:00:00+09:00')
+        : new Date();
+
+    if (!keyword || keyword === '오늘') {
+        return baseDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    }
+
+    const d = new Date(baseDate);
+    if (keyword === '내일') d.setDate(d.getDate() + 1);
+    else if (keyword === '모레') d.setDate(d.getDate() + 2);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+
+/** "3시" → "15:00", "오전 9시" → "09:00" 등 시간 파싱 */
+function parseTimeExpression(
+    ampm: string | undefined,
+    hour: string,
+    minute: string | undefined,
+): { startTime: string; endTime: string } | null {
+    let h = parseInt(hour, 10);
+    if (isNaN(h) || h < 0 || h > 23) return null;
+
+    const m = minute ? parseInt(minute, 10) : 0;
+    if (isNaN(m) || m < 0 || m > 59) return null;
+
+    // 오전/오후 명시 없이 1~6시 → 오후로 추정 (일상 패턴)
+    if (!ampm && h >= 1 && h <= 6) h += 12;
+    if (ampm === '오후' && h < 12) h += 12;
+    if (ampm === '오전' && h === 12) h = 0;
+
+    const startTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const endH = h + 1 > 23 ? 23 : h + 1;
+    const endTime = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    return { startTime, endTime };
+}
+
+/** 일정 추가 요청 파싱 */
+function tryParseScheduleAdd(
+    text: string,
+    context?: ChatContext,
+): { action: any; label: string; emoji: string } | null {
+    // 패턴: [날짜] [시간] [일정이름] [동사]
+    // "내일 3시에 회의 잡아줘", "오후 2시 운동 추가해줘", "7시 반에 저녁 넣어줘"
+    const pattern = /^(오늘|내일|모레)?\s*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가|넣어|등록|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 역순 패턴: "회의 내일 3시에 잡아줘"
+    const reversePattern = /^(.+?)\s*(오늘|내일|모레)?\s*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(잡아|추가|넣어|등록|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+
+    let dateKeyword: string | undefined;
+    let ampm: string | undefined;
+    let hourStr: string;
+    let minuteStr: string | undefined;
+    let scheduleName: string;
+
+    const m1 = text.match(pattern);
+    const m2 = !m1 ? text.match(reversePattern) : null;
+
+    if (m1) {
+        dateKeyword = m1[1];
+        ampm = m1[2];
+        hourStr = m1[3];
+        minuteStr = m1[4] === '반' ? '30' : m1[5];
+        scheduleName = m1[6];
+    } else if (m2) {
+        scheduleName = m2[1];
+        dateKeyword = m2[2];
+        ampm = m2[3];
+        hourStr = m2[4];
+        minuteStr = m2[5] === '반' ? '30' : m2[6];
+    } else {
+        return null;
+    }
+
+    // 일정 이름이 너무 짧거나 길면 LLM에 위임
+    scheduleName = scheduleName.trim();
+    if (scheduleName.length < 1 || scheduleName.length > 20) return null;
+
+    const time = parseTimeExpression(ampm, hourStr, minuteStr);
+    if (!time) return null;
+
+    const specificDate = resolveDateKeyword(dateKeyword, context);
+
+    const emojiMap: Record<string, string> = {
+        '운동': '💪', '헬스': '💪', '회의': '📋', '미팅': '📋',
+        '공부': '📚', '학습': '📚', '식사': '🍽️', '점심': '🍽️', '저녁': '🍽️',
+        '산책': '🚶', '독서': '📖', '기상': '☀️', '취침': '🌙',
+    };
+    const emoji = Object.entries(emojiMap).find(([k]) => scheduleName.includes(k))?.[1] || '✅';
+
+    const dateLabelMap: Record<string, string> = { '오늘': '오늘', '내일': '내일', '모레': '모레' };
+    const dateLabel = dateLabelMap[dateKeyword || '오늘'] || '오늘';
+    const timeLabel = `${ampm || ''}${hourStr}시${minuteStr ? (minuteStr === '30' ? ' 반' : ` ${minuteStr}분`) : ''}`.trim();
+
+    return {
+        action: {
+            type: 'add_schedule',
+            label: `${scheduleName} 추가`,
+            data: {
+                text: scheduleName,
+                startTime: time.startTime,
+                endTime: time.endTime,
+                specificDate,
+                daysOfWeek: null,
+                color: 'primary',
+                location: '',
+                memo: '',
+            },
+        },
+        label: `${dateLabel} ${timeLabel} ${scheduleName}`,
+        emoji,
+    };
 }
 
 // ============================================
@@ -663,7 +795,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         kvSet(userEmail, dailyCountKey, currentCount + 1).catch(() => {});
 
         // 4.2 코드 전용 Fast Path — LLM 호출 없이 즉시 응답 가능한 단순 조회
-        const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName);
+        const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName, context);
         if (codeOnlyResponse) {
             return NextResponse.json(codeOnlyResponse);
         }
