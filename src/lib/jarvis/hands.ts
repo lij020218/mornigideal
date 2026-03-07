@@ -68,8 +68,8 @@ export class Hands {
                 return await this.prepareForConfirmation(plan, reasonCodes);
 
             case InterventionLevel.L4_AUTO:
-                // 자동 실행
-                return await this.executeAuto(plan, reasonCodes);
+                // 자동 실행 → 사용자 확인으로 변경 (항상 물어봄)
+                return await this.prepareForConfirmation(plan, reasonCodes);
 
             default:
                 return {
