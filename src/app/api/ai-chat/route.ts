@@ -309,6 +309,49 @@ ${lines.join('\n')}
 }
 
 // ============================================
+// 코드 전용 Fast Path (LLM 호출 0회)
+// ============================================
+
+/**
+ * LLM 없이 코드만으로 응답 가능한 단순 조회 요청 처리
+ * 일정 조회 등 이미 로드된 데이터를 포맷팅해서 즉시 반환
+ */
+function tryCodeOnlyResponse(
+    messages: ChatMessage[],
+    scheduleContext: string,
+    userName: string,
+): { message: string; actions: any[] } | null {
+    const lastMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastMsg?.content) return null;
+    const text = lastMsg.content.trim();
+
+    // 단순 일정 조회 패턴
+    const scheduleViewPatterns = [
+        /^(오늘|내일|모레)?\s*일정\s*(알려|보여|뭐|어때)\s*(줘|줘요|주세요|줄래)?[.?!]?$/,
+        /^(오늘|내일|모레)?\s*일정\s*(있어|있나|있니|있을까)[?]?$/,
+        /^(오늘|내일|모레)?\s*(뭐|무슨)\s*일정\s*(있어|있나|있니)?[?]?$/,
+    ];
+
+    if (scheduleViewPatterns.some(p => p.test(text)) && text.length < 30) {
+        const name = userName || '사용자';
+
+        if (!scheduleContext || scheduleContext.trim().length === 0) {
+            return {
+                message: `${name}님, 오늘은 등록된 일정이 없어요! 🗓️\n\n새 일정을 추가하시려면 말씀해 주세요.`,
+                actions: [],
+            };
+        }
+
+        return {
+            message: `${name}님의 일정이에요! 📋\n\n${scheduleContext.trim()}\n\n일정 추가나 변경이 필요하면 말씀해 주세요.`,
+            actions: [],
+        };
+    }
+
+    return null;
+}
+
+// ============================================
 // 사용자 프로필 + 일정 컨텍스트 빌드
 // ============================================
 
@@ -318,6 +361,7 @@ async function buildUserAndScheduleContext(userEmail: string, context: ChatConte
     userPlan: string;
     userId: string | undefined;
     profile: UserProfile | null;
+    userName: string;
 }> {
     try {
         // 병렬 조회: getUserByEmail + getPlanName 동시 실행 (기존 순차 호출 대비 ~200-400ms 절약)
@@ -327,7 +371,7 @@ async function buildUserAndScheduleContext(userEmail: string, context: ChatConte
         ]);
 
         if (!user?.profile) {
-            return { userContext: "", scheduleContext: "", userPlan, userId: user?.id, profile: null };
+            return { userContext: "", scheduleContext: "", userPlan, userId: user?.id, profile: null, userName: user?.name || '' };
         }
 
         const p = user.profile;
@@ -456,10 +500,10 @@ ${dayAfterTomorrowGoals.map((g) => `- ${g.startTime}: ${g.text}`).join('\n')}`;
             }
         }
 
-        return { userContext, scheduleContext, userPlan, userId: user?.id, profile: p };
+        return { userContext, scheduleContext, userPlan, userId: user?.id, profile: p, userName: user?.name || '' };
     } catch (e) {
         logger.error("[AI Chat] Failed to get user context:", e);
-        return { userContext: "", scheduleContext: "", userPlan: "Free", userId: undefined, profile: null };
+        return { userContext: "", scheduleContext: "", userPlan: "Free", userId: undefined, profile: null, userName: '' };
     }
 }
 
@@ -604,7 +648,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         const intent = classifyIntent(messages);
 
         // 사용자 프로필 + 일정 (항상 필요)
-        const { userContext, scheduleContext, userPlan, userId, profile } = await buildUserAndScheduleContext(userEmail, context);
+        const { userContext, scheduleContext, userPlan, userId, profile, userName } = await buildUserAndScheduleContext(userEmail, context);
 
         // 4.1 플랜별 일일 제한 재확인
         const dailyLimit = LIMITS.AI_CHAT_DAILY[userPlan] ?? LIMITS.AI_CHAT_DAILY.Free;
@@ -618,6 +662,11 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         // 호출 카운트 증가 (비동기, 응답 대기 불필요)
         kvSet(userEmail, dailyCountKey, currentCount + 1).catch(() => {});
 
+        // 4.2 코드 전용 Fast Path — LLM 호출 없이 즉시 응답 가능한 단순 조회
+        const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName);
+        if (codeOnlyResponse) {
+            return NextResponse.json(codeOnlyResponse);
+        }
 
         // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청만)
         // 단순 일정 추가/삭제("점심 잡아줘")는 단발 GPT가 더 정확하고 빠름
