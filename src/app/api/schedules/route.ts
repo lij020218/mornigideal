@@ -90,8 +90,32 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       logger.error('[schedules/POST] 스키마 검증 실패:', JSON.stringify(body));
       return v.response;
     }
-    const { text, startTime, endTime, date, specificDate, color, daysOfWeek, location, memo } = v.data;
-    logger.info('[schedules/POST] 파싱 결과:', JSON.stringify({ text, startTime, specificDate, daysOfWeek, date }));
+    const { text, startTime: rawStartTime, endTime: rawEndTime, date, specificDate, color, daysOfWeek, location, memo } = v.data;
+    logger.info('[schedules/POST] 파싱 결과:', JSON.stringify({ text, startTime: rawStartTime, specificDate, daysOfWeek, date }));
+
+    // 시간 형식 검증 및 정규화 (HH:MM)
+    const normalizeTime = (t: string | undefined): string | undefined => {
+      if (!t) return undefined;
+      const m = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) return undefined;
+      const h = Math.min(Math.max(parseInt(m[1], 10), 0), 23);
+      const min = Math.min(Math.max(parseInt(m[2], 10), 0), 59);
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    };
+
+    const startTime = normalizeTime(rawStartTime);
+    if (!startTime) {
+      return NextResponse.json({ error: '유효한 시작 시간이 필요합니다. (HH:MM)' }, { status: 400 });
+    }
+
+    let endTime = normalizeTime(rawEndTime);
+    // endTime이 startTime보다 이전이면 startTime + 1시간으로 보정
+    if (endTime && endTime <= startTime) {
+      const sh = parseInt(startTime.split(':')[0], 10);
+      const eh = Math.min(sh + 1, 23);
+      endTime = `${String(eh).padStart(2, '0')}:${startTime.split(':')[1]}`;
+      logger.warn(`[schedules/POST] endTime(${rawEndTime})이 startTime(${rawStartTime})보다 이전 → ${endTime}로 보정`);
+    }
 
     // KST 기준 날짜 계산
     const now = new Date();

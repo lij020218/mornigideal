@@ -212,7 +212,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
 
     const totalSchedules = lastWeekSchedules.length;
     const completedSchedules = lastWeekSchedules.filter((g: CustomGoal) => g.completed).length;
-    const completionRate = totalSchedules > 0 ? (completedSchedules / totalSchedules) * 100 : 0;
+    const completionRate = totalSchedules > 0 ? Math.round((completedSchedules / totalSchedules) * 100) : 0;
 
     // Category breakdown (키워드 범위 확대)
     const categoryBreakdown = {
@@ -470,7 +470,7 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     // 5. Comparison with last week
     const previousTotal = previousWeekSchedules.length;
     const previousCompleted = previousWeekSchedules.filter((g: CustomGoal) => g.completed).length;
-    const previousCompletionRate = previousTotal > 0 ? (previousCompleted / previousTotal) * 100 : 0;
+    const previousCompletionRate = previousTotal > 0 ? Math.round((previousCompleted / previousTotal) * 100) : 0;
 
     const { data: previousReadingEvents } = await supabase
         .from('user_events')
