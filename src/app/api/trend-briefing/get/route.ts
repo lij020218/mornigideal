@@ -7,7 +7,18 @@ import { kvGet } from "@/lib/kv-store";
 import { LIMITS } from "@/lib/constants";
 
 export const GET = withAuth(async (request: NextRequest, email: string) => {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+    const now = new Date();
+    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const kstHour = kstNow.getHours();
+    const today = kstNow.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+    // 트렌드 브리핑은 KST 5시에 생성되므로, 5시 이전이면 어제 브리핑을 조회
+    let briefingDate = today;
+    if (kstHour < 5) {
+        const yesterday = new Date(kstNow);
+        yesterday.setDate(yesterday.getDate() - 1);
+        briefingDate = yesterday.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+    }
 
     // 유저 플랜 + 트렌드 데이터 + 읽음 정보 병렬 조회
     const [normalizedPlan, { data, error }, readIds] = await Promise.all([
@@ -16,9 +27,9 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             .from('trends_cache')
             .select('trends, last_updated')
             .eq('email', email)
-            .eq('date', today)
+            .eq('date', briefingDate)
             .maybeSingle(),
-        kvGet<string[]>(email, `read_trend_ids_${today}`),
+        kvGet<string[]>(email, `read_trend_ids_${briefingDate}`),
     ]);
 
     const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
@@ -36,7 +47,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ trends: null });
     }
 
-    const refreshKey = `trend_refresh_count_${today}`;
+    const refreshKey = `trend_refresh_count_${briefingDate}`;
     const currentRefreshCount = await kvGet<number>(email, refreshKey) || 0;
 
     return NextResponse.json({
