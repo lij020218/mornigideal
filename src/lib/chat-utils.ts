@@ -218,7 +218,7 @@ export function getActionSchemaForIntent(intent: UserIntent, userPlan: string, c
 }
 
 type Action =
-  | { type: "add_schedule"; label: string; data: { text: string; startTime: string; endTime: string; specificDate: string|null; daysOfWeek: number[]|null; color: "primary"; location: string; memo: string } }
+  | { type: "add_schedule"; label: string; data: { text: string; startTime: string; endTime: string; specificDate: string|null; daysOfWeek: number[]|null; startDate?: string; endDate?: string; color: "primary"; location: string; memo: string } }
   | { type: "delete_schedule"; label: string; data: { text: string; startTime: string; isRepeating?: boolean; specificDate?: string } }
   | { type: "update_schedule"; label: string; data: { originalText: string; originalTime: string; specificDate?: string; newText?: string; newStartTime?: string; newEndTime?: string; newLocation?: string; newMemo?: string } }
 
@@ -275,7 +275,7 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - **specificDate vs daysOfWeek**: 특정 날짜 일정은 반드시 specificDate를 설정하고 daysOfWeek는 null로. 반복 일정만 daysOfWeek를 사용.
 - **일정 이름 정규화**: 아침/점심/저녁→"아침 식사"/"점심 식사"/"저녁 식사", 잠→"취침", 일어나→"기상", 헬스→"운동"
 - **메모 패턴**: "'세부내용'으로 일정" → text: "일정유형", memo: "세부내용"
-- **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]
+- **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]. startDate/endDate는 자동 설정됨 (미입력 시 이번 주~6개월)
 - **시간 표시**: 메시지에서 "오전/오후" 명시 (6시 X → 오후 6시 O)
 - **삭제**: delete_schedule에 text, startTime 필수. 반복이면 isRepeating:true. 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
 - **수정**: "바꿔줘/변경해줘" → update_schedule (originalText, originalTime 필수). 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
@@ -515,6 +515,25 @@ export function postProcessActions(
             // daysOfWeek가 빈 배열이면 null로 정리
             if (action.data.daysOfWeek && action.data.daysOfWeek.length === 0) {
                 action.data.daysOfWeek = null;
+            }
+            // 반복 일정에 startDate/endDate 자동 설정 (이번 주 ~ 6개월)
+            if (action.data.daysOfWeek && action.data.daysOfWeek.length > 0) {
+                const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+                const todayDay = today.getDay();
+                // startDate: 이번 주의 첫 번째 해당 요일 (오늘 포함)
+                if (!action.data.startDate) {
+                    const minDay = Math.min(...action.data.daysOfWeek);
+                    const daysUntil = (minDay - todayDay + 7) % 7;
+                    const start = new Date(today);
+                    start.setDate(start.getDate() + daysUntil);
+                    action.data.startDate = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                }
+                // endDate: 6개월 후
+                if (!action.data.endDate) {
+                    const end = new Date(today);
+                    end.setMonth(end.getMonth() + 6);
+                    action.data.endDate = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                }
             }
             if (action.data.startTime && currentTime) {
                 // 내일/미래 일정이면 AM/PM 추론 + 과거 시간 조정 스킵

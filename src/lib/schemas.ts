@@ -118,6 +118,8 @@ export const scheduleCreateSchema = z.object({
     specificDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
     color: z.string().max(50).optional().nullable().transform(v => v ?? undefined),
     daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable().transform(v => v ?? undefined),
+    startDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
+    endDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
     location: z.string().max(500).optional().nullable().transform(v => v ?? undefined),
     memo: z.string().max(2000).optional().nullable().transform(v => v ?? undefined),
 });
