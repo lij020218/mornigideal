@@ -364,6 +364,20 @@ function tryCodeOnlyResponse(
         return { message: msg, actions };
     }
 
+    // ── 3. 반복 일정 추가 ──
+    const recurResult = tryParseRecurringScheduleAdd(text);
+    if (recurResult) {
+        const currentTime = context?.currentTime || new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const { actions } = postProcessActions(
+            [recurResult.action], currentTime, context?.schedules
+        );
+
+        return {
+            message: `${recurResult.label} 반복 일정 추가했어요! ${recurResult.emoji}\n\n6개월간 캘린더에 등록됩니다.`,
+            actions,
+        };
+    }
+
     return null;
 }
 
@@ -479,6 +493,111 @@ function tryParseScheduleAdd(
             },
         },
         label: `${dateLabel} ${timeLabel} ${scheduleName}`,
+        emoji,
+    };
+}
+
+/** 반복 일정 추가 요청 파싱 (매주/매일/평일/주말) */
+function tryParseRecurringScheduleAdd(
+    text: string,
+): { action: any; label: string; emoji: string } | null {
+    const DAY_MAP: Record<string, number> = {
+        '일': 0, '일요일': 0, '월': 1, '월요일': 1, '화': 2, '화요일': 2,
+        '수': 3, '수요일': 3, '목': 4, '목요일': 4, '금': 5, '금요일': 5,
+        '토': 6, '토요일': 6,
+    };
+
+    // 패턴: 매주 [요일(들)] [시간] [일정] [동사]
+    // "매주 금요일 오후 12시에 영화 잡아줘"
+    // "매일 오전 7시 운동 추가해줘"
+    // "평일 9시에 회의 넣어줘"
+    // "주말 오후 2시 독서 등록해줘"
+    const pattern = /^(매주|매일|평일|주말)\s*((?:월|화|수|목|금|토|일)(?:요일)?(?:\s*,?\s*(?:월|화|수|목|금|토|일)(?:요일)?)*)?[,\s]*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가|넣어|등록|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 역순: "영화 매주 금요일 오후 12시에 잡아줘"
+    const reversePattern = /^(.+?)\s+(매주|매일|평일|주말)\s*((?:월|화|수|목|금|토|일)(?:요일)?(?:\s*,?\s*(?:월|화|수|목|금|토|일)(?:요일)?)*)?[,\s]*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(잡아|추가|넣어|등록|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+
+    let recurType: string;
+    let dayNames: string | undefined;
+    let ampm: string | undefined;
+    let hourStr: string;
+    let minuteStr: string | undefined;
+    let scheduleName: string;
+
+    const m1 = text.match(pattern);
+    const m2 = !m1 ? text.match(reversePattern) : null;
+
+    if (m1) {
+        recurType = m1[1];
+        dayNames = m1[2];
+        ampm = m1[3];
+        hourStr = m1[4];
+        minuteStr = m1[5] === '반' ? '30' : m1[6];
+        scheduleName = m1[7];
+    } else if (m2) {
+        scheduleName = m2[1];
+        recurType = m2[2];
+        dayNames = m2[3];
+        ampm = m2[4];
+        hourStr = m2[5];
+        minuteStr = m2[6] === '반' ? '30' : m2[7];
+    } else {
+        return null;
+    }
+
+    scheduleName = scheduleName.trim();
+    if (scheduleName.length < 1 || scheduleName.length > 20) return null;
+
+    // daysOfWeek 결정
+    let daysOfWeek: number[];
+    if (recurType === '매일') {
+        daysOfWeek = [0, 1, 2, 3, 4, 5, 6];
+    } else if (recurType === '평일') {
+        daysOfWeek = [1, 2, 3, 4, 5];
+    } else if (recurType === '주말') {
+        daysOfWeek = [0, 6];
+    } else if (dayNames) {
+        // "매주 월수금" → [1, 3, 5]
+        const days = dayNames.match(/(월|화|수|목|금|토|일)(요일)?/g);
+        if (!days || days.length === 0) return null;
+        daysOfWeek = [...new Set(days.map(d => DAY_MAP[d.replace('요일', '')] ?? -1).filter(n => n >= 0))].sort();
+        if (daysOfWeek.length === 0) return null;
+    } else {
+        return null; // "매주"만 있고 요일 없으면 LLM에 위임
+    }
+
+    const time = parseTimeExpression(ampm, hourStr, minuteStr);
+    if (!time) return null;
+
+    const emojiMap: Record<string, string> = {
+        '운동': '💪', '헬스': '💪', '회의': '📋', '미팅': '📋',
+        '공부': '📚', '학습': '📚', '식사': '🍽️', '점심': '🍽️', '저녁': '🍽️',
+        '산책': '🚶', '독서': '📖', '기상': '☀️', '취침': '🌙', '영화': '🎬',
+        '요가': '🧘', '수영': '🏊', '등산': '🏔️',
+    };
+    const emoji = Object.entries(emojiMap).find(([k]) => scheduleName.includes(k))?.[1] || '🔄';
+
+    const dayLabels: Record<string, string> = {
+        '매일': '매일', '평일': '평일', '주말': '주말',
+    };
+    const dayLabel = dayLabels[recurType] || `매주 ${dayNames || ''}`.trim();
+    const timeLabel = `${ampm || ''}${hourStr}시${minuteStr ? (minuteStr === '30' ? ' 반' : ` ${minuteStr}분`) : ''}`.trim();
+
+    return {
+        action: {
+            type: 'add_schedule',
+            label: `${scheduleName} 추가`,
+            data: {
+                text: scheduleName,
+                startTime: time.startTime,
+                endTime: time.endTime,
+                specificDate: null,
+                daysOfWeek,
+                color: 'primary',
+                location: '',
+                memo: '',
+            },
+        },
+        label: `${dayLabel} ${timeLabel} ${scheduleName}`,
         emoji,
     };
 }
