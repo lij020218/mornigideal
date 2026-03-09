@@ -174,7 +174,10 @@ export class ReActBrain {
                 const dynamicTimeout = Math.min(Math.max(remainingMs - 3000, 10000), 30000);
 
                 try {
-                    llmResponse = await this.callLLM(systemPrompt, prompt, dynamicTimeout);
+                    // Pro: 첫 번째 단계만 GPT-5.2 (의도 파악 + 전략 수립), 이후는 mini (비용 통제)
+                    const useFirstStepUpgrade = i === 0 && this.userPlan === 'Pro';
+                    const modelOverride = useFirstStepUpgrade ? MODELS.GPT_5_2 : undefined;
+                    llmResponse = await this.callLLM(systemPrompt, prompt, dynamicTimeout, modelOverride);
                     totalLlmCalls++;
                     break;
                 } catch (error) {
@@ -359,13 +362,14 @@ export class ReActBrain {
     /**
      * 플랜별 프로바이더에 따라 LLM 호출 (타임아웃 포함)
      */
-    private async callLLM(systemPrompt: string, userPrompt: string, timeoutMs?: number): Promise<string> {
+    private async callLLM(systemPrompt: string, userPrompt: string, timeoutMs?: number, modelOverride?: string): Promise<string> {
         const LLM_TIMEOUT = timeoutMs || 30000; // 동적 타임아웃 (기본 30초)
+        const model = modelOverride || this.config.model;
 
-        if (this.config.provider === 'anthropic' && anthropic) {
+        if (!modelOverride && this.config.provider === 'anthropic' && anthropic) {
             const response = await Promise.race([
                 anthropic.messages.create({
-                    model: this.config.model,
+                    model,
                     max_tokens: 4096,
                     temperature: 1.0,
                     system: systemPrompt,
@@ -386,7 +390,7 @@ export class ReActBrain {
         const response = await reactCircuit.execute(() =>
             Promise.race([
                 openai.chat.completions.create({
-                    model: this.config.model,
+                    model,
                     temperature: 1.0,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -404,7 +408,7 @@ export class ReActBrain {
         if (!content) {
             const reason = choice?.finish_reason || 'unknown';
             const refusal = (choice?.message as any)?.refusal;
-            logger.error(`[ReActBrain] Empty OpenAI response — finish_reason: ${reason}, refusal: ${refusal || 'none'}, model: ${this.config.model}`);
+            logger.error(`[ReActBrain] Empty OpenAI response — finish_reason: ${reason}, refusal: ${refusal || 'none'}, model: ${model}`);
             throw new Error(`Empty response from OpenAI (finish_reason: ${reason})`);
         }
         return content;
