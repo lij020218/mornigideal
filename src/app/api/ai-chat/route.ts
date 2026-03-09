@@ -320,7 +320,7 @@ ${lines.join('\n')}
 /** 한국어 일정 입력 오타 정규화 */
 function normalizeTypos(text: string): string {
     return text
-        // 동사 어미 오타
+        // 동사 어미 오타 (줘 변형)
         .replace(/쥐$/g, '줘').replace(/쥐요$/g, '줘요')
         .replace(/줴$/g, '줘').replace(/줴요$/g, '줘요')
         .replace(/줭$/g, '줘').replace(/줭요$/g, '줘요')
@@ -332,18 +332,37 @@ function normalizeTypos(text: string): string {
         .replace(/만들어쥐/g, '만들어줘')
         .replace(/잡아조/g, '잡아줘').replace(/추가해조/g, '추가해줘')
         .replace(/넣어조/g, '넣어줘').replace(/등록해조/g, '등록해줘')
+        .replace(/알려쥐/g, '알려줘').replace(/보여쥐/g, '보여줘')
+        .replace(/알려조/g, '알려줘').replace(/보여조/g, '보여줘')
+        .replace(/삭제해쥐/g, '삭제해줘').replace(/삭제해조/g, '삭제해줘')
+        .replace(/바꿔쥐/g, '바꿔줘').replace(/바꿔조/g, '바꿔줘')
+        .replace(/변경해쥐/g, '변경해줘').replace(/변경해조/g, '변경해줘')
+        .replace(/취소해쥐/g, '취소해줘').replace(/취소해조/g, '취소해줘')
         // 시간대 오타
         .replace(/오잔/g, '오전').replace(/오휴/g, '오후')
+        // 날짜 오타
+        .replace(/네일/g, '내일').replace(/나일/g, '내일')
+        .replace(/몰레/g, '모레').replace(/머레/g, '모레')
+        // 일정 키워드 오타
+        .replace(/일젇/g, '일정').replace(/일졍/g, '일정')
+        .replace(/일정이/g, '일정이').replace(/읿정/g, '일정')
         // 반복 키워드 오타
         .replace(/매쥬/g, '매주').replace(/메주/g, '매주').replace(/매쭈/g, '매주')
         .replace(/매이루/g, '매일').replace(/메일/g, '매일')
+        .replace(/평이루/g, '평일').replace(/펑일/g, '평일')
+        .replace(/주말루/g, '주말')
         // 요일 축약/오타
         .replace(/월욜/g, '월요일').replace(/화욜/g, '화요일').replace(/수욜/g, '수요일')
         .replace(/목욜/g, '목요일').replace(/금욜/g, '금요일').replace(/토욜/g, '토요일').replace(/일욜/g, '일요일')
+        // 동작 키워드 오타
+        .replace(/추가헤/g, '추가해').replace(/등록헤/g, '등록해')
+        .replace(/삭제헤/g, '삭제해').replace(/변경헤/g, '변경해').replace(/취소헤/g, '취소해')
         // 불필요한 띄어쓰기 정규화 (동사 앞)
         .replace(/잡아\s+줘/g, '잡아줘').replace(/추가해\s+줘/g, '추가해줘')
         .replace(/넣어\s+줘/g, '넣어줘').replace(/등록해\s+줘/g, '등록해줘')
-        .replace(/만들어\s+줘/g, '만들어줘');
+        .replace(/만들어\s+줘/g, '만들어줘').replace(/알려\s+줘/g, '알려줘')
+        .replace(/보여\s+줘/g, '보여줘').replace(/삭제해\s+줘/g, '삭제해줘')
+        .replace(/바꿔\s+줘/g, '바꿔줘').replace(/변경해\s+줘/g, '변경해줘');
 }
 
 function tryCodeOnlyResponse(
