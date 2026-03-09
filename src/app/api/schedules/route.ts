@@ -94,7 +94,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
     logger.info('[schedules/POST] 파싱 결과:', JSON.stringify({ text, startTime: rawStartTime, specificDate, daysOfWeek, date }));
 
     // 시간 형식 검증 및 정규화 (HH:MM)
-    const normalizeTime = (t: string | undefined): string | undefined => {
+    const normalizeTime = (t: string | null | undefined): string | undefined => {
       if (!t) return undefined;
       const m = t.match(/^(\d{1,2}):(\d{2})$/);
       if (!m) return undefined;
