@@ -220,7 +220,15 @@ export function getActionSchemaForIntent(intent: UserIntent, userPlan: string, c
 type Action =
   | { type: "add_schedule"; label: string; data: { text: string; startTime: string; endTime: string; specificDate: string|null; daysOfWeek: number[]|null; color: "primary"; location: string; memo: string } }
   | { type: "delete_schedule"; label: string; data: { text: string; startTime: string; isRepeating?: boolean; specificDate?: string } }
-  | { type: "update_schedule"; label: string; data: { originalText: string; originalTime: string; specificDate?: string; newText?: string; newStartTime?: string; newEndTime?: string; newLocation?: string; newMemo?: string } }`;
+  | { type: "update_schedule"; label: string; data: { originalText: string; originalTime: string; specificDate?: string; newText?: string; newStartTime?: string; newEndTime?: string; newLocation?: string; newMemo?: string } }
+
+⚠️ 시간 형식 규칙 (반드시 준수):
+- startTime, endTime은 반드시 24시간 HH:MM 형식 (예: "09:00", "14:30", "18:00")
+- "오후 6시" → "18:00", "오전 9시" → "09:00", "오후 3시 반" → "15:30"
+- endTime은 반드시 startTime보다 이후여야 함
+- daysOfWeek: 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
+- 반복 일정이면 specificDate는 null, daysOfWeek는 배열
+- 단일 일정이면 daysOfWeek는 null, specificDate는 YYYY-MM-DD`;
 
     if (intent === 'search') {
         schema += `
@@ -354,7 +362,10 @@ User: "내일 3시 운동 삭제해줘"
 {"message": "내일 오후 3시 운동 일정 삭제했어요!", "actions": [{"type": "delete_schedule", "label": "운동 삭제", "data": {"text": "운동", "startTime": "15:00", "specificDate": "${tomorrowStr}"}}]}
 
 User: "내일 운동 시간 4시로 바꿔줘"
-{"message": "내일 운동 시간을 오후 4시로 변경했어요! 💪", "actions": [{"type": "update_schedule", "label": "운동 수정", "data": {"originalText": "운동", "originalTime": "15:00", "specificDate": "${tomorrowStr}", "newStartTime": "16:00", "newEndTime": "17:00"}}]}`;
+{"message": "내일 운동 시간을 오후 4시로 변경했어요! 💪", "actions": [{"type": "update_schedule", "label": "운동 수정", "data": {"originalText": "운동", "originalTime": "15:00", "specificDate": "${tomorrowStr}", "newStartTime": "16:00", "newEndTime": "17:00"}}]}
+
+User: "매주 목요일 오후 6시에서 8시 토끼발 세션 일정 추가해줘"
+{"message": "매주 목요일 오후 6시~8시 토끼발 세션 일정 추가했어요! 🐰", "actions": [{"type": "add_schedule", "label": "토끼발 세션 추가", "data": {"text": "토끼발 세션", "startTime": "18:00", "endTime": "20:00", "specificDate": null, "daysOfWeek": [4], "color": "primary", "location": "", "memo": ""}}]}`;
     }
 
     if (intent === 'search') {
@@ -516,6 +527,38 @@ export function postProcessActions(
                 if (adjusted !== action.data.startTime) {
                     action.data.startTime = adjusted;
                 }
+            }
+            // startTime HH:MM 형식 검증
+            if (action.data.startTime && !/^\d{2}:\d{2}$/.test(action.data.startTime)) {
+                const m = action.data.startTime.match(/(\d{1,2}):?(\d{2})?/);
+                if (m) {
+                    const h = Math.min(parseInt(m[1], 10), 23);
+                    const min = m[2] ? Math.min(parseInt(m[2], 10), 59) : 0;
+                    action.data.startTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+                }
+            }
+            // endTime 검증: HH:MM 형식 + startTime보다 이후
+            if (action.data.endTime) {
+                if (!/^\d{2}:\d{2}$/.test(action.data.endTime)) {
+                    const m = action.data.endTime.match(/(\d{1,2}):?(\d{2})?/);
+                    if (m) {
+                        const h = Math.min(parseInt(m[1], 10), 23);
+                        const min = m[2] ? Math.min(parseInt(m[2], 10), 59) : 0;
+                        action.data.endTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+                    }
+                }
+                if (action.data.startTime && action.data.endTime <= action.data.startTime) {
+                    // endTime이 startTime보다 이전이면 +1시간 보정
+                    const [sh] = action.data.startTime.split(':').map(Number);
+                    const eh = Math.min(sh + 1, 23);
+                    action.data.endTime = `${String(eh).padStart(2, '0')}:${action.data.startTime.split(':')[1]}`;
+                }
+            }
+            // endTime 누락 시 startTime + 1시간
+            if (action.data.startTime && !action.data.endTime) {
+                const [sh, sm] = action.data.startTime.split(':').map(Number);
+                const eh = Math.min(sh + 1, 23);
+                action.data.endTime = `${String(eh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
             }
             // 충돌 및 버퍼 감지
             if (existingSchedules && existingSchedules.length > 0) {
