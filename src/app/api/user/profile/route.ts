@@ -8,7 +8,7 @@ const MAX_PROFILE_SIZE = 50_000; // 50KB
 const ALLOWED_TOP_KEYS = new Set([
     'profile', 'settings', 'job', 'goal', 'level', 'interests', 'name',
     'notifications', 'userSettings', 'appearance', 'aiSettings',
-    'wakeUpTime', 'sleepTime', 'exerciseEnabled', 'location',
+    'wakeUpTime', 'sleepTime', 'exerciseEnabled', 'location', 'dream',
 ]);
 
 function validateProfilePayload(body: unknown): string | null {
@@ -41,6 +41,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                     name: p.name || user.name || '',
                     job: p.job || '',
                     goal: p.goal || '',
+                    dream: p.dream || '',
                     level: p.level || '',
                     interests: p.interests || [],
                 },
@@ -134,10 +135,11 @@ export const PUT = withAuth(async (request: NextRequest, email: string) => {
         const s = updates.settings;
         // profile 필드 → top-level
         if (s.profile) {
-            const { name, job, goal, level, interests } = s.profile;
+            const { name, job, goal, dream, level, interests } = s.profile;
             if (name !== undefined) flat.name = name;
             if (job !== undefined) flat.job = job;
             if (goal !== undefined) flat.goal = goal;
+            if (dream !== undefined) flat.dream = dream;
             if (level !== undefined) flat.level = level;
             if (interests !== undefined) flat.interests = interests;
         }
