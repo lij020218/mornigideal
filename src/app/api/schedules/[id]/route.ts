@@ -74,8 +74,8 @@ export async function PUT(
     if (!v.success) return v.response;
     const { text, startTime, endTime, completed } = v.data;
 
-    // customGoals에서 수정 (goal_, learning-, recurring_ 접두사)
-    if (id.startsWith('goal_') || id.startsWith('learning-') || id.startsWith('recurring_')) {
+    // customGoals에서 수정 (profile JSONB에 저장된 일정)
+    if (id.startsWith('goal_') || id.startsWith('learning-') || id.startsWith('recurring_') || id.startsWith('voice-') || id.startsWith('ai-') || id.startsWith('reminder-')) {
       const { data: user, error: userError } = await supabaseAdmin
         .from('users')
         .select('profile')
@@ -171,8 +171,8 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // customGoals에서 삭제 시도 (goal_, learning-, recurring_ 접두사)
-    if (id.startsWith('goal_') || id.startsWith('learning-') || id.startsWith('recurring_')) {
+    // customGoals에서 삭제 시도 (profile JSONB에 저장된 일정)
+    if (id.startsWith('goal_') || id.startsWith('learning-') || id.startsWith('recurring_') || id.startsWith('voice-') || id.startsWith('ai-') || id.startsWith('reminder-')) {
       // 사용자의 customGoals에서 해당 일정 삭제
       const { data: user, error: userError } = await supabaseAdmin
         .from('users')
@@ -188,13 +188,9 @@ export async function DELETE(
       const customGoals = user.profile?.customGoals || [];
       const updatedGoals = customGoals.filter((goal: any) => goal.id !== id);
 
-      // 일정이 존재하지 않는 경우
+      // 일정이 존재하지 않는 경우 — 이미 삭제되었거나 가상 일정이면 성공 처리
       if (customGoals.length === updatedGoals.length) {
-        if (id.startsWith('learning-') || id.startsWith('recurring_')) {
-          // 가상 일정이거나 이미 삭제된 경우 성공 처리
-          return NextResponse.json({ success: true });
-        }
-        return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
+        return NextResponse.json({ success: true });
       }
 
       // 업데이트된 customGoals 저장

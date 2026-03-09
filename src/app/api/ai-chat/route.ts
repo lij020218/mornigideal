@@ -370,6 +370,7 @@ function tryCodeOnlyResponse(
     scheduleContext: string,
     userName: string,
     context?: ChatContext,
+    profile?: UserProfile | null,
 ): { message: string; actions: any[] } | null {
     const lastMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastMsg?.content) return null;
@@ -426,7 +427,138 @@ function tryCodeOnlyResponse(
         };
     }
 
+    // ── 4. 단순 일정 삭제 ──
+    const deleteResult = tryParseScheduleDelete(text, context, profile);
+    if (deleteResult) {
+        return {
+            message: deleteResult.message,
+            actions: [deleteResult.action],
+        };
+    }
+
     return null;
+}
+
+/** 일정 삭제 요청 파싱 — 오늘은 context.schedules, 내일/모레/특정날짜는 profile.customGoals에서 매칭 */
+function tryParseScheduleDelete(
+    text: string,
+    context?: ChatContext,
+    profile?: UserProfile | null,
+): { action: any; message: string } | null {
+    // 삭제 동사 패턴
+    const deleteVerbs = /\s*(삭제해|삭제해줘|삭제해주세요|지워|지워줘|지워주세요|없애|없애줘|없애주세요|취소해|취소해줘|취소해주세요|빼줘|빼주세요)[.!]?$/;
+    if (!deleteVerbs.test(text)) return null;
+
+    // 동사 제거
+    const withoutVerb = text.replace(deleteVerbs, '').trim();
+
+    // 날짜 키워드 추출
+    const dateKeywordMatch = withoutVerb.match(/^(오늘|내일|모레)\s*/);
+    // "3월 15일", "4월 1일" 같은 구체적 날짜
+    const specificDateMatch = withoutVerb.match(/^(\d{1,2})월\s*(\d{1,2})일\s*/);
+    const dateKeyword = dateKeywordMatch?.[1];
+
+    // 시간 추출 (선택)
+    const timePattern = /(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*/;
+    const timeMatch = withoutVerb.match(timePattern);
+    let matchStartTime: string | undefined;
+    if (timeMatch) {
+        const parsed = parseTimeExpression(timeMatch[1], timeMatch[2], timeMatch[3] === '반' ? '30' : timeMatch[4]);
+        if (parsed) matchStartTime = parsed.startTime;
+    }
+
+    // 일정 이름 추출 (날짜 + 시간 + "일정" 제거)
+    const nameCandidate = withoutVerb
+        .replace(/^(오늘|내일|모레)?\s*/, '')
+        .replace(/^\d{1,2}월\s*\d{1,2}일\s*/, '')
+        .replace(timePattern, '')
+        .replace(/\s*일정\s*/, '')
+        .trim();
+
+    if (nameCandidate.length < 1 || nameCandidate.length > 30) return null;
+
+    // 대상 날짜 결정
+    let targetDate: string;
+    let dateLabel: string;
+
+    if (specificDateMatch) {
+        // "3월 15일" → 현재 연도 기준 YYYY-MM-DD
+        const year = new Date().getFullYear();
+        const month = parseInt(specificDateMatch[1], 10);
+        const day = parseInt(specificDateMatch[2], 10);
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+        targetDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        dateLabel = `${month}월 ${day}일`;
+    } else {
+        targetDate = resolveDateKeyword(dateKeyword || '오늘', context);
+        dateLabel = dateKeyword && dateKeyword !== '오늘' ? dateKeyword : '오늘';
+    }
+
+    const query = nameCandidate.toLowerCase();
+    const isToday = targetDate === resolveDateKeyword('오늘', context);
+
+    // 오늘 일정: context.schedules에서 매칭 (모바일이 보내준 데이터)
+    if (isToday && context?.schedules && context.schedules.length > 0) {
+        const match = context.schedules.find(s => {
+            if (!s.text) return false;
+            const sText = s.text.toLowerCase();
+            const nameMatch = sText === query || sText.includes(query) || query.includes(sText);
+            if (!nameMatch) return false;
+            if (matchStartTime && s.startTime && s.startTime !== matchStartTime) return false;
+            return true;
+        });
+
+        if (match) {
+            return {
+                action: {
+                    type: 'delete_schedule',
+                    label: `${match.text} 삭제`,
+                    data: { text: match.text, startTime: match.startTime || '', specificDate: targetDate },
+                },
+                message: `"${match.text}" 일정을 삭제했어요! 🗑️`,
+            };
+        }
+    }
+
+    // 내일/모레/특정날짜 또는 오늘 context에서 못 찾은 경우: profile.customGoals에서 매칭
+    const customGoals = profile?.customGoals;
+    if (!customGoals || customGoals.length === 0) return null;
+
+    const targetDayOfWeek = new Date(targetDate + 'T12:00:00').getDay();
+
+    const match = customGoals.find((g: CustomGoal) => {
+        if (!g.text) return false;
+        const sText = g.text.toLowerCase();
+        const nameMatch = sText === query || sText.includes(query) || query.includes(sText);
+        if (!nameMatch) return false;
+
+        // 날짜 매칭: specificDate 일치 또는 반복 일정의 요일 일치
+        const dateMatch = g.specificDate === targetDate ||
+            (g.daysOfWeek?.includes(targetDayOfWeek) && !g.specificDate);
+        if (!dateMatch) return false;
+
+        // 시간 매칭
+        if (matchStartTime && g.startTime && g.startTime !== matchStartTime) return false;
+        return true;
+    });
+
+    if (!match) return null;
+
+    return {
+        action: {
+            type: 'delete_schedule',
+            label: `${match.text} 삭제`,
+            data: {
+                text: match.text,
+                startTime: match.startTime || '',
+                specificDate: targetDate,
+                isRepeating: !!(match.daysOfWeek && match.daysOfWeek.length > 0),
+            },
+        },
+        message: dateLabel === '오늘'
+            ? `"${match.text}" 일정을 삭제했어요! 🗑️`
+            : `${dateLabel} "${match.text}" 일정을 삭제했어요! 🗑️`,
+    };
 }
 
 /** 날짜 키워드 → specificDate 변환 */
@@ -962,7 +1094,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         kvSet(userEmail, dailyCountKey, currentCount + 1).catch(() => {});
 
         // 4.2 코드 전용 Fast Path — LLM 호출 없이 즉시 응답 가능한 단순 조회
-        const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName, context);
+        const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName, context, profile);
         if (codeOnlyResponse) {
             return NextResponse.json(codeOnlyResponse);
         }
