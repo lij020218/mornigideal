@@ -45,6 +45,10 @@
       "schedule": "0 1,5,9 * * *"
     },
     {
+      "path": "/api/cron/morning-motivation",
+      "schedule": "0 0 * * *"
+    },
+    {
       "path": "/api/cron/proactive-push",
       "schedule": "0 22,0,2,4,6,8,10,12 * * *"
     }
