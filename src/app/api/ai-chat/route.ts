@@ -317,6 +317,35 @@ ${lines.join('\n')}
  * - 일정 조회: scheduleContext를 포맷팅해서 즉시 반환
  * - 일정 추가: 정규식으로 날짜/시간/이름 파싱 → add_schedule 액션 생성
  */
+/** 한국어 일정 입력 오타 정규화 */
+function normalizeTypos(text: string): string {
+    return text
+        // 동사 어미 오타
+        .replace(/쥐$/g, '줘').replace(/쥐요$/g, '줘요')
+        .replace(/줴$/g, '줘').replace(/줴요$/g, '줘요')
+        .replace(/줭$/g, '줘').replace(/줭요$/g, '줘요')
+        .replace(/조$/g, '줘').replace(/조요$/g, '줘요')
+        .replace(/주세여$/g, '주세요')
+        // 동사 오타 (중간)
+        .replace(/잡아쥐/g, '잡아줘').replace(/추가해쥐/g, '추가해줘')
+        .replace(/넣어쥐/g, '넣어줘').replace(/등록해쥐/g, '등록해줘')
+        .replace(/만들어쥐/g, '만들어줘')
+        .replace(/잡아조/g, '잡아줘').replace(/추가해조/g, '추가해줘')
+        .replace(/넣어조/g, '넣어줘').replace(/등록해조/g, '등록해줘')
+        // 시간대 오타
+        .replace(/오잔/g, '오전').replace(/오휴/g, '오후')
+        // 반복 키워드 오타
+        .replace(/매쥬/g, '매주').replace(/메주/g, '매주').replace(/매쭈/g, '매주')
+        .replace(/매이루/g, '매일').replace(/메일/g, '매일')
+        // 요일 축약/오타
+        .replace(/월욜/g, '월요일').replace(/화욜/g, '화요일').replace(/수욜/g, '수요일')
+        .replace(/목욜/g, '목요일').replace(/금욜/g, '금요일').replace(/토욜/g, '토요일').replace(/일욜/g, '일요일')
+        // 불필요한 띄어쓰기 정규화 (동사 앞)
+        .replace(/잡아\s+줘/g, '잡아줘').replace(/추가해\s+줘/g, '추가해줘')
+        .replace(/넣어\s+줘/g, '넣어줘').replace(/등록해\s+줘/g, '등록해줘')
+        .replace(/만들어\s+줘/g, '만들어줘');
+}
+
 function tryCodeOnlyResponse(
     messages: ChatMessage[],
     scheduleContext: string,
@@ -325,7 +354,7 @@ function tryCodeOnlyResponse(
 ): { message: string; actions: any[] } | null {
     const lastMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!lastMsg?.content) return null;
-    const text = lastMsg.content.trim();
+    const text = normalizeTypos(lastMsg.content.trim());
     const name = userName || '사용자';
 
     // ── 1. 단순 일정 조회 ──
