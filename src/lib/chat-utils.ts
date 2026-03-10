@@ -50,7 +50,7 @@ const SCHEDULE_NAME_MAP: Record<string, string> = {
     "일어나": "기상", "일어나기": "기상", "깨어나": "기상", "일어나야지": "기상", "wake up": "기상",
     "자기": "취침", "잠자기": "취침", "잠": "취침", "자야지": "취침", "sleep": "취침", "잘 시간": "취침",
     // 업무
-    "업무": "업무 시작", "업무 일정": "업무 시작", "일": "업무 시작", "work": "업무 시작", "출근": "업무 시작", "일 시작": "업무 시작", "업무 시작하기": "업무 시작", "수업 시작": "업무 시작",
+    "업무": "업무 시작", "업무 일정": "업무 시작", "work": "업무 시작", "출근": "업무 시작", "일 시작": "업무 시작", "업무 시작하기": "업무 시작", "수업 시작": "업무 시작",
     "업무 마무리": "업무 종료", "업무 끝": "업무 종료", "퇴근": "업무 종료", "일 끝": "업무 종료", "수업 끝": "업무 종료",
     // 운동
     "헬스": "운동", "요가": "운동", "필라테스": "운동", "러닝": "운동", "gym": "운동", "운동하기": "운동", "트레이닝": "운동",
@@ -68,10 +68,15 @@ const SCHEDULE_NAME_MAP: Record<string, string> = {
 
 export function normalizeScheduleName(text: string): string {
     const lowerText = text.toLowerCase().trim();
+    // 1. 정확 매칭 우선
     if (SCHEDULE_NAME_MAP[lowerText]) {
         return SCHEDULE_NAME_MAP[lowerText];
     }
-    for (const [key, value] of Object.entries(SCHEDULE_NAME_MAP)) {
+    // 2. 부분 매칭: 긴 키부터 매칭 (짧은 키의 오탐 방지), 2글자 이상만
+    const sortedEntries = Object.entries(SCHEDULE_NAME_MAP)
+        .filter(([key]) => key.length >= 2)
+        .sort(([a], [b]) => b.length - a.length);
+    for (const [key, value] of sortedEntries) {
         if (lowerText.includes(key.toLowerCase())) {
             return value;
         }

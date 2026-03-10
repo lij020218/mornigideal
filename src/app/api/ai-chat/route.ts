@@ -642,8 +642,10 @@ function tryParseScheduleAdd(
         return null;
     }
 
-    // 일정 이름이 너무 짧거나 길면 LLM에 위임
-    scheduleName = scheduleName.trim();
+    // 일정 이름 정리: 불필요한 접미사 제거
+    scheduleName = scheduleName.trim()
+        .replace(/\s*(일정|스케줄|예정|할\s*일)\s*$/, '')
+        .trim();
     if (scheduleName.length < 1 || scheduleName.length > 20) return null;
 
     const time = parseTimeExpression(ampm, hourStr, minuteStr);
@@ -729,7 +731,9 @@ function tryParseRecurringScheduleAdd(
         return null;
     }
 
-    scheduleName = scheduleName.trim();
+    scheduleName = scheduleName.trim()
+        .replace(/\s*(일정|스케줄|예정|할\s*일)\s*$/, '')
+        .trim();
     if (scheduleName.length < 1 || scheduleName.length > 20) return null;
 
     // daysOfWeek 결정
