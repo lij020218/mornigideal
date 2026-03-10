@@ -46,16 +46,23 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
                 .gte('created_at', `${todayDate}T00:00:00+09:00`)
                 .order('created_at', { ascending: false })
                 .limit(10)
-                .then(({ data }) => (data || []).map((row: any) => ({
-                    id: row.action_payload?.notification_ref_id || row.id,
-                    type: row.type as ProactiveNotification['type'],
-                    priority: 'medium' as const,
-                    title: row.message?.split('\n\n')[0]?.replace(/\*\*/g, '') || '',
-                    message: row.message?.split('\n\n').slice(1).join('\n\n') || row.message || '',
-                    actionType: row.action_type,
-                    actionPayload: row.action_payload,
-                    displayOrder: TYPE_DISPLAY_ORDER[row.type] ?? 150,
-                } as ProactiveNotification))),
+                .then(({ data }) => (data || []).map((row: any) => {
+                    const rawMsg = row.message || '';
+                    // daily_wrap은 전체 메시지를 보존 (split하면 내용이 잘림)
+                    const isDailyWrap = row.type === 'daily_wrap';
+                    const firstParagraph = rawMsg.split('\n\n')[0] || '';
+                    const restParagraphs = rawMsg.split('\n\n').slice(1).join('\n\n');
+                    return {
+                        id: row.action_payload?.notification_ref_id || row.id,
+                        type: row.type as ProactiveNotification['type'],
+                        priority: 'medium' as const,
+                        title: isDailyWrap ? '🌙 하루 마무리' : firstParagraph.replace(/\*\*/g, ''),
+                        message: isDailyWrap ? rawMsg.replace(/^\*\*.*?\*\*\n\n/, '') : (restParagraphs || rawMsg),
+                        actionType: row.action_type,
+                        actionPayload: row.action_payload,
+                        displayOrder: TYPE_DISPLAY_ORDER[row.type] ?? 150,
+                    } as ProactiveNotification;
+                })),
         ]);
 
         // cron 알림과 실시간 알림 병합 (ID 중복 제거)
