@@ -206,7 +206,22 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                 message: '오전 5시에 새로운 브리핑이 준비됩니다.',
             });
         }
+
+        // 5AM 이후인데 캐시가 없으면 (크론 미실행 등) → 실시간 생성하지 않고 안내 반환
+        // forceRefresh(Pro 새로고침)만 실시간 생성 허용
+        if (!forceRefresh) {
+            return NextResponse.json({
+                trends: [],
+                cached: true,
+                lastUpdated: null,
+                readIds: [],
+                refreshRemaining: Math.max(0, refreshLimit),
+                message: '브리핑을 준비 중입니다. 잠시 후 다시 확인해주세요.',
+            });
+        }
     }
+
+    // 이하 실시간 생성 로직: forceRefresh(Pro 새로고침) 또는 exclude(이미 본 뉴스 교체)일 때만 실행
 
     // Step 1: Fetch articles from RSS feeds
     const rssArticles = await fetchRSSArticles();

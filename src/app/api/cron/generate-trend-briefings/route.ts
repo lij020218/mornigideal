@@ -231,12 +231,12 @@ export async function GET(request: Request) {
         // Step 2: Get users with profiles (paginated)
         const USER_BATCH_SIZE = 50;
         let userOffset = 0;
-        let allUsers: { email: string; profile: any; plan: string }[] = [];
+        let allUsers: { email: string; profile: any }[] = [];
 
         while (true) {
             const { data: batch, error: usersError } = await supabaseAdmin
                 .from('users')
-                .select('email, profile, plan')
+                .select('email, profile')
                 .not('profile', 'is', null)
                 .range(userOffset, userOffset + USER_BATCH_SIZE - 1);
 
