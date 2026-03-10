@@ -3,6 +3,9 @@ import { withAuth } from "@/lib/api-handler";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { logger } from '@/lib/logger';
+import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
+import { sendPushNotification } from "@/lib/pushService";
+import { getUserByEmail } from "@/lib/users";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -300,48 +303,57 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     // Get user profile for job context
     let userJob = "사용자";
+    let userName = "사용자";
     try {
-        const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/user/profile`, {
-            headers: {
-                Cookie: `authjs.session-token=${email}` // Simplified, adjust based on your auth setup
-            }
-        });
-        if (profileResponse.ok) {
-            const { profile } = await profileResponse.json();
-            userJob = profile?.job || "사용자";
-        }
+        const currentUser = await getUserByEmail(email);
+        userJob = currentUser?.profile?.job || "사용자";
+        userName = currentUser?.profile?.name || currentUser?.name || "사용자";
     } catch (error) {
         logger.error('[Gmail Summary] Failed to get user profile:', error);
+    }
+
+    // 기존 캐시 조회 (비교용 + 빈 결과 시 폴백)
+    let previousCache: any = null;
+    try {
+        const { data: cached } = await supabaseAdmin
+            .from("user_kv_store")
+            .select("value")
+            .eq("user_email", email)
+            .eq("key", "gmail_summary_cache")
+            .maybeSingle();
+        if (cached?.value && cached.value.importantEmails?.length > 0) {
+            previousCache = cached.value;
+        }
+    } catch (err) {
+        // ignore
     }
 
     // Fetch Gmail messages
     const messages = await fetchGmailMessages(accessToken);
 
     if (messages.length === 0) {
-        const emptyResult = {
+        // 새 이메일 없으면 기존 캐시 반환 (있으면)
+        if (previousCache) {
+            return NextResponse.json({ ...previousCache, cached: true, noNewEmails: true });
+        }
+        return NextResponse.json({
             importantEmails: [],
             totalUnread: 0,
             skippedCount: 0,
             message: "읽지 않은 이메일이 없습니다"
-        };
-        // 빈 결과도 캐시 (불필요한 재요청 방지)
-        try {
-            await supabaseAdmin
-                .from("user_kv_store")
-                .upsert({
-                    user_email: email,
-                    key: "gmail_summary_cache",
-                    value: emptyResult,
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: "user_email,key" });
-        } catch (err) {
-            logger.error("[Gmail Summary] Cache save error:", err);
-        }
-        return NextResponse.json(emptyResult);
+        });
     }
 
     // Classify and summarize
     const summary = await classifyAndSummarizeEmails(messages, userJob);
+
+    // 새로운 이메일 감지 (이전 캐시와 비교)
+    const previousMessageIds = new Set(
+        (previousCache?.importantEmails || []).map((e: any) => e.messageId)
+    );
+    const newEmails = summary.importantEmails.filter(
+        (e: any) => !previousMessageIds.has(e.messageId)
+    );
 
     // 캐시 저장 (6시간)
     try {
@@ -357,5 +369,38 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         logger.error("[Gmail Summary] Cache save error:", err);
     }
 
-    return NextResponse.json(summary);
+    // 새 이메일이 있으면 선제적 알림 + 푸시
+    if (newEmails.length > 0) {
+        try {
+            const highPriority = newEmails.filter((e: any) => e.priority === 'high');
+            const topEmail = highPriority[0] || newEmails[0];
+            const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+            const notification = {
+                id: `gmail-new-${today}-${Date.now()}`,
+                type: 'context_suggestion' as const,
+                priority: (highPriority.length > 0 ? 'high' : 'medium') as 'high' | 'medium',
+                title: `📧 새 이메일 ${newEmails.length}통`,
+                message: highPriority.length > 0
+                    ? `${userName}님, 중요 메일이 도착했어요: ${topEmail.subject || topEmail.summary?.slice(0, 30)}`
+                    : `${userName}님, 새 메일 ${newEmails.length}통이 도착했어요. 확인해보세요!`,
+                actionType: 'open_insights',
+            };
+
+            await saveProactiveNotification(email, notification);
+            await sendPushNotification(email, {
+                title: notification.title,
+                body: notification.message,
+                data: {
+                    notificationId: notification.id,
+                    type: 'gmail_new',
+                    actionType: 'open_insights',
+                },
+            }).catch(() => {});
+        } catch (err) {
+            logger.error("[Gmail Summary] Notification error:", err);
+        }
+    }
+
+    return NextResponse.json({ ...summary, newEmailCount: newEmails.length });
 });
