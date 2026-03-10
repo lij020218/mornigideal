@@ -102,7 +102,7 @@ function setCorsHeaders(response: NextResponse, origin: string | null) {
 // 웹사이트 공개 페이지 (나머지는 앱 전용)
 // ============================================
 
-const PUBLIC_PAGES = ['/', '/landing', '/login', '/signup', '/reset', '/privacy', '/terms'];
+const PUBLIC_PAGES = ['/', '/landing', '/login', '/signup', '/reset', '/reset-password', '/privacy', '/terms'];
 
 function isPublicPage(path: string): boolean {
     return PUBLIC_PAGES.includes(path);

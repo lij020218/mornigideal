@@ -19,6 +19,7 @@ import {
     type ScheduleSuggestion,
 } from '@/lib/agent-capabilities';
 import { logger } from '@/lib/logger';
+import { getCuratedContentForPrompt } from '@/lib/curated-content-service';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -99,13 +100,57 @@ export async function generateSmartSuggestions(
 
         // 오늘 날짜의 실제 일정
         const today = new Date().toISOString().split('T')[0];
-        const existingSchedules = context.profile.customGoals
-            ?.filter((goal: any) => goal.specificDate === today)
-            .map((goal: any) => goal.text) || [];
+        const customGoals = context.profile.customGoals || [];
+        const existingSchedules = customGoals
+            .filter((goal: any) => goal.specificDate === today)
+            .map((goal: any) => goal.text);
 
         const addedSchedulesText = existingSchedules.length > 0
             ? existingSchedules.join(", ")
             : "없음";
+
+        // 최근 7일 일정 이력 (패턴 분석용)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+        const DAY_NAMES_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
+
+        const recentOneTime = customGoals.filter((g: any) =>
+            g.specificDate && g.specificDate >= sevenDaysAgoStr && g.specificDate < today
+        );
+        const recurringGoals = customGoals.filter((g: any) =>
+            g.daysOfWeek && g.daysOfWeek.length > 0
+        );
+
+        // 빈도 집계
+        const freq = new Map<string, { count: number; times: string[] }>();
+        recentOneTime.forEach((g: any) => {
+            const key = g.text || '';
+            if (!key) return;
+            if (!freq.has(key)) freq.set(key, { count: 0, times: [] });
+            const entry = freq.get(key)!;
+            entry.count++;
+            if (g.startTime && !entry.times.includes(g.startTime)) entry.times.push(g.startTime);
+        });
+
+        let recentHistoryText = '';
+        if (recentOneTime.length > 0 || recurringGoals.length > 0) {
+            const freqLines = [...freq.entries()]
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 8)
+                .map(([text, info]) => `- ${text}: ${info.count}회 (시간: ${info.times.join(', ') || '다양'})`);
+            const recurLines = recurringGoals.slice(0, 8).map((g: any) => {
+                const days = (g.daysOfWeek || []).map((d: number) => DAY_NAMES_SHORT[d]).join(',');
+                return `- ${g.text} (${g.startTime || '시간미정'}, 매주 ${days})`;
+            });
+            recentHistoryText = `\n**[최근 7일 일정 이력 — 반드시 참고]**
+${recurLines.length > 0 ? `반복 일정:\n${recurLines.join('\n')}` : ''}
+${freqLines.length > 0 ? `최근 등록한 일정 (빈도순):\n${freqLines.join('\n')}` : ''}
+→ 이미 자주 하는 활동과 중복 추천하지 말고, 부족한 영역을 채워주세요\n`;
+        }
+
+        // Pro 유저: 큐레이션 콘텐츠 주입
+        const curatedContent = await getCuratedContentForPrompt(email);
 
         const recentActivitiesText = context.recentActivities.length > 0
             ? context.recentActivities.map((a: any) => a.title).join(", ")
@@ -160,7 +205,9 @@ ${matchingRecurring.map((r: any) => `  - "${r.title}" (최근 4주간 ${r.freque
 
 **[사용자 프로필]**
 - 직업/전공: ${context.profile.job || '미설정'}
+- 경력 수준: ${context.profile.level === 'junior' ? '주니어 (0-3년)' : context.profile.level === 'mid' ? '미드레벨 (3-7년)' : context.profile.level === 'senior' ? '시니어 (7년+)' : '미설정'}
 - 목표: ${context.profile.goal || '미설정'}
+- 관심 분야: ${context.profile.interests?.length > 0 ? context.profile.interests.join(', ') : '미설정'}
 - 현재 시간: ${timeOfDayLabel} ${hour}시
 - 계절: ${currentSeason}
 
@@ -168,6 +215,8 @@ ${matchingRecurring.map((r: any) => `  - "${r.title}" (최근 4주간 ${r.freque
 ${timeAppropriateCategories}
 
 ${recurringPriorityText}
+${recentHistoryText}
+${curatedContent || ''}
 **[실제 생활 패턴 - 일정 분석 기반]**
 ${patternText}
 - 정기 반복 일정 (최근 4주):
@@ -283,9 +332,12 @@ ${addedSchedulesText}
    - 이 사용자의 직업/전공: ${context.profile.job || '미설정'}
    - 이 사용자의 목표: ${context.profile.goal || '미설정'}
 
-   **위 사용자의 실제 직업과 목표에 맞춰 개인화된 추천을 제공할 것**
-   - 사용자의 직업/목표와 직접 연관된 활동을 추천
+   **위 사용자의 실제 직업, 경력 수준, 목표, 관심 분야에 맞춰 개인화된 추천을 제공할 것**
+   - 이 사용자의 경력 수준: ${context.profile.level === 'junior' ? '주니어 → 기초 학습, 실습, 멘토링 관련 콘텐츠' : context.profile.level === 'mid' ? '미드레벨 → 심화 학습, 프로젝트 리딩, 전문성 강화' : context.profile.level === 'senior' ? '시니어 → 리더십, 아키텍처, 멘토링, 전략적 사고' : '미설정'}
+   - 이 사용자의 관심 분야: ${context.profile.interests?.length > 0 ? context.profile.interests.join(', ') : '미설정'}
+   - 사용자의 직업/목표/관심사와 직접 연관된 활동을 추천
    - **절대 일반적이거나 계절성 추천(겨울 독서, 봄맞이 운동 등) 하지 말 것**
+   - **혼자서 즉시 실행 가능한 구체적 활동만 추천** (스터디 모임, 네트워킹 등 타인 필요한 활동 금지)
 
 3. **카테고리 다양성 & 필수 균형**:
    - 3개 추천은 **반드시 서로 다른 카테고리**
@@ -333,7 +385,7 @@ ${addedSchedulesText}
   ]
 }
 
-**중요: 이 사용자의 실제 직업(${context.profile.job || '미설정'})과 목표(${context.profile.goal || '미설정'})를 반드시 반영하여 추천할 것.**
+**중요: 이 사용자의 실제 직업(${context.profile.job || '미설정'}), 경력(${context.profile.level || '미설정'}), 목표(${context.profile.goal || '미설정'}), 관심사(${context.profile.interests?.join(', ') || '미설정'})를 반드시 반영하여 추천할 것.**
 
 위 형식을 정확히 따라 응답하세요. 반드시 순수 JSON만 반환하고, 추가 설명이나 마크다운 없이 응답하세요.`;
 

@@ -7,6 +7,7 @@ import { logOpenAIUsage } from "@/lib/openai-usage";
 import { MODELS } from "@/lib/models";
 import { getSharedSuggestionPreferences } from "@/lib/shared-context";
 import { getUserPlan } from "@/lib/user-plan";
+import { getCuratedContentForPrompt } from "@/lib/curated-content-service";
 
 // 플랜별 일일 AI 추천 생성 횟수 제한
 const PLAN_REC_LIMITS: Record<string, number> = {
@@ -417,6 +418,9 @@ ${freqLines.length > 0 ? `\n최근 등록한 일정 (빈도순):\n${freqLines.jo
 `;
     }
 
+    // Pro 유저: 큐레이션 콘텐츠 주입
+    const curatedContent = await getCuratedContentForPrompt(email);
+
     // Build context for AI
     const userContext = `
 **사용자 프로필:**
@@ -474,7 +478,7 @@ ${currentSchedules.length > 0
     : '- 등록된 일정 없음'}
 → 위 일정과 시간이 겹치지 않도록 추천하세요.
 → 이미 등록된 활동과 같은 내용은 추천하지 마세요.
-
+${curatedContent || ''}
 **오늘 비어있는 시간대:**
 ${gaps.length > 0
     ? gaps.map(gap => {
@@ -530,6 +534,19 @@ ${userContext}
 5. **실현 가능성**: 비어있는 시간의 길이에 맞는 현실적인 활동만 추천
 6. **목표/직업/경력 수준 연결 (필수!)**: 반드시 1개 이상은 사용자의 직업("${profile?.job || 'N/A'}"), 경력 수준("${profile?.level || 'N/A'}"), 목표("${profile?.goal || 'N/A'}")와 직접 관련된 생산적 활동을 추천하세요. 경력 수준에 맞는 난이도로 추천하세요 (주니어면 기초 학습/멘토링, 시니어면 리더십/아키텍처 등). 예: 개발자면 코딩/사이드프로젝트/기술문서 읽기, 학생이면 공부/과제, 디자이너면 포트폴리오 등
 
+**🚫 절대 추천하지 말 것 (형식적/비현실적 일정 금지!):**
+- "스터디 모임", "네트워킹 모임", "멘토 미팅" 등 **타인과의 약속이 필요한 일정** → 혼자서 즉시 실행 불가능
+- "세미나 참석", "컨퍼런스" 등 **사전 등록/예약이 필요한 일정**
+- "봉사활동", "동아리 활동" 등 **정기적 그룹 활동**
+- 막연한 추천: "자기계발 시간", "생산적인 활동" 등 → 구체적인 행동이 아닌 것
+- **추천 일정은 반드시 "지금 당장 혼자서 시작할 수 있는 구체적 행동"이어야 합니다**
+
+**✅ 좋은 추천 예시:**
+- "30분 조깅" (혼자 바로 가능), "유튜브로 ${profile?.job || '관심 분야'} 강의 듣기" (구체적)
+- "${profile?.goal || '목표'} 관련 아티클 읽기", "스트레칭 15분"
+- "포트폴리오 정리", "사이드프로젝트 코딩", "영어 단어 암기 30분"
+- scheduleText는 짧고 명확하게 (예: "조깅 30분", "독서", "알고리즘 문제풀이")
+
 **추천 형식:**
 각 추천은 다음 정보를 포함하세요:
 - scheduleType: "운동", "학습", "휴식", "취미", "업무", "자기계발" 등
@@ -568,7 +585,7 @@ JSON 형식으로만 응답하세요:
             messages: [
                 {
                     role: "system",
-                    content: `You are a smart schedule recommendation AI. Timezone: KST (Asia/Seoul). Current time: ${currentTimeStr}. User wake time: ${wakeTime || 'unknown'}. CRITICAL: You MUST ONLY recommend times between ${earliestAllowedTime} and 23:00. NEVER recommend times before ${earliestAllowedTime}. Spread recommendations across the day with at least 2-hour gaps.`
+                    content: `You are a smart schedule recommendation AI. Timezone: KST (Asia/Seoul). Current time: ${currentTimeStr}. User wake time: ${wakeTime || 'unknown'}. CRITICAL: You MUST ONLY recommend times between ${earliestAllowedTime} and 23:00. NEVER recommend times before ${earliestAllowedTime}. Spread recommendations across the day with at least 2-hour gaps. IMPORTANT: Only recommend activities the user can START IMMEDIATELY BY THEMSELVES. Never recommend group activities (study groups, meetups, networking), events requiring registration, or vague activities. Be specific and practical.`
                 },
                 {
                     role: "user",

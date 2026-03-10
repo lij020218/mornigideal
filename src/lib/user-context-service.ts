@@ -43,6 +43,8 @@ export interface UserContext {
     profile: {
         job: string;
         goal: string;
+        level: string;
+        interests: string[];
         customGoals?: any[];
     };
     recentActivities: Array<{
@@ -201,6 +203,8 @@ export async function generateUserContext(userEmail: string): Promise<UserContex
         profile: {
             job: profile.job || '',
             goal: profile.goal || '',
+            level: profile.level || '',
+            interests: profile.interests || [],
             customGoals: profile.customGoals || [],
         },
         recentActivities,
