@@ -115,13 +115,16 @@ Preview: ${msg.snippet}
 TASK: Select the 5 MOST IMPORTANT emails and summarize them.
 
 IMPORTANCE CRITERIA (in order):
-1. Work-related and actionable (requires response or action)
-2. Time-sensitive (deadlines, meetings, urgent requests)
-3. From important contacts (colleagues, clients, managers)
-4. Contains valuable information for ${userJob}
-5. NOT promotional, newsletters, or automated notifications
+1. **Personally addressed emails** (from a real person, not automated/noreply) — these are ALWAYS high priority
+2. Work-related and actionable (requires response or action)
+3. Time-sensitive (deadlines, meetings, urgent requests)
+4. From important contacts (colleagues, clients, managers)
+5. Contains valuable information for ${userJob}
+6. NOT promotional, newsletters, or automated notifications (lowest priority)
 
-For each important email, provide:
+IMPORTANT: If fewer than 5 emails meet the importance criteria above, fill the remaining slots with the most recent emails (even if they are newsletters or promotions). Always return exactly 5 emails total (or all emails if fewer than 5 exist). For less important filler emails, set priority to "low".
+
+For each email, provide:
 - A clear Korean summary (2-3 sentences)
 - Why it's important for a ${userJob}
 - Suggested action (if any)
@@ -220,7 +223,28 @@ async function refreshAccessToken(refreshToken: string, userEmail: string): Prom
     }
 }
 
+const GMAIL_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6시간
+
 export const GET = withAuth(async (request: NextRequest, email: string) => {
+    const forceRefresh = request.nextUrl.searchParams.get("refresh") === "true";
+
+    // 6시간 캐시 확인
+    if (!forceRefresh) {
+        const { data: cached } = await supabaseAdmin
+            .from("user_kv_store")
+            .select("value, updated_at")
+            .eq("user_email", email)
+            .eq("key", "gmail_summary_cache")
+            .maybeSingle();
+
+        if (cached?.value && cached.updated_at) {
+            const age = Date.now() - new Date(cached.updated_at).getTime();
+            if (age < GMAIL_CACHE_TTL_MS) {
+                return NextResponse.json({ ...cached.value, cached: true });
+            }
+        }
+    }
+
     let accessToken: string | null = null;
 
     // Try to get token from database (for linked Gmail accounts)
@@ -294,16 +318,44 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const messages = await fetchGmailMessages(accessToken);
 
     if (messages.length === 0) {
-        return NextResponse.json({
+        const emptyResult = {
             importantEmails: [],
             totalUnread: 0,
             skippedCount: 0,
             message: "읽지 않은 이메일이 없습니다"
-        });
+        };
+        // 빈 결과도 캐시 (불필요한 재요청 방지)
+        try {
+            await supabaseAdmin
+                .from("user_kv_store")
+                .upsert({
+                    user_email: email,
+                    key: "gmail_summary_cache",
+                    value: emptyResult,
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: "user_email,key" });
+        } catch (err) {
+            logger.error("[Gmail Summary] Cache save error:", err);
+        }
+        return NextResponse.json(emptyResult);
     }
 
     // Classify and summarize
     const summary = await classifyAndSummarizeEmails(messages, userJob);
+
+    // 캐시 저장 (6시간)
+    try {
+        await supabaseAdmin
+            .from("user_kv_store")
+            .upsert({
+                user_email: email,
+                key: "gmail_summary_cache",
+                value: summary,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: "user_email,key" });
+    } catch (err) {
+        logger.error("[Gmail Summary] Cache save error:", err);
+    }
 
     return NextResponse.json(summary);
 });

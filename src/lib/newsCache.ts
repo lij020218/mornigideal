@@ -29,20 +29,20 @@ export function generateTrendId(title: string): string {
  * Get cached trends for today
  * @param emailOverride - Optional email for API routes where session is unavailable (e.g., mobile JWT auth)
  */
-export async function getTrendsCache(emailOverride?: string): Promise<{ trends: any[]; lastUpdated: string } | null> {
+export async function getTrendsCache(emailOverride?: string, dateOverride?: string): Promise<{ trends: any[]; lastUpdated: string } | null> {
     try {
         const userEmail = emailOverride || await getUserEmail();
         if (!userEmail) {
             return null;
         }
 
-        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        const queryDate = dateOverride || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
         const { data, error } = await supabaseAdmin
             .from('trends_cache')
             .select('trends, last_updated')
             .eq('email', userEmail)
-            .eq('date', today)
+            .eq('date', queryDate)
             .maybeSingle();
 
         if (error) {

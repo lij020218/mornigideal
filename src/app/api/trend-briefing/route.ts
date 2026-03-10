@@ -137,9 +137,17 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     // Check cache first (only if not force refreshing and no exclusions)
     if (!forceRefresh && excludeTitles.length === 0) {
-        const cachedData = await getTrendsCache(userEmail);
         const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
         const isBeforeFiveAM = nowKST.getHours() < 5;
+
+        // 5AM 이전이면 어제 날짜 캐시도 조회
+        let cachedData = await getTrendsCache(userEmail);
+        if (!cachedData && isBeforeFiveAM) {
+            const yesterday = new Date(nowKST);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toLocaleDateString("en-CA");
+            cachedData = await getTrendsCache(userEmail, yesterdayStr);
+        }
 
         if (cachedData && cachedData.trends.length > 0) {
             const lastUpdatedDate = new Date(cachedData.lastUpdated);
@@ -163,7 +171,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                     isCacheValid = true;
                 }
             }
-            // 5AM 이전이고 오늘 캐시가 없으면 전날 캐시를 반환
+            // 5AM 이전이고 어제 캐시면 유효
             if (!isCacheValid && isBeforeFiveAM) {
                 const yesterday = new Date(nowKST);
                 yesterday.setDate(yesterday.getDate() - 1);
