@@ -2,8 +2,8 @@
  * Escalation Intelligence Service
  *
  * 적응형 알림 에스컬레이션 전략
- * - 기존 3-strike → 7일 완전 차단 방식을 대체
  * - dismiss 횟수에 따라 단계적 전략 적용
+ * - 3회 연속 무시 → 7일 완전 억제
  * - 중요 알림(마감 임박, 중요 일정 직전)은 절대 억제하지 않음
  */
 
@@ -108,53 +108,8 @@ export async function getEscalationDecision(
         };
     }
 
-    if (streak.count === 3) {
-        return {
-            strategy: 'change_channel',
-            shouldDeliver: true,
-            pushAllowed: false, // push 중단, in-app only
-            modifyMessage: shortenMessage,
-            reason: 'dismiss_3: push 중단, in-app only',
-        };
-    }
-
-    if (streak.count === 4) {
-        // 5일 정지 + 체크인
-        const pauseDays = 5;
-        if (streak.lastDate) {
-            const daysSince = Math.floor(
-                (Date.now() - new Date(streak.lastDate).getTime()) / 86400000
-            );
-            if (daysSince < pauseDays) {
-                return {
-                    strategy: 'pause_with_checkin',
-                    shouldDeliver: false,
-                    pushAllowed: false,
-                    reason: `dismiss_4: 정지 중 (${daysSince}/${pauseDays}일)`,
-                };
-            }
-            // 정지 기간 경과 → 체크인 메시지
-            return {
-                strategy: 'pause_with_checkin',
-                shouldDeliver: true,
-                pushAllowed: false,
-                modifyMessage: (_title, _message) => ({
-                    title: '💬 알림 설정 확인',
-                    message: `이 유형의 알림을 계속 받으시겠어요? 설정에서 변경할 수 있어요.`,
-                }),
-                reason: 'dismiss_4: 체크인 질문',
-            };
-        }
-        return {
-            strategy: 'pause_with_checkin',
-            shouldDeliver: false,
-            pushAllowed: false,
-            reason: 'dismiss_4: 정지',
-        };
-    }
-
-    // 5회 이상: 14일 완전 억제
-    const suppressDays = 14;
+    // 3회 이상: 완전 억제 (7일 후 자동 리셋)
+    const suppressDays = 7;
     if (streak.lastDate) {
         const daysSince = Math.floor(
             (Date.now() - new Date(streak.lastDate).getTime()) / 86400000
@@ -175,7 +130,7 @@ export async function getEscalationDecision(
         strategy: 'full_suppress',
         shouldDeliver: false,
         pushAllowed: false,
-        reason: `dismiss_5+: 14일 완전 억제`,
+        reason: `dismiss_3+: 7일 완전 억제`,
     };
 }
 
