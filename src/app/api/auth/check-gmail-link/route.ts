@@ -11,7 +11,7 @@ import { withAuth } from '@/lib/api-handler';
 export const GET = withAuth(async (_request: NextRequest, email: string) => {
     const { data, error } = await supabaseAdmin
         .from('gmail_tokens')
-        .select('gmail_email, expires_at')
+        .select('gmail_email, expires_at, refresh_token')
         .eq('user_email', email)
         .maybeSingle();
 
@@ -20,7 +20,8 @@ export const GET = withAuth(async (_request: NextRequest, email: string) => {
     }
 
     const now = Date.now();
-    if (data.expires_at < now) {
+    // access_token이 만료되어도 refresh_token이 있으면 연동 유효 (summary API에서 자동 갱신)
+    if (data.expires_at < now && !data.refresh_token) {
         return NextResponse.json({
             linked: true,
             gmailEmail: data.gmail_email,
