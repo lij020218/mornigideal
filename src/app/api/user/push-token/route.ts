@@ -61,6 +61,26 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
 });
 
 /**
+ * GET: 등록된 푸시 토큰 목록 조회 (디버깅용)
+ */
+export const GET = withAuth(async (_request: NextRequest, email: string) => {
+    const { data, error } = await supabaseAdmin
+        .from('push_tokens')
+        .select('token, platform, device_name, active, updated_at')
+        .eq('user_email', email)
+        .order('updated_at', { ascending: false });
+
+    if (error) {
+        return NextResponse.json({ error: 'Failed to fetch tokens' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+        tokens: data || [],
+        activeCount: (data || []).filter(t => t.active).length,
+    });
+});
+
+/**
  * DELETE: 푸시 토큰 비활성화 (로그아웃 시)
  */
 export const DELETE = withAuth(async (request: NextRequest, email: string) => {
