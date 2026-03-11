@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendBulkPushNotifications } from '@/lib/pushService';
+import { appendChatMessage } from '@/lib/chatHistoryService';
 import { withCron } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 
@@ -125,6 +126,17 @@ export const GET = withCron(async (_request: NextRequest) => {
 
     // 푸시 발송
     const result = await sendBulkPushNotifications(notifications);
+
+    // 채팅 히스토리에도 저장 (앱이 꺼져있어도 채팅에 표시)
+    for (const notif of notifications) {
+        appendChatMessage(notif.userEmail, {
+            id: `schedule_reminder-${notif.data?.scheduleId}-${Date.now()}`,
+            role: 'assistant',
+            content: `${notif.title}\n${notif.body}`,
+            timestamp: new Date().toISOString(),
+            type: 'proactive',
+        }, todayStr).catch(() => {});
+    }
 
     // 발송 기록 저장 (중복 방지)
     const savePromises = Array.from(newSentMap.entries()).map(([email, ids]) =>

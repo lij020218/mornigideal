@@ -21,6 +21,7 @@ import {
 } from '@/lib/proactiveNotificationService';
 import { getEscalationDecision, applyEscalation } from '@/lib/escalationService';
 import { sendPushNotification } from '@/lib/pushService';
+import { appendChatMessage } from '@/lib/chatHistoryService';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withCron } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
@@ -192,6 +193,15 @@ export const GET = withCron(async (_request: NextRequest) => {
 
                     // jarvis_notifications에 저장 (앱 내에서도 확인 가능)
                     await saveProactiveNotification(user.email, notif);
+
+                    // 채팅 히스토리에도 저장 (앱 꺼져있어도 채팅에 표시)
+                    appendChatMessage(user.email, {
+                        id: `proactive-${notif.id}-${Date.now()}`,
+                        role: 'assistant',
+                        content: `${notif.title}\n${notif.message}`,
+                        timestamp: new Date().toISOString(),
+                        type: 'proactive',
+                    }, todayStr).catch(() => {});
                 }
             }
 

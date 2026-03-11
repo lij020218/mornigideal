@@ -5,6 +5,7 @@ import { withCron } from "@/lib/api-handler";
 import { logger } from "@/lib/logger";
 import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
 import { sendPushNotification } from "@/lib/pushService";
+import { appendChatMessage } from "@/lib/chatHistoryService";
 
 /**
  * Weekly Report Cron Job
@@ -100,7 +101,16 @@ export const GET = withCron(async (_request: NextRequest) => {
                         type: notification.type,
                         actionType: notification.actionType,
                     },
-                }).catch(() => {}); // 푸시 실패는 무시
+                }).catch(() => {});
+
+                // 채팅 히스토리에도 저장
+                appendChatMessage(user.email, {
+                    id: `weekly-report-chat-${targetWeekNumber}-${Date.now()}`,
+                    role: 'assistant',
+                    content: `**${notification.title}**\n\n${notification.message}`,
+                    timestamp: new Date().toISOString(),
+                    type: 'proactive',
+                }).catch(() => {});
 
                 return { email: user.email, success: true, week: targetWeekNumber, skipped: false };
             })
