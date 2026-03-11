@@ -105,7 +105,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                     .eq('user_email', email)
                     .eq('key', 'gmail_summary_cache')
                     .maybeSingle();
-                if (prevCached?.value?.importantEmails?.length > 0) {
+                if (prevCached && prevCached.value?.importantEmails?.length > 0) {
                     previousCache = prevCached.value;
                 }
             } catch { /* ignore */ }
