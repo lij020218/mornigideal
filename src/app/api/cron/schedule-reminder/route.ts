@@ -15,6 +15,20 @@ import { sendBulkPushNotifications } from '@/lib/pushService';
 import { appendChatMessage } from '@/lib/chatHistoryService';
 import { withCron } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
+import { FOCUS_KEYWORDS } from '@/lib/constants';
+
+/** 집중 모드 대상 일정인지 판별 */
+function isFocusEligible(title: string): boolean {
+    const lower = title.toLowerCase();
+    if (isSleepSchedule(lower)) return false; // 취침은 집중 모드 대상 아님
+    return FOCUS_KEYWORDS.some(kw => lower.includes(kw))
+        || /운동|헬스|요가|필라테스|러닝|조깅|수영|등산|논문|리서치|연구/.test(lower);
+}
+
+/** 취침 일정인지 판별 */
+function isSleepSchedule(title: string): boolean {
+    return /취침|잠|수면|숙면|잠자리|야간|sleep|bedtime/.test(title.toLowerCase());
+}
 
 export const maxDuration = 30;
 
@@ -102,14 +116,24 @@ export const GET = withCron(async (_request: NextRequest) => {
         const [sh, sm] = schedule.start_time.split(':').map(Number);
         const diffMin = (sh * 60 + sm) - nowMinutes;
 
+        const focusEligible = isFocusEligible(schedule.title);
+        const sleepEligible = isSleepSchedule(schedule.title);
+
         notifications.push({
             userEmail: email,
-            title: '⏰ 곧 일정이 시작돼요',
-            body: `"${schedule.title}" - ${diffMin}분 후 시작`,
+            title: sleepEligible ? '🌙 취침 시간이에요' : '⏰ 곧 일정이 시작돼요',
+            body: sleepEligible
+                ? `"${schedule.title}" - ${diffMin}분 후. 취침 모드를 켜볼까요?`
+                : focusEligible
+                ? `"${schedule.title}" - ${diffMin}분 후 시작 🎯 집중 모드를 켜볼까요?`
+                : `"${schedule.title}" - ${diffMin}분 후 시작`,
             data: {
                 type: 'schedule_reminder',
                 scheduleId: schedule.id,
                 deepLink: 'fieri://dashboard',
+                focusEligible,
+                sleepEligible,
+                scheduleTitle: schedule.title,
             },
             channelId: 'schedules',
         });
@@ -129,12 +153,44 @@ export const GET = withCron(async (_request: NextRequest) => {
 
     // 채팅 히스토리에도 저장 (앱이 꺼져있어도 채팅에 표시)
     for (const notif of notifications) {
+        const isFocus = notif.data?.focusEligible;
+        const isSleep = notif.data?.sleepEligible;
+
+        let content: string;
+        let proactiveData: Record<string, any> | undefined;
+
+        if (isSleep) {
+            content = `🌙 취침 시간이에요\n"${notif.data?.scheduleTitle}" 일정이 곧 시작돼요.\n취침 모드를 켜서 수면 시간을 기록해보세요.`;
+            proactiveData = {
+                notificationId: `sleep-${notif.data?.scheduleId}`,
+                notificationType: 'sleep_prompt',
+                actionType: 'start_wind_down',
+                actionPayload: {
+                    scheduleText: notif.data?.scheduleTitle,
+                },
+            };
+        } else if (isFocus) {
+            content = `${notif.title}\n"${notif.data?.scheduleTitle}" 일정이 곧 시작돼요! 🎯\n집중 모드를 켜면 더 효율적으로 할 수 있어요.`;
+            proactiveData = {
+                notificationId: `focus-${notif.data?.scheduleId}`,
+                notificationType: 'focus_prompt',
+                actionType: 'start_focus_mode',
+                actionPayload: {
+                    scheduleText: notif.data?.scheduleTitle,
+                    focusDuration: 45,
+                },
+            };
+        } else {
+            content = `${notif.title}\n${notif.body}`;
+        }
+
         appendChatMessage(notif.userEmail, {
             id: `schedule_reminder-${notif.data?.scheduleId}-${Date.now()}`,
             role: 'assistant',
-            content: `${notif.title}\n${notif.body}`,
+            content,
             timestamp: new Date().toISOString(),
             type: 'proactive',
+            ...(proactiveData && { proactiveData }),
         }, todayStr).catch(() => {});
     }
 

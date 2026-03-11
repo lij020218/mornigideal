@@ -1102,10 +1102,17 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         // 호출 카운트 증가 (비동기, 응답 대기 불필요)
         kvSet(userEmail, dailyCountKey, currentCount + 1).catch(() => {});
 
+        // 사용량 정보 (모든 응답에 포함)
+        const usageInfo = {
+            currentUsage: currentCount + 1,
+            dailyLimit,
+            remaining: Math.max(0, dailyLimit - currentCount - 1),
+        };
+
         // 4.2 코드 전용 Fast Path — LLM 호출 없이 즉시 응답 가능한 단순 조회
         const codeOnlyResponse = tryCodeOnlyResponse(messages, scheduleContext, userName, context, profile);
         if (codeOnlyResponse) {
-            return NextResponse.json(codeOnlyResponse);
+            return NextResponse.json({ ...codeOnlyResponse, usageInfo });
         }
 
         // 4.5. ReAct 에이전트 분기 (Pro/Max + 복합 요청만)
@@ -1153,6 +1160,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     actions: processedActions,
                     ...(conflictWarning && { conflictWarning }),
                     ...(focusSuggestion && { focusSuggestion }),
+                    usageInfo,
                 });
             } catch (reactError) {
                 logger.error('[AI Chat] ReAct failed, falling back to single-shot:', reactError);
@@ -1329,6 +1337,7 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
                 actions: processedActions,
                 ...(conflictWarning && { conflictWarning }),
                 ...(focusSuggestion && { focusSuggestion }),
+                usageInfo,
             });
         } catch (e) {
             logger.error('[AI Chat] JSON parse error:', e);
@@ -1346,6 +1355,7 @@ ${context.learningCurriculums.map((c) => `- ${c.title}${c.currentModule ? ` (현
             return NextResponse.json({
                 message: extractedMessage,
                 actions: extractedActions,
+                usageInfo,
             });
         }
     } catch (error: unknown) {

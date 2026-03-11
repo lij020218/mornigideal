@@ -588,10 +588,8 @@ export function postProcessActions(
                     }
                 }
             }
-            // 집중 모드 권장 감지
-            if (!focusSuggestion && action.data.text && isFocusWorthy(action.data.text)) {
-                focusSuggestion = action.data.text;
-            }
+            // 집중 모드 권장은 일정 시작 시 schedule-reminder cron에서 처리
+            // (일정 추가 시점에 물어보면 시간대가 맞지 않으므로 제거)
         }
         return action;
     }).filter(Boolean) as ChatAction[];
