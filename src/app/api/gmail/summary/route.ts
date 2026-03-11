@@ -307,7 +307,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     try {
         const currentUser = await getUserByEmail(email);
         userJob = currentUser?.profile?.job || "사용자";
-        userName = currentUser?.profile?.name || currentUser?.name || "사용자";
+        userName = (currentUser?.profile?.name as string) || currentUser?.name || "사용자";
     } catch (error) {
         logger.error('[Gmail Summary] Failed to get user profile:', error);
     }
