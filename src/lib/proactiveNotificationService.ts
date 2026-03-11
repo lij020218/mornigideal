@@ -1387,7 +1387,7 @@ async function getMemorySurfacingNotifications(context: UserContext): Promise<Pr
                     const dayLabel = daysAgo === 2 ? '그저께' : daysAgo <= 4 ? `${daysAgo}일 전` : '지난주';
 
                     notifications.push({
-                        id: `memory-surface-${schedule.id || text.substring(0, 10)}-${todayStr}`,
+                        id: `memory-surface-${schedule.id || text.substring(0, 10)}-${pastDateStr}`,
                         type: 'memory_suggestion',
                         priority: 'low',
                         title: '💭 후속 확인',
