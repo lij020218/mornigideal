@@ -68,18 +68,9 @@ const SCHEDULE_NAME_MAP: Record<string, string> = {
 
 export function normalizeScheduleName(text: string): string {
     const lowerText = text.toLowerCase().trim();
-    // 1. 정확 매칭 우선
+    // 정확 매칭만 사용 (부분 매칭은 "업무 보고"→"업무 시작" 등 오탐 발생)
     if (SCHEDULE_NAME_MAP[lowerText]) {
         return SCHEDULE_NAME_MAP[lowerText];
-    }
-    // 2. 부분 매칭: 긴 키부터 매칭 (짧은 키의 오탐 방지), 2글자 이상만
-    const sortedEntries = Object.entries(SCHEDULE_NAME_MAP)
-        .filter(([key]) => key.length >= 2)
-        .sort(([a], [b]) => b.length - a.length);
-    for (const [key, value] of sortedEntries) {
-        if (lowerText.includes(key.toLowerCase())) {
-            return value;
-        }
     }
     return text;
 }

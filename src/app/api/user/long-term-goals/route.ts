@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api-handler";
 import { getUserIdFromRequest } from "@/lib/auth-utils";
 import { longTermGoalSchema, validateBody } from '@/lib/schemas';
 import { logger } from '@/lib/logger';
+import { dualWriteDelete } from '@/lib/schedule-dual-write';
 
 // 장기 목표 타입 정의
 export interface LongTermGoal {
@@ -132,11 +133,22 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
 
         // 연관 일정(customGoals에서 linkedGoalId가 이 목표인 것)도 함께 삭제
         const customGoals: any[] = user.profile?.customGoals || [];
+        const removedSchedules = customGoals.filter(
+            (s: any) => s.linkedGoalId === goal.id
+        );
         const filteredGoals = customGoals.filter(
             (s: any) => s.linkedGoalId !== goal.id
         );
+
+        // schedules 테이블에서도 연관 일정 삭제
+        for (const removed of removedSchedules) {
+            await dualWriteDelete(email, removed.id).catch(e =>
+                logger.error(`[long-term-goals] schedules 테이블 삭제 실패 (${removed.id}):`, e)
+            );
+        }
+
         if (filteredGoals.length !== customGoals.length) {
-            const removedCount = customGoals.length - filteredGoals.length;
+            const removedCount = removedSchedules.length;
             logger.info(`[long-term-goals] 목표 ${goal.id} 삭제 시 연관 일정 ${removedCount}개 함께 삭제`);
             await updateProfile({
                 longTermGoals: currentGoals,
