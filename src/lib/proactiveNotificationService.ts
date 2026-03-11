@@ -2311,8 +2311,21 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             logger.error('[ProactiveNotif] Memory data fetch failed:', memoryError instanceof Error ? memoryError.message : memoryError);
         }
 
-        // 반복 패턴 감지
-        const recurringPatterns = detectRecurringPatterns(customGoals);
+        // 최근 2주 일정만 필터 (선제적 알림에서 오래된 일정 참고 방지)
+        const twoWeeksAgo = new Date(kstTime);
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const twoWeeksAgoStr = `${twoWeeksAgo.getFullYear()}-${String(twoWeeksAgo.getMonth() + 1).padStart(2, '0')}-${String(twoWeeksAgo.getDate()).padStart(2, '0')}`;
+
+        const recentGoals = customGoals.filter((g: CustomGoal) => {
+            // 반복 일정은 항상 포함
+            if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
+            // 일회성 일정은 최근 2주만
+            if (g.specificDate) return g.specificDate >= twoWeeksAgoStr;
+            return true;
+        });
+
+        // 반복 패턴 감지 (최근 2주 일정만)
+        const recurringPatterns = detectRecurringPatterns(recentGoals);
 
         return {
             userEmail,
@@ -2322,7 +2335,7 @@ export async function getUserContext(userEmail: string): Promise<UserContext | n
             userProfile: profile,
             userMemory: userMemory || undefined,
             recurringPatterns,
-            allCustomGoals: customGoals,
+            allCustomGoals: recentGoals,
         };
     } catch (error) {
         logger.error('[ProactiveNotification] Failed to get user context:', error);
