@@ -9,7 +9,7 @@ import { getUserByEmail } from "@/lib/users";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-interface GmailMessage {
+export interface GmailMessage {
     id: string;
     threadId: string;
     snippet: string;
@@ -20,7 +20,7 @@ interface GmailMessage {
 }
 
 // Fetch emails using Gmail API
-async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> {
+export async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> {
     try {
         // Get list of message IDs (unread, last 7 days)
         const sevenDaysAgo = new Date();
@@ -98,7 +98,7 @@ async function fetchGmailMessages(accessToken: string): Promise<GmailMessage[]> 
 }
 
 // Classify and summarize emails using AI
-async function classifyAndSummarizeEmails(messages: GmailMessage[], userJob: string) {
+export async function classifyAndSummarizeEmails(messages: GmailMessage[], userJob: string) {
     const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
         generationConfig: { responseMimeType: "application/json" }
@@ -186,7 +186,7 @@ OUTPUT JSON:
 }
 
 // Helper function to refresh access token
-async function refreshAccessToken(refreshToken: string, userEmail: string): Promise<string | null> {
+export async function refreshAccessToken(refreshToken: string, userEmail: string): Promise<string | null> {
     try {
         const response = await fetch("https://oauth2.googleapis.com/token", {
             method: "POST",
