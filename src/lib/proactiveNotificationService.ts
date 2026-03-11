@@ -2351,8 +2351,11 @@ async function getTrendBriefingReminderNotification(context: UserContext): Promi
     const { currentTime, userEmail } = context;
     const hour = currentTime.getHours();
 
-    // 10시, 14시, 18시에만 알림
-    if (hour !== 10 && hour !== 14 && hour !== 18) return [];
+    // 9~11시, 13~15시, 17~19시 범위에서 알림 (cron 2시간 간격 대응)
+    const isSlot1 = hour >= 9 && hour <= 11;
+    const isSlot2 = hour >= 13 && hour <= 15;
+    const isSlot3 = hour >= 17 && hour <= 19;
+    if (!isSlot1 && !isSlot2 && !isSlot3) return [];
 
     const today = currentTime.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
@@ -2376,11 +2379,11 @@ async function getTrendBriefingReminderNotification(context: UserContext): Promi
     if (unread.length === 0) return [];
 
     // 시간대별 다른 브리핑 추천 (안 읽은 것 중에서 돌아가며)
-    const slotIndex = hour === 10 ? 0 : hour === 14 ? 1 : 2;
+    const slotIndex = isSlot1 ? 0 : isSlot2 ? 1 : 2;
     const pick = unread[slotIndex % unread.length];
 
     return [{
-        id: `trend-reminder-${today}-${hour}`,
+        id: `trend-reminder-${today}-slot${slotIndex}`,
         type: 'context_suggestion',
         priority: 'low',
         title: '📰 트렌드 브리핑 추천',

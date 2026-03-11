@@ -124,8 +124,13 @@ export const GET = withCron(async (_request: NextRequest) => {
             }
 
             // 에스컬레이션 필터 — pushAllowed인 것만 발송
+            // 트렌드 브리핑 미독 알림은 에스컬레이션 bypass (억제되면 안 됨)
             const pushable: ProactiveNotification[] = [];
             for (const notif of filtered) {
+                if (notif.id.startsWith('trend-reminder-')) {
+                    pushable.push(notif);
+                    continue;
+                }
                 const decision = await getEscalationDecision(
                     user.email,
                     notif.type,
