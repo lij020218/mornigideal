@@ -443,6 +443,14 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         logger.error('[ProactiveNotif] Trend briefing reminder failed:', e instanceof Error ? e.message : e);
     }
 
+    // 25. 유튜브 콘텐츠 추천 (18시경)
+    try {
+        const youtubeRec = await getYoutubeRecommendationNotification(context);
+        notifications.push(...youtubeRec);
+    } catch (e) {
+        logger.error('[ProactiveNotif] YouTube recommendation failed:', e instanceof Error ? e.message : e);
+    }
+
     // displayOrder 부여 후 시간순 정렬
     for (const n of notifications) {
         n.displayOrder = TYPE_DISPLAY_ORDER[n.type] ?? 150;
@@ -2390,5 +2398,45 @@ async function getTrendBriefingReminderNotification(context: UserContext): Promi
         message: `"${pick.title}" — 잠깐 읽어보시겠어요?`,
         actionType: 'open_trend_briefing',
         actionPayload: { briefingId: pick.id, title: pick.title },
+    }];
+}
+
+/**
+ * 25. 유튜브 콘텐츠 추천 알림
+ * 오후 6시(17~19시)에 오늘 추천된 유튜브 영상 중 하나를 채팅으로 추천
+ */
+async function getYoutubeRecommendationNotification(context: UserContext): Promise<ProactiveNotification[]> {
+    const { currentTime, userEmail } = context;
+    const hour = currentTime.getHours();
+
+    // 17~19시 슬롯에서만 (cron 2시간 간격 대응)
+    if (hour < 17 || hour > 19) return [];
+
+    const today = currentTime.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
+    // recommendations_cache에서 오늘 추천 조회
+    const { data, error } = await supabaseAdmin
+        .from('recommendations_cache')
+        .select('recommendations')
+        .eq('email', userEmail)
+        .eq('date', today)
+        .maybeSingle();
+
+    if (error || !data?.recommendations || !Array.isArray(data.recommendations) || data.recommendations.length === 0) return [];
+
+    const recs = data.recommendations as Array<{ id: string; title: string; channel: string; duration: string; tags?: string[] }>;
+
+    // 랜덤으로 하나 선택
+    const pick = recs[Math.floor(Math.random() * recs.length)];
+    const durationStr = pick.duration ? ` (${pick.duration})` : '';
+
+    return [{
+        id: `youtube-recommend-${today}`,
+        type: 'context_suggestion',
+        priority: 'low',
+        title: '🎬 오늘의 영상 추천',
+        message: `"${pick.title}" — ${pick.channel}${durationStr}\n한 번 봐보세요!`,
+        actionType: 'open_youtube',
+        actionPayload: { videoId: pick.id, title: pick.title, channel: pick.channel },
     }];
 }
