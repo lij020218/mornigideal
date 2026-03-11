@@ -150,7 +150,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         }
 
         if (cachedData && cachedData.trends.length > 0) {
-            const lastUpdatedDate = new Date(cachedData.lastUpdated);
+            // lastUpdated가 없으면 오늘 날짜로 간주 (크론이 today 기준으로 저장하므로 유효)
+            const lastUpdatedDate = cachedData.lastUpdated ? new Date(cachedData.lastUpdated) : new Date();
             const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
             let isCacheValid = false;

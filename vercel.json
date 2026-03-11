@@ -74,6 +74,21 @@
     },
     "src/app/api/jarvis/run/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/generate-trend-briefings/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/daily-briefing/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/generate-recommendations/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/generate-greetings/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/trend-briefing/route.ts": {
+      "maxDuration": 300
     }
   }
 }

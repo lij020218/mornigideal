@@ -448,7 +448,7 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                                 email: user.email,
                                 date: today,
                                 trends,
-                                created_at: new Date().toISOString()
+                                last_updated: new Date().toISOString()
                             }, { onConflict: 'email,date' });
 
                         if (saveError) {
