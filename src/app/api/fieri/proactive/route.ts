@@ -19,7 +19,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withAuth } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { getUserPlan } from '@/lib/user-plan';
-import { LIMITS } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,25 +152,8 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
             return priorityOrder[a.priority] - priorityOrder[b.priority];
         });
 
-        // 8. 플랜별 일일 한도 적용 (free: 5, pro: 10, max: 무제한)
-        const dailyLimit = LIMITS.PROACTIVE_DAILY[userPlan.plan] ?? LIMITS.PROACTIVE_DAILY.free;
-
-        const countKey = `proactive_count_${todayStr}`;
-        const { data: countData } = await supabaseAdmin
-            .from('user_kv_store')
-            .select('value')
-            .eq('user_email', userEmail)
-            .eq('key', countKey)
-            .maybeSingle();
-
-        const shownCount: number = countData?.value ?? 0;
-        const remaining = Math.max(0, dailyLimit - shownCount);
-
-        // 콘텐츠 알림은 한도 무관하게 항상 전달
-        const alwaysDeliverTypes = ['daily_wrap', 'morning_briefing', 'trend_briefing', 'weekly_review'];
-        const mustDeliver = finalNotifications.filter(n => alwaysDeliverTypes.includes(n.type));
-        const rateLimited = finalNotifications.filter(n => !alwaysDeliverTypes.includes(n.type));
-        const limitedNotifications = [...mustDeliver, ...rateLimited.slice(0, Math.min(remaining, 5))];
+        // 8. 한 번에 최대 10개 (한도 제거 — 필요한 알림이 누락되면 안 됨)
+        const limitedNotifications = finalNotifications.slice(0, 10);
 
         return NextResponse.json({
             notifications: limitedNotifications,
