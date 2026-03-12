@@ -2206,7 +2206,7 @@ export async function saveProactiveNotification(
             .insert({
                 user_email: userEmail,
                 type: notification.type,
-                message: `**${notification.title}**\n\n${notification.message}`,
+                message: `${notification.title}\n\n${notification.message}`,
                 action_type: notification.actionType,
                 action_payload: {
                     ...notification.actionPayload,
