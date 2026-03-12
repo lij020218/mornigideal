@@ -292,24 +292,11 @@ export async function GET(request: Request) {
 
         console.log(`[CRON] ${allUsers.length} users grouped into ${userGroups.size} groups (saving ${allUsers.length - userGroups.size} selection calls)`);
 
-        // 그룹별로 기사 선별 1회 → 그룹 내 유저 전원에게 적용
-        const selectionCache = new Map<string, any[]>(); // groupKey → selectedArticles
-
-        // 그룹별 선별 (2그룹씩 병렬, rate limit 대응)
+        // ── Phase 1: 모든 그룹의 기사 선별을 전부 병렬 ──
         const groupEntries = Array.from(userGroups.entries());
-        for (let gi = 0; gi < groupEntries.length; gi += 2) {
-        const groupBatch = groupEntries.slice(gi, gi + 2);
-        await Promise.allSettled(groupBatch.map(async ([groupKey, groupUsers]) => {
-            const representative = groupUsers[0];
-            const p = representative.profile as any;
-            const job = p.job || '전문가';
-            const goal = p.goal || '전문성 향상';
-            const interests = p.interests || [];
-            const level = p.level || 'Intermediate';
-            const interestList = interests.join(', ');
-            const userPlan = planMap.get(representative.email) || 'Free';
-            const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
 
+        // 기사 선별 함수 (Gemini → flash → OpenAI 폴백)
+        async function selectArticlesForGroup(job: string, goal: string, interestList: string, level: string, articleCount: number) {
             const selectionPrompt = `Select ${articleCount} articles for a ${level} ${job}. Goal: ${goal}. Interests: ${interestList || "business, tech"}.
 
 ARTICLES (id=id, t=title, s=source, c=category, d=age):
@@ -322,181 +309,193 @@ OUTPUT JSON:
 
 Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`;
 
-            let text: string;
             try {
                 const result = await selectionModel.generateContent(selectionPrompt);
-                const response = await result.response;
-                text = response.text();
+                return result.response.text();
             } catch (geminiError: any) {
                 const status = geminiError?.status || geminiError?.httpStatusCode;
                 if (status === 503 || geminiError?.message?.includes('503')) {
-                    console.warn(`[CRON] Gemini 503 in article selection, retrying with gemini-2.5-flash`);
                     try {
-                        const flashModel = genAI.getGenerativeModel({
-                            model: "gemini-2.5-flash",
-                            generationConfig: { responseMimeType: "application/json" }
-                        });
-                        const flashResult = await flashModel.generateContent(selectionPrompt);
-                        text = flashResult.response.text();
-                    } catch {
-                        console.warn(`[CRON] Gemini flash also failed, falling back to OpenAI`);
-                        const completion = await openai.chat.completions.create({
-                            model: MODELS.GPT_5_MINI,
-                            messages: [
-                                { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
-                                { role: 'user', content: selectionPrompt }
-                            ],
-                            response_format: { type: 'json_object' },
-                        });
-                        text = completion.choices[0]?.message?.content || '{}';
-                    }
-                } else if (status === 429 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota')) {
-                    console.warn(`[CRON] Gemini 429, falling back to OpenAI`);
+                        const flashModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { responseMimeType: "application/json" } });
+                        return (await flashModel.generateContent(selectionPrompt)).response.text();
+                    } catch { /* fall through to OpenAI */ }
+                }
+                if (status === 429 || status === 503 || geminiError?.message?.includes('429') || geminiError?.message?.includes('quota') || geminiError?.message?.includes('503')) {
                     const completion = await openai.chat.completions.create({
                         model: MODELS.GPT_5_MINI,
-                        messages: [
-                            { role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' },
-                            { role: 'user', content: selectionPrompt }
-                        ],
+                        messages: [{ role: 'system', content: 'You are a professional news curator. Always respond with valid JSON only.' }, { role: 'user', content: selectionPrompt }],
                         response_format: { type: 'json_object' },
                     });
-                    text = completion.choices[0]?.message?.content || '{}';
+                    return completion.choices[0]?.message?.content || '{}';
+                }
+                throw geminiError;
+            }
+        }
+
+        // 모든 그룹의 기사 선별을 동시에 실행
+        interface GroupResult {
+            groupKey: string;
+            groupUsers: typeof allUsers;
+            trends: any[];
+            job: string;
+            goal: string;
+            interests: string[];
+            level: string;
+            isPro: boolean;
+        }
+        const groupResults: GroupResult[] = [];
+
+        const selectionResults = await Promise.allSettled(
+            groupEntries.map(async ([groupKey, groupUsers]) => {
+                const representative = groupUsers[0];
+                const p = representative.profile as any;
+                const job = p.job || '전문가';
+                const goal = p.goal || '전문성 향상';
+                const interests = p.interests || [];
+                const level = p.level || 'Intermediate';
+                const interestList = interests.join(', ');
+                const userPlan = planMap.get(representative.email) || 'Free';
+                const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
+
+                const text = await selectArticlesForGroup(job, goal, interestList, level, articleCount);
+                const data = JSON.parse(text);
+                const selectedArticles = data.selectedArticles || [];
+                if (selectedArticles.length === 0) throw new Error('no_articles');
+
+                const trends = selectedArticles.map((selected: any) => {
+                    const filteredArticle = articlesForPrompt[selected.id];
+                    const originalArticle = rssArticles.find(article =>
+                        article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
+                    );
+                    const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+                    return {
+                        id: generateTrendId(selected.title_korean),
+                        title: selected.title_korean,
+                        category: selected.category || "General",
+                        summary: selected.summary_korean,
+                        time: pubDate,
+                        imageColor: "bg-blue-500/20",
+                        originalUrl: originalArticle?.link || "",
+                        imageUrl: "",
+                        source: originalArticle?.sourceName || "Unknown",
+                        relevance: selected.relevance_korean
+                    };
+                });
+
+                const isPro = userPlan === 'Pro' || userPlan === 'Max';
+                return { groupKey, groupUsers, trends, job, goal, interests, level, isPro } as GroupResult;
+            })
+        );
+
+        // 선별 결과 수집
+        for (let i = 0; i < selectionResults.length; i++) {
+            const sr = selectionResults[i];
+            if (sr.status === 'fulfilled') {
+                groupResults.push(sr.value);
+            } else {
+                const [groupKey, groupUsers] = groupEntries[i];
+                console.error(`[CRON] Selection failed for group ${groupKey}:`, sr.reason?.message);
+                for (const u of groupUsers) {
+                    results.push({ email: u.email, status: 'error', error: sr.reason?.message });
+                }
+            }
+        }
+
+        console.log(`[CRON] Phase 1 done: ${groupResults.length}/${groupEntries.length} groups selected`);
+
+        // ── Phase 2: 모든 그룹의 상세 브리핑을 동시 병렬 ──
+        // 모든 (그룹, 트렌드) 쌍을 한 번에 병렬 실행
+        interface DetailTask { groupIdx: number; trendIdx: number; trend: any; groupCtx: any }
+        const detailTasks: DetailTask[] = [];
+        for (let gi = 0; gi < groupResults.length; gi++) {
+            const gr = groupResults[gi];
+            const groupCtx = { job: gr.job, goal: gr.goal, interests: gr.interests, level: gr.level, isPro: gr.isPro };
+            for (let ti = 0; ti < gr.trends.length; ti++) {
+                detailTasks.push({ groupIdx: gi, trendIdx: ti, trend: gr.trends[ti], groupCtx });
+            }
+        }
+
+        // 상세 브리핑 전체 병렬 (Gemini → flash → OpenAI 폴백 내장)
+        const detailResults = await Promise.allSettled(
+            detailTasks.map(task => generateDetailedBriefing(task.trend, task.groupCtx))
+        );
+
+        // 상세 결과를 그룹별로 정리
+        const groupDetailsMap = new Map<number, Map<string, any>>(); // groupIdx → (trendId → detail)
+        for (let di = 0; di < detailTasks.length; di++) {
+            const task = detailTasks[di];
+            const dr = detailResults[di];
+            if (!groupDetailsMap.has(task.groupIdx)) groupDetailsMap.set(task.groupIdx, new Map());
+            if (dr.status === 'fulfilled') {
+                groupDetailsMap.get(task.groupIdx)!.set(task.trend.id, dr.value);
+            } else {
+                console.error(`[CRON] Detail failed for ${task.trend.title}:`, dr.reason?.message);
+            }
+        }
+
+        console.log(`[CRON] Phase 2 done: ${detailResults.filter(r => r.status === 'fulfilled').length}/${detailTasks.length} details generated`);
+
+        // ── Phase 3: 유저별 저장 + 알림 (DB 작업만, 빠름) ──
+        for (const gr of groupResults) {
+            const groupDetails = groupDetailsMap.get(groupResults.indexOf(gr)) || new Map();
+
+            const userSaveResults = await Promise.allSettled(
+                gr.groupUsers.map(async (user) => {
+                    const userProfile = user.profile as any;
+                    const name = userProfile.name || '사용자';
+
+                    // {{NAME}} → 실제 이름 치환 후 저장
+                    for (const [trendId, templateDetail] of groupDetails) {
+                        const personalizedDetail = personalizeDetail(templateDetail, name);
+                        await saveDetailCache(trendId, personalizedDetail, user.email);
+                    }
+
+                    const { error: saveError } = await supabaseAdmin
+                        .from('trends_cache')
+                        .upsert({
+                            email: user.email,
+                            date: today,
+                            trends: gr.trends,
+                            last_updated: new Date().toISOString()
+                        }, { onConflict: 'email,date' });
+
+                    if (saveError) {
+                        return { email: user.email, status: 'error', error: saveError.message };
+                    }
+
+                    // 알림
+                    const topTitles = gr.trends.slice(0, 2).map((t: any) => t.title).join(', ');
+                    const notification = {
+                        id: `trend-briefing-${today}`,
+                        type: 'trend_briefing' as const,
+                        priority: 'low' as const,
+                        title: '📰 오늘의 트렌드 브리핑',
+                        message: `${name}님 맞춤 뉴스 ${gr.trends.length}개가 도착했어요! ${topTitles}`,
+                        actionType: 'open_trend_briefing',
+                    };
+
+                    await saveProactiveNotification(user.email, notification);
+                    await sendPushNotification(user.email, {
+                        title: notification.title,
+                        body: notification.message,
+                        data: {
+                            notificationId: notification.id,
+                            type: notification.type,
+                            actionType: notification.actionType,
+                        },
+                    }).catch(() => {});
+
+                    return { email: user.email, status: 'success', trends: gr.trends.length };
+                })
+            );
+
+            for (const result of userSaveResults) {
+                if (result.status === 'fulfilled') {
+                    results.push(result.value);
                 } else {
-                    console.error(`[CRON] Selection failed for group ${groupKey}:`, geminiError);
-                    for (const u of groupUsers) {
-                        results.push({ email: u.email, status: 'error', error: geminiError?.message });
-                    }
-                    return;
+                    results.push({ email: 'unknown', status: 'error', error: result.reason?.message });
                 }
             }
-
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch {
-                console.error(`[CRON] Failed to parse selection for group ${groupKey}`);
-                for (const u of groupUsers) {
-                    results.push({ email: u.email, status: 'parse_error' });
-                }
-                return;
-            }
-
-            const selectedArticles = data.selectedArticles || [];
-            if (selectedArticles.length === 0) {
-                for (const u of groupUsers) {
-                    results.push({ email: u.email, status: 'no_articles' });
-                }
-                return;
-            }
-
-            selectionCache.set(groupKey, selectedArticles);
-
-            // 선별된 기사를 trends로 변환 (그룹 공통)
-            const trends = selectedArticles.map((selected: any) => {
-                const filteredArticle = articlesForPrompt[selected.id];
-                const originalArticle = rssArticles.find(article =>
-                    article.title === filteredArticle?.t &&
-                    article.sourceName === filteredArticle?.s
-                );
-                const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
-
-                return {
-                    id: generateTrendId(selected.title_korean),
-                    title: selected.title_korean,
-                    category: selected.category || "General",
-                    summary: selected.summary_korean,
-                    time: pubDate,
-                    imageColor: "bg-blue-500/20",
-                    originalUrl: originalArticle?.link || "",
-                    imageUrl: "",
-                    source: originalArticle?.sourceName || "Unknown",
-                    relevance: selected.relevance_korean
-                };
-            });
-
-            // 그룹당 상세 브리핑 1회 생성 ({{NAME}} 플레이스홀더 포함)
-            const isPro = groupKey.endsWith('|pro');
-            const groupCtx = { job, goal, interests, level, isPro };
-            const groupDetails = new Map<string, any>(); // trendId → detail (with {{NAME}})
-
-            for (const trend of trends) {
-                try {
-                    const detail = await generateDetailedBriefing(trend, groupCtx);
-                    groupDetails.set(trend.id, detail);
-                } catch (error) {
-                    console.error(`[CRON] Error generating detail for ${trend.title}:`, error);
-                }
-            }
-
-            console.log(`[CRON] Group "${groupKey}": generated ${groupDetails.size} details for ${groupUsers.length} users`);
-
-            // 유저별: 이름 치환 + 캐시 저장 + 알림
-            const CONCURRENCY = 5;
-            for (let i = 0; i < groupUsers.length; i += CONCURRENCY) {
-                const userBatch = groupUsers.slice(i, i + CONCURRENCY);
-                const batchResults = await Promise.allSettled(
-                    userBatch.map(async (user) => {
-                        const userProfile = user.profile as any;
-                        const name = userProfile.name || '사용자';
-
-                        // {{NAME}} → 실제 이름 치환 후 저장
-                        for (const [trendId, templateDetail] of groupDetails) {
-                            const personalizedDetail = personalizeDetail(templateDetail, name);
-                            await saveDetailCache(trendId, personalizedDetail, user.email);
-                        }
-
-                        const { error: saveError } = await supabaseAdmin
-                            .from('trends_cache')
-                            .upsert({
-                                email: user.email,
-                                date: today,
-                                trends,
-                                last_updated: new Date().toISOString()
-                            }, { onConflict: 'email,date' });
-
-                        if (saveError) {
-                            return { email: user.email, status: 'error', error: saveError.message };
-                        }
-
-                        // 알림
-                        const topTitles = trends.slice(0, 2).map((t: any) => t.title).join(', ');
-                        const notification = {
-                            id: `trend-briefing-${today}`,
-                            type: 'trend_briefing' as const,
-                            priority: 'low' as const,
-                            title: '📰 오늘의 트렌드 브리핑',
-                            message: `${name}님 맞춤 뉴스 ${trends.length}개가 도착했어요! ${topTitles}`,
-                            actionType: 'open_trend_briefing',
-                        };
-
-                        await saveProactiveNotification(user.email, notification);
-                        await sendPushNotification(user.email, {
-                            title: notification.title,
-                            body: notification.message,
-                            data: {
-                                notificationId: notification.id,
-                                type: notification.type,
-                                actionType: notification.actionType,
-                            },
-                        }).catch(() => {});
-
-                        return { email: user.email, status: 'success', trends: trends.length };
-                    })
-                );
-
-                for (const result of batchResults) {
-                    if (result.status === 'fulfilled') {
-                        results.push(result.value);
-                    } else {
-                        const email = userBatch[batchResults.indexOf(result)]?.email || 'unknown';
-                        results.push({ email, status: 'error', error: result.reason?.message });
-                    }
-                }
-            }
-
-        }));
-            // 그룹 배치 간 rate limit 대기
-            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
 

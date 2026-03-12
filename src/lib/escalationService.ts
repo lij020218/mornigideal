@@ -58,6 +58,17 @@ export async function getEscalationDecision(
         deadlineHours?: number; // 마감까지 남은 시간
     }
 ): Promise<EscalationDecision> {
+    // 콘텐츠 요약 알림은 축약하면 정보가 소실되므로 항상 원문 전달
+    const noShortenTypes = ['daily_wrap', 'morning_briefing', 'trend_briefing', 'weekly_report'];
+    if (noShortenTypes.includes(notificationType)) {
+        return {
+            strategy: 'deliver',
+            shouldDeliver: true,
+            pushAllowed: true,
+            reason: 'content_type_bypass: 콘텐츠 알림은 축약 없이 전달',
+        };
+    }
+
     // Critical override: 중요 알림은 절대 억제하지 않음
     if (isCriticalOverride(priority, context)) {
         return {

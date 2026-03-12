@@ -93,25 +93,36 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
             return true;
         });
 
-        // 5. 오늘 이미 표시한 타입별 알림 체크 (singleton 타입만 서버에서 필터)
-        // shownIds 필터링은 모바일에서 per-device로 처리 (멀티 디바이스 지원)
+        // 5. 오늘 이미 표시한 알림 필터 (타입 singleton + ID 기반)
         const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-        const { data: shownToday } = await supabaseAdmin
-            .from('user_kv_store')
-            .select('value')
-            .eq('user_email', userEmail)
-            .eq('key', `proactive_shown_${todayStr}`)
-            .maybeSingle();
+        const [{ data: shownToday }, { data: shownIdsData }] = await Promise.all([
+            supabaseAdmin
+                .from('user_kv_store')
+                .select('value')
+                .eq('user_email', userEmail)
+                .eq('key', `proactive_shown_${todayStr}`)
+                .maybeSingle(),
+            supabaseAdmin
+                .from('user_kv_store')
+                .select('value')
+                .eq('user_email', userEmail)
+                .eq('key', `proactive_shown_ids_${todayStr}`)
+                .maybeSingle(),
+        ]);
 
         const shownTypes = shownToday?.value || [];
+        const shownIdsList: string[] = shownIdsData?.value || [];
+        const shownIdsSet = new Set(shownIdsList);
 
-        // Type-singleton notifications: 하루에 한 번만 (morning_briefing 등)
-        // Instance notifications: 서버에서 필터하지 않음 → 모바일이 로컬에서 중복 방지
+        // Type-singleton: 하루에 한 번만 (morning_briefing 등)
+        // ID 기반: mark_shown된 알림은 모든 기기에서 필터 (멀티 디바이스 중복 방지)
         const typeSingletons = ['morning_briefing', 'trend_briefing', 'goal_nudge', 'urgent_alert', 'lifestyle_recommend'];
         const filteredNotifications = activeNotifications.filter(n => {
             if (typeSingletons.includes(n.type)) {
                 if (shownTypes.includes(n.type)) return false;
             }
+            // 이미 mark_shown된 알림 ID는 서버에서 필터 (멀티 디바이스 동기화)
+            if (shownIdsSet.has(n.id)) return false;
             return true;
         });
 
