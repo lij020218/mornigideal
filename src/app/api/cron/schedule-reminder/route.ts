@@ -4,7 +4,7 @@
  * 5분 간격으로 실행. 앞으로 10분 이내 시작하는 일정을 찾아 push 발송.
  * 앱이 꺼져 있어도 알림이 감.
  *
- * - schedules 테이블에서 오늘 일정 중 start_time이 현재~10분 후인 것 조회
+ * - users.profile.customGoals에서 오늘 일정 중 startTime이 현재~10분 후인 것 조회
  * - 이미 발송한 일정은 user_kv_store에 기록하여 중복 방지
  * - completed/skipped 일정은 제외
  */
@@ -20,7 +20,7 @@ import { FOCUS_KEYWORDS } from '@/lib/constants';
 /** 집중 모드 대상 일정인지 판별 */
 function isFocusEligible(title: string): boolean {
     const lower = title.toLowerCase();
-    if (isSleepSchedule(lower)) return false; // 취침은 집중 모드 대상 아님
+    if (isSleepSchedule(lower)) return false;
     return FOCUS_KEYWORDS.some(kw => lower.includes(kw))
         || /운동|헬스|요가|필라테스|러닝|조깅|수영|등산|논문|리서치|연구/.test(lower);
 }
@@ -43,84 +43,114 @@ export const GET = withCron(async (_request: NextRequest) => {
     }
 
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
+    const dayOfWeek = kst.getDay();
 
-    // 현재 KST 시간 (HH:mm)
+    // 현재 KST 시간 (분 단위)
     const nowMinutes = kst.getHours() * 60 + kst.getMinutes();
-    // 10분 후까지의 일정
     const targetMinutes = nowMinutes + 10;
 
     const nowTime = `${String(Math.floor(nowMinutes / 60)).padStart(2, '0')}:${String(nowMinutes % 60).padStart(2, '0')}`;
-    const targetTime = `${String(Math.floor(targetMinutes / 60)).padStart(2, '0')}:${String(targetMinutes % 60).padStart(2, '0')}`;
 
-    // 오늘 일정 중 start_time이 현재~10분 후이고, 완료/스킵되지 않은 것 조회
-    const { data: schedules, error } = await supabaseAdmin
-        .from('schedules')
-        .select('id, user_id, title, start_time, date')
-        .eq('date', todayStr)
-        .eq('completed', false)
-        .eq('skipped', false)
-        .gt('start_time', nowTime)
-        .lte('start_time', targetTime);
+    // 모든 유저의 customGoals에서 오늘 일정 추출
+    const { data: users, error: usersError } = await supabaseAdmin
+        .from('users')
+        .select('id, email, profile')
+        .not('profile', 'is', null);
 
-    if (error) {
-        logger.error('[ScheduleReminder] Query error:', error);
+    if (usersError) {
+        logger.error('[ScheduleReminder] Users query error:', usersError);
         return NextResponse.json({ error: 'Query failed' }, { status: 500 });
     }
 
-    if (!schedules || schedules.length === 0) {
+    if (!users || users.length === 0) {
+        return NextResponse.json({ message: 'No users', sent: 0 });
+    }
+
+    // 오늘 일정 추출 (customGoals 기반)
+    interface ScheduleItem {
+        id: string;
+        title: string;
+        startTime: string;
+        userEmail: string;
+    }
+
+    const todaySchedules: ScheduleItem[] = [];
+
+    for (const user of users) {
+        const profile = user.profile as any;
+        const customGoals = profile?.customGoals;
+        if (!Array.isArray(customGoals)) continue;
+
+        for (const goal of customGoals) {
+            if (goal.completed || goal.skipped) continue;
+            if (!goal.startTime) continue;
+
+            // 오늘 해당 일정인지 확인
+            let isToday = false;
+            if (goal.specificDate === todayStr) {
+                isToday = true;
+            } else if (goal.daysOfWeek && Array.isArray(goal.daysOfWeek) && goal.daysOfWeek.includes(dayOfWeek)) {
+                if (goal.startDate && todayStr < goal.startDate) continue;
+                if (goal.endDate && todayStr > goal.endDate) continue;
+                isToday = true;
+            }
+
+            if (!isToday) continue;
+
+            // startTime이 현재~10분 후 범위인지 확인
+            const [sh, sm] = goal.startTime.split(':').map(Number);
+            if (isNaN(sh) || isNaN(sm)) continue;
+            const scheduleMinutes = sh * 60 + sm;
+
+            if (scheduleMinutes > nowMinutes && scheduleMinutes <= targetMinutes) {
+                todaySchedules.push({
+                    id: goal.id,
+                    title: goal.text || '',
+                    startTime: goal.startTime,
+                    userEmail: user.email,
+                });
+            }
+        }
+    }
+
+    if (todaySchedules.length === 0) {
         return NextResponse.json({ message: 'No upcoming schedules', sent: 0 });
     }
 
-    // user_id → email 매핑
-    const userIds = [...new Set(schedules.map(s => s.user_id))];
-    const { data: users } = await supabaseAdmin
-        .from('users')
-        .select('id, email')
-        .in('id', userIds);
-
-    if (!users || users.length === 0) {
-        return NextResponse.json({ message: 'No users found', sent: 0 });
-    }
-
-    const userMap = new Map(users.map(u => [u.id, u.email]));
-
     // 이미 발송한 일정 ID 조회 (중복 방지)
     const sentKey = `schedule_reminder_sent_${todayStr}`;
-    const sentPromises = userIds.map(uid => {
-        const email = userMap.get(uid);
-        if (!email) return null;
-        return supabaseAdmin
+    const uniqueEmails = [...new Set(todaySchedules.map(s => s.userEmail))];
+
+    const sentPromises = uniqueEmails.map(email =>
+        supabaseAdmin
             .from('user_kv_store')
             .select('value')
             .eq('user_email', email)
             .eq('key', sentKey)
             .maybeSingle()
-            .then(({ data }) => ({ email, sentIds: (data?.value as string[]) || [] }));
-    });
+            .then(({ data }) => ({ email, sentIds: (data?.value as string[]) || [] }))
+    );
 
-    const sentResults = (await Promise.all(sentPromises)).filter(Boolean) as Array<{ email: string; sentIds: string[] }>;
+    const sentResults = await Promise.all(sentPromises);
     const sentMap = new Map(sentResults.map(r => [r.email, new Set(r.sentIds)]));
 
     // 발송 대상 필터링
     const notifications: Array<{ userEmail: string; title: string; body: string; data?: Record<string, any>; channelId?: string }> = [];
     const newSentMap = new Map<string, string[]>();
 
-    for (const schedule of schedules) {
-        const email = userMap.get(schedule.user_id);
-        if (!email) continue;
-
-        const alreadySent = sentMap.get(email);
+    for (const schedule of todaySchedules) {
+        const alreadySent = sentMap.get(schedule.userEmail);
         if (alreadySent?.has(schedule.id)) continue;
 
         // 시작까지 남은 분 계산
-        const [sh, sm] = schedule.start_time.split(':').map(Number);
+        const [sh, sm] = schedule.startTime.split(':').map(Number);
         const diffMin = (sh * 60 + sm) - nowMinutes;
 
         const focusEligible = isFocusEligible(schedule.title);
         const sleepEligible = isSleepSchedule(schedule.title);
 
         notifications.push({
-            userEmail: email,
+            userEmail: schedule.userEmail,
             title: sleepEligible ? '🌙 취침 시간이에요' : '⏰ 곧 일정이 시작돼요',
             body: sleepEligible
                 ? `"${schedule.title}" - ${diffMin}분 후. 취침 모드를 켜볼까요?`
@@ -139,9 +169,9 @@ export const GET = withCron(async (_request: NextRequest) => {
         });
 
         // 발송 기록 추가
-        const existing = newSentMap.get(email) || [...(sentMap.get(email) || [])];
+        const existing = newSentMap.get(schedule.userEmail) || [...(sentMap.get(schedule.userEmail) || [])];
         existing.push(schedule.id);
-        newSentMap.set(email, existing);
+        newSentMap.set(schedule.userEmail, existing);
     }
 
     if (notifications.length === 0) {
@@ -151,7 +181,7 @@ export const GET = withCron(async (_request: NextRequest) => {
     // 푸시 발송
     const result = await sendBulkPushNotifications(notifications);
 
-    // 채팅 히스토리에도 저장 (앱이 꺼져있어도 채팅에 표시)
+    // 채팅 히스토리에도 저장
     for (const notif of notifications) {
         const isFocus = notif.data?.focusEligible;
         const isSleep = notif.data?.sleepEligible;
