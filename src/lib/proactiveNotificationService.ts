@@ -26,6 +26,8 @@ export interface ProactiveNotification {
     expiresAt?: Date;
     /** 채팅 내 표시 순서 (낮을수록 먼저 표시, 시간순) */
     displayOrder?: number;
+    /** 알림 생성 시각 (다른 기기에서 원래 시간에 표시하기 위해) */
+    createdAt?: string;
 }
 
 /** 알림 타입별 논리적 시간 순서 (낮을수록 먼저 표시) */

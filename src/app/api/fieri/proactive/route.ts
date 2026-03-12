@@ -61,6 +61,7 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
                         actionType: row.action_type,
                         actionPayload: row.action_payload,
                         displayOrder: TYPE_DISPLAY_ORDER[row.type] ?? 150,
+                        createdAt: row.created_at,
                     } as ProactiveNotification;
                 })),
         ]);
