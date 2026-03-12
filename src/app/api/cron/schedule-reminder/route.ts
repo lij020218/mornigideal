@@ -230,10 +230,11 @@ export const GET = withCron(async (_request: NextRequest) => {
         }).catch(() => {});
 
         // 채팅 히스토리에도 직접 저장
+        // ID를 모바일 폴링(checkAndShowProactiveNotifications)에서 만들 ID와 동일하게 맞춤
         appendChatMessage(notif.userEmail, {
-            id: `schedule_reminder-${notif.data?.scheduleId}-${todayStr}`,
+            id: `proactive-${notifId}`,
             role: 'assistant',
-            content,
+            content: `**${notif.title}**\n\n${notif.body}`,
             timestamp: new Date().toISOString(),
             type: 'proactive',
             ...(proactiveData && { proactiveData }),

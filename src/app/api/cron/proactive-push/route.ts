@@ -200,12 +200,23 @@ export const GET = withCron(async (_request: NextRequest) => {
                     await saveProactiveNotification(user.email, notif);
 
                     // 채팅 히스토리에도 저장 (앱 꺼져있어도 채팅에 표시)
+                    // ID를 모바일 checkAndShowProactiveNotifications와 동일하게 맞춤 (중복 방지)
                     appendChatMessage(user.email, {
-                        id: `proactive-${notif.id}-${Date.now()}`,
+                        id: `proactive-${notif.id}`,
                         role: 'assistant',
-                        content: `${notif.title}\n${notif.message}`,
+                        content: notif.type === 'daily_wrap'
+                            ? notif.message
+                            : `**${notif.title}**\n\n${notif.message}`,
                         timestamp: new Date().toISOString(),
                         type: 'proactive',
+                        ...(notif.actionType && {
+                            proactiveData: {
+                                notificationId: notif.id,
+                                notificationType: notif.type,
+                                actionType: notif.actionType,
+                                actionPayload: notif.actionPayload,
+                            },
+                        }),
                     }, todayStr).catch(() => {});
                 }
             }
