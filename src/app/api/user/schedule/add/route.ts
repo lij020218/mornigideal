@@ -137,56 +137,40 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
             nextDay.setDate(nextDay.getDate() + 1);
             const nextDayStr = nextDay.toISOString().split('T')[0];
 
-            // Look for wake-up schedule today or tomorrow
             const wakeSchedule = customGoals.find((g: any) => {
                 const isWake = g.text?.includes('기상') || g.text?.toLowerCase().includes('wake') || g.text?.includes('일어나');
-                const isRelevantDate = g.specificDate === specificDate || g.specificDate === nextDayStr;
-                // Also check recurring schedules
-                const isRecurringWake = isWake && g.daysOfWeek && g.daysOfWeek.length > 0;
-                return isWake && (isRelevantDate || isRecurringWake);
+                if (!isWake) return false;
+                // 같은 날 또는 다음 날 기상
+                if (g.specificDate === specificDate || g.specificDate === nextDayStr) return true;
+                // 반복 기상 일정
+                if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
+                return false;
             });
 
-            if (wakeSchedule) {
-                // Set sleep end time to wake-up start time
-                const wakeTime = wakeSchedule.startTime;
-                if (wakeTime && calculatedEndTime) {
-                    calculatedEndTime = wakeTime;
-                }
+            if (wakeSchedule?.startTime) {
+                calculatedEndTime = wakeSchedule.startTime;
             }
         }
 
-        // 기상 일정인 경우 취침 일정의 종료 시간도 맞춰 조정
-        // 전날 밤에 시작한 취침 일정도 찾아야 함 (예: 전날 23:00 취침 → 오늘 10:00 기상)
+        // 기상 일정 추가 시 → 같은 날 또는 전날의 취침 일정 endTime을 기상 시간으로 업데이트
         if (isWakeSchedule && specificDate) {
-            // 전날 날짜 계산
             const prevDay = new Date(specificDate);
             prevDay.setDate(prevDay.getDate() - 1);
             const prevDayStr = prevDay.toISOString().split('T')[0];
 
-            // 같은 날 또는 전날의 취침 일정 찾기
             const sleepSchedule = customGoals.find((g: any) => {
                 const isSleep = g.text?.includes('취침') || g.text?.toLowerCase().includes('sleep') || g.text?.includes('잠') || g.text?.includes('수면');
                 if (!isSleep) return false;
-
-                // 같은 날 취침 (새벽에 잔 경우)
+                // 같은 날 취침
                 if (g.specificDate === specificDate) return true;
-
-                // 전날 밤 취침 (저녁/밤에 잔 경우 - 18시 이후 시작)
-                if (g.specificDate === prevDayStr && g.startTime) {
-                    const startHour = parseInt(g.startTime.split(':')[0]);
-                    return startHour >= 18; // 저녁 6시 이후 시작한 취침만
-                }
-
-                // 반복 일정 체크
-                if (isSleep && g.daysOfWeek && g.daysOfWeek.length > 0) {
-                    return true;
-                }
-
+                // 전날 취침 (시간 무관 — 올빼미형도 지원)
+                if (g.specificDate === prevDayStr) return true;
+                // 반복 취침 일정
+                if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
                 return false;
             });
 
             if (sleepSchedule && calculatedStartTime) {
-                // Update the existing sleep schedule's end time
                 const sleepIndex = customGoals.findIndex((g: any) => g.id === sleepSchedule.id);
                 if (sleepIndex !== -1) {
                     customGoals[sleepIndex] = {
