@@ -295,8 +295,11 @@ export async function GET(request: Request) {
         // 그룹별로 기사 선별 1회 → 그룹 내 유저 전원에게 적용
         const selectionCache = new Map<string, any[]>(); // groupKey → selectedArticles
 
-        // 그룹별 선별 (순차, rate limit 대응)
-        for (const [groupKey, groupUsers] of userGroups) {
+        // 그룹별 선별 (2그룹씩 병렬, rate limit 대응)
+        const groupEntries = Array.from(userGroups.entries());
+        for (let gi = 0; gi < groupEntries.length; gi += 2) {
+        const groupBatch = groupEntries.slice(gi, gi + 2);
+        await Promise.allSettled(groupBatch.map(async ([groupKey, groupUsers]) => {
             const representative = groupUsers[0];
             const p = representative.profile as any;
             const job = p.job || '전문가';
@@ -363,7 +366,7 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                     for (const u of groupUsers) {
                         results.push({ email: u.email, status: 'error', error: geminiError?.message });
                     }
-                    continue;
+                    return;
                 }
             }
 
@@ -375,7 +378,7 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                 for (const u of groupUsers) {
                     results.push({ email: u.email, status: 'parse_error' });
                 }
-                continue;
+                return;
             }
 
             const selectedArticles = data.selectedArticles || [];
@@ -383,7 +386,7 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                 for (const u of groupUsers) {
                     results.push({ email: u.email, status: 'no_articles' });
                 }
-                continue;
+                return;
             }
 
             selectionCache.set(groupKey, selectedArticles);
@@ -491,8 +494,9 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                 }
             }
 
-            // 그룹 간 rate limit 대기
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        }));
+            // 그룹 배치 간 rate limit 대기
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
 
