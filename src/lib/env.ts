@@ -11,6 +11,7 @@ const required = [
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'CRON_SECRET',
+  'API_KEY_ENCRYPTION_SECRET',
 ] as const;
 
 // JWT_SECRET은 3개 중 하나만 있으면 됨
