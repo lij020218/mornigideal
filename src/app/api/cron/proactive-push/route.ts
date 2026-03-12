@@ -151,7 +151,12 @@ export const GET = withCron(async (_request: NextRequest) => {
                 continue;
             }
 
-            // 플랜별 일일 한도
+            // 콘텐츠 알림은 한도 무관하게 항상 전달 (daily_wrap, morning_briefing 등)
+            const alwaysDeliverTypes = ['daily_wrap', 'morning_briefing', 'trend_briefing', 'weekly_review'];
+            const mustSend = pushable.filter(n => alwaysDeliverTypes.includes(n.type));
+            const rateLimited = pushable.filter(n => !alwaysDeliverTypes.includes(n.type));
+
+            // 플랜별 일일 한도 (콘텐츠 알림 제외)
             const dailyLimit = LIMITS.PROACTIVE_DAILY[userPlan.plan] ?? LIMITS.PROACTIVE_DAILY.free;
             const countKey = `proactive_count_${todayStr}`;
             const { data: countData } = await supabaseAdmin
@@ -163,19 +168,16 @@ export const GET = withCron(async (_request: NextRequest) => {
 
             const shownCount: number = countData?.value ?? 0;
             const remaining = Math.max(0, dailyLimit - shownCount);
-            if (remaining === 0) {
-                skipped++;
-                continue;
-            }
 
             // displayOrder(시간순) 정렬 후 한도 적용
             const priorityOrder = { high: 0, medium: 1, low: 2 };
-            pushable.sort((a, b) => {
+            rateLimited.sort((a, b) => {
                 const orderDiff = (a.displayOrder ?? 150) - (b.displayOrder ?? 150);
                 if (orderDiff !== 0) return orderDiff;
                 return priorityOrder[a.priority] - priorityOrder[b.priority];
             });
-            const toSend = pushable.slice(0, Math.min(remaining, 3)); // 한 번에 최대 3개
+            const limitedSlice = rateLimited.slice(0, Math.min(remaining, 3));
+            const toSend = [...mustSend, ...limitedSlice];
 
             let userPushed = 0;
             for (const notif of toSend) {

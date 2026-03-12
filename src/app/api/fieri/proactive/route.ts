@@ -166,7 +166,12 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
 
         const shownCount: number = countData?.value ?? 0;
         const remaining = Math.max(0, dailyLimit - shownCount);
-        const limitedNotifications = finalNotifications.slice(0, Math.min(remaining, 5));
+
+        // 콘텐츠 알림은 한도 무관하게 항상 전달
+        const alwaysDeliverTypes = ['daily_wrap', 'morning_briefing', 'trend_briefing', 'weekly_review'];
+        const mustDeliver = finalNotifications.filter(n => alwaysDeliverTypes.includes(n.type));
+        const rateLimited = finalNotifications.filter(n => !alwaysDeliverTypes.includes(n.type));
+        const limitedNotifications = [...mustDeliver, ...rateLimited.slice(0, Math.min(remaining, 5))];
 
         return NextResponse.json({
             notifications: limitedNotifications,
