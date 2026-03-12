@@ -89,6 +89,24 @@
     },
     "src/app/api/trend-briefing/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/proactive-push/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/weekly-report/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/idle-schedule-nudge/route.ts": {
+      "maxDuration": 120
+    },
+    "src/app/api/cron/gmail-summary/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/batch-news/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/collect-curated-content/route.ts": {
+      "maxDuration": 300
     }
   }
 }
