@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendBulkPushNotifications } from '@/lib/pushService';
 import { appendChatMessage } from '@/lib/chatHistoryService';
+import { saveProactiveNotification } from '@/lib/proactiveNotificationService';
 import { withCron } from '@/lib/api-handler';
 import { logger } from '@/lib/logger';
 import { FOCUS_KEYWORDS } from '@/lib/constants';
@@ -181,41 +182,56 @@ export const GET = withCron(async (_request: NextRequest) => {
     // 푸시 발송
     const result = await sendBulkPushNotifications(notifications);
 
-    // 채팅 히스토리에도 저장
+    // jarvis_notifications에 저장 → 모바일 폴링으로 확실히 수신 + 채팅 히스토리에도 저장
     for (const notif of notifications) {
         const isFocus = notif.data?.focusEligible;
         const isSleep = notif.data?.sleepEligible;
 
         let content: string;
         let proactiveData: Record<string, any> | undefined;
+        let actionType: string | undefined;
+        let actionPayload: Record<string, unknown> | undefined;
 
         if (isSleep) {
             content = `🌙 취침 시간이에요\n"${notif.data?.scheduleTitle}" 일정이 곧 시작돼요.\n취침 모드를 켜서 수면 시간을 기록해보세요.`;
+            actionType = 'start_wind_down';
+            actionPayload = { scheduleText: notif.data?.scheduleTitle };
             proactiveData = {
                 notificationId: `sleep-${notif.data?.scheduleId}`,
                 notificationType: 'sleep_prompt',
-                actionType: 'start_wind_down',
-                actionPayload: {
-                    scheduleText: notif.data?.scheduleTitle,
-                },
+                actionType,
+                actionPayload,
             };
         } else if (isFocus) {
             content = `${notif.title}\n"${notif.data?.scheduleTitle}" 일정이 곧 시작돼요! 🎯\n집중 모드를 켜면 더 효율적으로 할 수 있어요.`;
+            actionType = 'start_focus_mode';
+            actionPayload = { scheduleText: notif.data?.scheduleTitle, focusDuration: 45 };
             proactiveData = {
                 notificationId: `focus-${notif.data?.scheduleId}`,
                 notificationType: 'focus_prompt',
-                actionType: 'start_focus_mode',
-                actionPayload: {
-                    scheduleText: notif.data?.scheduleTitle,
-                    focusDuration: 45,
-                },
+                actionType,
+                actionPayload,
             };
         } else {
             content = `${notif.title}\n${notif.body}`;
         }
 
+        const notifId = `schedule-reminder-${notif.data?.scheduleId}`;
+
+        // jarvis_notifications에 저장 → 앱이 백그라운드여도 폴링으로 채팅에 표시
+        saveProactiveNotification(notif.userEmail, {
+            id: notifId,
+            type: 'schedule_reminder',
+            priority: 'high',
+            title: notif.title,
+            message: notif.body,
+            actionType,
+            actionPayload,
+        }).catch(() => {});
+
+        // 채팅 히스토리에도 직접 저장
         appendChatMessage(notif.userEmail, {
-            id: `schedule_reminder-${notif.data?.scheduleId}-${Date.now()}`,
+            id: `schedule_reminder-${notif.data?.scheduleId}-${todayStr}`,
             role: 'assistant',
             content,
             timestamp: new Date().toISOString(),
