@@ -227,7 +227,7 @@ export const GET = withCron(async (_request: NextRequest) => {
             message: notif.body,
             actionType,
             actionPayload,
-        }).catch(() => {});
+        }).catch(e => logger.error(`[ScheduleReminder] saveNotification failed for ${notif.userEmail}:`, e));
 
         // 채팅 히스토리에도 직접 저장
         // ID를 모바일 폴링(checkAndShowProactiveNotifications)에서 만들 ID와 동일하게 맞춤
@@ -238,7 +238,7 @@ export const GET = withCron(async (_request: NextRequest) => {
             timestamp: new Date().toISOString(),
             type: 'proactive',
             ...(proactiveData && { proactiveData }),
-        }, todayStr).catch(() => {});
+        }, todayStr).catch(e => logger.error(`[ScheduleReminder] appendChatMessage failed for ${notif.userEmail}:`, e));
     }
 
     // 발송 기록 저장 (중복 방지)

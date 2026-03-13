@@ -175,32 +175,35 @@ export const GET = withCron(async (_request: NextRequest) => {
                     },
                 });
 
-                if (sent) {
-                    userPushed++;
+                // 푸시 성공/실패 무관하게 알림 저장 (앱 꺼져있어도 채팅에 표시)
+                if (sent) userPushed++;
 
-                    // jarvis_notifications에 저장 (앱 내에서도 확인 가능)
-                    await saveProactiveNotification(user.email, notif);
+                // jarvis_notifications에 저장 (앱 내에서도 확인 가능)
+                await saveProactiveNotification(user.email, notif).catch(e =>
+                    logger.error(`[ProactivePush] saveNotification failed for ${user.email}:`, e)
+                );
 
-                    // 채팅 히스토리에도 저장 (앱 꺼져있어도 채팅에 표시)
-                    // ID를 모바일 checkAndShowProactiveNotifications와 동일하게 맞춤 (중복 방지)
-                    appendChatMessage(user.email, {
-                        id: `proactive-${notif.id}`,
-                        role: 'assistant',
-                        content: notif.type === 'daily_wrap'
-                            ? notif.message
-                            : `**${notif.title}**\n\n${notif.message}`,
-                        timestamp: new Date().toISOString(),
-                        type: 'proactive',
-                        ...(notif.actionType && {
-                            proactiveData: {
-                                notificationId: notif.id,
-                                notificationType: notif.type,
-                                actionType: notif.actionType,
-                                actionPayload: notif.actionPayload,
-                            },
-                        }),
-                    }, todayStr).catch(() => {});
-                }
+                // 채팅 히스토리에도 저장
+                // ID를 모바일 checkAndShowProactiveNotifications와 동일하게 맞춤 (중복 방지)
+                appendChatMessage(user.email, {
+                    id: `proactive-${notif.id}`,
+                    role: 'assistant',
+                    content: notif.type === 'daily_wrap'
+                        ? notif.message
+                        : `**${notif.title}**\n\n${notif.message}`,
+                    timestamp: new Date().toISOString(),
+                    type: 'proactive',
+                    ...(notif.actionType && {
+                        proactiveData: {
+                            notificationId: notif.id,
+                            notificationType: notif.type,
+                            actionType: notif.actionType,
+                            actionPayload: notif.actionPayload,
+                        },
+                    }),
+                }, todayStr).catch(e =>
+                    logger.error(`[ProactivePush] appendChatMessage failed for ${user.email}:`, e)
+                );
             }
 
             if (userPushed > 0) {
