@@ -57,14 +57,17 @@ Make queries:
         // 2. Search YouTube for each query
         const allVideos: MediaItem[] = [];
 
+        const isNonTargetLang = (text: string) => /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B00-\u0B7F\u0C00-\u0C7F\u0D00-\u0D7F]/.test(text);
+
         for (const query of queries) {
             try {
+                const isKoreanQuery = /[가-힣]/.test(query);
                 const searchResponse = await youtube.search.list({
                     part: ["snippet"],
                     q: query,
                     type: ["video"],
-                    maxResults: 2,
-                    relevanceLanguage: "en",
+                    maxResults: 5,
+                    relevanceLanguage: isKoreanQuery ? "ko" : "en",
                     videoDuration: "medium"
                 });
 
@@ -82,14 +85,22 @@ Make queries:
 
                 const videos = detailsResponse.data.items || [];
                 for (const video of videos) {
+                    const title = video.snippet?.title || "";
+                    const desc = video.snippet?.description || "";
+                    const defaultLang = video.snippet?.defaultLanguage || video.snippet?.defaultAudioLanguage || "";
+
+                    // 영어/한국어가 아닌 영상 배제
+                    if (isNonTargetLang(title) || isNonTargetLang(desc.slice(0, 200))) continue;
+                    if (defaultLang && !defaultLang.startsWith("en") && !defaultLang.startsWith("ko")) continue;
+
                     allVideos.push({
                         id: video.id || "",
-                        title: video.snippet?.title || "",
+                        title,
                         channel: video.snippet?.channelTitle || "",
                         type: "youtube",
                         tags: video.snippet?.tags?.slice(0, 3) || [],
                         duration: formatDuration(video.contentDetails?.duration || ""),
-                        description: video.snippet?.description?.slice(0, 150) || ""
+                        description: desc.slice(0, 150) || ""
                     });
                 }
             } catch (err) {

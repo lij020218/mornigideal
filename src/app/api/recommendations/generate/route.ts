@@ -165,14 +165,19 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
       const publishedAfterFallback = threeMonthsAgo.toISOString();
 
       // Get more results to filter by view count
+      // 한국어 쿼리인지 판별 → relevanceLanguage 설정
+      const isKoreanQuery = /[가-힣]/.test(q);
+      const relevanceLanguage = isKoreanQuery ? "ko" : "en";
+
       const searchRes = await youtube.search.list({
         part: ["snippet"],
         q: q,
-        maxResults: 25, // Get more results to have better options
+        maxResults: 25,
         type: ["video"],
-        videoDuration: "medium", // Avoid shorts
-        publishedAfter: publishedAfter, // Only get videos from last 1 month first
-        order: "viewCount" // Sort by view count to get popular videos
+        videoDuration: "medium",
+        publishedAfter: publishedAfter,
+        order: "viewCount",
+        relevanceLanguage,
       });
 
       let videoItems = searchRes.data.items || [];
@@ -186,7 +191,8 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
           type: ["video"],
           videoDuration: "medium",
           publishedAfter: publishedAfterFallback,
-          order: "viewCount"
+          order: "viewCount",
+          relevanceLanguage,
         });
         videoItems = fallbackRes.data.items || [];
       }
@@ -208,11 +214,20 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
       if (!videoRes.data.items || videoRes.data.items.length === 0) continue;
 
       // Filter videos - prefer 200k+ views, fallback to 50k+
+      // 힌디어/비영어·비한국어 영상 감지 (데바나가리 문자 등)
+      const isNonTargetLang = (text: string) => /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B00-\u0B7F\u0C00-\u0C7F\u0D00-\u0D7F]/.test(text);
+
       const filterVideos = (minViews: number) => {
         return videoRes.data.items!.filter(video => {
           const viewCount = parseInt(video.statistics?.viewCount || "0");
           const title = video.snippet?.title || "";
+          const description = video.snippet?.description || "";
+          const defaultLang = video.snippet?.defaultLanguage || video.snippet?.defaultAudioLanguage || "";
           const videoId = video.id!;
+
+          // Filter out non-English/Korean videos (Hindi, Tamil, etc.)
+          if (isNonTargetLang(title) || isNonTargetLang(description.slice(0, 200))) return false;
+          if (defaultLang && !defaultLang.startsWith("en") && !defaultLang.startsWith("ko")) return false;
 
           // Filter out videos we've already shown (by ID - primary method)
           const alreadyShownById = excludedVideoIds.has(videoId);
@@ -297,6 +312,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         const threeMonthsAgo = new Date();
         threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
+        const isKoreanBackup = /[가-힣]/.test(q);
         const searchRes = await youtube.search.list({
           part: ["snippet"],
           q: q,
@@ -304,7 +320,8 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
           type: ["video"],
           videoDuration: "medium",
           publishedAfter: threeMonthsAgo.toISOString(),
-          order: "viewCount"
+          order: "viewCount",
+          relevanceLanguage: isKoreanBackup ? "ko" : "en",
         });
 
         if (!searchRes.data.items?.length) continue;
@@ -320,8 +337,14 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
           id: videoIds
         });
 
+        const isNonTargetLangBackup = (text: string) => /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B00-\u0B7F\u0C00-\u0C7F\u0D00-\u0D7F]/.test(text);
         const validVideo = videoRes.data.items?.find(video => {
           const viewCount = parseInt(video.statistics?.viewCount || "0");
+          const title = video.snippet?.title || "";
+          const desc = video.snippet?.description || "";
+          const defaultLang = video.snippet?.defaultLanguage || video.snippet?.defaultAudioLanguage || "";
+          if (isNonTargetLangBackup(title) || isNonTargetLangBackup(desc.slice(0, 200))) return false;
+          if (defaultLang && !defaultLang.startsWith("en") && !defaultLang.startsWith("ko")) return false;
           return viewCount >= 50000 && !excludedVideoIds.has(video.id!);
         });
 
