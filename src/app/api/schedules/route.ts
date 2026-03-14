@@ -109,8 +109,9 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
     }
 
     let endTime = normalizeTime(rawEndTime);
-    // endTime이 startTime보다 이전이면 startTime + 1시간으로 보정
-    if (endTime && endTime <= startTime) {
+    // 취침 일정은 endTime이 startTime보다 이전이어도 허용 (자정 넘김)
+    const isSleepSchedule = text.includes('취침') || text.toLowerCase().includes('sleep') || text.includes('수면');
+    if (endTime && endTime <= startTime && !isSleepSchedule) {
       const sh = parseInt(startTime.split(':')[0], 10);
       const eh = Math.min(sh + 1, 23);
       endTime = `${String(eh).padStart(2, '0')}:${startTime.split(':')[1]}`;
@@ -169,6 +170,54 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
     });
     if (isDuplicate) {
       return NextResponse.json({ error: '동일한 일정이 이미 존재합니다.' }, { status: 409 });
+    }
+
+    // 취침-기상 시간 연동
+    const isWakeSchedule = text.includes('기상') || text.toLowerCase().includes('wake') || text.includes('일어나');
+
+    if (isSleepSchedule && scheduleDate) {
+      // 취침 일정 추가 시 → 같은 날/다음 날 기상 일정의 startTime을 endTime으로 설정
+      const nextDay = new Date(scheduleDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = nextDay.toISOString().split('T')[0];
+
+      const wakeGoal = customGoals.find((g: any) => {
+        const isWake = g.text?.includes('기상') || g.text?.toLowerCase().includes('wake') || g.text?.includes('일어나');
+        if (!isWake) return false;
+        if (g.specificDate === scheduleDate || g.specificDate === nextDayStr) return true;
+        if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
+        return false;
+      });
+
+      if (wakeGoal?.startTime) {
+        newGoal.endTime = wakeGoal.startTime;
+      }
+    }
+
+    if (isWakeSchedule && scheduleDate) {
+      // 기상 일정 추가 시 → 같은 날/전날 취침 일정의 endTime을 기상 시간으로 업데이트
+      const prevDay = new Date(scheduleDate);
+      prevDay.setDate(prevDay.getDate() - 1);
+      const prevDayStr = prevDay.toISOString().split('T')[0];
+
+      const sleepGoalIdx = customGoals.findIndex((g: any) => {
+        const isSleep = g.text?.includes('취침') || g.text?.toLowerCase().includes('sleep') || g.text?.includes('수면');
+        if (!isSleep) return false;
+        if (g.specificDate === scheduleDate || g.specificDate === prevDayStr) return true;
+        if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
+        return false;
+      });
+
+      if (sleepGoalIdx !== -1 && startTime) {
+        customGoals[sleepGoalIdx] = { ...customGoals[sleepGoalIdx], endTime: startTime };
+        // schedules 테이블의 취침 일정도 endTime 업데이트
+        const sleepGoal = customGoals[sleepGoalIdx];
+        supabaseAdmin.from('schedules')
+          .update({ end_time: startTime })
+          .eq('user_email', userEmail)
+          .eq('goal_id', sleepGoal.id)
+          .then(() => {}, () => {});
+      }
     }
 
     customGoals.push(newGoal);
