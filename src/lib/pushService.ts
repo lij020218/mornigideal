@@ -6,6 +6,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logger } from '@/lib/logger';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -56,7 +57,10 @@ export async function sendPushNotification(
     }
 ): Promise<boolean> {
     const tokens = await getUserPushTokens(userEmail);
-    if (tokens.length === 0) return false;
+    if (tokens.length === 0) {
+        logger.warn(`[PushService] ${userEmail}: 활성 토큰 없음 — 푸시 전송 불가`);
+        return false;
+    }
 
     const messages: ExpoPushMessage[] = tokens.map(token => ({
         to: token,
@@ -98,9 +102,16 @@ export async function sendPushNotification(
         }
 
         const successCount = tickets.filter(t => t.status === 'ok').length;
+        const errorTickets = tickets.filter(t => t.status === 'error');
+        if (errorTickets.length > 0) {
+            logger.warn(`[PushService] ${userEmail}: ${errorTickets.length}건 전송 실패`, errorTickets.map(t => t.details?.error));
+        }
+        if (successCount > 0) {
+            logger.info(`[PushService] ${userEmail}: ${successCount}/${tokens.length}건 전송 성공`);
+        }
         return successCount > 0;
     } catch (error) {
-        console.error('[PushService] Send error:', error);
+        logger.error(`[PushService] ${userEmail}: 전송 에러`, error);
         return false;
     }
 }
@@ -126,6 +137,7 @@ export async function sendBulkPushNotifications(
         .eq('active', true);
 
     if (!allTokens || allTokens.length === 0) {
+        logger.warn(`[PushService] Bulk: ${emails.length}명 대상 활성 토큰 없음`);
         return { sent: 0, failed: notifications.length };
     }
 
@@ -155,8 +167,10 @@ export async function sendBulkPushNotifications(
     }
 
     if (messages.length === 0) {
+        logger.warn(`[PushService] Bulk: 토큰 매핑 후 전송할 메시지 0건`);
         return { sent: 0, failed: notifications.length };
     }
+    logger.info(`[PushService] Bulk: ${messages.length}건 전송 시작 (${emails.length}명)`);
 
     let sent = 0;
     let failed = 0;
@@ -179,7 +193,20 @@ export async function sendBulkPushNotifications(
                 const tickets: ExpoPushTicket[] = result.data || [];
                 sent += tickets.filter(t => t.status === 'ok').length;
                 failed += tickets.filter(t => t.status === 'error').length;
+
+                // 무효 토큰 비활성화
+                for (let j = 0; j < tickets.length; j++) {
+                    if (tickets[j].status === 'error' && tickets[j].details?.error === 'DeviceNotRegistered') {
+                        supabaseAdmin
+                            .from('push_tokens')
+                            .update({ active: false, updated_at: new Date().toISOString() })
+                            .eq('token', batch[j].to)
+                            .then(() => {}, () => {});
+                        logger.warn(`[PushService] 무효 토큰 비활성화: ${batch[j].to.slice(0, 20)}...`);
+                    }
+                }
             } else {
+                logger.error(`[PushService] Expo API 에러: ${response.status}`);
                 failed += batch.length;
             }
         } catch {
@@ -187,5 +214,6 @@ export async function sendBulkPushNotifications(
         }
     }
 
+    logger.info(`[PushService] Bulk 완료: 성공 ${sent}, 실패 ${failed}`);
     return { sent, failed };
 }
