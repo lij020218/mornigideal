@@ -90,7 +90,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       logger.error('[schedules/POST] 스키마 검증 실패:', JSON.stringify(body));
       return v.response;
     }
-    const { text, startTime: rawStartTime, endTime: rawEndTime, date, specificDate, color, daysOfWeek, startDate, endDate, location, memo } = v.data;
+    const { text, startTime: rawStartTime, endTime: rawEndTime, date, specificDate, color, daysOfWeek, startDate, endDate, location, memo, linkedGoalId, linkedGoalType } = v.data;
     logger.info('[schedules/POST] 파싱 결과:', JSON.stringify({ text, startTime: rawStartTime, specificDate, daysOfWeek, date }));
 
     // 시간 형식 검증 및 정규화 (HH:MM)
@@ -137,6 +137,8 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
       ...(color && color.startsWith('#') ? { color } : {}),
       ...(location ? { location } : {}),
       ...(memo ? { memo } : {}),
+      ...(linkedGoalId ? { linkedGoalId } : {}),
+      ...(linkedGoalType ? { linkedGoalType } : {}),
       ...(isRecurring ? { daysOfWeek, ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) } : { specificDate: scheduleDate }),
     };
 
@@ -196,6 +198,8 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         endTime: newGoal.endTime,
         completed: false,
         date: scheduleDate,
+        linkedGoalId: newGoal.linkedGoalId || undefined,
+        linkedGoalType: newGoal.linkedGoalType || undefined,
       }
     });
 });

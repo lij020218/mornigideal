@@ -204,6 +204,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                 lastUpdated: null,
                 readIds: [],
                 refreshRemaining: Math.max(0, refreshLimit),
+                pending: true,
                 message: '오전 5시에 새로운 브리핑이 준비됩니다.',
             });
         }
@@ -217,6 +218,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                 lastUpdated: null,
                 readIds: [],
                 refreshRemaining: Math.max(0, refreshLimit),
+                pending: true,
                 message: '브리핑을 준비 중입니다. 잠시 후 다시 확인해주세요.',
             });
         }

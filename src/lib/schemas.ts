@@ -122,6 +122,8 @@ export const scheduleCreateSchema = z.object({
     endDate: dateSchema.optional().nullable().transform(v => v ?? undefined),
     location: z.string().max(500).optional().nullable().transform(v => v ?? undefined),
     memo: z.string().max(2000).optional().nullable().transform(v => v ?? undefined),
+    linkedGoalId: z.string().max(200).optional().nullable().transform(v => v ?? undefined),
+    linkedGoalType: z.string().max(50).optional().nullable().transform(v => v ?? undefined),
 });
 
 // PUT /api/schedules/[id]
@@ -355,4 +357,30 @@ export const healthDataSchema = z.object({
     heartRateAvg: z.number().int().min(30).max(250).optional(),
     caloriesBurned: z.number().int().min(0).max(20000).optional(),
     source: z.enum(['healthkit', 'google_fit', 'manual']).optional(),
+});
+
+// ============================================
+// User feedback schema
+// ============================================
+
+// POST /api/user/feedback
+export const userFeedbackSchema = z.object({
+    category: z.enum(['bug', 'feature_request', 'notification', 'schedule', 'ai_quality', 'other']),
+    severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+    title: z.string().min(1).max(100),
+    description: z.string().min(1).max(2000),
+    context: z.object({
+        screen: z.string().optional(),
+        appVersion: z.string().optional(),
+        platform: z.string().optional(),
+        osVersion: z.string().optional(),
+        deviceModel: z.string().optional(),
+    }).optional().default({}),
+    screenshotBase64: z.string().max(5_000_000).optional(),
+});
+
+// PATCH /api/admin/feedback/[id]
+export const feedbackUpdateSchema = z.object({
+    status: z.enum(['new', 'in_progress', 'resolved', 'closed']).optional(),
+    admin_notes: z.string().max(2000).optional(),
 });

@@ -67,6 +67,14 @@
     {
       "path": "/api/cron/daily-insights",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/verify-briefings",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/system-monitor",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {
@@ -114,6 +122,12 @@
     },
     "src/app/api/cron/daily-insights/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/verify-briefings/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/system-monitor/route.ts": {
+      "maxDuration": 120
     }
   }
 }

@@ -9,6 +9,7 @@ import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
 import { sendPushNotification } from "@/lib/pushService";
 import { LIMITS } from "@/lib/constants";
 import { getPlanNamesBatch } from "@/lib/user-plan";
+import { logCronExecution } from '@/lib/cron-logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -208,13 +209,13 @@ function personalizeDetail(detail: any, userName: string): any {
 }
 
 export async function GET(request: Request) {
+    const start = Date.now();
     try {
         // Verify the request is authorized
         const authHeader = request.headers.get('authorization');
         if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
@@ -345,63 +346,132 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
         }
         const groupResults: GroupResult[] = [];
 
-        const selectionResults = await Promise.allSettled(
-            groupEntries.map(async ([groupKey, groupUsers]) => {
-                const representative = groupUsers[0];
-                const p = representative.profile as any;
-                const job = p.job || '전문가';
-                const goal = p.goal || '전문성 향상';
-                const interests = p.interests || [];
-                const level = p.level || 'Intermediate';
-                const interestList = interests.join(', ');
-                const userPlan = planMap.get(representative.email) || 'Free';
-                const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
+        // 그룹별 기사 선별 (배치 5개씩, rate limit 방지)
+        const SELECTION_BATCH_SIZE = 5;
+        const selectionResults: PromiseSettledResult<GroupResult>[] = [];
+        for (let i = 0; i < groupEntries.length; i += SELECTION_BATCH_SIZE) {
+            const batch = groupEntries.slice(i, i + SELECTION_BATCH_SIZE);
+            const batchResults = await Promise.allSettled(
+                batch.map(async ([groupKey, groupUsers]) => {
+                    const representative = groupUsers[0];
+                    const p = representative.profile as any;
+                    const job = p.job || '전문가';
+                    const goal = p.goal || '전문성 향상';
+                    const interests = p.interests || [];
+                    const level = p.level || 'Intermediate';
+                    const interestList = interests.join(', ');
+                    const userPlan = planMap.get(representative.email) || 'Free';
+                    const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
 
-                const text = await selectArticlesForGroup(job, goal, interestList, level, articleCount);
-                const data = JSON.parse(text);
-                const selectedArticles = data.selectedArticles || [];
-                if (selectedArticles.length === 0) throw new Error('no_articles');
+                    const text = await selectArticlesForGroup(job, goal, interestList, level, articleCount);
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseErr) {
+                        console.error(`[CRON] JSON parse failed for group, raw text: ${text.substring(0, 200)}`);
+                        throw new Error('json_parse_failed');
+                    }
+                    const selectedArticles = data.selectedArticles || [];
+                    if (selectedArticles.length === 0) throw new Error('no_articles');
 
-                const trends = selectedArticles.map((selected: any) => {
-                    const filteredArticle = articlesForPrompt[selected.id];
-                    const originalArticle = rssArticles.find(article =>
-                        article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
-                    );
-                    const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
-                    return {
-                        id: generateTrendId(selected.title_korean),
-                        title: selected.title_korean,
-                        category: selected.category || "General",
-                        summary: selected.summary_korean,
-                        time: pubDate,
-                        imageColor: "bg-blue-500/20",
-                        originalUrl: originalArticle?.link || "",
-                        imageUrl: "",
-                        source: originalArticle?.sourceName || "Unknown",
-                        relevance: selected.relevance_korean
-                    };
-                });
+                    const trends = selectedArticles.map((selected: any) => {
+                        const filteredArticle = articlesForPrompt[selected.id];
+                        const originalArticle = rssArticles.find(article =>
+                            article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
+                        );
+                        const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+                        return {
+                            id: generateTrendId(selected.title_korean),
+                            title: selected.title_korean,
+                            category: selected.category || "General",
+                            summary: selected.summary_korean,
+                            time: pubDate,
+                            imageColor: "bg-blue-500/20",
+                            originalUrl: originalArticle?.link || "",
+                            imageUrl: "",
+                            source: originalArticle?.sourceName || "Unknown",
+                            relevance: selected.relevance_korean
+                        };
+                    });
 
-                const isPro = userPlan === 'Pro' || userPlan === 'Max';
-                return { groupKey, groupUsers, trends, job, goal, interests, level, isPro } as GroupResult;
-            })
-        );
+                    const isPro = userPlan === 'Pro' || userPlan === 'Max';
+                    return { groupKey, groupUsers, trends, job, goal, interests, level, isPro } as GroupResult;
+                })
+            );
+            selectionResults.push(...batchResults);
+            // 배치 간 대기 (rate limit 방지)
+            if (i + SELECTION_BATCH_SIZE < groupEntries.length) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
 
-        // 선별 결과 수집
+        // 선별 결과 수집 + 실패 그룹 1회 재시도
+        const failedEntries: [string, typeof allUsers][] = [];
         for (let i = 0; i < selectionResults.length; i++) {
             const sr = selectionResults[i];
             if (sr.status === 'fulfilled') {
                 groupResults.push(sr.value);
             } else {
-                const [groupKey, groupUsers] = groupEntries[i];
-                console.error(`[CRON] Selection failed for group ${groupKey}:`, sr.reason?.message);
-                for (const u of groupUsers) {
-                    results.push({ email: u.email, status: 'error', error: sr.reason?.message });
+                failedEntries.push(groupEntries[i]);
+                console.error(`[CRON] Selection failed for group ${groupEntries[i][0]}:`, sr.reason?.message);
+            }
+        }
+
+        // 실패한 그룹 1회 재시도 (순차, rate limit 방지)
+        if (failedEntries.length > 0) {
+            console.log(`[CRON] Retrying ${failedEntries.length} failed groups...`);
+            for (const [groupKey, groupUsers] of failedEntries) {
+                try {
+                    const representative = groupUsers[0];
+                    const p = representative.profile as any;
+                    const job = p.job || '전문가';
+                    const goal = p.goal || '전문성 향상';
+                    const interests = p.interests || [];
+                    const level = p.level || 'Intermediate';
+                    const interestList = interests.join(', ');
+                    const userPlan = planMap.get(representative.email) || 'Free';
+                    const articleCount = LIMITS.TREND_BRIEFING_COUNT[userPlan] || 3;
+
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const text = await selectArticlesForGroup(job, goal, interestList, level, articleCount);
+                    let data;
+                    try { data = JSON.parse(text); } catch { throw new Error('json_parse_retry_failed'); }
+                    const selectedArticles = data.selectedArticles || [];
+                    if (selectedArticles.length === 0) throw new Error('no_articles_retry');
+
+                    const trends = selectedArticles.map((selected: any) => {
+                        const filteredArticle = articlesForPrompt[selected.id];
+                        const originalArticle = rssArticles.find(article =>
+                            article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
+                        );
+                        const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+                        return {
+                            id: generateTrendId(selected.title_korean),
+                            title: selected.title_korean,
+                            category: selected.category || "General",
+                            summary: selected.summary_korean,
+                            time: pubDate,
+                            imageColor: "bg-blue-500/20",
+                            originalUrl: originalArticle?.link || "",
+                            imageUrl: "",
+                            source: originalArticle?.sourceName || "Unknown",
+                            relevance: selected.relevance_korean
+                        };
+                    });
+
+                    const isPro = userPlan === 'Pro' || userPlan === 'Max';
+                    groupResults.push({ groupKey, groupUsers, trends, job, goal, interests, level, isPro } as GroupResult);
+                    console.log(`[CRON] Retry succeeded for group ${groupKey}`);
+                } catch (retryErr: any) {
+                    console.error(`[CRON] Retry also failed for group ${groupKey}:`, retryErr?.message);
+                    for (const u of groupUsers) {
+                        results.push({ email: u.email, status: 'error', error: retryErr?.message });
+                    }
                 }
             }
         }
 
-        console.log(`[CRON] Phase 1 done: ${groupResults.length}/${groupEntries.length} groups selected`);
+        console.log(`[CRON] Phase 1 done: ${groupResults.length}/${groupEntries.length} groups selected (${failedEntries.length} retried)`);
 
         // ── Phase 2: 모든 그룹의 상세 브리핑을 동시 병렬 ──
         // 모든 (그룹, 트렌드) 쌍을 한 번에 병렬 실행
@@ -415,10 +485,20 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
             }
         }
 
-        // 상세 브리핑 전체 병렬 (Gemini → flash → OpenAI 폴백 내장)
-        const detailResults = await Promise.allSettled(
-            detailTasks.map(task => generateDetailedBriefing(task.trend, task.groupCtx))
-        );
+        // 상세 브리핑 배치 병렬 (동시 5개씩, rate limit 방지)
+        const DETAIL_BATCH_SIZE = 5;
+        const detailResults: PromiseSettledResult<any>[] = [];
+        for (let i = 0; i < detailTasks.length; i += DETAIL_BATCH_SIZE) {
+            const batch = detailTasks.slice(i, i + DETAIL_BATCH_SIZE);
+            const batchResults = await Promise.allSettled(
+                batch.map(task => generateDetailedBriefing(task.trend, task.groupCtx))
+            );
+            detailResults.push(...batchResults);
+            // 마지막 배치가 아니면 잠시 대기 (rate limit 방지)
+            if (i + DETAIL_BATCH_SIZE < detailTasks.length) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
 
         // 상세 결과를 그룹별로 정리
         const groupDetailsMap = new Map<number, Map<string, any>>(); // groupIdx → (trendId → detail)
@@ -499,6 +579,9 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
         }
 
 
+        await logCronExecution('generate-trend-briefings', 'success', {
+            affected_count: results.filter(r => r.status === 'success').length,
+        }, Date.now() - start);
         return NextResponse.json({
             success: true,
             processed: allUsers.length,
@@ -508,7 +591,8 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
             timestamp: new Date().toISOString()
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        await logCronExecution('generate-trend-briefings', 'failure', { error: error?.message }, Date.now() - start);
         console.error('[CRON] Error in trend briefing generation:', error);
         return NextResponse.json({
             error: 'Failed to generate trend briefings'

@@ -14,6 +14,7 @@ import { sendPushNotification } from '@/lib/pushService';
 import { saveProactiveNotification } from '@/lib/proactiveNotificationService';
 import { kvGet } from '@/lib/kv-store';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 import { MODELS } from '@/lib/models';
 import type { CustomGoal } from '@/lib/types';
@@ -97,7 +98,7 @@ JSON만: {"m":"동기부여 메시지 (2-3문장)","s":"추천 일정 (예: 오�
     }
 }
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('morning-motivation', async (_request: NextRequest) => {
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
@@ -246,4 +247,4 @@ export const GET = withCron(async (_request: NextRequest) => {
         skipped,
         total: users.length,
     });
-});
+}));

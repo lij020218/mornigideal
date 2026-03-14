@@ -24,12 +24,13 @@ import { sendPushNotification } from '@/lib/pushService';
 import { appendChatMessage } from '@/lib/chatHistoryService';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 import { getUserPlan } from '@/lib/user-plan';
 
 export const maxDuration = 120;
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('proactive-push', async (_request: NextRequest) => {
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const currentHour = kst.getHours();
@@ -126,7 +127,7 @@ export const GET = withCron(async (_request: NextRequest) => {
             // 트렌드 브리핑, 기분 체크인은 에스컬레이션 bypass (억제되면 안 됨)
             const pushable: ProactiveNotification[] = [];
             for (const notif of filtered) {
-                if (notif.id.startsWith('trend-reminder-') || notif.id.startsWith('youtube-recommend-') || notif.id.startsWith('mood-reminder-')) {
+                if (notif.type === 'daily_wrap' || notif.id.startsWith('trend-reminder-') || notif.id.startsWith('youtube-recommend-') || notif.id.startsWith('mood-reminder-')) {
                     pushable.push(notif);
                     continue;
                 }
@@ -150,14 +151,21 @@ export const GET = withCron(async (_request: NextRequest) => {
                 continue;
             }
 
-            // displayOrder(시간순) 정렬 후 한 번에 최대 5개
+            // daily_wrap은 반드시 포함 (displayOrder가 높아서 밀리는 문제 방지)
+            const mustSendTypes = ['daily_wrap', 'morning_briefing'];
+            const mustSend = pushable.filter(n => mustSendTypes.includes(n.type));
+            const rest = pushable.filter(n => !mustSendTypes.includes(n.type));
+
+            // 나머지는 displayOrder(시간순) 정렬
             const priorityOrder = { high: 0, medium: 1, low: 2 };
-            pushable.sort((a, b) => {
+            rest.sort((a, b) => {
                 const orderDiff = (a.displayOrder ?? 150) - (b.displayOrder ?? 150);
                 if (orderDiff !== 0) return orderDiff;
                 return priorityOrder[a.priority] - priorityOrder[b.priority];
             });
-            const toSend = pushable.slice(0, 5);
+
+            // 필수 알림 + 나머지에서 최대 5개
+            const toSend = [...mustSend, ...rest].slice(0, 5);
 
             let userPushed = 0;
             for (const notif of toSend) {
@@ -252,4 +260,4 @@ export const GET = withCron(async (_request: NextRequest) => {
         errors,
         total: users.length,
     });
-});
+}));

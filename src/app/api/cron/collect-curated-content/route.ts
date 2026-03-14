@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { logger } from '@/lib/logger';
+import { logCronExecution } from '@/lib/cron-logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -123,6 +124,7 @@ async function fetchHackerNews(): Promise<ContentItem[]> {
 }
 
 export async function GET(request: Request) {
+    const start = Date.now();
     try {
         const authHeader = request.headers.get('authorization');
         if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -165,12 +167,14 @@ export async function GET(request: Request) {
 
         logger.info(`[Curated Content] Done: ${summary.join(', ')}`);
 
+        await logCronExecution('collect-curated-content', 'success', {}, Date.now() - start);
         return NextResponse.json({
             success: true,
             date: today,
             results: summary,
         });
-    } catch (error) {
+    } catch (error: any) {
+        await logCronExecution('collect-curated-content', 'failure', { error: error?.message }, Date.now() - start);
         logger.error('[Curated Content] Error:', error);
         return NextResponse.json(
             { error: 'Failed to collect curated content' },

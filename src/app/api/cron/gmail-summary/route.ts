@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 import { getUserByEmail } from '@/lib/users';
 import { saveProactiveNotification } from '@/lib/proactiveNotificationService';
@@ -21,7 +22,7 @@ import {
 
 export const maxDuration = 120;
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('gmail-summary', async (_request: NextRequest) => {
     // Gmail 연동된 모든 사용자 조회
     const { data: gmailUsers, error } = await supabaseAdmin
         .from('gmail_tokens')
@@ -175,4 +176,4 @@ export const GET = withCron(async (_request: NextRequest) => {
         errors,
         total: gmailUsers.length,
     });
-});
+}));

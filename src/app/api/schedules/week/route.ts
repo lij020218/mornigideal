@@ -73,6 +73,8 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
           location: g.location || undefined,
           memo: g.memo || undefined,
           date: dateStr,
+          linkedGoalId: g.linkedGoalId || undefined,
+          linkedGoalType: g.linkedGoalType || undefined,
         });
       }
     }

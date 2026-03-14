@@ -19,6 +19,7 @@ import { sendPushNotification } from '@/lib/pushService';
 import { saveProactiveNotification } from '@/lib/proactiveNotificationService';
 import { kvGet } from '@/lib/kv-store';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 import { MODELS } from '@/lib/models';
 import type { CustomGoal } from '@/lib/types';
@@ -157,7 +158,7 @@ async function generateRecommendation(
     }
 }
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('idle-schedule-nudge', async (_request: NextRequest) => {
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const currentHour = kst.getHours();
@@ -334,4 +335,4 @@ export const GET = withCron(async (_request: NextRequest) => {
         skipped,
         total: users.length,
     });
-});
+}));

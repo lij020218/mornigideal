@@ -149,16 +149,20 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
             }
         }
 
-        // 7. displayOrder(시간순) 정렬 — 같은 순서면 우선순위로
+        // 7. daily_wrap은 반드시 포함 (displayOrder가 높아서 밀리는 문제 방지)
+        const mustSendTypes = ['daily_wrap', 'morning_briefing'];
+        const mustSend = finalNotifications.filter(n => mustSendTypes.includes(n.type));
+        const restNotifs = finalNotifications.filter(n => !mustSendTypes.includes(n.type));
+
         const priorityOrder = { high: 0, medium: 1, low: 2 };
-        finalNotifications.sort((a, b) => {
+        restNotifs.sort((a, b) => {
             const orderDiff = (a.displayOrder ?? 150) - (b.displayOrder ?? 150);
             if (orderDiff !== 0) return orderDiff;
             return priorityOrder[a.priority] - priorityOrder[b.priority];
         });
 
-        // 8. 한 번에 최대 10개 (한도 제거 — 필요한 알림이 누락되면 안 됨)
-        const limitedNotifications = finalNotifications.slice(0, 10);
+        // 8. 필수 알림 + 나머지에서 최대 10개
+        const limitedNotifications = [...mustSend, ...restNotifs].slice(0, 10);
 
         return NextResponse.json({
             notifications: limitedNotifications,

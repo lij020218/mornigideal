@@ -9,9 +9,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { kvGet } from '@/lib/kv-store';
 import { sendBulkPushNotifications } from '@/lib/pushService';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('morning-widget-push', async (_request: NextRequest) => {
     const now = new Date();
     const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
@@ -103,4 +104,4 @@ export const GET = withCron(async (_request: NextRequest) => {
         total: users.length,
         date: todayStr,
     });
-});
+}));

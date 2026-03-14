@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { kvGet, kvSet } from '@/lib/kv-store';
 import { withCron } from '@/lib/api-handler';
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
 import { MODELS } from '@/lib/models';
 import type { CustomGoal } from '@/lib/types';
@@ -40,7 +41,7 @@ function categorizeSchedule(text: string): string {
     return '기타';
 }
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('daily-insights', async (_request: NextRequest) => {
     const kst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayStr = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -238,7 +239,7 @@ ${todayMood ? `오늘 기분: ${todayMood.mood}/5, 에너지: ${todayMood.energy
         errors,
         total: users.length,
     });
-});
+}));
 
 /**
  * AI 실패 시 규칙 기반 폴백 인사이트

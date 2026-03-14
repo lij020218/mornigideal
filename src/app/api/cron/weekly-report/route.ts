@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateWeeklyReport, generateWeeklyReportNarrative } from "@/lib/weeklyReportGenerator";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { withCron } from "@/lib/api-handler";
+import { withCronLogging } from '@/lib/cron-logger';
 import { logger } from "@/lib/logger";
 import { saveProactiveNotification } from "@/lib/proactiveNotificationService";
 import { sendPushNotification } from "@/lib/pushService";
@@ -13,7 +14,7 @@ import { appendChatMessage } from "@/lib/chatHistoryService";
  * Vercel Cron: 매주 일요일 저녁 9시 KST 실행 (UTC 12시)
  */
 
-export const GET = withCron(async (_request: NextRequest) => {
+export const GET = withCron(withCronLogging('weekly-report', async (_request: NextRequest) => {
     // Get all users (paginated to avoid memory issues)
     const BATCH_SIZE = 50;
     let offset = 0;
@@ -138,7 +139,7 @@ export const GET = withCron(async (_request: NextRequest) => {
         },
         results,
     });
-});
+}));
 
 // POST도 지원 (Vercel Cron)
 export const POST = withCron(async (request: NextRequest) => {

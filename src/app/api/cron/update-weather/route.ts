@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { logCronExecution } from '@/lib/cron-logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,7 @@ interface WeatherData {
 
 // Cron job to pre-generate weather data every hour
 export async function GET(request: Request) {
+    const start = Date.now();
     try {
         // 인증 체크
         const authHeader = request.headers.get('authorization');
@@ -99,13 +101,15 @@ export async function GET(request: Request) {
         }
 
 
+        await logCronExecution('update-weather', 'success', {}, Date.now() - start);
         return NextResponse.json({
             success: true,
             weather: cachedWeather,
             message: 'Weather data cached successfully'
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        await logCronExecution('update-weather', 'failure', { error: error?.message }, Date.now() - start);
         console.error('[Weather Cron] Error:', error);
 
         const fallbackWeather = {

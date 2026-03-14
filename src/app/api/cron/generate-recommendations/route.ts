@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { google } from "googleapis";
+import { logCronExecution } from '@/lib/cron-logger';
 
 export const maxDuration = 300; // 5 minutes
 
@@ -135,13 +136,13 @@ function formatDuration(isoDuration: string): string {
 }
 
 export async function GET(request: Request) {
+    const start = Date.now();
     try {
         // Verify authorization
         const authHeader = request.headers.get('authorization');
         if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
 
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 
@@ -239,6 +240,9 @@ export async function GET(request: Request) {
         }
 
 
+        await logCronExecution('generate-recommendations', 'success', {
+            affected_count: results.filter(r => r.status === 'success').length,
+        }, Date.now() - start);
         return NextResponse.json({
             success: true,
             processed: allUsers.length,
@@ -248,7 +252,8 @@ export async function GET(request: Request) {
             timestamp: new Date().toISOString()
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        await logCronExecution('generate-recommendations', 'failure', { error: error?.message }, Date.now() - start);
         console.error('[CRON] Error in recommendations generation:', error);
         return NextResponse.json({
             error: 'Failed to generate recommendations'
