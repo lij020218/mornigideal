@@ -11,7 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import crypto from 'crypto';
 
 // 암호화 키 (환경 변수 필수)
-const ENCRYPTION_KEY = process.env.API_KEY_ENCRYPTION_SECRET;
+const ENCRYPTION_KEY: string = process.env.API_KEY_ENCRYPTION_SECRET || '';
 if (!ENCRYPTION_KEY) {
     throw new Error('API_KEY_ENCRYPTION_SECRET 환경 변수가 설정되지 않았습니다. 사용자 API 키 암호화에 필수입니다.');
 }

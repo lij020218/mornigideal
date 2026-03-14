@@ -199,7 +199,7 @@ async function notifyAdmins(issues: HealthIssue[], today: string): Promise<numbe
         key: alertKey,
         value: { areas: allSentAreas, lastAlert: new Date().toISOString() },
         updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_email,key' }).catch(() => {});
+    }, { onConflict: 'user_email,key' }).then(() => {}, () => {});
 
     return notified;
 }
