@@ -127,8 +127,13 @@ export const GET = withAuth(async (request: NextRequest, userEmail: string) => {
         });
 
         // 6. 적응형 에스컬레이션 필터 (단계별 전략 적용)
+        // mood_reminder는 에스컬레이션 bypass (매일 9시 필수 전달)
         const finalNotifications: ProactiveNotification[] = [];
         for (const notif of filteredNotifications) {
+            if (notif.id.startsWith('mood-reminder-')) {
+                finalNotifications.push(notif);
+                continue;
+            }
             const decision = await getEscalationDecision(
                 userEmail,
                 notif.type,

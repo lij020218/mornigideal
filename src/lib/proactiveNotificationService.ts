@@ -1555,14 +1555,15 @@ async function getMoodCheckInReminderNotification(context: UserContext): Promise
         if (Array.isArray(moodData) && moodData.some(c => c.date === todayStr)) {
             return []; // 오늘 이미 기록함
         }
-    } catch {
-        return [];
+    } catch (e) {
+        // KV 조회 실패 시에도 기분 체크인 표시 (에러로 누락 방지)
+        logger.error('[ProactiveNotif] Mood KV check failed, showing reminder anyway:', e instanceof Error ? e.message : e);
     }
 
     return [{
         id: `mood-reminder-${todayStr}`,
         type: 'mood_reminder',
-        priority: 'low',
+        priority: 'medium',
         title: '😊 오늘 기분은 어떠세요?',
         message: '오늘 아직 기분을 기록하지 않으셨어요. 잠깐 체크인 해볼까요?',
         actionType: 'open_mood_checkin',

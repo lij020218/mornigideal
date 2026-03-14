@@ -63,6 +63,10 @@
     {
       "path": "/api/cron/gmail-summary",
       "schedule": "0 0,6,12,18 * * *"
+    },
+    {
+      "path": "/api/cron/daily-insights",
+      "schedule": "0 12 * * *"
     }
   ],
   "functions": {
@@ -106,6 +110,9 @@
       "maxDuration": 300
     },
     "src/app/api/cron/collect-curated-content/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/daily-insights/route.ts": {
       "maxDuration": 300
     }
   }

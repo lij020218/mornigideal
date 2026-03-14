@@ -123,10 +123,10 @@ export const GET = withCron(async (_request: NextRequest) => {
             }
 
             // 에스컬레이션 필터 — pushAllowed인 것만 발송
-            // 트렌드 브리핑 미독 알림은 에스컬레이션 bypass (억제되면 안 됨)
+            // 트렌드 브리핑, 기분 체크인은 에스컬레이션 bypass (억제되면 안 됨)
             const pushable: ProactiveNotification[] = [];
             for (const notif of filtered) {
-                if (notif.id.startsWith('trend-reminder-') || notif.id.startsWith('youtube-recommend-')) {
+                if (notif.id.startsWith('trend-reminder-') || notif.id.startsWith('youtube-recommend-') || notif.id.startsWith('mood-reminder-')) {
                     pushable.push(notif);
                     continue;
                 }
