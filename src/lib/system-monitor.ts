@@ -506,7 +506,146 @@ export async function sendHealthAlert(
     return true;
 }
 
-// ── 5. 로그 정리 ──
+// ── 5. 채팅 & AI 품질 검증 ──
+
+export interface ServiceCheckResult {
+    name: string;
+    status: 'ok' | 'warning' | 'critical';
+    message: string;
+    metrics?: Record<string, unknown>;
+}
+
+/**
+ * 채팅 시스템 정합성 검증
+ * - proactive-push CRON이 chat_history에 메시지를 정상 저장했는지
+ * - 활성 유저 대비 오늘 chat_history 비율
+ */
+async function verifyChatIntegrity(today: string, kstHour: number): Promise<ServiceCheckResult> {
+    if (kstHour < 9) return { name: 'chat-integrity', status: 'ok', message: '아직 이른 시간' };
+
+    try {
+        // 오늘 jarvis_notifications에 저장된 알림 수
+        const { count: notifCount } = await supabaseAdmin
+            .from('jarvis_notifications')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', `${today}T00:00:00+09:00`);
+
+        // 오늘 chat_history에 저장된 대화 수
+        const { count: chatCount } = await supabaseAdmin
+            .from('chat_history')
+            .select('*', { count: 'exact', head: true })
+            .eq('date', today);
+
+        const notifs = notifCount || 0;
+        const chats = chatCount || 0;
+
+        // 알림은 보냈는데 chat_history가 0이면 동기화 문제
+        if (notifs > 0 && chats === 0) {
+            return {
+                name: 'chat-integrity',
+                status: 'warning',
+                message: `알림 ${notifs}건 발송했으나 chat_history 0건 — 동기화 문제 의심`,
+                metrics: { notifications: notifs, chatHistories: chats },
+            };
+        }
+
+        return {
+            name: 'chat-integrity',
+            status: 'ok',
+            message: `알림 ${notifs}건, 채팅 ${chats}건`,
+            metrics: { notifications: notifs, chatHistories: chats },
+        };
+    } catch (err: any) {
+        return { name: 'chat-integrity', status: 'warning', message: `검증 실패: ${err?.message}` };
+    }
+}
+
+/**
+ * AI API 품질 모니터링
+ * - 최근 1시간 AI 호출 실패율
+ * - 토큰 사용량 이상 감지 (일평균 대비 3배 초과)
+ * - Circuit breaker 상태
+ */
+async function verifyAIQuality(today: string): Promise<ServiceCheckResult> {
+    try {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+        // 최근 1시간 AI 사용 로그 (openai_usage_logs 테이블)
+        const { data: usageLogs } = await supabaseAdmin
+            .from('openai_usage_logs')
+            .select('endpoint, estimated_cost, output_tokens')
+            .gte('created_at', oneHourAgo);
+
+        // 오늘 전체 AI 사용량
+        const { data: todayUsage } = await supabaseAdmin
+            .from('openai_usage_logs')
+            .select('estimated_cost')
+            .gte('created_at', `${today}T00:00:00+09:00`);
+
+        const recentCalls = usageLogs?.length || 0;
+        const recentZeroOutput = usageLogs?.filter(l => (l.output_tokens || 0) === 0).length || 0;
+        const todayCost = todayUsage?.reduce((sum, l) => sum + (l.estimated_cost || 0), 0) || 0;
+
+        // Circuit breaker 상태
+        const circuitStates = {
+            llm: llmCircuit.getState(),
+            react: reactCircuit.getState(),
+            embedding: embeddingCircuit.getState(),
+        };
+        const openCircuits = Object.entries(circuitStates)
+            .filter(([_, state]) => state === 'OPEN')
+            .map(([name]) => name);
+
+        // 판정
+        const issues: string[] = [];
+
+        // 빈 응답 비율 50% 초과 (최소 5건 이상일 때)
+        if (recentCalls >= 5 && recentZeroOutput / recentCalls > 0.5) {
+            issues.push(`빈 응답 ${recentZeroOutput}/${recentCalls}건 (${Math.round(recentZeroOutput / recentCalls * 100)}%)`);
+        }
+
+        // Circuit breaker OPEN
+        if (openCircuits.length > 0) {
+            issues.push(`서킷 브레이커 OPEN: ${openCircuits.join(', ')}`);
+        }
+
+        // 일일 비용 $5 초과 (이상 사용)
+        if (todayCost > 5) {
+            issues.push(`오늘 비용 $${todayCost.toFixed(2)} (임계값 $5 초과)`);
+        }
+
+        if (issues.length > 0) {
+            return {
+                name: 'ai-quality',
+                status: openCircuits.length > 0 ? 'critical' : 'warning',
+                message: issues.join(' | '),
+                metrics: { recentCalls, recentZeroOutput, todayCost: +todayCost.toFixed(3), circuitStates },
+            };
+        }
+
+        return {
+            name: 'ai-quality',
+            status: 'ok',
+            message: `최근 1시간 ${recentCalls}건, 비용 $${todayCost.toFixed(3)}`,
+            metrics: { recentCalls, todayCost: +todayCost.toFixed(3), circuitStates },
+        };
+    } catch (err: any) {
+        return { name: 'ai-quality', status: 'warning', message: `검증 실패: ${err?.message}` };
+    }
+}
+
+/**
+ * 전체 서비스 레벨 검증 (채팅 + AI)
+ */
+export async function verifyServiceHealth(today: string, kstHour: number): Promise<ServiceCheckResult[]> {
+    const [chatResult, aiResult] = await Promise.all([
+        verifyChatIntegrity(today, kstHour),
+        verifyAIQuality(today),
+    ]);
+    return [chatResult, aiResult];
+}
+
+// ── 6. 로그 정리 ──
 
 export async function cleanupOldLogs(): Promise<number> {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

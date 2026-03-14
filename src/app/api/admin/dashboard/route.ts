@@ -192,6 +192,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             breakdown: healthMetrics?.breakdown ?? null,
             lastCheck: latestHealth?.created_at ?? null,
             recentFailures,
+            services: healthMetrics?.services ?? null,
         },
     });
 });

@@ -13,6 +13,7 @@ import {
     computeHealthScore,
     sendHealthAlert,
     cleanupOldLogs,
+    verifyServiceHealth,
 } from '@/lib/system-monitor';
 import { logCronExecution } from '@/lib/cron-logger';
 import { logger } from '@/lib/logger';
@@ -39,19 +40,37 @@ export const GET = withCron(async (_request: NextRequest) => {
             ? await attemptSelfHeal(missingCrons)
             : [];
 
-        // 3. 헬스 점수 산정
+        // 3. 채팅 & AI 서비스 검증
+        const serviceResults = await verifyServiceHealth(today, kstHour);
+
+        // 4. 헬스 점수 산정
         const healthScore = await computeHealthScore(cronResults);
 
-        // 4. 알림 발송
+        // 서비스 검증 결과가 critical이면 헬스 점수 감점
+        const criticalServices = serviceResults.filter(s => s.status === 'critical');
+        const warningServices = serviceResults.filter(s => s.status === 'warning');
+        if (criticalServices.length > 0) {
+            healthScore.score = Math.max(0, healthScore.score - criticalServices.length * 15);
+        }
+        if (warningServices.length > 0) {
+            healthScore.score = Math.max(0, healthScore.score - warningServices.length * 5);
+        }
+        // 레벨 재산정
+        if (healthScore.score >= 90) healthScore.level = 'healthy';
+        else if (healthScore.score >= 70) healthScore.level = 'degraded';
+        else if (healthScore.score >= 50) healthScore.level = 'warning';
+        else healthScore.level = 'critical';
+
+        // 5. 알림 발송
         const alertSent = await sendHealthAlert(healthScore, cronResults, selfHealResults);
 
-        // 5. 로그 정리 (정시에만)
+        // 6. 로그 정리 (정시에만)
         let cleaned = 0;
         if (kst.getMinutes() < 10) {
             cleaned = await cleanupOldLogs();
         }
 
-        // 6. 자체 실행 결과 로깅
+        // 7. 자체 실행 결과 로깅
         const durationMs = Date.now() - start;
         await logCronExecution('system-monitor', 'success', {
             metrics: {
@@ -62,6 +81,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                 healed: selfHealResults.filter(r => r.success).length,
                 alertSent,
                 cleaned,
+                services: Object.fromEntries(serviceResults.map(s => [s.name, { status: s.status, metrics: s.metrics }])),
             },
         }, durationMs);
 
@@ -79,6 +99,11 @@ export const GET = withCron(async (_request: NextRequest) => {
                 critical: c.critical,
                 status: c.status,
                 message: c.message,
+            })),
+            serviceHealth: serviceResults.map(s => ({
+                name: s.name,
+                status: s.status,
+                message: s.message,
             })),
             selfHeal: selfHealResults,
             alertSent,
