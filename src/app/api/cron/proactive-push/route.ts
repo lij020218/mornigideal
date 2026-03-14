@@ -190,7 +190,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                     role: 'assistant',
                     content: notif.type === 'daily_wrap'
                         ? notif.message
-                        : `**${notif.title}**\n\n${notif.message}`,
+                        : `${notif.title}\n\n${notif.message}`,
                     timestamp: new Date().toISOString(),
                     type: 'proactive',
                     ...(notif.actionType && {

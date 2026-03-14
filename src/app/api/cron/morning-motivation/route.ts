@@ -196,7 +196,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                         const chatMessage = {
                             id: `morning-motivation-${todayStr}-${Date.now()}`,
                             role: 'assistant',
-                            content: `**${title}**\n\n${personalizedMsg}${motivation.suggestion ? `\n\n💡 추천: ${motivation.suggestion}` : ''}`,
+                            content: `${title}\n\n${personalizedMsg}${motivation.suggestion ? `\n\n💡 추천: ${motivation.suggestion}` : ''}`,
                             timestamp: new Date().toISOString(),
                         };
 

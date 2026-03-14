@@ -234,7 +234,7 @@ export const GET = withCron(async (_request: NextRequest) => {
         appendChatMessage(notif.userEmail, {
             id: `proactive-${notifId}`,
             role: 'assistant',
-            content: `**${notif.title}**\n\n${notif.body}`,
+            content: `${notif.title}\n\n${notif.body}`,
             timestamp: new Date().toISOString(),
             type: 'proactive',
             ...(proactiveData && { proactiveData }),

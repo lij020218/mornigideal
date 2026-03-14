@@ -286,7 +286,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                             const chatMessage = {
                                 id: `idle-nudge-${todayStr}-${slotLabel}-${Date.now()}`,
                                 role: 'assistant',
-                                content: `**${recommendation.title}**\n\n${personalizedMessage}`,
+                                content: `${recommendation.title}\n\n${personalizedMessage}`,
                                 timestamp: new Date().toISOString(),
                             };
 

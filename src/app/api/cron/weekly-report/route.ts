@@ -107,7 +107,7 @@ export const GET = withCron(async (_request: NextRequest) => {
                 appendChatMessage(user.email, {
                     id: `weekly-report-chat-${targetWeekNumber}-${Date.now()}`,
                     role: 'assistant',
-                    content: `**${notification.title}**\n\n${notification.message}`,
+                    content: `${notification.title}\n\n${notification.message}`,
                     timestamp: new Date().toISOString(),
                     type: 'proactive',
                 }).catch(() => {});
