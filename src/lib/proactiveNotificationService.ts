@@ -17,7 +17,7 @@ import { getChatDate } from '@/lib/scheduleUtils';
 
 export interface ProactiveNotification {
     id: string;
-    type: 'schedule_reminder' | 'morning_briefing' | 'trend_briefing' | 'urgent_alert' | 'context_suggestion' | 'goal_nudge' | 'memory_suggestion' | 'pattern_reminder' | 'lifestyle_recommend' | 'schedule_prep' | 'mood_reminder' | 'burnout_warning' | 'focus_streak' | 'health_insight' | 'github_streak' | 'schedule_overload' | 'weekly_goal_deadline' | 'routine_break' | 'inactive_return' | 'learning_reminder' | 'energy_boost' | 'daily_wrap' | 'weekly_review';
+    type: 'schedule_reminder' | 'schedule_end' | 'morning_briefing' | 'trend_briefing' | 'urgent_alert' | 'context_suggestion' | 'goal_nudge' | 'memory_suggestion' | 'pattern_reminder' | 'lifestyle_recommend' | 'schedule_prep' | 'mood_reminder' | 'burnout_warning' | 'focus_streak' | 'health_insight' | 'github_streak' | 'schedule_overload' | 'weekly_goal_deadline' | 'routine_break' | 'inactive_return' | 'learning_reminder' | 'energy_boost' | 'daily_wrap' | 'weekly_review';
     priority: 'high' | 'medium' | 'low';
     title: string;
     message: string;
