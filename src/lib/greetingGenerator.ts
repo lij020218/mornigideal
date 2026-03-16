@@ -150,7 +150,7 @@ async function getAIDecision(ctx: GreetingContext, userEmail: string): Promise<G
     const contextSummary = buildContextSummary(ctx);
 
     const modelName = MODELS.GPT_5_MINI;
-    const LLM_TIMEOUT = 30000;
+    const LLM_TIMEOUT = 60000;
 
     try {
         const completion = await Promise.race([
