@@ -207,7 +207,7 @@ export const longTermGoalSchema = z.object({
         })).optional(),
         completed: z.boolean().optional(),
     }),
-    action: z.enum(['add', 'update', 'delete', 'complete', 'updateProgress', 'resetWeekly']),
+    action: z.enum(['add', 'update', 'delete', 'complete', 'updateProgress', 'resetWeekly', 'claim']),
 });
 
 // ============================================

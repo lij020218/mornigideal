@@ -27,6 +27,15 @@ export interface LongTermGoals {
     yearly: LongTermGoal[];
 }
 
+export interface GoalBadge {
+    id: string;
+    title: string;
+    category?: string;
+    weekLabel: string; // "3월 2주차"
+    progress: number;
+    claimedAt: string;
+}
+
 /** 현재 KST 기준 이번 주 월요일 00:00 (YYYY-MM-DD) */
 function getCurrentWeekMonday(): string {
     const now = new Date();
@@ -70,15 +79,21 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         yearly: rawGoals?.yearly as LongTermGoal[] || [],
     };
 
-    // 주간 목표: 이번 주가 아닌 목표에 expired 플래그 추가
+    // 주간 목표: 이번 주가 아닌 목표 분류
+    // - 100% 달성 → completable (뱃지 획득 가능)
+    // - 미달성 → expired (지난 목표)
     longTermGoals.weekly = longTermGoals.weekly.map(goal => {
-        if (!goal.completed && !isCurrentWeekGoal(goal)) {
-            return { ...goal, expired: true };
+        if (goal.completed || isCurrentWeekGoal(goal)) return goal;
+        if (goal.progress >= 100) {
+            return { ...goal, completable: true };
         }
-        return goal;
+        return { ...goal, expired: true };
     });
 
-    return NextResponse.json({ goals: longTermGoals });
+    // 뱃지 목록도 함께 반환
+    const goalBadges = (user.profile?.goalBadges || []) as GoalBadge[];
+
+    return NextResponse.json({ goals: longTermGoals, badges: goalBadges });
 });
 
 // POST: 장기 목표 추가/수정/삭제
@@ -260,6 +275,54 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
             goals: currentGoals,
             archived: archivedWeeklyGoals.length > 0 ? archivedWeeklyGoals[archivedWeeklyGoals.length - 1] : null,
         });
+    } else if (action === "claim") {
+        // 지난 주 달성 목표 뱃지 획득 → 목록에서 제거
+        const targetGoal = currentGoals[goalType].find(g => g.id === goal.id);
+        if (!targetGoal) {
+            return NextResponse.json({ error: "목표를 찾을 수 없습니다." }, { status: 404 });
+        }
+
+        // 주차 라벨 생성 (목표 생성일 기준)
+        const createdDate = new Date(targetGoal.createdAt);
+        const kstCreated = new Date(createdDate.getTime() + 9 * 60 * 60 * 1000);
+        const month = kstCreated.getUTCMonth() + 1;
+        const weekOfMonth = Math.ceil(kstCreated.getUTCDate() / 7);
+        const weekLabel = `${month}월 ${weekOfMonth}주차`;
+
+        const badge: GoalBadge = {
+            id: `badge-${targetGoal.id}`,
+            title: targetGoal.title,
+            category: targetGoal.category,
+            weekLabel,
+            progress: targetGoal.progress,
+            claimedAt: now,
+        };
+
+        // 뱃지 배열에 추가
+        const goalBadges = (user.profile?.goalBadges || []) as GoalBadge[];
+        goalBadges.push(badge);
+
+        // 목표 목록에서 제거 + 연관 일정도 정리
+        currentGoals[goalType] = currentGoals[goalType].filter(g => g.id !== goal.id);
+
+        const customGoals: any[] = user.profile?.customGoals || [];
+        const filteredSchedules = customGoals.filter((s: any) => s.linkedGoalId !== goal.id);
+
+        // schedules 테이블에서도 연관 일정 삭제
+        const removedSchedules = customGoals.filter((s: any) => s.linkedGoalId === goal.id);
+        for (const removed of removedSchedules) {
+            await dualWriteDelete(email, removed.id).catch(e =>
+                logger.error(`[long-term-goals] claim 시 schedules 삭제 실패 (${removed.id}):`, e)
+            );
+        }
+
+        await updateProfile({
+            longTermGoals: currentGoals,
+            goalBadges,
+            customGoals: filteredSchedules,
+        });
+
+        return NextResponse.json({ success: true, goals: currentGoals, badge, badges: goalBadges });
     }
 
     // 프로필 업데이트
