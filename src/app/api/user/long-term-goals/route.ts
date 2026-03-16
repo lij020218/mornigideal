@@ -27,6 +27,27 @@ export interface LongTermGoals {
     yearly: LongTermGoal[];
 }
 
+/** 현재 KST 기준 이번 주 월요일 00:00 (YYYY-MM-DD) */
+function getCurrentWeekMonday(): string {
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const day = kst.getUTCDay(); // 0=일, 1=월 ...
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(kst);
+    monday.setUTCDate(kst.getUTCDate() + mondayOffset);
+    return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** 목표의 createdAt이 이번 주(월~일) 범위인지 확인 */
+function isCurrentWeekGoal(goal: LongTermGoal): boolean {
+    if (!goal.createdAt) return true; // createdAt 없으면 현재 주로 간주
+    const mondayStr = getCurrentWeekMonday();
+    const monday = new Date(mondayStr + 'T00:00:00+09:00');
+    const sunday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+    const created = new Date(goal.createdAt);
+    return created >= monday && created <= sunday;
+}
+
 // GET: 장기 목표 조회
 export const GET = withAuth(async (request: NextRequest, email: string) => {
     const userId = await getUserIdFromRequest(request);
@@ -48,6 +69,14 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         monthly: rawGoals?.monthly as LongTermGoal[] || [],
         yearly: rawGoals?.yearly as LongTermGoal[] || [],
     };
+
+    // 주간 목표: 이번 주가 아닌 목표에 expired 플래그 추가
+    longTermGoals.weekly = longTermGoals.weekly.map(goal => {
+        if (!goal.completed && !isCurrentWeekGoal(goal)) {
+            return { ...goal, expired: true };
+        }
+        return goal;
+    });
 
     return NextResponse.json({ goals: longTermGoals });
 });
