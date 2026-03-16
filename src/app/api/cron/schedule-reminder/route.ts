@@ -70,7 +70,7 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         return NextResponse.json({ message: 'No users', sent: 0 });
     }
 
-    // 오늘 일정 추출 (customGoals 기반)
+    // 오늘 일정 추출 (customGoals + schedules 테이블)
     interface ScheduleItem {
         id: string;
         title: string;
@@ -81,7 +81,33 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
 
     const todaySchedules: ScheduleItem[] = [];
     const endedSchedules: ScheduleItem[] = [];
+    const seenIds = new Set<string>();
 
+    /** 일정 하나를 시작/종료 알림 대상인지 판별하여 추가 */
+    function checkSchedule(id: string, title: string, startTime: string, endTime: string | undefined, userEmail: string) {
+        if (seenIds.has(`${userEmail}:${id}`)) return;
+        seenIds.add(`${userEmail}:${id}`);
+
+        const [sh, sm] = startTime.split(':').map(Number);
+        if (isNaN(sh) || isNaN(sm)) return;
+        const scheduleMinutes = sh * 60 + sm;
+
+        if (scheduleMinutes >= nowMinutes && scheduleMinutes <= targetMinutes) {
+            todaySchedules.push({ id, title, startTime, endTime, userEmail });
+        }
+
+        if (endTime) {
+            const [eh, em] = endTime.split(':').map(Number);
+            if (!isNaN(eh) && !isNaN(em)) {
+                const endMinutes = eh * 60 + em;
+                if (endMinutes > (nowMinutes - 5) && endMinutes <= nowMinutes) {
+                    endedSchedules.push({ id, title, startTime, endTime, userEmail });
+                }
+            }
+        }
+    }
+
+    // 1) customGoals 기반
     for (const user of users) {
         const profile = user.profile as any;
         const customGoals = profile?.customGoals;
@@ -91,7 +117,6 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
             if (goal.completed || goal.skipped) continue;
             if (!goal.startTime) continue;
 
-            // 오늘 해당 일정인지 확인
             let isToday = false;
             if (goal.specificDate === todayStr) {
                 isToday = true;
@@ -100,43 +125,45 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
                 if (goal.endDate && todayStr > goal.endDate) continue;
                 isToday = true;
             }
-
             if (!isToday) continue;
 
-            // startTime이 현재~10분 후 범위인지 확인 (시작 알림)
-            const [sh, sm] = goal.startTime.split(':').map(Number);
-            if (isNaN(sh) || isNaN(sm)) continue;
-            const scheduleMinutes = sh * 60 + sm;
-
-            if (scheduleMinutes > nowMinutes && scheduleMinutes <= targetMinutes) {
-                todaySchedules.push({
-                    id: goal.id,
-                    title: goal.text || '',
-                    startTime: goal.startTime,
-                    endTime: goal.endTime,
-                    userEmail: user.email,
-                });
-            }
-
-            // endTime이 지난 5분 이내에 끝난 일정 확인 (종료 알림)
-            if (goal.endTime) {
-                const [eh, em] = goal.endTime.split(':').map(Number);
-                if (!isNaN(eh) && !isNaN(em)) {
-                    const endMinutes = eh * 60 + em;
-                    // 종료 시간이 (현재 - 5분) ~ 현재 범위
-                    if (endMinutes > (nowMinutes - 5) && endMinutes <= nowMinutes) {
-                        endedSchedules.push({
-                            id: goal.id,
-                            title: goal.text || '',
-                            startTime: goal.startTime,
-                            endTime: goal.endTime,
-                            userEmail: user.email,
-                        });
-                    }
-                }
-            }
+            checkSchedule(goal.id, goal.text || '', goal.startTime, goal.endTime, user.email);
         }
     }
+
+    // 2) schedules 테이블 기반 (dual-write로 저장된 일정)
+    const { data: dbSchedules } = await supabaseAdmin
+        .from('schedules')
+        .select('id, user_email, text, start_time, end_time, completed, skipped, specific_date, days_of_week, start_date, end_date')
+        .eq('completed', false)
+        .not('start_time', 'is', null);
+
+    if (dbSchedules) {
+        for (const s of dbSchedules) {
+            if (s.skipped) continue;
+            const st = typeof s.start_time === 'string' ? s.start_time : '';
+            if (!st) continue;
+
+            // HH:MM 추출 (ISO datetime이면 시간 부분만)
+            const startHHMM = st.includes('T') ? st.split('T')[1]?.substring(0, 5) : st.substring(0, 5);
+            const endRaw = typeof s.end_time === 'string' ? s.end_time : undefined;
+            const endHHMM = endRaw ? (endRaw.includes('T') ? endRaw.split('T')[1]?.substring(0, 5) : endRaw.substring(0, 5)) : undefined;
+
+            let isToday = false;
+            if (s.specific_date === todayStr) {
+                isToday = true;
+            } else if (s.days_of_week && Array.isArray(s.days_of_week) && s.days_of_week.includes(dayOfWeek)) {
+                if (s.start_date && todayStr < s.start_date) continue;
+                if (s.end_date && todayStr > s.end_date) continue;
+                isToday = true;
+            }
+            if (!isToday) continue;
+
+            checkSchedule(s.id, s.text || '', startHHMM, endHHMM, s.user_email);
+        }
+    }
+
+    logger.info(`[ScheduleReminder] ${todayStr} ${nowTime} | users: ${users.length} | upcoming: ${todaySchedules.length} | ended: ${endedSchedules.length} | window: ${nowMinutes}-${targetMinutes}min`);
 
     if (todaySchedules.length === 0 && endedSchedules.length === 0) {
         return NextResponse.json({ message: 'No upcoming or ended schedules', sent: 0 });
