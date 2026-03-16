@@ -61,7 +61,7 @@ export async function appendChatMessage(
                 user_id: userData.id,
                 date: targetDate,
                 messages,
-                title: existing ? undefined : targetDate,
+                title: targetDate,
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'user_id,date' });
 

@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { MODELS } from "@/lib/models";
 import type { CustomGoal, ActivityEventLog } from '@/lib/types';
 import { logger } from '@/lib/logger';
+import { kvGet } from '@/lib/kv-store';
 
 /**
  * Weekly Report Generator
@@ -24,6 +25,10 @@ export interface WeeklyReportData {
             learning: number;
             exercise: number;
             wellness: number;
+            social: number;
+            hobby: number;
+            routine: number;
+            finance: number;
             other: number;
         };
         mostProductiveDay: string;
@@ -214,26 +219,38 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const completedSchedules = lastWeekSchedules.filter((g: CustomGoal) => g.completed).length;
     const completionRate = totalSchedules > 0 ? Math.round((completedSchedules / totalSchedules) * 100) : 0;
 
-    // Category breakdown (키워드 범위 확대)
+    // Category breakdown (9개 카테고리)
     const categoryBreakdown = {
         work: 0,
         learning: 0,
         exercise: 0,
         wellness: 0,
+        social: 0,
+        hobby: 0,
+        routine: 0,
+        finance: 0,
         other: 0,
     };
 
-    const WORK_KEYWORDS = ['업무', '회의', '미팅', '출근', '퇴근', '근무', '야근', 'work', '수업', '강의', '과제'];
-    const LEARNING_KEYWORDS = ['학습', '공부', '강의', '읽기', '독서', '스터디', '코딩', '개발', '사이드프로젝트', '포트폴리오', 'study', 'learn'];
-    const EXERCISE_KEYWORDS = ['운동', '헬스', '요가', '러닝', '조깅', '필라테스', '수영', '등산', '산책', '스트레칭', '근력', '축구', '농구', '테니스', '배드민턴', '자전거', '걷기', 'workout', 'gym'];
-    const WELLNESS_KEYWORDS = ['명상', '휴식', '수면', '취침', '기상', '낮잠', '웰빙', '마사지', '사우나', '반신욕', 'wellness', 'rest', 'sleep'];
+    const WORK_KEYWORDS = ['업무', '회의', '미팅', '출근', '퇴근', '근무', '야근', 'work', '수업', '강의', '과제', '발표', '보고서', '프레젠테이션', '면접', '인터뷰', '세미나', '워크샵'];
+    const LEARNING_KEYWORDS = ['학습', '공부', '읽기', '독서', '스터디', '코딩', '개발', '사이드프로젝트', '포트폴리오', 'study', 'learn', '논문', '리서치', '연구', '영어', '외국어', '자격증', '시험', '토익', '토플'];
+    const EXERCISE_KEYWORDS = ['운동', '헬스', '요가', '러닝', '조깅', '필라테스', '수영', '등산', '산책', '스트레칭', '근력', '축구', '농구', '테니스', '배드민턴', '자전거', '걷기', 'workout', 'gym', '크로스핏', '복싱', '클라이밍', '골프', '볼링', '줄넘기', '러닝머신', '트레드밀'];
+    const WELLNESS_KEYWORDS = ['명상', '휴식', '수면', '취침', '기상', '낮잠', '웰빙', '마사지', '사우나', '반신욕', 'wellness', 'rest', 'sleep', '스파', '테라피', '힐링', '심호흡', '마음챙김'];
+    const SOCIAL_KEYWORDS = ['약속', '모임', '만남', '데이트', '친구', '가족', '동창', '회식', '파티', '생일', '결혼식', '돌잔치', '저녁약속', '점심약속', '술약속', '카페', '브런치'];
+    const HOBBY_KEYWORDS = ['취미', '게임', '영화', '드라마', '넷플릭스', '음악', '기타연주', '기타레슨', '피아노', '드럼', '그림', '사진', '요리', '베이킹', '뜨개질', '원예', '캠핑', '여행', '낚시', '블로그', '유튜브', '콘서트', '전시', '공연', '미술관', '박물관'];
+    const ROUTINE_KEYWORDS = ['청소', '빨래', '설거지', '장보기', '식사준비', '식단', '비타민', '약먹기', '병원', '치과', '안과', '세차', '정리정돈', '이사', '택배', '분리수거', '다림질'];
+    const FINANCE_KEYWORDS = ['쇼핑', '구매', '결제', '은행', '송금', '저축', '투자', '주식', '가계부', '예산', '보험', '세금', '월급', '급여'];
 
-    const categorizeSchedule = (text: string) => {
+    const categorizeSchedule = (text: string): keyof typeof categoryBreakdown => {
         const t = text.toLowerCase();
         if (WORK_KEYWORDS.some(k => t.includes(k))) return 'work';
         if (LEARNING_KEYWORDS.some(k => t.includes(k))) return 'learning';
         if (EXERCISE_KEYWORDS.some(k => t.includes(k))) return 'exercise';
+        if (SOCIAL_KEYWORDS.some(k => t.includes(k))) return 'social';
+        if (HOBBY_KEYWORDS.some(k => t.includes(k))) return 'hobby';
         if (WELLNESS_KEYWORDS.some(k => t.includes(k))) return 'wellness';
+        if (ROUTINE_KEYWORDS.some(k => t.includes(k))) return 'routine';
+        if (FINANCE_KEYWORDS.some(k => t.includes(k))) return 'finance';
         return 'other';
     };
 
@@ -254,35 +271,58 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const leastProductiveDay = sortedDays[sortedDays.length - 1]?.[0] || 'N/A';
     const avgSchedulesPerDay = totalSchedules / 7;
 
-    // 2. Trend Briefing Analysis (트렌드 브리핑 읽은 횟수)
-    const { data: readingEvents } = await supabase
-        .from('user_events')
-        .select('*')
-        .eq('user_email', userEmail)
-        .eq('event_type', 'trend_briefing_read')
-        .gte('start_at', oneWeekAgo.toISOString())
-        .lte('start_at', weekEnd.toISOString());
+    // 2. Trend Briefing Analysis — KV Store에서 날짜별 읽은 ID 조회
+    let totalRead = 0;
+    let readingStreak = 0;
+    let currentStreak = 0;
+    const readingDaysSet = new Set<string>();
 
-    const totalRead = readingEvents?.length || 0;
+    // 주간 날짜 순회 (월~일)
+    for (let d = new Date(oneWeekAgo); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${dateStr}`);
+        if (readIds && readIds.length > 0) {
+            totalRead += readIds.length;
+            readingDaysSet.add(dateStr);
+            currentStreak++;
+            if (currentStreak > readingStreak) readingStreak = currentStreak;
+        } else {
+            currentStreak = 0;
+        }
+    }
+
     const avgReadPerDay = totalRead / 7;
 
-    // Category breakdown for briefings
-    const categoryCount: Record<string, number> = {};
-    readingEvents?.forEach((event: ActivityEventLog) => {
-        const category = event.metadata?.category || 'other';
-        categoryCount[category] = (categoryCount[category] || 0) + 1;
-    });
+    // 카테고리별 분석은 KV에 카테고리 정보가 없으므로 trends_cache에서 조회
+    const topCategories: Array<{ category: string; count: number }> = [];
+    if (readingDaysSet.size > 0) {
+        const dates = Array.from(readingDaysSet);
+        const { data: cachedTrends } = await supabase
+            .from('trends_cache')
+            .select('trends, date')
+            .eq('email', userEmail)
+            .in('date', dates);
 
-    const topCategories = Object.entries(categoryCount)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([category, count]) => ({ category, count }));
-
-    // Reading streak (연속 읽은 일수)
-    const readingDays = new Set(
-        readingEvents?.map((event: ActivityEventLog) => new Date(event.start_at || event.created_at || '').toISOString().split('T')[0]) || []
-    );
-    const readingStreak = readingDays.size;
+        if (cachedTrends) {
+            const categoryCount: Record<string, number> = {};
+            for (const row of cachedTrends) {
+                const dateReadIds = await kvGet<string[]>(userEmail, `read_trend_ids_${row.date}`);
+                if (!dateReadIds || !Array.isArray(row.trends)) continue;
+                for (const trend of row.trends as any[]) {
+                    if (dateReadIds.includes(trend.id)) {
+                        const cat = trend.category || 'other';
+                        categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+                    }
+                }
+            }
+            topCategories.push(
+                ...Object.entries(categoryCount)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([category, count]) => ({ category, count }))
+            );
+        }
+    }
 
     // 3. Focus Mode Analysis
     const { data: focusEvents } = await supabase
@@ -380,10 +420,13 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const consistencyScore = Math.min(100, (completionRate + readingStreak * 10 + focusBonus + sleepBonus) / 3);
 
     const focusAreas: string[] = [];
-    if (categoryBreakdown.work > categoryBreakdown.learning) focusAreas.push('업무');
-    if (categoryBreakdown.learning > 0) focusAreas.push('학습');
-    if (categoryBreakdown.exercise >= 3) focusAreas.push('운동');
-    if (categoryBreakdown.wellness > 0) focusAreas.push('웰빙');
+    const catLabels: Record<string, string> = { work: '업무', learning: '학습', exercise: '운동', wellness: '웰빙', social: '사교', hobby: '취미', routine: '생활', finance: '재정' };
+    const sorted = Object.entries(categoryBreakdown)
+        .filter(([k]) => k !== 'other')
+        .sort((a, b) => b[1] - a[1]);
+    for (const [key, count] of sorted) {
+        if (count > 0 && focusAreas.length < 4) focusAreas.push(catLabels[key] || key);
+    }
 
     // Estimated time invested (duration sum)
     const timeInvested = lastWeekSchedules.reduce((sum: number, goal: CustomGoal) => {
@@ -472,15 +515,13 @@ export async function generateWeeklyReport(userEmail: string): Promise<WeeklyRep
     const previousCompleted = previousWeekSchedules.filter((g: CustomGoal) => g.completed).length;
     const previousCompletionRate = previousTotal > 0 ? Math.round((previousCompleted / previousTotal) * 100) : 0;
 
-    const { data: previousReadingEvents } = await supabase
-        .from('user_events')
-        .select('*')
-        .eq('user_email', userEmail)
-        .eq('event_type', 'trend_briefing_read')
-        .gte('start_at', twoWeeksAgo.toISOString())
-        .lte('start_at', twoWeeksAgoEnd.toISOString());
-
-    const previousRead = previousReadingEvents?.length || 0;
+    // 지난주 트렌드 읽기 수 — KV Store에서 조회
+    let previousRead = 0;
+    for (let d = new Date(twoWeeksAgo); d <= twoWeeksAgoEnd; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${dateStr}`);
+        if (readIds) previousRead += readIds.length;
+    }
 
     const scheduleChange = previousTotal > 0 ? ((totalSchedules - previousTotal) / previousTotal) * 100 : 0;
     const completionRateChange = previousCompletionRate > 0 ? completionRate - previousCompletionRate : 0;
@@ -564,7 +605,7 @@ ${userContext}
 
 이번 주 데이터:
 - 일정 ${scheduleAnalysis.completedSchedules}/${scheduleAnalysis.totalSchedules}개 완료 (${scheduleAnalysis.completionRate.toFixed(0)}%)
-- 업무 ${scheduleAnalysis.categoryBreakdown.work}, 학습 ${scheduleAnalysis.categoryBreakdown.learning}, 운동 ${scheduleAnalysis.categoryBreakdown.exercise}, 웰빙 ${scheduleAnalysis.categoryBreakdown.wellness}
+- 카테고리: 업무 ${scheduleAnalysis.categoryBreakdown.work}, 학습 ${scheduleAnalysis.categoryBreakdown.learning}, 운동 ${scheduleAnalysis.categoryBreakdown.exercise}, 웰빙 ${scheduleAnalysis.categoryBreakdown.wellness}, 사교 ${scheduleAnalysis.categoryBreakdown.social}, 취미 ${scheduleAnalysis.categoryBreakdown.hobby}, 생활 ${scheduleAnalysis.categoryBreakdown.routine}, 재정 ${scheduleAnalysis.categoryBreakdown.finance}
 - 트렌드 브리핑 ${trendBriefingAnalysis.totalRead}개 읽음
 - 집중 모드 ${focusAnalysis.focusSessions}회 (${Math.round(focusAnalysis.totalFocusMinutes)}분)
 - 수면 평균 ${sleepAnalysis.avgSleepHours.toFixed(1)}시간

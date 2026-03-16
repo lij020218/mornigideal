@@ -177,8 +177,9 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         notifications.push(...eveningNotifications);
     }
 
-    // 3.5 저녁 마무리 알림 (21시) — 오늘 활동 요약 + 피드백 + 내일 일정 + 일정 생성 권유
-    if (currentHour === TIMING.EVENING_CHECK_HOUR) {
+    // 3.5 저녁 마무리 알림 (20~22시) — 오늘 활동 요약 + 피드백 + 내일 일정 + 일정 생성 권유
+    // CRON 2시간 간격이므로 정각 21시를 놓칠 수 있어 범위 확장 (ID 기반 중복 방지로 안전)
+    if (currentHour >= TIMING.EVENING_START && currentHour < TIMING.EVENING_END) {
         const completedCount = todaySchedules.filter(s => s.completed).length;
         const totalCount = todaySchedules.length;
         const skippedCount = todaySchedules.filter(s => s.skipped).length;

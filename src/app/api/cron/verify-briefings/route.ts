@@ -37,8 +37,8 @@ const RSS_FEEDS = [
     { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Technology" },
     { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Technology" },
     { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스" },
-    { name: "한국경제", url: "https://www.hankyung.com/feed/economy", category: "경제" },
-    { name: "한국경제 IT", url: "https://www.hankyung.com/feed/it", category: "IT" },
+    { name: "한국경제", url: "https://www.hankyung.com/rss/economy", category: "경제" },
+    { name: "한국경제 IT", url: "https://www.hankyung.com/rss/it", category: "IT" },
     { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제" },
 ];
 

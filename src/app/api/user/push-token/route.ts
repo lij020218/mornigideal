@@ -13,48 +13,20 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ error: 'token and platform are required' }, { status: 400 });
     }
 
-    // 기존 토큰 확인
-    const { data: existing } = await supabaseAdmin
+    const { error } = await supabaseAdmin
         .from('push_tokens')
-        .select('id')
-        .eq('user_email', email)
-        .eq('token', token)
-        .maybeSingle();
+        .upsert({
+            user_email: email,
+            token,
+            platform,
+            device_name: deviceName || null,
+            active: true,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_email,token' });
 
-    if (existing) {
-        // 이미 존재하면 업데이트
-        const { error } = await supabaseAdmin
-            .from('push_tokens')
-            .update({
-                platform,
-                device_name: deviceName || null,
-                active: true,
-                updated_at: new Date().toISOString(),
-            })
-            .eq('user_email', email)
-            .eq('token', token);
-
-        if (error) {
-            logger.error('[Push Token] Update error:', error);
-            return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
-        }
-    } else {
-        // 없으면 삽입
-        const { error } = await supabaseAdmin
-            .from('push_tokens')
-            .insert({
-                user_email: email,
-                token,
-                platform,
-                device_name: deviceName || null,
-                active: true,
-                updated_at: new Date().toISOString(),
-            });
-
-        if (error) {
-            logger.error('[Push Token] Insert error:', error);
-            return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
-        }
+    if (error) {
+        logger.error('[Push Token] Upsert error:', error);
+        return NextResponse.json({ error: 'Failed to save token' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
