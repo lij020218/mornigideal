@@ -732,6 +732,8 @@ function tryParseRecurringScheduleAdd(
     const pattern = /^(매주|매일|평일|주말)\s*((?:월|화|수|목|금|토|일)(?:요일)?(?:\s*,?\s*(?:월|화|수|목|금|토|일)(?:요일)?)*)?[,\s]*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
     // 역순: "영화 매주 금요일 오후 12시에 잡아줘"
     const reversePattern = /^(.+?)\s+(매주|매일|평일|주말)\s*((?:월|화|수|목|금|토|일)(?:요일)?(?:\s*,?\s*(?:월|화|수|목|금|토|일)(?:요일)?)*)?[,\s]*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 기간 지정 패턴: "3월부터 4월까지 매주 월요일 아침 9시 기상 추가해줘"
+    const dateRangePattern = /^(\d{1,2})월\s*부터\s*(\d{1,2})월\s*까지\s*(매주|매일|평일|주말)\s*((?:월|화|수|목|금|토|일)(?:요일)?(?:\s*,?\s*(?:월|화|수|목|금|토|일)(?:요일)?)*)?[,\s]*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
 
     let recurType: string;
     let dayNames: string | undefined;
@@ -739,11 +741,23 @@ function tryParseRecurringScheduleAdd(
     let hourStr: string;
     let minuteStr: string | undefined;
     let scheduleName: string;
+    let dateRangeStartMonth: number | undefined;
+    let dateRangeEndMonth: number | undefined;
 
-    const m1 = text.match(pattern);
-    const m2 = !m1 ? text.match(reversePattern) : null;
+    const mdr = text.match(dateRangePattern);
+    const m1 = !mdr ? text.match(pattern) : null;
+    const m2 = !mdr && !m1 ? text.match(reversePattern) : null;
 
-    if (m1) {
+    if (mdr) {
+        dateRangeStartMonth = parseInt(mdr[1], 10);
+        dateRangeEndMonth = parseInt(mdr[2], 10);
+        recurType = mdr[3];
+        dayNames = mdr[4];
+        ampm = mdr[5];
+        hourStr = mdr[6];
+        minuteStr = mdr[7] === '반' ? '30' : mdr[8];
+        scheduleName = mdr[9];
+    } else if (m1) {
         recurType = m1[1];
         dayNames = m1[2];
         ampm = m1[3];
@@ -801,6 +815,26 @@ function tryParseRecurringScheduleAdd(
     const dayLabel = dayLabels[recurType] || `매주 ${dayNames || ''}`.trim();
     const timeLabel = `${ampm || ''}${hourStr}시${minuteStr ? (minuteStr === '30' ? ' 반' : ` ${minuteStr}분`) : ''}`.trim();
 
+    // 기간 지정이 있으면 startDate/endDate 계산
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+    if (dateRangeStartMonth && dateRangeEndMonth) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const year = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        // 시작월이 현재월보다 이전이면 내년으로 간주
+        const startYear = dateRangeStartMonth < currentMonth ? year + 1 : year;
+        // 종료월이 시작월보다 이전이면 내년으로 간주
+        const endYear = dateRangeEndMonth < dateRangeStartMonth ? startYear + 1 : startYear;
+        startDate = `${startYear}-${String(dateRangeStartMonth).padStart(2, '0')}-01`;
+        // 종료월의 마지막 날
+        const lastDay = new Date(endYear, dateRangeEndMonth, 0).getDate();
+        endDate = `${endYear}-${String(dateRangeEndMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    const dateRangeLabel = dateRangeStartMonth && dateRangeEndMonth
+        ? `${dateRangeStartMonth}월~${dateRangeEndMonth}월 ` : '';
+
     return {
         action: {
             type: 'add_schedule',
@@ -811,12 +845,14 @@ function tryParseRecurringScheduleAdd(
                 endTime: time.endTime,
                 specificDate: null,
                 daysOfWeek,
+                ...(startDate && { startDate }),
+                ...(endDate && { endDate }),
                 color: 'primary',
                 location: '',
                 memo: '',
             },
         },
-        label: `${dayLabel} ${timeLabel} ${scheduleName}`,
+        label: `${dateRangeLabel}${dayLabel} ${timeLabel} ${scheduleName}`,
         emoji,
     };
 }

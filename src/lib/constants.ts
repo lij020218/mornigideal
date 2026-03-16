@@ -53,7 +53,7 @@ export const TIMING = {
     SKIPPED_PATTERN_END: 11,
 
     /** Mood check-in reminder default start hour (기상 일정 없을 때) */
-    MOOD_REMINDER_DEFAULT_HOUR: 9,
+    MOOD_REMINDER_DEFAULT_HOUR: 10,
     /** Mood check-in reminder window end hour */
     MOOD_REMINDER_END: 22,
 

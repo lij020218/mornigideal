@@ -79,9 +79,14 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         userEmail: string;
     }
 
-    const todaySchedules: ScheduleItem[] = [];
+    const todaySchedules: ScheduleItem[] = [];      // 10분 이내 시작 예정 (곧 시작 알림)
+    const startedSchedules: ScheduleItem[] = [];    // 지금 막 시작된 일정 (시작 알림)
     const endedSchedules: ScheduleItem[] = [];
     const seenIds = new Set<string>();
+    /** 같은 유저+제목+시간 조합 중복 방지 (customGoals와 schedules 테이블 dual-write 대응) */
+    const seenUpcomingKeys = new Set<string>();
+    const seenStartedKeys = new Set<string>();
+    const seenEndKeys = new Set<string>();
 
     /** 일정 하나를 시작/종료 알림 대상인지 판별하여 추가 */
     function checkSchedule(id: string, title: string, startTime: string, endTime: string | undefined, userEmail: string) {
@@ -92,8 +97,22 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         if (isNaN(sh) || isNaN(sm)) return;
         const scheduleMinutes = sh * 60 + sm;
 
-        if (scheduleMinutes >= nowMinutes && scheduleMinutes <= targetMinutes) {
-            todaySchedules.push({ id, title, startTime, endTime, userEmail });
+        // 곧 시작 알림: 1분 초과 ~ 10분 이내 (nowMinutes < scheduleMinutes <= targetMinutes)
+        if (scheduleMinutes > nowMinutes && scheduleMinutes <= targetMinutes) {
+            const upcomingKey = `${userEmail}:${title}:${startTime}`;
+            if (!seenUpcomingKeys.has(upcomingKey)) {
+                seenUpcomingKeys.add(upcomingKey);
+                todaySchedules.push({ id, title, startTime, endTime, userEmail });
+            }
+        }
+
+        // 시작 알림: 지난 5분 이내에 시작된 일정 (nowMinutes - 5 < scheduleMinutes <= nowMinutes)
+        if (scheduleMinutes > (nowMinutes - 5) && scheduleMinutes <= nowMinutes) {
+            const startedKey = `${userEmail}:${title}:${startTime}`;
+            if (!seenStartedKeys.has(startedKey)) {
+                seenStartedKeys.add(startedKey);
+                startedSchedules.push({ id, title, startTime, endTime, userEmail });
+            }
         }
 
         if (endTime) {
@@ -101,7 +120,12 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
             if (!isNaN(eh) && !isNaN(em)) {
                 const endMinutes = eh * 60 + em;
                 if (endMinutes > (nowMinutes - 5) && endMinutes <= nowMinutes) {
-                    endedSchedules.push({ id, title, startTime, endTime, userEmail });
+                    // 같은 유저+제목+종료시간 조합은 한 번만 (dual-write 중복 방지)
+                    const endKey = `${userEmail}:${title}:${endTime}`;
+                    if (!seenEndKeys.has(endKey)) {
+                        seenEndKeys.add(endKey);
+                        endedSchedules.push({ id, title, startTime, endTime, userEmail });
+                    }
                 }
             }
         }
@@ -163,15 +187,15 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         }
     }
 
-    logger.info(`[ScheduleReminder] ${todayStr} ${nowTime} | users: ${users.length} | upcoming: ${todaySchedules.length} | ended: ${endedSchedules.length} | window: ${nowMinutes}-${targetMinutes}min`);
+    logger.info(`[ScheduleReminder] ${todayStr} ${nowTime} | users: ${users.length} | upcoming: ${todaySchedules.length} | started: ${startedSchedules.length} | ended: ${endedSchedules.length} | window: ${nowMinutes}-${targetMinutes}min`);
 
-    if (todaySchedules.length === 0 && endedSchedules.length === 0) {
-        return NextResponse.json({ message: 'No upcoming or ended schedules', sent: 0 });
+    if (todaySchedules.length === 0 && startedSchedules.length === 0 && endedSchedules.length === 0) {
+        return NextResponse.json({ message: 'No upcoming, started, or ended schedules', sent: 0 });
     }
 
     // 이미 발송한 일정 ID 조회 (중복 방지)
     const sentKey = `schedule_reminder_sent_${todayStr}`;
-    const uniqueEmails = [...new Set(todaySchedules.map(s => s.userEmail))];
+    const uniqueEmails = [...new Set([...todaySchedules, ...startedSchedules].map(s => s.userEmail))];
 
     const sentPromises = uniqueEmails.map(email =>
         supabaseAdmin
@@ -226,6 +250,55 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         newSentMap.set(schedule.userEmail, existing);
     }
 
+    // ── 시작 알림 처리 ── (일정이 막 시작됨)
+    const startSentKey = `schedule_start_sent_${todayStr}`;
+    const startUniqueEmails = [...new Set(startedSchedules.map(s => s.userEmail))];
+
+    const startSentPromises = startUniqueEmails.map(email =>
+        supabaseAdmin
+            .from('user_kv_store')
+            .select('value')
+            .eq('user_email', email)
+            .eq('key', startSentKey)
+            .maybeSingle()
+            .then(({ data }) => ({ email, sentIds: (data?.value as string[]) || [] }))
+    );
+
+    const startSentResults = await Promise.all(startSentPromises);
+    const startSentMap = new Map(startSentResults.map(r => [r.email, new Set(r.sentIds)]));
+    const newStartSentMap = new Map<string, string[]>();
+
+    for (const schedule of startedSchedules) {
+        const alreadySent = startSentMap.get(schedule.userEmail);
+        if (alreadySent?.has(schedule.id)) continue;
+
+        const focusEligible = isFocusEligible(schedule.title);
+        const sleepEligible = isSleepSchedule(schedule.title);
+
+        notifications.push({
+            userEmail: schedule.userEmail,
+            title: sleepEligible ? '🌙 취침 시간이에요' : '🚀 일정이 시작됐어요!',
+            body: sleepEligible
+                ? `"${schedule.title}" 시간이에요. 취침 모드를 켜볼까요?`
+                : focusEligible
+                ? `"${schedule.title}" 지금 시작! 🎯 집중 모드를 켜볼까요?`
+                : `"${schedule.title}" 지금 시작이에요!`,
+            data: {
+                type: 'schedule_start',
+                scheduleId: schedule.id,
+                deepLink: 'fieri://dashboard',
+                focusEligible,
+                sleepEligible,
+                scheduleTitle: schedule.title,
+            },
+            channelId: 'schedules',
+        });
+
+        const existing = newStartSentMap.get(schedule.userEmail) || [...(startSentMap.get(schedule.userEmail) || [])];
+        existing.push(schedule.id);
+        newStartSentMap.set(schedule.userEmail, existing);
+    }
+
     // ── 종료 알림 처리 ──
     const endSentKey = `schedule_end_sent_${todayStr}`;
     const endUniqueEmails = [...new Set(endedSchedules.map(s => s.userEmail))];
@@ -276,6 +349,7 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
     // jarvis_notifications에 저장 → 모바일 폴링으로 확실히 수신 + 채팅 히스토리에도 저장
     for (const notif of notifications) {
         const isEnd = notif.data?.type === 'schedule_end';
+        const isStart = notif.data?.type === 'schedule_start';
         const isFocus = notif.data?.focusEligible;
         const isSleep = notif.data?.sleepEligible;
 
@@ -286,6 +360,20 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
 
         if (isEnd) {
             content = `⏰ 일정 종료\n"${notif.data?.scheduleTitle}" 시간이 끝났어요. 완료하셨나요?`;
+        } else if (isStart) {
+            if (isSleep) {
+                content = `🌙 취침 시간이에요\n"${notif.data?.scheduleTitle}" 시간이에요.\n취침 모드를 켜서 수면 시간을 기록해보세요.`;
+                actionType = 'start_wind_down';
+                actionPayload = { scheduleText: notif.data?.scheduleTitle };
+                proactiveData = { notificationId: `sleep-start-${notif.data?.scheduleId}`, notificationType: 'sleep_prompt', actionType, actionPayload };
+            } else if (isFocus) {
+                content = `🚀 일정이 시작됐어요!\n"${notif.data?.scheduleTitle}" 지금 시작! 🎯\n집중 모드를 켜면 더 효율적으로 할 수 있어요.`;
+                actionType = 'start_focus_mode';
+                actionPayload = { scheduleText: notif.data?.scheduleTitle, focusDuration: 45 };
+                proactiveData = { notificationId: `focus-start-${notif.data?.scheduleId}`, notificationType: 'focus_prompt', actionType, actionPayload };
+            } else {
+                content = `🚀 일정이 시작됐어요!\n"${notif.data?.scheduleTitle}" 지금 시작이에요!`;
+            }
         } else if (isSleep) {
             content = `🌙 취침 시간이에요\n"${notif.data?.scheduleTitle}" 일정이 곧 시작돼요.\n취침 모드를 켜서 수면 시간을 기록해보세요.`;
             actionType = 'start_wind_down';
@@ -312,12 +400,14 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
 
         const notifId = isEnd
             ? `schedule-end-${notif.data?.scheduleId}`
+            : isStart
+            ? `schedule-start-${notif.data?.scheduleId}`
             : `schedule-reminder-${notif.data?.scheduleId}`;
 
         // jarvis_notifications에 저장
         saveProactiveNotification(notif.userEmail, {
             id: notifId,
-            type: isEnd ? 'schedule_end' : 'schedule_reminder',
+            type: isEnd ? 'schedule_end' : isStart ? 'schedule_start' : 'schedule_reminder',
             priority: 'high',
             title: notif.title,
             message: notif.body,
@@ -336,11 +426,20 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         }, todayStr).catch(e => logger.error(`[ScheduleReminder] appendChatMessage failed for ${notif.userEmail}:`, e));
     }
 
-    // 발송 기록 저장 (중복 방지) — 시작 알림
+    // 발송 기록 저장 (중복 방지) — 곧 시작 알림
     const savePromises = Array.from(newSentMap.entries()).map(([email, ids]) =>
         supabaseAdmin.from('user_kv_store').upsert({
             user_email: email,
             key: sentKey,
+            value: ids,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_email,key' })
+    );
+    // 발송 기록 저장 (중복 방지) — 시작 알림
+    const startSavePromises = Array.from(newStartSentMap.entries()).map(([email, ids]) =>
+        supabaseAdmin.from('user_kv_store').upsert({
+            user_email: email,
+            key: startSentKey,
             value: ids,
             updated_at: new Date().toISOString(),
         }, { onConflict: 'user_email,key' })
@@ -354,11 +453,12 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
             updated_at: new Date().toISOString(),
         }, { onConflict: 'user_email,key' })
     );
-    await Promise.all([...savePromises, ...endSavePromises]);
+    await Promise.all([...savePromises, ...startSavePromises, ...endSavePromises]);
 
-    const startCount = notifications.filter(n => n.data?.type !== 'schedule_end').length;
+    const upcomingCount = notifications.filter(n => n.data?.type === 'schedule_reminder').length;
+    const startCount = notifications.filter(n => n.data?.type === 'schedule_start').length;
     const endCount = notifications.filter(n => n.data?.type === 'schedule_end').length;
-    logger.info(`[ScheduleReminder] Sent ${result.sent} (start: ${startCount}, end: ${endCount}), failed ${result.failed}`);
+    logger.info(`[ScheduleReminder] Sent ${result.sent} (upcoming: ${upcomingCount}, start: ${startCount}, end: ${endCount}), failed ${result.failed}`);
 
     return NextResponse.json({
         success: true,
@@ -367,6 +467,7 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         sent: result.sent,
         failed: result.failed,
         total: notifications.length,
+        upcomingReminders: upcomingCount,
         startReminders: startCount,
         endReminders: endCount,
     });

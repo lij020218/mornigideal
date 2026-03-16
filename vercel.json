@@ -50,7 +50,7 @@
     },
     {
       "path": "/api/cron/proactive-push",
-      "schedule": "0 22,0,2,4,6,8,10,11,12 * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/collect-curated-content",
@@ -79,6 +79,14 @@
     {
       "path": "/api/cron/generate-trend-details",
       "schedule": "10 20 * * *"
+    },
+    {
+      "path": "/api/cron/morning-widget-push",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/evening-review",
+      "schedule": "0 12 * * *"
     }
   ],
   "functions": {
@@ -135,6 +143,9 @@
     },
     "src/app/api/cron/generate-trend-details/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/evening-review/route.ts": {
+      "maxDuration": 120
     }
   }
 }

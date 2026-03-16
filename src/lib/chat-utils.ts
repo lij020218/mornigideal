@@ -272,7 +272,9 @@ export function getBehaviorGuide(intent: UserIntent): string {
 - **일정 이름 정규화**: 아침/점심/저녁→"아침 식사"/"점심 식사"/"저녁 식사", 잠→"취침", 일어나→"기상", 헬스→"운동"
 - **일정 이름에 시간 포함 금지**: text 필드에는 순수 활동명만 넣으세요. 시간 관련 표현(부터, 까지, ~시, 오전, 오후 등)은 절대 포함하지 마세요. 예: "9시부터 10시까지 게임" → text:"게임", startTime:"21:00", endTime:"22:00"
 - **메모 패턴**: "'세부내용'으로 일정" → text: "일정유형", memo: "세부내용"
-- **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]. startDate/endDate는 자동 설정됨 (미입력 시 이번 주~6개월)
+- **반복 일정**: 매일=[0-6], 평일=[1-5], 주말=[0,6], 매주 월수금=[1,3,5]
+- **반복 일정 기간(startDate/endDate)**: 사용자가 기간을 지정하면 반드시 startDate/endDate를 YYYY-MM-DD로 설정하세요. 예: "3월부터 4월까지" → startDate:"현재연도-03-01", endDate:"현재연도-04-30". 기간 미지정 시 기본 6개월.
+- **endDate 상한**: endDate는 현재 날짜로부터 최대 1년 이내여야 합니다. 절대로 수년 뒤 날짜를 설정하지 마세요.
 - **시간 표시**: 메시지에서 "오전/오후" 명시 (6시 X → 오후 6시 O)
 - **삭제**: delete_schedule에 text, startTime 필수. 반복이면 isRepeating:true. 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
 - **수정**: "바꿔줘/변경해줘" → update_schedule (originalText, originalTime 필수). 특정 날짜 일정이면 specificDate 필수 (YYYY-MM-DD)
@@ -362,7 +364,10 @@ User: "내일 운동 시간 4시로 바꿔줘"
 {"message": "내일 운동 시간을 오후 4시로 변경했어요! 💪", "actions": [{"type": "update_schedule", "label": "운동 수정", "data": {"originalText": "운동", "originalTime": "15:00", "specificDate": "${tomorrowStr}", "newStartTime": "16:00", "newEndTime": "17:00"}}]}
 
 User: "매주 목요일 오후 6시에서 8시 토끼발 세션 일정 추가해줘"
-{"message": "매주 목요일 오후 6시~8시 토끼발 세션 일정 추가했어요! 🐰", "actions": [{"type": "add_schedule", "label": "토끼발 세션 추가", "data": {"text": "토끼발 세션", "startTime": "18:00", "endTime": "20:00", "specificDate": null, "daysOfWeek": [4], "color": "primary", "location": "", "memo": ""}}]}`;
+{"message": "매주 목요일 오후 6시~8시 토끼발 세션 일정 추가했어요! 🐰", "actions": [{"type": "add_schedule", "label": "토끼발 세션 추가", "data": {"text": "토끼발 세션", "startTime": "18:00", "endTime": "20:00", "specificDate": null, "daysOfWeek": [4], "color": "primary", "location": "", "memo": ""}}]}
+
+User: "3월부터 4월까지 매주 월요일 아침 9시 기상 추가해줘"
+{"message": "3월~4월 매주 월요일 오전 9시 기상 일정 추가했어요! ☀️", "actions": [{"type": "add_schedule", "label": "기상 추가", "data": {"text": "기상", "startTime": "09:00", "endTime": "10:00", "specificDate": null, "daysOfWeek": [1], "startDate": "${currentDate.slice(0, 4)}-03-01", "endDate": "${currentDate.slice(0, 4)}-04-30", "color": "primary", "location": "", "memo": ""}}]}`;
     }
 
     if (intent === 'search') {
@@ -531,11 +536,19 @@ export function postProcessActions(
                     start.setDate(start.getDate() + daysUntil);
                     action.data.startDate = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
                 }
-                // endDate: 6개월 후
+                // endDate: 미지정 시 6개월 후, 최대 1년 상한
                 if (!action.data.endDate) {
                     const end = new Date(today);
                     end.setMonth(end.getMonth() + 6);
                     action.data.endDate = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                } else {
+                    // endDate가 현재로부터 1년 이상이면 1년으로 제한
+                    const maxEnd = new Date(today);
+                    maxEnd.setFullYear(maxEnd.getFullYear() + 1);
+                    const endDateObj = new Date(action.data.endDate + 'T00:00:00');
+                    if (endDateObj > maxEnd) {
+                        action.data.endDate = maxEnd.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                    }
                 }
             }
             if (action.data.startTime && currentTime) {
