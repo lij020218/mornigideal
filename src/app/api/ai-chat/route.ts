@@ -610,33 +610,55 @@ function tryParseScheduleAdd(
     text: string,
     context?: ChatContext,
 ): { action: any; label: string; emoji: string } | null {
-    // 패턴: [날짜] [시간] [일정이름] [동사]
-    // "내일 3시에 회의 잡아줘", "오후 2시 운동 추가해줘", "7시 반에 저녁 넣어줘"
-    const pattern = /^(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
-    // 역순 패턴: "회의 내일 3시에 잡아줘"
-    const reversePattern = /^(.+?)\s*(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
-
     let dateKeyword: string | undefined;
     let ampm: string | undefined;
     let hourStr: string;
     let minuteStr: string | undefined;
+    let endAmpm: string | undefined;
+    let endHourStr: string | undefined;
+    let endMinuteStr: string | undefined;
     let scheduleName: string;
 
-    const m1 = text.match(pattern);
-    const m2 = !m1 ? text.match(reversePattern) : null;
+    // 범위 패턴: "오늘 오후 9시 40분부터 10시 30분까지 게임 넣어줘"
+    const rangePattern = /^(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*부터\s*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*까지\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 역순 범위: "게임 오후 9시 40분부터 10시 30분까지 넣어줘"
+    const rangeReversePattern = /^(.+?)\s*(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*부터\s*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*까지\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 이름 중간 범위: "오늘 오후 9시 40분부터 10시 30분까지 게임 일정 넣어줘" (일정 이름이 까지 뒤에)
+    // 에서~까지 패턴: "오후 9시에서 10시까지 게임 넣어줘"
+    const fromToPattern = /^(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에서\s*(오전|오후)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*까지\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 단일 시간 패턴: "내일 3시에 회의 잡아줘"
+    const pattern = /^(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(.+?)\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
+    // 역순 단일: "회의 내일 3시에 잡아줘"
+    const reversePattern = /^(.+?)\s*(오늘|내일|모레)?\s*(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*(잡아|추가해?|넣어|등록해?|만들어)\s*(줘|줘요|주세요|줄래)?$/;
 
-    if (m1) {
-        dateKeyword = m1[1];
-        ampm = m1[2];
-        hourStr = m1[3];
-        minuteStr = m1[4] === '반' ? '30' : m1[5];
+    const mr = text.match(rangePattern);
+    const mrr = !mr ? text.match(rangeReversePattern) : null;
+    const mft = !mr && !mrr ? text.match(fromToPattern) : null;
+    const m1 = !mr && !mrr && !mft ? text.match(pattern) : null;
+    const m2 = !mr && !mrr && !mft && !m1 ? text.match(reversePattern) : null;
+
+    if (mr) {
+        dateKeyword = mr[1]; ampm = mr[2];
+        hourStr = mr[3]; minuteStr = mr[4] === '반' ? '30' : mr[5];
+        endAmpm = mr[6]; endHourStr = mr[7]; endMinuteStr = mr[8] === '반' ? '30' : mr[9];
+        scheduleName = mr[10];
+    } else if (mrr) {
+        scheduleName = mrr[1];
+        dateKeyword = mrr[2]; ampm = mrr[3];
+        hourStr = mrr[4]; minuteStr = mrr[5] === '반' ? '30' : mrr[6];
+        endAmpm = mrr[7]; endHourStr = mrr[8]; endMinuteStr = mrr[9] === '반' ? '30' : mrr[10];
+    } else if (mft) {
+        dateKeyword = mft[1]; ampm = mft[2];
+        hourStr = mft[3]; minuteStr = mft[4] === '반' ? '30' : mft[5];
+        endAmpm = mft[6]; endHourStr = mft[7]; endMinuteStr = mft[8] === '반' ? '30' : mft[9];
+        scheduleName = mft[10];
+    } else if (m1) {
+        dateKeyword = m1[1]; ampm = m1[2];
+        hourStr = m1[3]; minuteStr = m1[4] === '반' ? '30' : m1[5];
         scheduleName = m1[6];
     } else if (m2) {
-        scheduleName = m2[1];
-        dateKeyword = m2[2];
-        ampm = m2[3];
-        hourStr = m2[4];
-        minuteStr = m2[5] === '반' ? '30' : m2[6];
+        scheduleName = m2[1]; dateKeyword = m2[2]; ampm = m2[3];
+        hourStr = m2[4]; minuteStr = m2[5] === '반' ? '30' : m2[6];
     } else {
         return null;
     }
@@ -650,18 +672,27 @@ function tryParseScheduleAdd(
     const time = parseTimeExpression(ampm, hourStr, minuteStr);
     if (!time) return null;
 
+    // 끝 시간이 명시된 경우 (부터...까지, 에서...까지)
+    if (endHourStr) {
+        const endTime = parseTimeExpression(endAmpm || ampm, endHourStr, endMinuteStr);
+        if (endTime) {
+            time.endTime = endTime.startTime;
+        }
+    }
+
     const specificDate = resolveDateKeyword(dateKeyword, context);
 
     const emojiMap: Record<string, string> = {
         '운동': '💪', '헬스': '💪', '회의': '📋', '미팅': '📋',
         '공부': '📚', '학습': '📚', '식사': '🍽️', '점심': '🍽️', '저녁': '🍽️',
-        '산책': '🚶', '독서': '📖', '기상': '☀️', '취침': '🌙',
+        '산책': '🚶', '독서': '📖', '기상': '☀️', '취침': '🌙', '게임': '🎮',
     };
     const emoji = Object.entries(emojiMap).find(([k]) => scheduleName.includes(k))?.[1] || '✅';
 
     const dateLabelMap: Record<string, string> = { '오늘': '오늘', '내일': '내일', '모레': '모레' };
     const dateLabel = dateLabelMap[dateKeyword || '오늘'] || '오늘';
-    const timeLabel = `${ampm || ''}${hourStr}시${minuteStr ? (minuteStr === '30' ? ' 반' : ` ${minuteStr}분`) : ''}`.trim();
+    const startLabel = `${ampm || ''}${hourStr}시${minuteStr ? (minuteStr === '30' ? ' 반' : ` ${minuteStr}분`) : ''}`.trim();
+    const endLabel = endHourStr ? ` ~ ${endAmpm || ampm || ''}${endHourStr}시${endMinuteStr ? (endMinuteStr === '30' ? ' 반' : ` ${endMinuteStr}분`) : ''}`.trim() : '';
 
     return {
         action: {
@@ -678,7 +709,7 @@ function tryParseScheduleAdd(
                 memo: '',
             },
         },
-        label: `${dateLabel} ${timeLabel} ${scheduleName}`,
+        label: `${dateLabel} ${startLabel}${endLabel} ${scheduleName}`,
         emoji,
     };
 }

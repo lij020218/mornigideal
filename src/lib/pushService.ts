@@ -9,6 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { logger } from '@/lib/logger';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_ACCESS_TOKEN = process.env.EXPO_ACCESS_TOKEN;
 
 interface ExpoPushMessage {
     to: string;
@@ -73,17 +74,22 @@ export async function sendPushNotification(
     }));
 
     try {
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        };
+        if (EXPO_ACCESS_TOKEN) {
+            headers['Authorization'] = `Bearer ${EXPO_ACCESS_TOKEN}`;
+        }
+
         const response = await fetch(EXPO_PUSH_URL, {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify(messages),
         });
 
         if (!response.ok) {
-            console.error('[PushService] Expo API error:', response.status);
+            logger.error(`[PushService] Expo API error: ${response.status}`, await response.text().catch(() => ''));
             return false;
         }
 
@@ -179,12 +185,17 @@ export async function sendBulkPushNotifications(
     for (let i = 0; i < messages.length; i += 100) {
         const batch = messages.slice(i, i + 100);
         try {
+            const batchHeaders: Record<string, string> = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            };
+            if (EXPO_ACCESS_TOKEN) {
+                batchHeaders['Authorization'] = `Bearer ${EXPO_ACCESS_TOKEN}`;
+            }
+
             const response = await fetch(EXPO_PUSH_URL, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
+                headers: batchHeaders,
                 body: JSON.stringify(batch),
             });
 
@@ -209,7 +220,8 @@ export async function sendBulkPushNotifications(
                 logger.error(`[PushService] Expo API 에러: ${response.status}`);
                 failed += batch.length;
             }
-        } catch {
+        } catch (error) {
+            logger.error(`[PushService] Bulk 배치 전송 에러 (${i}~${i + batch.length}):`, error);
             failed += batch.length;
         }
     }
