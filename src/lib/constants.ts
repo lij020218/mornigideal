@@ -217,7 +217,7 @@ export const LIMITS = {
     /** Trend briefing article count per plan */
     TREND_BRIEFING_COUNT: { Free: 3, Pro: 6, Max: 6 } as Record<string, number>,
     /** Trend briefing daily refresh limit per plan (0 = no refresh) */
-    TREND_REFRESH_DAILY: { Free: 0, Pro: 3, Max: 3 } as Record<string, number>,
+    TREND_REFRESH_DAILY: { Free: 1, Pro: 3, Max: 3 } as Record<string, number>,
 } as const;
 
 // ============================================

@@ -331,7 +331,6 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
             if (actionType === 'convert_to_recurring' && actionPayload) {
                 const { text, dayOfWeek, startTime, scheduleIds, color } = actionPayload;
 
-                // 사용자 프로필에서 customGoals 로드
                 const { data: userData, error: userFetchError } = await supabaseAdmin
                     .from('users')
                     .select('profile')
@@ -345,11 +344,15 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                 const profile = userData.profile || {};
                 const customGoals = profile.customGoals || [];
 
-                // 해당 일회성 일정들 제거
                 const removeSet = new Set(scheduleIds);
                 const filteredGoals = customGoals.filter((g: any) => !removeSet.has(g.id));
 
-                // 새 반복 일정 생성
+                // 6개월 후 종료일 설정
+                const endDate = new Date();
+                endDate.setMonth(endDate.getMonth() + 6);
+                const endDateStr = endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                const startDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
                 const newRecurringGoal: Record<string, any> = {
                     id: `recurring_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     text,
@@ -357,12 +360,13 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     daysOfWeek: [dayOfWeek],
                     completed: false,
                     time: 'morning' as const,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
                     ...(color ? { color } : {}),
                 };
 
                 filteredGoals.push(newRecurringGoal);
 
-                // 프로필 업데이트
                 const { error: updateError } = await supabaseAdmin
                     .from('users')
                     .update({ profile: { ...profile, customGoals: filteredGoals } })
@@ -372,7 +376,6 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     logger.error('[Proactive API] Failed to convert to recurring:', updateError);
                     return NextResponse.json({ error: 'Failed to convert schedule' }, { status: 500 });
                 }
-
             }
 
             // 연속 일자 → 매일 반복 전환 처리
@@ -395,12 +398,20 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                 const removeSet = new Set(scheduleIds as string[]);
                 const filteredGoals = customGoals.filter((g: any) => !removeSet.has(g.id));
 
+                // 6개월 후 종료일 설정
+                const endDate = new Date();
+                endDate.setMonth(endDate.getMonth() + 6);
+                const endDateStr = endDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+                const startDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+
                 const newRecurringGoal: Record<string, any> = {
                     id: `recurring_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     text,
                     startTime,
                     daysOfWeek: (daysOfWeek as number[]) || [0, 1, 2, 3, 4, 5, 6],
                     completed: false,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
                     ...(color ? { color } : {}),
                 };
 

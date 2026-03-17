@@ -473,13 +473,14 @@ Select now.`;
         await kvSet(email, refreshKey, usedRefreshes + 1);
     }
 
-    // Pre-generate details for all trends - MUST await to ensure cache is ready
+    // Pre-generate details in background (don't block response)
     const detailModel = genAI.getGenerativeModel({
         model: "gemini-3-flash-preview",
         generationConfig: { responseMimeType: "application/json" }
     });
 
-    // 순차 처리 — Gemini Free Tier 분당 5요청 제한 대응 (2개씩 병렬, 배치 간 딜레이)
+    // 백그라운드 상세 프리생성 — 응답은 먼저 반환 (상세는 열 때 on-demand 생성 가능)
+    const preGenerateDetails = async () => {
     try {
         const BATCH_SIZE = 2;
         const BATCH_DELAY = 13000; // 13초 대기 (분당 5요청 제한)
@@ -572,6 +573,10 @@ OTHER RULES:
     } catch (err) {
         logger.error('[API] Error in detail pre-generation:', err);
     }
+    };
+
+    // 상세 프리생성은 백그라운드로 실행 (응답 블로킹 안 함)
+    preGenerateDetails().catch(err => logger.error('[API] Background detail pre-generation failed:', err));
 
     // 새로 생성한 브리핑이라도 오늘 읽은 기록 반환
     const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];

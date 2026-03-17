@@ -259,20 +259,32 @@ export class ToolExecutor {
         const targetText = (args.text || '').toLowerCase().trim();
         const targetTime = args.startTime || '';
         const targetDate = args.specificDate || '';
+        const isRepeating = (args as any).isRepeating;
+
+        // 날짜 매칭: 반복 일정(daysOfWeek 있고 specificDate 없는)도 매칭되도록 처리
+        const matchesDateOrRepeating = (g: CustomGoal) => {
+            // 반복 일정 삭제 요청인 경우 반복 일정만 매칭
+            if (isRepeating) return !!(g.daysOfWeek && g.daysOfWeek.length > 0);
+            // 날짜 조건이 없으면 모든 일정 매칭 (반복 일정 포함)
+            if (!targetDate) return true;
+            // 일회성 일정은 specificDate로 매칭
+            if (g.specificDate) return g.specificDate === targetDate;
+            // 반복 일정은 daysOfWeek가 있으면 날짜 무관하게 매칭 (이름+시간으로 특정)
+            if (g.daysOfWeek && g.daysOfWeek.length > 0) return true;
+            return false;
+        };
 
         // 정확 매칭 우선, 없으면 부분 매칭 (1개만 매칭될 때)
         const exactMatches = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().trim() === targetText;
             const matchesTime = !targetTime || g.startTime === targetTime;
-            const matchesDate = !targetDate || g.specificDate === targetDate;
-            return matchesText && matchesTime && matchesDate;
+            return matchesText && matchesTime && matchesDateOrRepeating(g);
         });
 
         const partialMatches = customGoals.filter((g: CustomGoal) => {
             const matchesText = (g.text || '').toLowerCase().includes(targetText);
             const matchesTime = !targetTime || g.startTime === targetTime;
-            const matchesDate = !targetDate || g.specificDate === targetDate;
-            return matchesText && matchesTime && matchesDate;
+            return matchesText && matchesTime && matchesDateOrRepeating(g);
         });
 
         const toDelete = exactMatches.length > 0 ? exactMatches : partialMatches;

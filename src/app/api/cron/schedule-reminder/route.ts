@@ -360,6 +360,14 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
 
         if (isEnd) {
             content = `⏰ 일정 종료\n"${notif.data?.scheduleTitle}" 시간이 끝났어요. 완료하셨나요?`;
+            actionType = 'mark_schedule_done';
+            actionPayload = { scheduleId: notif.data?.scheduleId, scheduleTitle: notif.data?.scheduleTitle };
+            proactiveData = {
+                notificationId: `schedule-end-${notif.data?.scheduleId}`,
+                notificationType: 'schedule_end',
+                actionType,
+                actionPayload,
+            };
         } else if (isStart) {
             if (isSleep) {
                 content = `🌙 취침 시간이에요\n"${notif.data?.scheduleTitle}" 시간이에요.\n취침 모드를 켜서 수면 시간을 기록해보세요.`;

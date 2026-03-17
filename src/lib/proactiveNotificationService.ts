@@ -479,8 +479,6 @@ export async function generateProactiveNotifications(context: UserContext): Prom
     // 6. 반복 일정 전환 제안
     const recurringNotifications = getRecurringConversionNotifications(context);
     notifications.push(...recurringNotifications);
-    if (recurringNotifications.length > 0) {
-    }
 
     // 7. 주말/연휴/기념일 맛집·여행 추천
     const lifestyleNotifications = getLifestyleRecommendNotifications(context);

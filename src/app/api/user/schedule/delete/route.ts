@@ -42,8 +42,18 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
                 // Time match (if provided)
                 const timeMatch = !startTime || g.startTime === startTime;
 
-                // Date match (for specific date schedules)
-                const dateMatch = !specificDate || g.specificDate === specificDate;
+                // Date match: 반복 일정(daysOfWeek 있고 specificDate 없는)도 매칭
+                let dateMatch: boolean;
+                if (!specificDate) {
+                    dateMatch = true;
+                } else if (g.specificDate) {
+                    dateMatch = g.specificDate === specificDate;
+                } else if (g.daysOfWeek && g.daysOfWeek.length > 0) {
+                    // 반복 일정은 specificDate가 없으므로 날짜 무관하게 이름+시간으로 매칭
+                    dateMatch = true;
+                } else {
+                    dateMatch = false;
+                }
 
                 // Repeating match
                 const repeatingMatch = isRepeating === undefined ||
