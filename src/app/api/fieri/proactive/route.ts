@@ -329,7 +329,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
         if (action === 'accept') {
             // 반복 일정 전환 처리
             if (actionType === 'convert_to_recurring' && actionPayload) {
-                const { text, dayOfWeek, startTime, scheduleIds, color } = actionPayload;
+                const { text, dayOfWeek, startTime, endTime, scheduleIds, color } = actionPayload;
 
                 const { data: userData, error: userFetchError } = await supabaseAdmin
                     .from('users')
@@ -357,6 +357,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     id: `recurring_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     text,
                     startTime,
+                    ...(endTime ? { endTime } : {}),
                     daysOfWeek: [dayOfWeek],
                     completed: false,
                     time: 'morning' as const,
@@ -380,7 +381,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
 
             // 연속 일자 → 매일 반복 전환 처리
             if (actionType === 'convert_to_recurring_daily' && actionPayload) {
-                const { text, daysOfWeek, startTime, scheduleIds, color } = actionPayload;
+                const { text, daysOfWeek, startTime, endTime, scheduleIds, color } = actionPayload;
 
                 const { data: userData, error: userFetchError } = await supabaseAdmin
                     .from('users')
@@ -408,6 +409,7 @@ export const POST = withAuth(async (request: NextRequest, userEmail: string) => 
                     id: `recurring_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     text,
                     startTime,
+                    ...(endTime ? { endTime } : {}),
                     daysOfWeek: (daysOfWeek as number[]) || [0, 1, 2, 3, 4, 5, 6],
                     completed: false,
                     startDate: startDateStr,

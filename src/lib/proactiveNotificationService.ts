@@ -1017,6 +1017,7 @@ interface RecurringCandidate {
     text: string;
     dayOfWeek: number;
     startTime: string;
+    endTime?: string;
     scheduleIds: string[];
     occurrences: number;
     color?: string;
@@ -1081,6 +1082,7 @@ function detectOneTimeRecurringCandidates(customGoals: CustomGoal[]): RecurringC
                 text: group.text,
                 dayOfWeek: group.dayOfWeek,
                 startTime: sorted[0].startTime ?? '',
+                endTime: sorted[0].endTime,
                 scheduleIds: group.goals.map((g) => g.id).filter((id): id is string => id !== undefined),
                 occurrences: group.goals.length,
                 color: group.color,
@@ -1098,6 +1100,7 @@ function detectOneTimeRecurringCandidates(customGoals: CustomGoal[]): RecurringC
 interface ConsecutiveCandidate {
     text: string;
     startTime: string;
+    endTime?: string;
     consecutiveDates: string[];
     scheduleIds: string[];
     daysOfWeek: number[];
@@ -1166,6 +1169,7 @@ function detectConsecutiveDayCandidates(customGoals: CustomGoal[]): ConsecutiveC
             candidates.push({
                 text: group.text,
                 startTime: bestStreak[bestStreak.length - 1].startTime ?? '',
+                endTime: bestStreak[bestStreak.length - 1].endTime,
                 consecutiveDates: dates,
                 scheduleIds: bestStreak.map((g) => g.id).filter((id): id is string => id !== undefined),
                 daysOfWeek: daysOfWeek.length >= 5 ? [0, 1, 2, 3, 4, 5, 6] : daysOfWeek,
@@ -1207,6 +1211,7 @@ function getRecurringConversionNotifications(context: UserContext): ProactiveNot
                 text: candidate.text,
                 daysOfWeek: candidate.daysOfWeek,
                 startTime: candidate.startTime,
+                endTime: candidate.endTime,
                 scheduleIds: candidate.scheduleIds,
                 color: candidate.color,
             },
@@ -1234,6 +1239,7 @@ function getRecurringConversionNotifications(context: UserContext): ProactiveNot
                 text: candidate.text,
                 dayOfWeek: candidate.dayOfWeek,
                 startTime: candidate.startTime,
+                endTime: candidate.endTime,
                 scheduleIds: candidate.scheduleIds,
                 color: candidate.color,
             },
