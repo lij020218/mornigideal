@@ -92,6 +92,14 @@ export const GET = withCron(withCronLogging('evening-review', async (_request: N
                 content: `${dailyWrap.title}\n\n${dailyWrap.message}`,
                 timestamp: new Date().toISOString(),
                 type: 'proactive',
+                ...(dailyWrap.actionType && {
+                    proactiveData: {
+                        notificationId: dailyWrap.id,
+                        notificationType: dailyWrap.type,
+                        actionType: dailyWrap.actionType,
+                        actionPayload: dailyWrap.actionPayload,
+                    },
+                }),
             }, todayStr).catch(e => logger.error(`[EveningReview] appendChat failed for ${user.email}:`, e));
 
         } catch (err) {

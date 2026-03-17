@@ -14,6 +14,9 @@ import { kvGet } from '@/lib/kv-store';
 import { isProOrAbove, type UserPlanType } from '@/lib/user-plan';
 import { logger } from '@/lib/logger';
 import { getChatDate } from '@/lib/scheduleUtils';
+import OpenAI from 'openai';
+import { MODELS } from '@/lib/models';
+import { logOpenAIUsage } from '@/lib/openai-usage';
 
 export interface ProactiveNotification {
     id: string;
@@ -97,6 +100,154 @@ export interface UserContext {
 }
 
 /**
+ * 빈 시간대 일정 추천 생성 — 캐시 우선, 없으면 경량 AI 호출
+ */
+async function getSmartScheduleRecommendations(
+    userEmail: string,
+    userProfile: UserProfile,
+    currentHour: number,
+): Promise<Array<{ text: string; startTime: string; duration: string; reason: string; category: string }>> {
+    try {
+        const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const todayKey = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
+
+        // 1. 캐시된 AI 추천 확인 (ai-schedule-recommendations API가 저장한 것)
+        const { data: cached } = await supabaseAdmin
+            .from('user_kv_store')
+            .select('value')
+            .eq('user_email', userEmail)
+            .eq('key', `schedule_recs_${todayKey}`)
+            .maybeSingle();
+
+        const cachedRecs = cached?.value?.recommendations;
+        if (cachedRecs?.length > 0) {
+            return (cachedRecs as any[]).slice(0, 3).map((r: any) => ({
+                text: r.scheduleText || r.text,
+                startTime: r.suggestedStartTime || r.startTime,
+                duration: `${r.suggestedDuration || r.duration || 60}분`,
+                reason: r.reason || '',
+                category: r.scheduleType || r.category || '기타',
+            }));
+        }
+
+        // 2. 캐시 없으면 웹 트렌드 + AI 호출로 즉석 생성
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const currentTimeStr = `${String(currentHour).padStart(2, '0')}:00`;
+
+        const profile = userProfile as any;
+        const interests = (profile?.interests || []) as string[];
+        const job = profile?.job || '';
+        const goal = profile?.goal || '';
+
+        // Tavily로 사용자 관심사 기반 실시간 트렌드 수집
+        let trendContext = '';
+        try {
+            const { tavily } = await import('@tavily/core');
+            const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY || '' });
+
+            // 직업/관심사 기반 검색 쿼리 생성 (최대 2개)
+            const searchQueries: string[] = [];
+            if (job) searchQueries.push(`${job} 최신 트렌드 오늘`);
+            if (interests.length > 0) searchQueries.push(`${interests.slice(0, 2).join(' ')} 최신 화제`);
+            if (searchQueries.length === 0) searchQueries.push('오늘 화제 트렌드 기술');
+
+            const searchResults = await Promise.all(
+                searchQueries.slice(0, 2).map(q =>
+                    tvly.search(q, { maxResults: 3 }).catch(() => ({ results: [] }))
+                )
+            );
+
+            const allTrends = searchResults
+                .flatMap(r => (r.results || []))
+                .slice(0, 5)
+                .map((r: any) => `- ${r.title}${r.content ? ': ' + r.content.substring(0, 100) : ''}`)
+                .join('\n');
+
+            if (allTrends) {
+                trendContext = `\n**지금 웹에서 화제인 것들 (사용자 관심사 기반):**\n${allTrends}\n→ 위 트렌드 중 사용자가 관심 가질 만한 것을 일정에 녹여주세요. 예: "GitHub 트렌드 XX 프로젝트 살펴보기", "S&P500 하락 원인 분석 읽기" 등\n`;
+            }
+        } catch (e) {
+            logger.error('[ProactiveNotif] Tavily search failed:', e);
+        }
+
+        const prompt = `사용자에게 지금 바로 시작할 수 있는 일정 3개를 추천해주세요.
+
+사용자 정보:
+- 이름: ${profile?.name || '사용자'}
+- 직업: ${job || 'N/A'}
+- 관심사: ${interests.join(', ') || 'N/A'}
+- 목표: ${goal || 'N/A'}
+
+현재 시간(KST): ${currentTimeStr}
+추천 가능 시간: ${currentTimeStr} ~ 23:00
+${trendContext}
+**핵심 규칙:**
+- 혼자서 지금 당장 시작할 수 있는 구체적 행동만
+- 그룹 활동, 사전 예약 필요 활동 금지
+- 최소 1개는 직업/목표 관련 + 실시간 트렌드를 반영한 구체적 활동
+- 각 추천은 최소 2시간 간격
+
+**🚫 절대 하지 말 것:**
+- "독서", "운동", "공부" 같은 뻔하고 형식적인 추천
+- "스터디 모임", "네트워킹" 같은 그룹 활동
+- 추상적이거나 막연한 활동
+
+**✅ 좋은 추천 예시:**
+- "GitHub 트렌딩 1위 OOO 프로젝트 코드 읽기" (구체적 대상 명시)
+- "S&P500 급락 원인 분석 아티클 읽기" (시의성 있는 주제)
+- "Next.js 15 새 기능 App Router 마이그레이션 실습" (구체적 기술)
+- "30분 인터벌 러닝 (5분 걷기 + 1분 전력질주 × 5세트)" (구체적 루틴)
+
+scheduleText는 구체적 대상/주제를 포함한 명확한 이름으로!
+
+JSON 형식:
+{"recommendations":[{"scheduleType":"카테고리","scheduleText":"일정명","suggestedStartTime":"HH:MM","suggestedDuration":분,"reason":"이유"}]}`;
+
+        const completion = await openai.chat.completions.create({
+            model: MODELS.GPT_5_MINI,
+            messages: [
+                { role: 'system', content: `일정 추천 AI. 현재 KST ${currentTimeStr}. ${currentTimeStr} 이전 시간 절대 금지. 사용자의 직업/관심사에 맞고 실시간 트렌드를 반영한, 구체적이고 흥미로운 추천만. "독서", "운동" 같은 뻔한 추천 금지.` },
+                { role: 'user', content: prompt },
+            ],
+            response_format: { type: 'json_object' },
+        });
+
+        const response = completion.choices[0]?.message?.content || '{"recommendations":[]}';
+        const result = JSON.parse(response);
+
+        await logOpenAIUsage(
+            userEmail,
+            completion.model,
+            'proactive-schedule-rec',
+            completion.usage?.prompt_tokens || 0,
+            completion.usage?.completion_tokens || 0,
+        );
+
+        // 캐시에 저장 (같은 키로 ai-schedule-recommendations API와 공유)
+        const recs = (result.recommendations || []).slice(0, 3);
+        if (recs.length > 0) {
+            await supabaseAdmin.from('user_kv_store').upsert({
+                user_email: userEmail,
+                key: `schedule_recs_${todayKey}`,
+                value: { recommendations: recs, generatedAt: new Date().toISOString() },
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_email,key' });
+        }
+
+        return recs.map((r: any) => ({
+            text: r.scheduleText,
+            startTime: r.suggestedStartTime,
+            duration: `${r.suggestedDuration || 60}분`,
+            reason: r.reason || '',
+            category: r.scheduleType || '기타',
+        }));
+    } catch (error) {
+        logger.error('[ProactiveNotif] Smart schedule rec failed:', error);
+        return [];
+    }
+}
+
+/**
  * 선제적 알림 생성 - 현재 컨텍스트 기반
  */
 export async function generateProactiveNotifications(context: UserContext): Promise<ProactiveNotification[]> {
@@ -138,18 +289,43 @@ export async function generateProactiveNotifications(context: UserContext): Prom
         notifications.push(...morningNotifications);
     }
 
-    // 2.5 오전 11시 이후 일정 미등록 시 권유
+    // 2.5 오전 11시 이후 일정 미등록 시 AI 일정 추천
     if (currentHour >= 11 && currentHour < TIMING.EVENING_START && todaySchedules.length === 0) {
         const userName = userProfile?.name || '';
         const greeting = userName ? `${userName}님, ` : '';
-        notifications.push({
-            id: `no-schedule-nudge-${getChatDate()}`,
-            type: 'context_suggestion',
-            priority: 'low',
-            title: '📅 오늘 일정이 비어있어요',
-            message: `${greeting}오늘은 아직 등록된 일정이 없어요. 간단한 할 일이라도 추가해보면 하루가 더 알차질 거예요!`,
-            actionType: 'open_add_schedule',
-        });
+        try {
+            const items = await getSmartScheduleRecommendations(context.userEmail, userProfile, currentHour);
+            if (items.length > 0) {
+                notifications.push({
+                    id: `no-schedule-nudge-${getChatDate()}`,
+                    type: 'context_suggestion',
+                    priority: 'low',
+                    title: '📅 오늘 이런 일정은 어떠세요?',
+                    message: `${greeting}오늘은 아직 등록된 일정이 없어요. 이런 활동은 어떨까요?`,
+                    actionType: 'open_add_schedule',
+                    actionPayload: { items },
+                });
+            } else {
+                // AI 추천 실패 시 기존 기본 메시지 폴백
+                notifications.push({
+                    id: `no-schedule-nudge-${getChatDate()}`,
+                    type: 'context_suggestion',
+                    priority: 'low',
+                    title: '📅 오늘 일정이 비어있어요',
+                    message: `${greeting}오늘은 아직 등록된 일정이 없어요. 간단한 할 일이라도 추가해보면 하루가 더 알차질 거예요!`,
+                    actionType: 'open_add_schedule',
+                });
+            }
+        } catch {
+            notifications.push({
+                id: `no-schedule-nudge-${getChatDate()}`,
+                type: 'context_suggestion',
+                priority: 'low',
+                title: '📅 오늘 일정이 비어있어요',
+                message: `${greeting}오늘은 아직 등록된 일정이 없어요. 간단한 할 일이라도 추가해보면 하루가 더 알차질 거예요!`,
+                actionType: 'open_add_schedule',
+            });
+        }
     }
 
     // 2.6 어제 미완료 작업 알림 - 아침 이외 시간에도 표시 (오전 중 미확인 시)

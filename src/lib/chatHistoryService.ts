@@ -14,6 +14,13 @@ interface ChatMessage {
     content: string;
     timestamp: string;
     type?: string;
+    proactiveData?: {
+        notificationId: string;
+        notificationType: string;
+        actionType?: string;
+        actionPayload?: Record<string, unknown>;
+    };
+    [key: string]: unknown; // 추가 필드 보존
 }
 
 /**
