@@ -14,43 +14,71 @@ const parser = new Parser();
 
 // RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)
 const RSS_FEEDS = [
-    // International Sources - News & Business
-    // Reuters/AP 피드가 막혀서 대체 소스 사용
-    { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "Business" },
-    { name: "Financial Times", url: "https://www.ft.com/?format=rss", category: "Business" },
-    { name: "Economist", url: "https://www.economist.com/business/rss.xml", category: "Business" },
-    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business" },
-    { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology" },
-    { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories" },
-    { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Tech" },
-    { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Tech" },
-    { name: "Wired", url: "https://www.wired.com/feed/rss", category: "Tech" },
-    { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: "Tech" },
-    { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Tech" },
+    // ── AI & ML 전문 소스 ──
+    { name: "OpenAI Blog", url: "https://openai.com/blog/rss.xml", category: "AI", tags: ["ai", "tech", "development"] },
+    { name: "Google AI Blog", url: "https://blog.google/technology/ai/rss/", category: "AI", tags: ["ai", "tech"] },
+    { name: "MIT Technology Review", url: "https://www.technologyreview.com/feed/", category: "AI", tags: ["ai", "tech", "selfdev"] },
+    { name: "VentureBeat", url: "https://venturebeat.com/feed/", category: "AI", tags: ["ai", "tech", "startup"] },
+    { name: "The Decoder", url: "https://the-decoder.com/feed/", category: "AI", tags: ["ai", "tech"] },
+    { name: "AI News", url: "https://www.artificialintelligence-news.com/feed/", category: "AI", tags: ["ai", "tech"] },
+    { name: "Synced Review", url: "https://syncedreview.com/feed/", category: "AI", tags: ["ai", "tech", "development"] },
 
-    // Premium Business Sources
-    { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business" },
-    { name: "Bloomberg Economics", url: "https://feeds.bloomberg.com/economics/news.rss", category: "Economics" },
-    { name: "WSJ World News", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", category: "Business" },
-    { name: "New York Times Economy", url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", category: "Economics" },
-    { name: "New York Times AI", url: "https://www.nytimes.com/svc/collections/v1/publish/spotlight/artificial-intelligence/rss.xml", category: "AI" },
+    // ── Technology & Engineering ──
+    { name: "TechCrunch", url: "https://techcrunch.com/feed/", category: "Technology", tags: ["tech", "startup", "development", "ai"] },
+    { name: "The Verge", url: "https://www.theverge.com/rss/index.xml", category: "Technology", tags: ["tech", "design"] },
+    { name: "Wired", url: "https://www.wired.com/feed/rss", category: "Technology", tags: ["tech", "creative", "design"] },
+    { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index", category: "Technology", tags: ["tech", "development"] },
+    { name: "Hacker News", url: "https://hnrss.org/frontpage", category: "Technology", tags: ["tech", "development", "startup"] },
+    { name: "IEEE Spectrum", url: "https://spectrum.ieee.org/feeds/feed.rss", category: "Technology", tags: ["tech", "development"] },
+    { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", category: "Technology", tags: ["tech", "general"] },
 
-    // International Sources - Sports
-    { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports" },
-    { name: "ESPN Soccer", url: "https://www.espn.com/espn/rss/soccer/news", category: "Sports" },
-    { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", category: "Sports" },
-    { name: "Sky Sports", url: "https://www.skysports.com/rss/11095", category: "Sports" },
+    // ── Business & Economics ──
+    { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "Business", tags: ["business", "finance"] },
+    { name: "Financial Times", url: "https://www.ft.com/?format=rss", category: "Business", tags: ["business", "finance"] },
+    { name: "Economist", url: "https://www.economist.com/business/rss.xml", category: "Business", tags: ["business", "finance", "selfdev"] },
+    { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", category: "Business", tags: ["business", "general"] },
+    { name: "Bloomberg Markets", url: "https://feeds.bloomberg.com/markets/news.rss", category: "Business", tags: ["finance", "business"] },
+    { name: "Bloomberg Economics", url: "https://feeds.bloomberg.com/economics/news.rss", category: "Economics", tags: ["finance", "business"] },
+    { name: "WSJ World News", url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml", category: "Business", tags: ["business", "general"] },
+    { name: "WSJ Tech", url: "https://feeds.a.dj.com/rss/RSSWSJD.xml", category: "Technology", tags: ["tech", "business", "startup"] },
+    { name: "New York Times Economy", url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", category: "Economics", tags: ["finance", "business"] },
 
-    // Korean Sources
-    { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스" },
-    { name: "동아일보", url: "https://rss.donga.com/total.xml", category: "뉴스" },
-    { name: "SBS 뉴스", url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", category: "뉴스" },
-    { name: "한국경제", url: "https://www.hankyung.com/rss/economy", category: "경제" },
-    { name: "한국경제 IT", url: "https://www.hankyung.com/rss/it", category: "IT" },
-    { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제" },
-    { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제" },
-    { name: "매일경제 증권", url: "https://www.mk.co.kr/rss/50200011/", category: "증권" },
-    { name: "Google News 비즈니스", url: "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB?hl=ko&gl=KR&ceid=KR:ko", category: "Business" },
+    // ── Sports ──
+    { name: "ESPN", url: "http://www.espn.com/espn/rss/news", category: "Sports", tags: ["health"] },
+    { name: "ESPN Soccer", url: "https://www.espn.com/espn/rss/soccer/news", category: "Sports", tags: ["health"] },
+    { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml", category: "Sports", tags: ["health"] },
+    { name: "Sky Sports", url: "https://www.skysports.com/rss/11095", category: "Sports", tags: ["health"] },
+
+    // ── General News ──
+    { name: "CNN Top Stories", url: "http://rss.cnn.com/rss/cnn_topstories.rss", category: "Top Stories", tags: ["general"] },
+
+    // ── Korean Sources ──
+    { name: "연합뉴스", url: "https://www.yna.co.kr/rss/news.xml", category: "뉴스", tags: ["general"] },
+    { name: "동아일보", url: "https://rss.donga.com/total.xml", category: "뉴스", tags: ["general"] },
+    { name: "SBS 뉴스", url: "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", category: "뉴스", tags: ["general"] },
+    { name: "한국경제", url: "https://www.hankyung.com/rss/economy", category: "경제", tags: ["business", "finance"] },
+    { name: "한국경제 IT", url: "https://www.hankyung.com/rss/it", category: "IT", tags: ["tech", "ai", "development"] },
+    { name: "조선일보 경제", url: "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml", category: "경제", tags: ["business", "finance"] },
+    { name: "매일경제", url: "https://www.mk.co.kr/rss/30100041/", category: "경제", tags: ["business", "finance", "marketing"] },
+    // Arts & Design
+    { name: "Hyperallergic", url: "https://hyperallergic.com/feed/", category: "Arts", tags: ["creative", "design"] },
+    { name: "ARTnews", url: "https://www.artnews.com/feed/", category: "Arts", tags: ["creative"] },
+    { name: "Designboom", url: "https://www.designboom.com/feed/", category: "Design", tags: ["creative", "design"] },
+    { name: "Creative Bloq", url: "https://www.creativebloq.com/feeds/all", category: "Design", tags: ["creative", "design"] },
+    // Science
+    { name: "Science Daily", url: "https://www.sciencedaily.com/rss/all.xml", category: "Science", tags: ["general"] },
+    { name: "Nature", url: "http://feeds.nature.com/nature/rss/current", category: "Science", tags: ["general"] },
+    // Marketing
+    { name: "Adweek", url: "https://www.adweek.com/feed/", category: "Marketing", tags: ["marketing", "business"] },
+    { name: "HubSpot Marketing", url: "https://blog.hubspot.com/marketing/rss.xml", category: "Marketing", tags: ["marketing", "business"] },
+    // Music & Entertainment
+    { name: "Billboard", url: "https://www.billboard.com/feed/", category: "Entertainment", tags: ["creative"] },
+    { name: "Variety", url: "https://variety.com/feed/", category: "Entertainment", tags: ["creative", "business"] },
+    { name: "Hollywood Reporter", url: "https://www.hollywoodreporter.com/feed/", category: "Entertainment", tags: ["creative"] },
+    // Self-dev
+    { name: "Fast Company", url: "https://www.fastcompany.com/latest/rss", category: "Business", tags: ["selfdev", "business", "startup"] },
+    // Korean
+    { name: "경향신문", url: "https://www.khan.co.kr/rss/rssdata/total_news.xml", category: "뉴스", tags: ["general"] },
 ];
 
 interface RSSArticle {
@@ -115,6 +143,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const articleCount = LIMITS.TREND_BRIEFING_COUNT[normalizedPlan] || 3;
     const refreshLimit = LIMITS.TREND_REFRESH_DAILY[normalizedPlan] ?? 0;
     const isPro = normalizedPlan === 'Pro' || normalizedPlan === 'Max';
+    logger.info(`[Trend Briefing] user=${userEmail}, plan=${normalizedPlan}, articleCount=${articleCount}, forceRefresh=${forceRefresh}`);
     const userLevel = currentUser?.profile?.level || 'Intermediate';
 
     // 새로고침 제한 체크
@@ -135,96 +164,139 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         }
     }
 
-    // Check cache first (only if not force refreshing and no exclusions)
-    if (!forceRefresh && excludeTitles.length === 0) {
-        const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-        const isBeforeFiveAM = nowKST.getHours() < 5;
+    // 캐시 조회 (forceRefresh 포함 — 캐시 풀에서 다음 세트 제공)
+    const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const isBeforeFiveAM = nowKST.getHours() < 5;
 
-        // 5AM 이전이면 어제 날짜 캐시도 조회
-        let cachedData = await getTrendsCache(userEmail);
-        if (!cachedData && isBeforeFiveAM) {
+    // 5AM 이전이면 어제 날짜 캐시도 조회
+    let cachedData = await getTrendsCache(userEmail);
+    if (!cachedData && isBeforeFiveAM) {
+        const yesterday = new Date(nowKST);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toLocaleDateString("en-CA");
+        cachedData = await getTrendsCache(userEmail, yesterdayStr);
+    }
+
+    if (cachedData && cachedData.trends.length > 0) {
+        // 캐시 유효성 검증
+        const lastUpdatedDate = cachedData.lastUpdated ? new Date(cachedData.lastUpdated) : new Date();
+        const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+
+        let isCacheValid = false;
+        if (cacheDate === today) {
+            if (nowKST.getHours() >= 5) {
+                const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
+                    timeZone: "Asia/Seoul",
+                    hour: '2-digit',
+                    hour12: false
+                });
+                const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr);
+                if (lastUpdatedHourKST >= 5) {
+                    isCacheValid = true;
+                }
+            } else {
+                isCacheValid = true;
+            }
+        }
+        if (!isCacheValid && isBeforeFiveAM) {
             const yesterday = new Date(nowKST);
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toLocaleDateString("en-CA");
-            cachedData = await getTrendsCache(userEmail, yesterdayStr);
+            if (cacheDate === yesterdayStr) {
+                isCacheValid = true;
+            }
         }
 
-        if (cachedData && cachedData.trends.length > 0) {
-            // lastUpdated가 없으면 오늘 날짜로 간주 (크론이 today 기준으로 저장하므로 유효)
-            const lastUpdatedDate = cachedData.lastUpdated ? new Date(cachedData.lastUpdated) : new Date();
-            const cacheDate = lastUpdatedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+        if (isCacheValid) {
+            const allTrends = cachedData.trends;
+            const shownKey = `shown_trend_ids_${today}`;
+            const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
+            const refreshKey = `trend_refresh_count_${today}`;
+            const currentRefreshCount = await kvGet<number>(userEmail, refreshKey) || 0;
 
-            let isCacheValid = false;
-            if (cacheDate === today) {
-                if (nowKST.getHours() >= 5) {
-                    // 5AM 이후: 캐시도 5AM 이후에 생성된 것이어야 유효
-                    const lastUpdatedKSTStr = lastUpdatedDate.toLocaleString("en-US", {
-                        timeZone: "Asia/Seoul",
-                        hour: '2-digit',
-                        hour12: false
+            if (forceRefresh) {
+                // 새로고침: 캐시 풀에서 이미 표시한 것 제외하고 다음 articleCount개 반환
+                const shownIds = new Set(await kvGet<string[]>(userEmail, shownKey) || []);
+                const unshownTrends = allTrends.filter((t: any) => !shownIds.has(t.id));
+
+                if (unshownTrends.length > 0) {
+                    // 풀에 아직 미표시 기사가 남아있음 → 다음 세트 반환
+                    const nextBatch = unshownTrends.slice(0, articleCount);
+                    const updatedShownIds = [...shownIds, ...nextBatch.map((t: any) => t.id)];
+                    await kvSet(userEmail, shownKey, updatedShownIds);
+
+                    // 새로고침 카운트 증가
+                    await kvSet(email, refreshKey, currentRefreshCount + 1);
+
+                    logger.info(`[Trend Briefing] 캐시 풀에서 다음 세트 반환: ${nextBatch.length}개 (풀 잔여: ${unshownTrends.length - nextBatch.length}개)`);
+
+                    return NextResponse.json({
+                        trends: nextBatch,
+                        cached: true,
+                        lastUpdated: cachedData.lastUpdated,
+                        readIds,
+                        refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount - 1),
                     });
-                    const lastUpdatedHourKST = parseInt(lastUpdatedKSTStr);
-                    if (lastUpdatedHourKST >= 5) {
-                        isCacheValid = true;
-                    }
+                }
+                // 풀 소진 → 아래 실시간 생성 로직으로 폴백
+                logger.info(`[Trend Briefing] 캐시 풀 소진, RSS 실시간 생성으로 폴백`);
+            } else {
+                // 첫 로드: 앞 articleCount개만 반환 + shown 기록
+                const currentShown = await kvGet<string[]>(userEmail, shownKey) || [];
+                if (currentShown.length === 0) {
+                    // 오늘 첫 로드 — shown 초기화
+                    const firstBatch = allTrends.slice(0, articleCount);
+                    await kvSet(userEmail, shownKey, firstBatch.map((t: any) => t.id));
+                    return NextResponse.json({
+                        trends: firstBatch,
+                        cached: true,
+                        lastUpdated: cachedData.lastUpdated,
+                        readIds,
+                        refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
+                    });
                 } else {
-                    // 5AM 이전: 오늘 날짜 캐시면 유효
-                    isCacheValid = true;
+                    // 이미 표시한 것들 반환 (재방문)
+                    const shownSet = new Set(currentShown);
+                    const shownTrends = allTrends.filter((t: any) => shownSet.has(t.id));
+                    return NextResponse.json({
+                        trends: shownTrends,
+                        cached: true,
+                        lastUpdated: cachedData.lastUpdated,
+                        readIds,
+                        refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
+                    });
                 }
             }
-            // 5AM 이전이고 어제 캐시면 유효
-            if (!isCacheValid && isBeforeFiveAM) {
-                const yesterday = new Date(nowKST);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toLocaleDateString("en-CA");
-                if (cacheDate === yesterdayStr) {
-                    isCacheValid = true;
-                }
-            }
-
-            if (isCacheValid) {
-                const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
-                const refreshKey = `trend_refresh_count_${today}`;
-                const currentRefreshCount = await kvGet<number>(userEmail, refreshKey) || 0;
-                return NextResponse.json({
-                    trends: cachedData.trends.slice(0, articleCount),
-                    cached: true,
-                    lastUpdated: cachedData.lastUpdated,
-                    readIds,
-                    refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
-                });
-            }
-        }
-
-        // 5AM 이전에 캐시가 아예 없어도 실시간 생성하지 않고 빈 응답 반환
-        if (isBeforeFiveAM) {
-            return NextResponse.json({
-                trends: [],
-                cached: true,
-                lastUpdated: null,
-                readIds: [],
-                refreshRemaining: Math.max(0, refreshLimit),
-                pending: true,
-                message: '오전 5시에 새로운 브리핑이 준비됩니다.',
-            });
-        }
-
-        // 5AM 이후인데 캐시가 없으면 (크론 미실행 등) → 실시간 생성하지 않고 안내 반환
-        // forceRefresh(Pro 새로고침)만 실시간 생성 허용
-        if (!forceRefresh) {
-            return NextResponse.json({
-                trends: [],
-                cached: true,
-                lastUpdated: null,
-                readIds: [],
-                refreshRemaining: Math.max(0, refreshLimit),
-                pending: true,
-                message: '브리핑을 준비 중입니다. 잠시 후 다시 확인해주세요.',
-            });
         }
     }
 
-    // 이하 실시간 생성 로직: forceRefresh(Pro 새로고침) 또는 exclude(이미 본 뉴스 교체)일 때만 실행
+    // 5AM 이전에 캐시가 없으면 빈 응답 반환
+    if (isBeforeFiveAM) {
+        return NextResponse.json({
+            trends: [],
+            cached: true,
+            lastUpdated: null,
+            readIds: [],
+            refreshRemaining: Math.max(0, refreshLimit),
+            pending: true,
+            message: '오전 5시에 새로운 브리핑이 준비됩니다.',
+        });
+    }
+
+    // 5AM 이후인데 캐시가 없으면 (크론 미실행 등) → forceRefresh가 아니면 안내 반환
+    if (!forceRefresh) {
+        return NextResponse.json({
+            trends: [],
+            cached: true,
+            lastUpdated: null,
+            readIds: [],
+            refreshRemaining: Math.max(0, refreshLimit),
+            pending: true,
+            message: '브리핑을 준비 중입니다. 잠시 후 다시 확인해주세요.',
+        });
+    }
+
+    // 이하 실시간 생성 로직: 캐시 풀 소진 후 forceRefresh일 때만 실행 (폴백)
 
     // Step 1: Fetch articles from RSS feeds
     const rssArticles = await fetchRSSArticles();
@@ -278,7 +350,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             }
             return true;
         })
-        .slice(0, 80)
+        .slice(0, 100)
         .map((article, index) => ({
             id: index,
             t: article.title,
@@ -300,7 +372,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
     if (filteredArticles.length < articleCount) {
         // 더 많은 뉴스가 필요하면 전체 풀 사용
-        filteredArticles = sortedArticles.slice(0, 80).map((article, index) => ({
+        filteredArticles = sortedArticles.slice(0, 100).map((article, index) => ({
             id: index,
             t: article.title,
             s: article.sourceName,
@@ -463,10 +535,12 @@ Select now.`;
     });
 
 
-    // Save to cache (with user email for proper caching)
+    // 실시간 생성된 트렌드를 캐시에 저장 + shown 기록
     await saveTrendsCache(trends, true, userEmail);
+    const shownKey = `shown_trend_ids_${today}`;
+    const existingShown = await kvGet<string[]>(userEmail, shownKey) || [];
+    await kvSet(userEmail, shownKey, [...existingShown, ...trends.map((t: any) => t.id)]);
 
-    // 새로고침 성공 시 카운트 증가
     if (forceRefresh) {
         const refreshKey = `trend_refresh_count_${today}`;
         const usedRefreshes = await kvGet<number>(email, refreshKey) || 0;
@@ -578,19 +652,16 @@ OTHER RULES:
     // 상세 프리생성은 백그라운드로 실행 (응답 블로킹 안 함)
     preGenerateDetails().catch(err => logger.error('[API] Background detail pre-generation failed:', err));
 
-    // 새로 생성한 브리핑이라도 오늘 읽은 기록 반환
     const readIds = await kvGet<string[]>(userEmail, `read_trend_ids_${today}`) || [];
-
-    // 남은 새로고침 횟수 계산
-    const refreshKey = `trend_refresh_count_${today}`;
-    const currentRefreshCount = await kvGet<number>(email, refreshKey) || 0;
+    const refreshKey2 = `trend_refresh_count_${today}`;
+    const finalRefreshCount = await kvGet<number>(email, refreshKey2) || 0;
 
     return NextResponse.json({
-        trends: trends.slice(0, articleCount),
+        trends,
         cached: false,
         lastUpdated: new Date().toISOString(),
         readIds,
-        refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
+        refreshRemaining: Math.max(0, refreshLimit - finalRefreshCount),
     });
 });
 

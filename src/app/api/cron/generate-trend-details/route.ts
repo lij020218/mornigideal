@@ -194,6 +194,10 @@ export const GET = withCron(withCronLogging('generate-trend-details', async (_re
         // 같은 직업+관심사+플랜레벨 → 같은 상세 브리핑 공유
         const groupKey = `${job}|${interests}|${isPro ? 'pro' : 'free'}`;
 
+        // 상세 프리생성은 첫 표시분(articleCount)만 — 나머지는 on-demand
+        const baseCount = isPro ? 6 : 3;
+        const trendsForDetail = (row.trends || []).slice(0, baseCount);
+
         if (!groups.has(groupKey)) {
             groups.set(groupKey, {
                 job,
@@ -201,7 +205,7 @@ export const GET = withCron(withCronLogging('generate-trend-details', async (_re
                 interests: p?.interests || [],
                 level: p?.level || 'Intermediate',
                 isPro,
-                trends: row.trends || [],
+                trends: trendsForDetail,
                 users: [],
             });
         }
