@@ -27,10 +27,11 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         return NextResponse.json({ error: 'Forbidden', isAdmin: false }, { status: 403 });
     }
 
+    try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
     const now = new Date();
 
-    // 핵심 데이터 병렬 조회 (반드시 존재하는 테이블만)
+    // 핵심 데이터 병렬 조회
     const [
         usersResult,
         trendCacheResult,
@@ -39,7 +40,6 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         alertsResult,
         feedbackResult,
         dailyBriefingResult,
-        userFeedbackNewResult,
     ] = await Promise.all([
         // 1. 전체 유저 수
         supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).not('profile', 'is', null),
@@ -72,10 +72,13 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
         // 7. 데일리 브리핑 생성 수
         supabaseAdmin.from('daily_briefings').select('*', { count: 'exact', head: true }).eq('date', today),
-
-        // 8. 미처리 사용자 피드백 수
-        supabaseAdmin.from('user_feedback').select('*', { count: 'exact', head: true }).eq('status', 'new'),
     ]);
+
+    // user_feedback 조회 (테이블 미존재 시 안전 폴백)
+    let userFeedbackNewResult: { count: number | null } = { count: null };
+    try {
+        userFeedbackNewResult = await supabaseAdmin.from('user_feedback').select('*', { count: 'exact', head: true }).eq('status', 'new');
+    } catch {};
 
     // system_health_log 조회 (테이블 미생성 시 안전하게 폴백)
     let systemHealthResult: { data: any[] | null } = { data: null };
@@ -199,4 +202,20 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             services: healthMetrics?.services ?? null,
         },
     });
+
+    } catch (e) {
+        logger.error('[AdminDashboard] Unexpected error:', e instanceof Error ? e.message : e);
+        return NextResponse.json({
+            isAdmin: true,
+            error: e instanceof Error ? e.message : 'Internal server error',
+            status: 'critical',
+            date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
+            issues: ['대시보드 데이터 로딩 실패'],
+            stats: { totalUsers: 0, trendBriefing: { delivered: 0, coverage: 0 }, dailyBriefing: { count: 0 }, pushTokens: { active: 0 }, notifications: { today: 0, byType: {} } },
+            escalation: {},
+            systemAlerts: [],
+            feedback: { newCount: 0 },
+            systemHealth: { score: null, level: null, breakdown: null, lastCheck: null, recentFailures: [], services: null },
+        });
+    }
 });
