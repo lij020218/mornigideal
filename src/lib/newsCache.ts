@@ -15,11 +15,14 @@ async function getUserEmail(): Promise<string | null> {
 }
 
 /**
- * Generate unique trend ID from title
+ * Generate unique trend ID from original URL (or title as fallback)
+ * URL 기반으로 생성하면 AI가 다른 제목을 붙여도 같은 기사는 같은 ID를 가짐
  */
-export function generateTrendId(title: string): string {
-    return title
+export function generateTrendId(titleOrUrl: string, originalUrl?: string): string {
+    const source = originalUrl || titleOrUrl;
+    return source
         .toLowerCase()
+        .replace(/^https?:\/\//, '')
         .replace(/[^a-z0-9가-힣]/g, '-')
         .replace(/-+/g, '-')
         .substring(0, 100);

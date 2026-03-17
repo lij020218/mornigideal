@@ -431,14 +431,15 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                             article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
                         );
                         const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+                        const url = originalArticle?.link || "";
                         return {
-                            id: generateTrendId(selected.title_korean),
+                            id: generateTrendId(selected.title_korean, url),
                             title: selected.title_korean,
                             category: selected.category || "General",
                             summary: selected.summary_korean,
                             time: pubDate,
                             imageColor: "bg-blue-500/20",
-                            originalUrl: originalArticle?.link || "",
+                            originalUrl: url,
                             imageUrl: "",
                             source: originalArticle?.sourceName || "Unknown",
                             relevance: selected.relevance_korean
@@ -500,14 +501,15 @@ Requirements: exactly ${articleCount}, Korean text, practical value for ${job}.`
                             article.title === filteredArticle?.t && article.sourceName === filteredArticle?.s
                         );
                         const pubDate = originalArticle?.pubDate ? new Date(originalArticle.pubDate).toISOString().split('T')[0] : today;
+                        const url = originalArticle?.link || "";
                         return {
-                            id: generateTrendId(selected.title_korean),
+                            id: generateTrendId(selected.title_korean, url),
                             title: selected.title_korean,
                             category: selected.category || "General",
                             summary: selected.summary_korean,
                             time: pubDate,
                             imageColor: "bg-blue-500/20",
-                            originalUrl: originalArticle?.link || "",
+                            originalUrl: url,
                             imageUrl: "",
                             source: originalArticle?.sourceName || "Unknown",
                             relevance: selected.relevance_korean
