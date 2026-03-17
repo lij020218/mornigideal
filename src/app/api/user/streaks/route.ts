@@ -22,7 +22,7 @@ export interface StreakData {
 
 /**
  * 일정 완료 streak 계산
- * 각 날짜별로 일정이 있고, 50% 이상 완료한 날을 "활동일"로 간주
+ * 각 날짜별로 일정이 있고, 60% 이상 완료한 날을 "활동일"로 간주
  */
 function calculateScheduleStreak(dailyStats: Map<string, { total: number; completed: number }>) {
     const sortedDates = [...dailyStats.keys()].sort().reverse(); // 최신순
@@ -37,7 +37,7 @@ function calculateScheduleStreak(dailyStats: Map<string, { total: number; comple
     // 오늘 완료 여부
     const todayStats = dailyStats.get(today);
     if (todayStats && todayStats.total > 0) {
-        todayCompleted = todayStats.completed > 0 && (todayStats.completed / todayStats.total) >= 0.5;
+        todayCompleted = todayStats.completed > 0 && (todayStats.completed / todayStats.total) >= 0.6;
     }
 
     // 연속 일수 계산 (오늘 또는 어제부터 시작)
@@ -53,10 +53,10 @@ function calculateScheduleStreak(dailyStats: Map<string, { total: number; comple
         const dateStr = checkDate.toISOString().split('T')[0];
 
         const stats = dailyStats.get(dateStr);
-        if (stats && stats.total > 0 && stats.completed > 0 && (stats.completed / stats.total) >= 0.5) {
+        if (stats && stats.total > 0 && stats.completed > 0 && (stats.completed / stats.total) >= 0.6) {
             tempStreak++;
         } else if (stats && stats.total > 0) {
-            // 일정이 있었지만 50% 미달 → streak 끊김
+            // 일정이 있었지만 60% 미달 → streak 끊김
             break;
         }
         // 일정이 없는 날은 건너뜀 (주말 등)
@@ -68,7 +68,7 @@ function calculateScheduleStreak(dailyStats: Map<string, { total: number; comple
     const allDates = [...dailyStats.keys()].sort();
     for (let i = 0; i < allDates.length; i++) {
         const stats = dailyStats.get(allDates[i])!;
-        if (stats.total > 0 && stats.completed > 0 && (stats.completed / stats.total) >= 0.5) {
+        if (stats.total > 0 && stats.completed > 0 && (stats.completed / stats.total) >= 0.6) {
             tempStreak++;
             longest = Math.max(longest, tempStreak);
         } else if (stats.total > 0) {

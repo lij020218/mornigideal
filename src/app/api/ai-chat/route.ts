@@ -451,6 +451,91 @@ function tryParseScheduleDelete(
     // 동사 제거
     const withoutVerb = text.replace(deleteVerbs, '').trim();
 
+    // 반복 일정 삭제 패턴: "매주 화요일 기상", "매일 운동", "평일 아침 기상", "격주 금요일 회의" 등
+    const DAY_NAME_MAP: Record<string, number> = { '일': 0, '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6 };
+    const recurringMatch = withoutVerb.match(/^(매주|격주|매일|평일|주말)\s*([일월화수목금토요]+요?일?)?\s*/);
+
+    if (recurringMatch) {
+        const recurType = recurringMatch[1];
+        const dayStr = recurringMatch[2];
+
+        // 요일 배열 결정
+        let targetDays: number[] | null = null;
+        if (recurType === '매일') targetDays = [0, 1, 2, 3, 4, 5, 6];
+        else if (recurType === '평일') targetDays = [1, 2, 3, 4, 5];
+        else if (recurType === '주말') targetDays = [0, 6];
+        else if (dayStr) {
+            // "화요일", "월수금", "화목" 등에서 요일 추출
+            targetDays = [];
+            for (const char of dayStr.replace(/요일?/g, '')) {
+                if (DAY_NAME_MAP[char] !== undefined) targetDays.push(DAY_NAME_MAP[char]);
+            }
+            if (targetDays.length === 0) targetDays = null;
+        }
+
+        if (targetDays) {
+            // 반복 키워드 제거 후 시간/이름 추출
+            const afterRecur = withoutVerb.replace(recurringMatch[0], '').trim();
+
+            const timePattern = /(오전|오후|아침|새벽|저녁|밤)?\s*(\d{1,2})시\s*(반|(\d{1,2})분)?\s*에?\s*/;
+            const timeMatch = afterRecur.match(timePattern);
+            let matchStartTime: string | undefined;
+            if (timeMatch) {
+                const parsed = parseTimeExpression(timeMatch[1], timeMatch[2], timeMatch[3] === '반' ? '30' : timeMatch[4]);
+                if (parsed) matchStartTime = parsed.startTime;
+            }
+
+            const nameCandidate = afterRecur
+                .replace(timePattern, '')
+                .replace(/\s*일정\s*/, '')
+                .trim();
+
+            if (nameCandidate.length >= 1 && nameCandidate.length <= 30) {
+                const query = nameCandidate.toLowerCase();
+                const customGoals = profile?.customGoals;
+
+                if (customGoals && customGoals.length > 0) {
+                    // 반복 일정에서 요일 + 이름 매칭
+                    const match = customGoals.find((g: CustomGoal) => {
+                        if (!g.text || !g.daysOfWeek || g.daysOfWeek.length === 0) return false;
+                        const sText = g.text.toLowerCase();
+                        const nameMatch = sText === query || sText.includes(query) || query.includes(sText);
+                        if (!nameMatch) return false;
+                        // 요일이 하나라도 겹치면 매칭
+                        const dayMatch = targetDays!.some(d => g.daysOfWeek!.includes(d));
+                        if (!dayMatch) return false;
+                        if (matchStartTime && g.startTime && g.startTime !== matchStartTime) return false;
+                        return true;
+                    });
+
+                    if (match) {
+                        const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+                        const dayLabel = recurType === '매일' ? '매일' :
+                            recurType === '평일' ? '평일' :
+                            recurType === '주말' ? '주말' :
+                            `${recurType} ${targetDays.map(d => dayLabels[d]).join('')}요일`;
+
+                        return {
+                            action: {
+                                type: 'delete_schedule',
+                                label: `${match.text} 삭제`,
+                                data: {
+                                    text: match.text,
+                                    startTime: match.startTime || '',
+                                    specificDate: '',
+                                    isRepeating: true,
+                                    daysOfWeek: match.daysOfWeek,
+                                },
+                            },
+                            message: `${dayLabel} "${match.text}" 반복 일정을 삭제했어요! 🗑️`,
+                        };
+                    }
+                }
+            }
+            // 반복 패턴이었지만 매칭 실패 → 아래 일반 로직으로 폴스루
+        }
+    }
+
     // 날짜 키워드 추출
     const dateKeywordMatch = withoutVerb.match(/^(오늘|내일|모레)\s*/);
     // "3월 15일", "4월 1일" 같은 구체적 날짜

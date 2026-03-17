@@ -30,7 +30,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
     const now = new Date();
 
-    // 모든 데이터를 병렬로 가져옴
+    // 핵심 데이터 병렬 조회 (반드시 존재하는 테이블만)
     const [
         usersResult,
         trendCacheResult,
@@ -40,8 +40,6 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
         feedbackResult,
         dailyBriefingResult,
         userFeedbackNewResult,
-        systemHealthResult,
-        recentFailuresResult,
     ] = await Promise.all([
         // 1. 전체 유저 수
         supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).not('profile', 'is', null),
@@ -77,25 +75,31 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
         // 8. 미처리 사용자 피드백 수
         supabaseAdmin.from('user_feedback').select('*', { count: 'exact', head: true }).eq('status', 'new'),
-
-        // 9. 시스템 헬스 최근 결과
-        supabaseAdmin
-            .from('system_health_log')
-            .select('details, created_at')
-            .eq('cron_name', 'system-monitor')
-            .eq('status', 'success')
-            .order('created_at', { ascending: false })
-            .limit(1),
-
-        // 10. 최근 24시간 CRON 실패 내역
-        supabaseAdmin
-            .from('system_health_log')
-            .select('cron_name, status, details, created_at')
-            .eq('status', 'failure')
-            .gte('created_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString())
-            .order('created_at', { ascending: false })
-            .limit(20),
     ]);
+
+    // system_health_log 조회 (테이블 미생성 시 안전하게 폴백)
+    let systemHealthResult: { data: any[] | null } = { data: null };
+    let recentFailuresResult: { data: any[] | null } = { data: null };
+    try {
+        [systemHealthResult, recentFailuresResult] = await Promise.all([
+            supabaseAdmin
+                .from('system_health_log')
+                .select('details, created_at')
+                .eq('cron_name', 'system-monitor')
+                .eq('status', 'success')
+                .order('created_at', { ascending: false })
+                .limit(1),
+            supabaseAdmin
+                .from('system_health_log')
+                .select('cron_name, status, details, created_at')
+                .eq('status', 'failure')
+                .gte('created_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString())
+                .order('created_at', { ascending: false })
+                .limit(20),
+        ]);
+    } catch (e) {
+        logger.error('[AdminDashboard] system_health_log query failed (table may not exist):', e instanceof Error ? e.message : e);
+    }
 
     // ── 알림 타입별 통계 ──
     const notificationsByType: Record<string, number> = {};
