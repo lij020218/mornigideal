@@ -143,7 +143,7 @@ export async function generateSchedulePrep(
         };
         const emoji = typeEmojis[prepType];
 
-        const modelName = MODELS.GPT_5_MINI;
+        const modelName = MODELS.GPT_5_4_NANO;
         const completion = await openai.chat.completions.create({
             model: modelName,
             messages: [

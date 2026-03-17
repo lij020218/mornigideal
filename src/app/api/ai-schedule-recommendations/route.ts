@@ -586,7 +586,7 @@ JSON 형식으로만 응답하세요:
 
     try {
         const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_5_MINI,
+            model: MODELS.GPT_5_4_MINI,
             messages: [
                 {
                     role: "system",

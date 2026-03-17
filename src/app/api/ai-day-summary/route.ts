@@ -28,7 +28,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     if (uncompleted.length > 0) contextParts.push(`미완료:${uncompleted.slice(0, 3).map((s: any) => s.text).join(',')}`);
     if (isMaxUser && tomorrowList.length > 0) contextParts.push(`내일:${tomorrowList.map((s: any) => `${s.startTime || '?'} ${s.text}`).join(',')}`);
 
-    const modelName = isMaxUser ? MODELS.GPT_5_2 : MODELS.GPT_5_MINI;
+    const modelName = isMaxUser ? MODELS.GPT_5_2 : MODELS.GPT_5_4_NANO;
 
     const systemPrompt = isMaxUser
         ? `하루 마무리 비서. JSON만: {"closing":"마무리 인사 한 문장","highlight":"오늘 핵심 성과 한 문장","feedback":"피드백 한 문장","tomorrowPrep":"내일 준비사항 한 문장","strategy":"장기 목표 조언 한 문장"}`

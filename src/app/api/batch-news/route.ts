@@ -12,7 +12,7 @@ const openai = new OpenAI({
 
 const parser = new Parser();
 
-const MINI_MODEL = MODELS.GPT_5_MINI;
+const MINI_MODEL = MODELS.GPT_5_4_NANO;
 const BATCH_SIZE = 10; // 10개씩 병렬 처리
 
 // RSS Feed URLs (2026년 1월 업데이트 - 작동하지 않는 피드 대체)

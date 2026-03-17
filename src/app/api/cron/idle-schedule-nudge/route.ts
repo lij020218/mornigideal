@@ -110,7 +110,7 @@ async function generateRecommendation(
     try {
         // AI에게 추천 항목 JSON만 요청
         const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_5_MINI,
+            model: MODELS.GPT_5_4_NANO,
             messages: [
                 {
                     role: 'system',

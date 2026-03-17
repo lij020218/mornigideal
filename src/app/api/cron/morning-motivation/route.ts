@@ -68,7 +68,7 @@ async function generateMotivation(
 
     try {
         const completion = await openai.chat.completions.create({
-            model: MODELS.GPT_5_MINI,
+            model: MODELS.GPT_5_4_NANO,
             messages: [{
                 role: 'system',
                 content: `사용자: ${job}, 관심사: ${interests || '없음'}, 목표: ${goals || '없음'}.

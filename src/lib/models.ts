@@ -9,4 +9,6 @@ export const MODELS = {
     EMBEDDING_SMALL: 'text-embedding-3-small',
     GPT_4_1_MINI: 'gpt-4.1-mini-2025-04-14',
     GPT_REALTIME: 'gpt-realtime-2025-08-28',
+    GPT_5_4_MINI: 'gpt-5.4-mini-2026-03-17',
+    GPT_5_4_NANO: 'gpt-5.4-nano-2026-03-17',
 } as const;

@@ -26,7 +26,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
 
     // 1) Parse intent
     const intentResp = await client.chat.completions.create({
-        model: MODELS.GPT_4O_MINI_SHORT,
+        model: MODELS.GPT_5_4_NANO,
         response_format: { type: "json_object" },
         messages: [
             {

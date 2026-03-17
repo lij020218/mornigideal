@@ -31,7 +31,7 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     const { quiz, answers, type } = await request.json();
 
     // 모든 플랜 GPT-5-mini (비용 최적화)
-    const gradingModel = MODELS.GPT_5_MINI;
+    const gradingModel = MODELS.GPT_5_4_NANO;
 
 
     // Grade T/F (straightforward)
