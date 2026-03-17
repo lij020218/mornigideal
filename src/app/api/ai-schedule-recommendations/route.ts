@@ -39,18 +39,33 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const todayKey = `${kstNow.getFullYear()}-${String(kstNow.getMonth() + 1).padStart(2, '0')}-${String(kstNow.getDate()).padStart(2, '0')}`;
 
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 모든 DB 쿼리 병렬 실행 (순차 → 병렬: ~4 RTT → ~1 RTT)
+    const [userPlan, usageResult, userResult, activitiesResult] = await Promise.all([
+        getUserPlan(email),
+        supabaseAdmin
+            .from('user_kv_store')
+            .select('value')
+            .eq('user_email', email)
+            .eq('key', `schedule_rec_count_${todayKey}`)
+            .maybeSingle(),
+        supabaseAdmin
+            .from('users')
+            .select('id, name, email, profile')
+            .eq('email', email)
+            .maybeSingle(),
+        supabaseAdmin
+            .from('user_events')
+            .select('*')
+            .eq('email', email)
+            .gte('created_at', thirtyDaysAgo.toISOString()),
+    ]);
+
     // 플랜별 일일 추천 생성 횟수 제한 체크
-    const userPlan = await getUserPlan(email);
     const dailyLimit = PLAN_REC_LIMITS[userPlan.plan] || 1;
-
-    const { data: usageData } = await supabaseAdmin
-        .from('user_kv_store')
-        .select('value')
-        .eq('user_email', email)
-        .eq('key', `schedule_rec_count_${todayKey}`)
-        .maybeSingle();
-
-    const currentCount = usageData?.value?.count || 0;
+    const currentCount = usageResult.data?.value?.count || 0;
     if (currentCount >= dailyLimit) {
         return NextResponse.json({
             error: '오늘의 AI 추천 생성 횟수를 모두 사용했습니다.',
@@ -61,30 +76,16 @@ export const POST = withAuth(async (request: NextRequest, email: string) => {
         }, { status: 429 });
     }
 
-    // Fetch user profile (stored in users.profile JSON)
-    const { data: userData } = await supabaseAdmin
-        .from('users')
-        .select('id, name, email, profile')
-        .eq('email', email)
-        .maybeSingle();
+    const userData = userResult.data;
     const profile = userData ? { ...userData.profile, name: userData.name, email: userData.email } : null;
 
-    // Enhanced profile: 직접 DB 조회 (self-fetch 제거)
+    // Enhanced profile: 행동 분석
     let enhancedProfile = null;
     try {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const { data: activities } = await supabaseAdmin
-            .from('user_events')
-            .select('*')
-            .eq('email', email)
-            .gte('created_at', thirtyDaysAgo.toISOString());
-
-        // 간단한 행동 분석
-        const exerciseEvents = (activities || []).filter(a => a.event_type === 'workout_completed');
-        const sleepEvents = (activities || []).filter(a => a.event_type === 'sleep_end');
-        const scheduleCompleted = (activities || []).filter(a => a.event_type === 'schedule_complete');
+        const activities = activitiesResult.data || [];
+        const exerciseEvents = activities.filter((a: any) => a.event_type === 'workout_completed');
+        const sleepEvents = activities.filter((a: any) => a.event_type === 'sleep_end');
+        const scheduleCompleted = activities.filter((a: any) => a.event_type === 'schedule_complete');
 
         const avgWorkoutsPerWeek = exerciseEvents.length / 4;
         const avgSleepDuration = sleepEvents.length > 0
@@ -318,7 +319,12 @@ async function generateSmartRecommendations(
     requestTime?: string // 모바일에서 전달한 KST 현재 시간 (HH:MM)
 ): Promise<any[]> {
     const insights = enhancedProfile?.behavioral_insights;
-    const suggestionPrefs = await getSharedSuggestionPreferences(email).catch(() => null) as any;
+
+    // 선호도 + 큐레이션 콘텐츠 병렬 조회
+    const [suggestionPrefs, curatedContent] = await Promise.all([
+        getSharedSuggestionPreferences(email).catch(() => null) as Promise<any>,
+        getCuratedContentForPrompt(email),
+    ]);
 
     // 과거 일정 요약 + 패턴 분석
     const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
@@ -418,8 +424,7 @@ ${freqLines.length > 0 ? `\n최근 등록한 일정 (빈도순):\n${freqLines.jo
 `;
     }
 
-    // Pro 유저: 큐레이션 콘텐츠 주입
-    const curatedContent = await getCuratedContentForPrompt(email);
+    // curatedContent는 상단에서 병렬 조회 완료
 
     // Build context for AI
     const userContext = `
@@ -611,8 +616,11 @@ JSON 형식으로만 응답하세요:
         const [earliestH, earliestM] = earliestAllowedTime.split(':').map(Number);
         const earliestMinutes = earliestH * 60 + (earliestM || 0);
 
+        const rawRecs = result.recommendations || [];
+        logger.info(`[Schedule Rec] LLM 원본: ${rawRecs.length}개, earliestAllowed: ${earliestAllowedTime} (${earliestMinutes}분)`);
+
         // Filter: 기상 시간 이전 제거, 시간 보정, 시간 분산 강제
-        const filteredRecs = (result.recommendations || [])
+        const filteredRecs = rawRecs
             .map((rec: any) => {
                 if (!rec.suggestedStartTime) return rec;
 
@@ -645,6 +653,8 @@ JSON 형식으로만 응답하세요:
                 return { startMin, endMin };
             });
 
+        logger.info(`[Schedule Rec] 시간 필터 후: ${filteredRecs.length}개 (기존 일정 ${existingSlots.length}개와 충돌 체크)`);
+
         const noConflictRecs = filteredRecs.filter((rec: any) => {
             if (!rec.suggestedStartTime) return true;
             const [rH, rM] = rec.suggestedStartTime.split(':').map(Number);
@@ -657,6 +667,8 @@ JSON 형식으로만 응답하세요:
                 recStart < endMin && recEnd > startMin
             );
         });
+
+        logger.info(`[Schedule Rec] 충돌 제거 후: ${noConflictRecs.length}개`);
 
         // 시간 분산 강제: 2시간 이내 중복 제거
         const validatedRecommendations: any[] = [];
@@ -672,6 +684,7 @@ JSON 형식으로만 응답하세요:
             }
         }
 
+        logger.info(`[Schedule Rec] 최종 결과: ${validatedRecommendations.length}개`);
         return validatedRecommendations;
     } catch (error: any) {
         logger.error('[Schedule Recommendations] OpenAI error:', error);

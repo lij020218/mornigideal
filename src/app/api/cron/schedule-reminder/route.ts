@@ -354,7 +354,7 @@ export const GET = withCron(withCronLogging('schedule-reminder', async (_request
         const isSleep = notif.data?.sleepEligible;
 
         let content: string;
-        let proactiveData: Record<string, any> | undefined;
+        let proactiveData: { notificationId: string; notificationType: string; actionType?: string; actionPayload?: Record<string, unknown> } | undefined;
         let actionType: string | undefined;
         let actionPayload: Record<string, unknown> | undefined;
 
