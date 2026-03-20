@@ -214,6 +214,8 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
             const refreshKey = `trend_refresh_count_${today}`;
             const currentRefreshCount = await kvGet<number>(userEmail, refreshKey) || 0;
 
+            const activeKey = `active_trend_ids_${today}`;
+
             if (forceRefresh) {
                 // 새로고침: 캐시 풀에서 이미 표시한 것 제외하고 다음 articleCount개 반환
                 const shownIds = new Set(await kvGet<string[]>(userEmail, shownKey) || []);
@@ -225,6 +227,11 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                     const updatedShownIds = [...shownIds, ...nextBatch.map((t: any) => t.id)];
                     await kvSet(userEmail, shownKey, updatedShownIds);
 
+                    // 이전 active를 previousTrends로, 새 배치를 active로
+                    const prevActiveIds = await kvGet<string[]>(userEmail, activeKey) || [];
+                    const previousTrends = allTrends.filter((t: any) => prevActiveIds.includes(t.id));
+                    await kvSet(userEmail, activeKey, nextBatch.map((t: any) => t.id));
+
                     // 새로고침 카운트 증가
                     await kvSet(email, refreshKey, currentRefreshCount + 1);
 
@@ -232,6 +239,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
 
                     return NextResponse.json({
                         trends: nextBatch,
+                        previousTrends,
                         cached: true,
                         lastUpdated: cachedData.lastUpdated,
                         readIds,
@@ -247,6 +255,7 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                     // 오늘 첫 로드 — shown 초기화
                     const firstBatch = allTrends.slice(0, articleCount);
                     await kvSet(userEmail, shownKey, firstBatch.map((t: any) => t.id));
+                    await kvSet(userEmail, activeKey, firstBatch.map((t: any) => t.id));
                     return NextResponse.json({
                         trends: firstBatch,
                         cached: true,
@@ -255,11 +264,21 @@ export const GET = withAuth(async (request: NextRequest, email: string) => {
                         refreshRemaining: Math.max(0, refreshLimit - currentRefreshCount),
                     });
                 } else {
-                    // 이미 표시한 것들 반환 (재방문)
+                    // 재방문: active만 trends로, 나머지 shown은 previousTrends로
+                    const activeIds = await kvGet<string[]>(userEmail, activeKey) || currentShown;
+                    const activeSet = new Set(activeIds);
+                    const activeTrends = allTrends.filter((t: any) => activeSet.has(t.id));
+
+                    // shown에는 있지만 active에는 없는 것 = 이전 브리핑
                     const shownSet = new Set(currentShown);
-                    const shownTrends = allTrends.filter((t: any) => shownSet.has(t.id));
+                    const prevIds = currentShown.filter(id => !activeSet.has(id));
+                    const previousTrends = prevIds.length > 0
+                        ? allTrends.filter((t: any) => prevIds.includes(t.id))
+                        : [];
+
                     return NextResponse.json({
-                        trends: shownTrends,
+                        trends: activeTrends,
+                        previousTrends,
                         cached: true,
                         lastUpdated: cachedData.lastUpdated,
                         readIds,
@@ -536,11 +555,13 @@ Select now.`;
     });
 
 
-    // 실시간 생성된 트렌드를 캐시에 저장 + shown 기록
+    // 실시간 생성된 트렌드를 캐시에 저장 + shown/active 기록
     await saveTrendsCache(trends, true, userEmail);
     const shownKey = `shown_trend_ids_${today}`;
+    const activeKey = `active_trend_ids_${today}`;
     const existingShown = await kvGet<string[]>(userEmail, shownKey) || [];
     await kvSet(userEmail, shownKey, [...existingShown, ...trends.map((t: any) => t.id)]);
+    await kvSet(userEmail, activeKey, trends.map((t: any) => t.id));
 
     if (forceRefresh) {
         const refreshKey = `trend_refresh_count_${today}`;
